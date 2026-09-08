@@ -11,6 +11,10 @@ export type TrustedMediaDiscovery = {
   sourceUrl: string;
   evidence: string;
   beats: string[];
+  sectors?: string[];
+  geography?: string;
+  mediaOpportunity?: string;
+  recentCoverage?: Array<{ title: string; url: string }>;
   confidence: "High" | "Medium" | "Low";
   verifiedAt: string;
 };

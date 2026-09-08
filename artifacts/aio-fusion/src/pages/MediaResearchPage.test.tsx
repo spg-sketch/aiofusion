@@ -52,6 +52,9 @@ describe("MediaResearchPage live discovery", () => {
         const body = JSON.parse(String(init?.body));
         expect(body.projectId).toBe("project-1");
         expect(body.content.title).toBe("New clean energy platform launches");
+        expect(body.query).toBe("London reporters");
+        expect(body.regions).toEqual(["UK", "US"]);
+        expect(body.sectorTopic).toBe("Renewable energy");
         return new Response(JSON.stringify({ ok: true, items: [candidate], discoveryToken: "signed-token" }), { status: 200 });
       }
       if (url.includes("/store/media-db/discoveries")) {
@@ -71,11 +74,14 @@ describe("MediaResearchPage live discovery", () => {
   it("shows grounded live results and saves a selected contact to the Media Database", async () => {
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    fireEvent.change(screen.getByPlaceholderText(/tech reporters in London/i), { target: { value: "London reporters" } });
+    fireEvent.change(screen.getByPlaceholderText(/cleantech/i), { target: { value: "Renewable energy" } });
+    fireEvent.click(screen.getByRole("button", { name: "US" }));
     fireEvent.click(screen.getByTestId("button-discover-live"));
 
     expect(await screen.findByText("Jane Reporter")).toBeTruthy();
     expect(screen.getByText(candidate.evidence)).toBeTruthy();
-    expect(screen.getByRole("link", { name: /view source/i })).toHaveAttribute("href", candidate.sourceUrl);
+    expect(screen.getByRole("link", { name: /view cited source/i })).toHaveAttribute("href", candidate.sourceUrl);
 
     fireEvent.click(screen.getByRole("button", { name: /save to media database/i }));
     await waitFor(() => expect(screen.getByRole("button", { name: /saved to media database/i })).toBeDisabled());

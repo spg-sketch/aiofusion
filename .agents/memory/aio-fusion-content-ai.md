@@ -90,6 +90,11 @@ person's full name appears on an SSRF-safe bounded fetch of that page, and any e
 complete address found in that fetched text. Bind saveable results to the authenticated account
 with a short-lived signed token so the browser cannot rewrite provenance.
 
+Model-written evidence and pitch framing must remain visibly distinct: call the former an
+AI-generated summary of the cited source and the latter an AI-suggested media opportunity. A
+source/profile page is not automatically recent coverage, and a source-check date is not proof
+that every stored profile field was verified.
+
 **Why:** model-authored URLs, evidence, confidence, and email fields can look grounded while still
 being fabricated or mismatched. Host-only citation checks also let a homepage validate an unrelated
 profile, and browser-submitted discoveries can falsely acquire a "verified" label.
@@ -98,6 +103,11 @@ profile, and browser-submitted discoveries can falsely acquire a "verified" labe
 Serialize account saves and deduplicate by person plus outlet rather than source page alone because
 several journalists may share a staff page or article. Count every web-search tool call in spend
 accounting, including responses that fail JSON parsing.
+
+When rediscovering a saved contact, preserve populated user-maintained intelligence and record the
+new source check in provenance. Do not silently replace manual review notes or upgrade retained
+fields to newly verified. Reuse visible outlets by canonical domain or normalized name, while
+masking inaccessible outlet metadata anywhere recommendation records are returned.
 
 ## Typecheck
 

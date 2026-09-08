@@ -136,6 +136,23 @@ function isSupportedByCitation(sourceUrl: string, citations: string[]): boolean 
   return source !== null && citations.some((citation) => normalisedPublicPage(citation) === source);
 }
 
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  mapper: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  async function worker(): Promise<void> {
+    while (cursor < items.length) {
+      const index = cursor++;
+      results[index] = await mapper(items[index]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+  return results;
+}
+
 // Escapes raw control characters (literal newlines, tabs, etc.) that appear
 // *inside* JSON string literals. Models routinely emit real line breaks inside
 // long body copy, which is invalid JSON and makes JSON.parse fail. We walk the
@@ -1056,6 +1073,10 @@ contentAiRouter.post(
     const bodyCopy = asString(content.bodyCopy || content.body, 5000);
     const mediaCategories = asStringArray(body.mediaCategories);
     const keyMessages = asStringArray(body.keyMessages);
+    const searchQuery = asString(body.query, 1000);
+    const sectorTopic = asString(body.sectorTopic, 500);
+    const requestedRegions = asStringArray(body.regions).filter((region) => ["UK", "US"].includes(region)).slice(0, 2);
+    const regions = requestedRegions.length ? requestedRegions : ["UK"];
     const projectId = asString(body.projectId, 200);
     if (!projectId || (!title && !headline && !bodyCopy)) {
       res.status(400).json({ error: "Choose a saved article and active project before searching the web." });
@@ -1072,17 +1093,22 @@ contentAiRouter.post(
       return;
     }
 
-    const prompt = `You are a careful UK media researcher. Search the current public web for journalists and editors who demonstrably cover the supplied story topic.
+    const prompt = `You are a careful media researcher. Search the current public web for journalists and editors who demonstrably cover the supplied story topic.
 
 Rules:
-1. Return no more than 10 people, ranked by editorial relevance.
-2. Every person must be supported by a current public author page, staff profile, or recent article byline at sourceUrl.
-3. Never infer or generate an email address. Include an email only when the exact address appears publicly in the searched evidence.
-4. Do not use people-search, data-broker, scraped contact database, or private social profile data.
-5. evidence must briefly state what the cited page proves. Do not claim facts absent from that page.
-6. confidence is "High" only for an official outlet profile or very recent outlet byline, "Medium" for strong current evidence, otherwise "Low".
-7. Prefer UK publications and people active in the topic. Exclude generic newsroom contacts and unverifiable names.
+1. Search these markets: ${regions.join(" and ")}. Seek a broad, useful mix across national, trade and specialist publications.
+2. Aim for at least 12 distinct relevant publications and up to 3 journalists per publication wherever current evidence supports them. Never add weak or invented results merely to reach a number. Return no more than 30 people, ranked by editorial relevance.
+3. Every person must be supported by a current public author page, staff profile, or recent article byline at sourceUrl.
+4. Never infer or generate an email address. Include an email only when the exact address appears publicly in the searched evidence.
+5. Do not use people-search, data-broker, scraped contact database, or private social profile data.
+6. evidence must briefly state what the cited page proves. Do not claim facts absent from that page.
+7. confidence is "High" only for an official outlet profile or very recent outlet byline, "Medium" for strong current evidence, otherwise "Low".
+8. Classify sectors with concise labels such as National, AI, Technology, Retail, Finance, Marketing, Healthcare or Sustainability.
+9. mediaOpportunity should explain how this specific story could be framed for the journalist, grounded in their demonstrated beat. Do not invent past articles.
+10. Exclude generic newsroom contacts and unverifiable names.
 
+Natural-language search: ${searchQuery || "(use the story and project context below)"}
+Requested sector or topic: ${sectorTopic || "(use the project media categories)"}
 Story title: ${title || "(untitled)"}
 Headline: ${headline || "(none)"}
 Standfirst: ${standfirst || "(none)"}
@@ -1094,7 +1120,7 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
       const response = await client.responses.create({
         model: "gpt-5.4-mini",
         tools: [{ type: "web_search" }],
-        max_output_tokens: 8192,
+        max_output_tokens: 16384,
         input: prompt,
         text: {
           format: {
@@ -1107,7 +1133,7 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
               properties: {
                 items: {
                   type: "array",
-                  maxItems: 10,
+                  maxItems: 30,
                   items: {
                     type: "object",
                     additionalProperties: false,
@@ -1121,9 +1147,12 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
                       sourceUrl: { type: "string" },
                       evidence: { type: "string" },
                       beats: { type: "array", items: { type: "string" }, maxItems: 8 },
+                      sectors: { type: "array", items: { type: "string" }, maxItems: 6 },
+                      geography: { type: "string" },
+                      mediaOpportunity: { type: "string" },
                       confidence: { type: "string", enum: ["High", "Medium", "Low"] },
                     },
-                    required: ["firstName", "lastName", "role", "email", "outletName", "outletWebsite", "sourceUrl", "evidence", "beats", "confidence"],
+                    required: ["firstName", "lastName", "role", "email", "outletName", "outletWebsite", "sourceUrl", "evidence", "beats", "sectors", "geography", "mediaOpportunity", "confidence"],
                   },
                 },
               },
@@ -1146,7 +1175,7 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
       const parsed = JSON.parse(response.output_text || "{\"items\":[]}") as { items?: unknown[] };
       const citations = citedUrls(response.output);
       const now = new Date().toISOString();
-      const candidates: TrustedMediaDiscovery[] = (Array.isArray(parsed.items) ? parsed.items : []).slice(0, 10).flatMap((raw) => {
+      const candidates: TrustedMediaDiscovery[] = (Array.isArray(parsed.items) ? parsed.items : []).slice(0, 30).flatMap((raw) => {
         if (!raw || typeof raw !== "object") return [];
         const item = raw as Record<string, unknown>;
         const firstName = asString(item.firstName, 120);
@@ -1168,11 +1197,14 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
           sourceUrl,
           evidence: asString(item.evidence, 2000),
           beats: asStringArray(item.beats).slice(0, 8),
+          sectors: asStringArray(item.sectors).slice(0, 6),
+          geography: asString(item.geography, 120),
+          mediaOpportunity: asString(item.mediaOpportunity, 2000),
           confidence,
           verifiedAt: now,
         }];
       });
-      const checked = await Promise.all(candidates.map(async (candidate): Promise<TrustedMediaDiscovery | null> => {
+      const checked = await mapWithConcurrency(candidates, 5, async (candidate): Promise<TrustedMediaDiscovery | null> => {
         try {
           const source = await fetchSiteContent(candidate.sourceUrl, 20_000);
           const evidenceText = `${source.title} ${source.description} ${source.text}`.toLowerCase();
@@ -1184,11 +1216,14 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
           );
           const candidateEmail = candidate.email.trim().toLowerCase();
           const email = candidateEmail && publishedEmails.has(candidateEmail) ? candidateEmail : "";
-          return { ...candidate, email };
+          return {
+            ...candidate,
+            email,
+          };
         } catch {
           return null;
         }
-      }));
+      });
       const items = checked.filter((candidate): candidate is TrustedMediaDiscovery => candidate !== null);
       const discoveryToken = signMediaDiscoveries({
         accountId: normUsername(req.account.username),

@@ -98,8 +98,11 @@ export function SearchableOutletPicker({
 // ---------------------------------------------------------------------------
 // Media Database page - outlets, contacts and custom categories
 // ---------------------------------------------------------------------------
+import type { Contact } from "./JournalistComponents";
+import { RecommendationCard } from "./JournalistComponents";
+
 type Outlet = { id: number; name: string; category: string; website: string; description: string; country: string; reachBand: string; accountId: string | null };
-export type Contact = { id: number; outletId: number | null; firstName: string; lastName: string; role: string; email: string; phone: string; notes: string; accountId: string | null; outletName?: string; outletCategory?: string; mobile?: string; linkedinUrl?: string; twitterHandle?: string; beats?: string[]; sectors?: string[]; geography?: string; language?: string; seniority?: string; editorialStatus?: string; sourceUrl?: string; sourceRef?: string; lastVerifiedAt?: string | null; reach?: string; reachBand?: string; authority?: number; authorityScore?: number; confidence?: string; confidenceLevel?: string };
+
 type ImportPreview = {
   validRows: number;
   importableRows: number;
@@ -117,7 +120,7 @@ type ImportPreview = {
 };
 
 function MediaDatabasePage() {
-  const [activeTab, setActiveTab] = useState<"outlets" | "contacts">("outlets");
+  const [activeTab, setActiveTab] = useState<"outlets" | "contacts">("contacts");
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [allCategories, setAllCategories] = useState<string[]>([]);
@@ -140,8 +143,15 @@ function MediaDatabasePage() {
   const [deletingOutletId, setDeletingOutletId] = useState<number | null>(null);
 
   const [showContactModal, setShowContactModal] = useState(false);
+  const [showContactProfile, setShowContactProfile] = useState<Contact | null>(null);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const [contactForm, setContactForm] = useState({ outletId: "", firstName: "", lastName: "", role: "", email: "", phone: "", notes: "" });
+  const [contactForm, setContactForm] = useState({
+    outletId: "", firstName: "", lastName: "", role: "", email: "", phone: "", notes: "",
+    mobile: "", linkedinUrl: "", twitterHandle: "", beats: "", sectors: "", geography: "",
+    language: "", seniority: "", editorialStatus: "", sourceUrl: "", sourceRef: "",
+    publicationReach: "", publicationAuthority: "", journalistAuthority: "", confidence: "",
+    lastVerifiedAt: ""
+  });
   const [contactSaving, setContactSaving] = useState(false);
   const [deletingContactId, setDeletingContactId] = useState<number | null>(null);
 
@@ -301,21 +311,47 @@ function MediaDatabasePage() {
 
   const openAddContact = () => {
     setEditingContact(null);
-    setContactForm({ outletId: "", firstName: "", lastName: "", role: "", email: "", phone: "", notes: "" });
+    setContactForm({
+      outletId: "", firstName: "", lastName: "", role: "", email: "", phone: "", notes: "",
+      mobile: "", linkedinUrl: "", twitterHandle: "", beats: "", sectors: "", geography: "",
+      language: "", seniority: "", editorialStatus: "", sourceUrl: "", sourceRef: "",
+      publicationReach: "", publicationAuthority: "", journalistAuthority: "", confidence: "",
+      lastVerifiedAt: ""
+    });
     setShowContactModal(true);
   };
   const openEditContact = (c: Contact) => {
     setEditingContact(c);
-    setContactForm({ outletId: c.outletId ? String(c.outletId) : "", firstName: c.firstName, lastName: c.lastName, role: c.role, email: c.email, phone: c.phone, notes: c.notes });
+    setContactForm({
+      outletId: c.outletId ? String(c.outletId) : "",
+      firstName: c.firstName || "", lastName: c.lastName || "", role: c.role || "",
+      email: c.email || "", phone: c.phone || "", notes: c.notes || "",
+      mobile: c.mobile || "", linkedinUrl: c.linkedinUrl || "", twitterHandle: c.twitterHandle || "",
+      beats: (c.beats || []).join(", "), sectors: (c.sectors || []).join(", "),
+      geography: c.geography || "", language: c.language || "", seniority: c.seniority || "",
+      editorialStatus: c.editorialStatus || "", sourceUrl: c.sourceUrl || "", sourceRef: c.sourceRef || "",
+      publicationReach: c.publicationReach || "",
+      publicationAuthority: c.publicationAuthority !== undefined ? String(c.publicationAuthority) : "",
+      journalistAuthority: c.journalistAuthority !== undefined ? String(c.journalistAuthority) : "",
+      confidence: c.confidence || "",
+      lastVerifiedAt: c.lastVerifiedAt ? new Date(c.lastVerifiedAt).toISOString().split("T")[0] : ""
+    });
     setShowContactModal(true);
   };
   const saveContact = async () => {
     if ((!contactForm.firstName.trim() && !contactForm.lastName.trim()) || contactSaving) return;
     setContactSaving(true);
     try {
+      const payload = {
+        ...contactForm,
+        beats: contactForm.beats.split(",").map(s => s.trim()).filter(Boolean),
+        sectors: contactForm.sectors.split(",").map(s => s.trim()).filter(Boolean),
+        publicationAuthority: contactForm.publicationAuthority || undefined,
+        journalistAuthority: contactForm.journalistAuthority || undefined,
+      };
       const resp = editingContact
-        ? await fetch(`${apiBase()}/api/store/media-db/contacts/${editingContact.id}`, { method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(contactForm) })
-        : await fetch(`${apiBase()}/api/store/media-db/contacts`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(contactForm) });
+        ? await fetch(`${apiBase()}/api/store/media-db/contacts/${editingContact.id}`, { method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+        : await fetch(`${apiBase()}/api/store/media-db/contacts`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       if (resp.ok) { setShowContactModal(false); await loadData(); }
     } catch {}
     setContactSaving(false);
@@ -380,13 +416,16 @@ function MediaDatabasePage() {
       {/* Outlets tab */}
       {activeTab === "outlets" && (
         <div>
-          <div className="flex flex-wrap items-center gap-3 mb-5">
-            <input value={outletSearch} onChange={(e) => setOutletSearch(e.target.value)} placeholder="Search outlets..." className="px-3 py-2 rounded-lg border text-[13px] flex-1 min-w-[180px] placeholder-white" style={{ borderColor: vars.g200 }} />
-            <select value={outletCatFilter} onChange={(e) => setOutletCatFilter(e.target.value)} className="px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200, color: outletCatFilter ? vars.navy : "#ffffff" }}>
-              <option value="" style={{ color: "#ffffff", background: vars.navy }}>All categories</option>
-              {catOptions.map((c) => <option key={c} value={c} style={{ color: vars.navy, background: "#ffffff" }}>{c}</option>)}
+          <div className="flex flex-wrap items-center gap-3 mb-5 p-4 rounded-xl border bg-white" style={{ borderColor: vars.g200 }}>
+            <div className="flex-1 min-w-[250px] flex items-center gap-2 mb-1">
+               <Search size={16} className="text-slate-400" />
+               <input value={outletSearch} onChange={(e) => setOutletSearch(e.target.value)} placeholder="Search outlets by name or category..." className="px-3 py-2 rounded-lg border text-[13px] w-full outline-none focus:border-slate-400" style={{ borderColor: vars.g200 }} />
+            </div>
+            <select value={outletCatFilter} onChange={(e) => setOutletCatFilter(e.target.value)} className="px-3 py-2 rounded-lg border text-[13px] outline-none bg-white" style={{ borderColor: vars.g200, color: outletCatFilter ? vars.navy : "inherit" }}>
+              <option value="">All categories</option>
+              {catOptions.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            <button onClick={openAddOutlet} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>
+            <button onClick={openAddOutlet} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors" style={{ background: vars.accent }}>
               <Plus size={14} /> Add outlet
             </button>
           </div>
@@ -443,32 +482,44 @@ function MediaDatabasePage() {
       {/* Contacts tab */}
       {activeTab === "contacts" && (
         <div>
-          <div className="flex flex-wrap items-center gap-3 mb-5">
-            <input value={contactSearch} onChange={(e) => { setContactSearch(e.target.value); setContactPage(1); }} placeholder="Search contacts..." className="px-3 py-2 rounded-lg border text-[13px] flex-1 min-w-[180px] placeholder-white text-white" style={{ borderColor: vars.g200 }} />
-            <select value={contactCategoryFilter} onChange={(e) => { setContactCategoryFilter(e.target.value); setContactPage(1); }} className="px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }}>
-              <option value="">All categories</option>{allCategories.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <input value={contactCountryFilter} onChange={(e) => { setContactCountryFilter(e.target.value); setContactPage(1); }} placeholder="Country" className="px-3 py-2 rounded-lg border text-[13px] w-28" style={{ borderColor: vars.g200 }} />
-            <select value={contactOutletFilter} onChange={(e) => setContactOutletFilter(e.target.value)} className="px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200, color: contactOutletFilter ? vars.navy : "#ffffff" }}>
-              <option value="">All outlets</option>
-              {outletOptions.map((o) => <option key={o.id} value={String(o.id)}>{o.name}</option>)}
-            </select>
-            <select value={`${contactSort}:${contactDirection}`} onChange={(e) => { const [sort, direction] = e.target.value.split(":"); setContactSort(sort); setContactDirection(direction as "asc" | "desc"); setContactPage(1); }} className="px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }}>
-              <option value="lastName:asc">Name A-Z</option><option value="lastName:desc">Name Z-A</option><option value="outletName:asc">Outlet A-Z</option><option value="createdAt:desc">Newest</option>
-            </select>
-            {(contactSearch || contactCategoryFilter || contactCountryFilter || contactOutletFilter) && <button onClick={() => { setContactSearch(""); setContactCategoryFilter(""); setContactCountryFilter(""); setContactOutletFilter(""); setContactPage(1); }} className="px-3 py-2 rounded-lg text-[12px] border" style={{ borderColor: vars.g200, color: vars.g600 }}>Clear filters</button>}
-            <button onClick={openAddContact} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>
-              <Plus size={14} /> Add contact
-            </button>
-            <button onClick={openImport} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold border bg-white" style={{ borderColor: vars.gold, color: vars.navy }}>
-              <Upload size={14} /> Import CSV
-            </button>
-            {filteredContacts.length > 0 && (
-              <div className="flex items-center gap-1">
-                <button onClick={() => void exportContacts("xlsx")} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Excel</button>
-                <button onClick={() => void exportContacts("word")} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border" style={{ borderColor: vars.g200, color: vars.navy }}><FileText size={13} /> Word</button>
-              </div>
-            )}
+          <div className="flex flex-wrap items-center gap-3 mb-5 p-4 rounded-xl border bg-white" style={{ borderColor: vars.g200 }}>
+            <div className="w-full flex items-center gap-2 mb-1">
+               <Search size={16} className="text-slate-400" />
+               <input value={contactSearch} onChange={(e) => { setContactSearch(e.target.value); setContactPage(1); }} placeholder="Natural language search (e.g. 'tech reporters in London')" className="px-3 py-2 rounded-lg border text-[13px] flex-1 min-w-[250px] outline-none focus:border-slate-400" style={{ borderColor: vars.g200 }} />
+            </div>
+            <div className="flex flex-wrap items-center gap-2 w-full">
+              <select value={contactCategoryFilter} onChange={(e) => { setContactCategoryFilter(e.target.value); setContactPage(1); }} className="px-3 py-2 rounded-lg border text-[13px] bg-white outline-none" style={{ borderColor: vars.g200 }}>
+                <option value="">All categories</option>{allCategories.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select value={contactCountryFilter} onChange={(e) => { setContactCountryFilter(e.target.value); setContactPage(1); }} className="px-3 py-2 rounded-lg border text-[13px] bg-white outline-none" style={{ borderColor: vars.g200 }}>
+                <option value="">All locations</option>
+                <option value="UK">United Kingdom</option>
+                <option value="US">United States</option>
+                <option value="EU">Europe</option>
+                <option value="Global">Global</option>
+              </select>
+              <select value={contactOutletFilter} onChange={(e) => setContactOutletFilter(e.target.value)} className="px-3 py-2 rounded-lg border text-[13px] bg-white outline-none" style={{ borderColor: vars.g200, color: contactOutletFilter ? vars.navy : "inherit" }}>
+                <option value="">All outlets</option>
+                {outletOptions.map((o) => <option key={o.id} value={String(o.id)}>{o.name}</option>)}
+              </select>
+              <select value={`${contactSort}:${contactDirection}`} onChange={(e) => { const [sort, direction] = e.target.value.split(":"); setContactSort(sort); setContactDirection(direction as "asc" | "desc"); setContactPage(1); }} className="px-3 py-2 rounded-lg border text-[13px] bg-white outline-none" style={{ borderColor: vars.g200 }}>
+                <option value="lastName:asc">Name A-Z</option><option value="lastName:desc">Name Z-A</option><option value="outletName:asc">Outlet A-Z</option><option value="createdAt:desc">Newest</option>
+              </select>
+              {(contactSearch || contactCategoryFilter || contactCountryFilter || contactOutletFilter) && <button onClick={() => { setContactSearch(""); setContactCategoryFilter(""); setContactCountryFilter(""); setContactOutletFilter(""); setContactPage(1); }} className="px-3 py-2 rounded-lg text-[12px] font-medium text-slate-500 hover:text-slate-700 transition-colors">Clear filters</button>}
+              <div className="flex-1"></div>
+              <button onClick={openAddContact} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors" style={{ background: vars.accent }}>
+                <Plus size={14} /> Add contact
+              </button>
+              <button onClick={openImport} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold border bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.gold, color: vars.navy }}>
+                <Upload size={14} className="text-amber-600" /> Import CSV
+              </button>
+              {filteredContacts.length > 0 && (
+                <div className="flex items-center gap-1 border-l pl-2 ml-1" style={{ borderColor: vars.g200 }}>
+                  <button onClick={() => void exportContacts("xlsx")} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} className="text-slate-400" /> Excel</button>
+                  <button onClick={() => void exportContacts("word")} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}><FileText size={13} className="text-slate-400" /> Word</button>
+                </div>
+              )}
+            </div>
           </div>
 
           {filteredContacts.length === 0 ? (
@@ -517,6 +568,7 @@ function MediaDatabasePage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 justify-end">
+                          <button onClick={() => setShowContactProfile(c)} className="px-2 py-1 text-[11px] font-medium rounded border hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}>View Profile</button>
                           <button onClick={() => openEditContact(c)} className="p-1.5 rounded-lg hover:bg-gray-50" title="Edit"><PenLine size={13} color={vars.g400} /></button>
                           <button onClick={() => { if (window.confirm(`Delete ${c.firstName} ${c.lastName}?`)) void deleteContact(c.id); }} disabled={deletingContactId === c.id} className="p-1.5 rounded-lg hover:bg-red-50" title="Delete"><Trash2 size={13} color={deletingContactId === c.id ? vars.g300 : vars.red} /></button>
                         </div>
@@ -696,52 +748,152 @@ function MediaDatabasePage() {
       )}
 
       {/* Contact modal */}
+      {showContactProfile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowContactProfile(null)}>
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 flex items-center justify-between border-b" style={{ borderColor: vars.g200, background: vars.g50 }}>
+              <div className="flex items-center gap-2">
+                <User size={18} color={vars.accent} />
+                <h2 className="text-[16px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Journalist Profile</h2>
+              </div>
+              <button onClick={() => setShowContactProfile(null)} className="text-[20px] leading-none px-2 text-slate-400 hover:text-slate-700 transition-colors">&times;</button>
+            </div>
+            <div className="overflow-y-auto">
+              <RecommendationCard
+                item={{
+                  rank: 0,
+                  score: 100, // Or whatever placeholder score since it's just a profile view
+                  reasons: [],
+                  contact: showContactProfile,
+                }}
+                isShortlist={true}
+                onEdit={() => {
+                  setShowContactProfile(null);
+                  openEditContact(showContactProfile);
+                }}
+                showMatchScore={false}
+              />
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end bg-slate-50" style={{ borderColor: vars.g200 }}>
+              <button onClick={() => setShowContactProfile(null)} className="px-4 py-2 rounded-lg text-[13px] font-semibold bg-white border shadow-sm hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showContactModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowContactModal(false)}>
-          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between bg-slate-50" style={{ borderColor: vars.g200 }}>
               <h2 className="text-[16px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{editingContact ? "Edit contact" : "Add contact"}</h2>
               <button onClick={() => setShowContactModal(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
             </div>
-            <div className="p-6 flex flex-col gap-4">
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: "First name", key: "firstName", placeholder: "Jane" },
-                  { label: "Last name", key: "lastName", placeholder: "Smith" },
-                ].map(({ label, key, placeholder }) => (
-                  <div key={key}>
-                    <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>{label}</label>
-                    <input value={contactForm[key as keyof typeof contactForm]} onChange={(e) => setContactForm((f) => ({ ...f, [key]: e.target.value }))} placeholder={placeholder} className="w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
-                  </div>
-                ))}
-              </div>
-              {[
-                { label: "Role / title", key: "role", placeholder: "e.g. Senior Reporter" },
-                { label: "Email", key: "email", placeholder: "jane@publication.com" },
-                { label: "Phone", key: "phone", placeholder: "+44 7700 000000" },
-              ].map(({ label, key, placeholder }) => (
-                <div key={key}>
-                  <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>{label}</label>
-                  <input value={contactForm[key as keyof typeof contactForm]} onChange={(e) => setContactForm((f) => ({ ...f, [key]: e.target.value }))} placeholder={placeholder} className="w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+            <div className="flex-1 overflow-y-auto p-6 space-y-8">
+              {/* Basic Details */}
+              <section>
+                <h3 className="text-[14px] font-semibold text-slate-800 border-b pb-2 mb-4" style={{ borderColor: vars.g100 }}>Basic Details</h3>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  {[
+                    { label: "First name", key: "firstName", placeholder: "Jane" },
+                    { label: "Last name", key: "lastName", placeholder: "Smith" },
+                  ].map(({ label, key, placeholder }) => (
+                    <div key={key}>
+                      <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>{label}</label>
+                      <input value={contactForm[key as keyof typeof contactForm] as string} onChange={(e) => setContactForm((f) => ({ ...f, [key]: e.target.value }))} placeholder={placeholder} className="w-full px-3 py-2 rounded-lg border text-[13px] outline-none focus:border-slate-400" style={{ borderColor: vars.g200 }} />
+                    </div>
+                  ))}
                 </div>
-              ))}
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>Publication / outlet</label>
-                <SearchableOutletPicker
-                  outlets={outletOptions}
-                  value={contactForm.outletId}
-                  onChange={(id) => setContactForm((f) => ({ ...f, outletId: id }))}
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>Notes</label>
-                <textarea rows={2} value={contactForm.notes} onChange={(e) => setContactForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Beat, preferences, any useful context..." className="w-full px-3 py-2 rounded-lg border text-[13px] resize-none" style={{ borderColor: vars.g200 }} />
-              </div>
+                <div className="mb-4">
+                  <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>Publication / outlet</label>
+                  <SearchableOutletPicker
+                    outlets={outletOptions}
+                    value={contactForm.outletId}
+                    onChange={(id) => setContactForm((f) => ({ ...f, outletId: id }))}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {[
+                    { label: "Role / title", key: "role", placeholder: "e.g. Senior Reporter" },
+                    { label: "Seniority", key: "seniority", placeholder: "e.g. Director" },
+                    { label: "Editorial Status", key: "editorialStatus", placeholder: "e.g. Active" },
+                    { label: "Geography / Location", key: "geography", placeholder: "e.g. London" },
+                  ].map(({ label, key, placeholder }) => (
+                    <div key={key}>
+                      <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>{label}</label>
+                      <input value={contactForm[key as keyof typeof contactForm] as string} onChange={(e) => setContactForm((f) => ({ ...f, [key]: e.target.value }))} placeholder={placeholder} className="w-full px-3 py-2 rounded-lg border text-[13px] outline-none focus:border-slate-400" style={{ borderColor: vars.g200 }} />
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Contact & Social */}
+              <section>
+                <h3 className="text-[14px] font-semibold text-slate-800 border-b pb-2 mb-4" style={{ borderColor: vars.g100 }}>Contact & Social</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {[
+                    { label: "Email", key: "email", placeholder: "jane@publication.com" },
+                    { label: "Phone", key: "phone", placeholder: "+44 7700 000000" },
+                    { label: "Mobile", key: "mobile", placeholder: "+44 7700 000001" },
+                    { label: "Language", key: "language", placeholder: "e.g. English" },
+                    { label: "LinkedIn URL", key: "linkedinUrl", placeholder: "https://linkedin.com/in/..." },
+                    { label: "Twitter Handle", key: "twitterHandle", placeholder: "@handle" },
+                  ].map(({ label, key, placeholder }) => (
+                    <div key={key}>
+                      <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>{label}</label>
+                      <input value={contactForm[key as keyof typeof contactForm] as string} onChange={(e) => setContactForm((f) => ({ ...f, [key]: e.target.value }))} placeholder={placeholder} className="w-full px-3 py-2 rounded-lg border text-[13px] outline-none focus:border-slate-400" style={{ borderColor: vars.g200 }} />
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Coverage Areas */}
+              <section>
+                <h3 className="text-[14px] font-semibold text-slate-800 border-b pb-2 mb-4" style={{ borderColor: vars.g100 }}>Coverage Areas</h3>
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>Beats (comma separated)</label>
+                    <input value={contactForm.beats} onChange={(e) => setContactForm((f) => ({ ...f, beats: e.target.value }))} placeholder="e.g. Technology, AI, Startups" className="w-full px-3 py-2 rounded-lg border text-[13px] outline-none focus:border-slate-400" style={{ borderColor: vars.g200 }} />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>Sectors (comma separated)</label>
+                    <input value={contactForm.sectors} onChange={(e) => setContactForm((f) => ({ ...f, sectors: e.target.value }))} placeholder="e.g. FinTech, B2B SaaS" className="w-full px-3 py-2 rounded-lg border text-[13px] outline-none focus:border-slate-400" style={{ borderColor: vars.g200 }} />
+                  </div>
+                </div>
+              </section>
+
+              {/* Advanced & Intel */}
+              <section>
+                <h3 className="text-[14px] font-semibold text-slate-800 border-b pb-2 mb-4" style={{ borderColor: vars.g100 }}>Advanced & Intelligence</h3>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  {[
+                    { label: "Journalist Authority", key: "journalistAuthority", placeholder: "0 - 100", type: "number" },
+                    { label: "Publication Authority", key: "publicationAuthority", placeholder: "0 - 100", type: "number" },
+                    { label: "Publication Reach", key: "publicationReach", placeholder: "e.g. 1M - 5M" },
+                    { label: "Confidence", key: "confidence", placeholder: "High, Medium, Low" },
+                    { label: "Source URL", key: "sourceUrl", placeholder: "https://..." },
+                    { label: "Source Reference", key: "sourceRef", placeholder: "e.g. MuckRack, Live Discovery" },
+                  ].map(({ label, key, placeholder, type }) => (
+                    <div key={key}>
+                      <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>{label}</label>
+                      <input type={type || "text"} value={contactForm[key as keyof typeof contactForm] as string} onChange={(e) => setContactForm((f) => ({ ...f, [key]: e.target.value }))} placeholder={placeholder} className="w-full px-3 py-2 rounded-lg border text-[13px] outline-none focus:border-slate-400" style={{ borderColor: vars.g200 }} />
+                    </div>
+                  ))}
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>Last Verified Date</label>
+                    <input type="date" value={contactForm.lastVerifiedAt} onChange={(e) => setContactForm((f) => ({ ...f, lastVerifiedAt: e.target.value }))} className="w-full px-3 py-2 rounded-lg border text-[13px] outline-none focus:border-slate-400" style={{ borderColor: vars.g200 }} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>Notes / Review Info</label>
+                  <textarea rows={3} value={contactForm.notes} onChange={(e) => setContactForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Any useful context, relationship history, or media opportunity details..." className="w-full px-3 py-2 rounded-lg border text-[13px] resize-none outline-none focus:border-slate-400" style={{ borderColor: vars.g200 }} />
+                </div>
+              </section>
             </div>
-            <div className="px-6 py-4 border-t flex justify-end gap-2" style={{ borderColor: vars.g200 }}>
-              <button onClick={() => setShowContactModal(false)} className="px-4 py-2 rounded-lg text-[13px] font-semibold border" style={{ borderColor: vars.g200, color: vars.g500 }}>Cancel</button>
-              <button onClick={() => void saveContact()} disabled={(!contactForm.firstName.trim() && !contactForm.lastName.trim()) || contactSaving} className="px-5 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent, opacity: (!contactForm.firstName.trim() && !contactForm.lastName.trim()) || contactSaving ? 0.5 : 1 }}>
-                {contactSaving ? "Saving..." : editingContact ? "Save changes" : "Add contact"}
+
+            <div className="px-6 py-4 border-t flex gap-2 justify-end bg-slate-50" style={{ borderColor: vars.g200 }}>
+              <button onClick={() => setShowContactModal(false)} className="px-4 py-2 rounded-lg text-[13px] font-semibold border bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}>Cancel</button>
+              <button onClick={() => void saveContact()} disabled={(!contactForm.firstName.trim() && !contactForm.lastName.trim()) || contactSaving} className="flex items-center gap-2 px-5 py-2 rounded-lg text-[13px] font-semibold text-white transition-all disabled:opacity-50" style={{ background: vars.accent }}>
+                {contactSaving ? <><div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div> Saving...</> : editingContact ? "Save changes" : "Save contact"}
               </button>
             </div>
           </div>

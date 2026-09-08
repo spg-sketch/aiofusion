@@ -509,6 +509,73 @@ router.delete(
 //           DELETE /api/store/media-db/contacts/:id
 // ---------------------------------------------------------------------------
 
+const RICH_CONTACT_STRING_FIELDS = [
+  "firstName", "lastName", "role", "email", "phone", "notes", "mobile",
+  "linkedinUrl", "twitterHandle", "geography", "language", "seniority",
+  "editorialStatus", "sourceUrl", "sourceRef", "publicationReach",
+  "publicationAuthority", "journalistAuthority", "confidence", "reviewNotes",
+] as const;
+
+function cleanContactStrings(body: Record<string, unknown>): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const field of RICH_CONTACT_STRING_FIELDS) {
+    if (typeof body[field] === "string") values[field] = body[field].trim().slice(0, field === "notes" || field === "reviewNotes" ? 8000 : 2000);
+  }
+  return values;
+}
+
+function cleanContactArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return Array.from(new Set(value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean))).slice(0, 30);
+}
+
+function cleanVerifiedDate(value: unknown): Date | null | undefined {
+  if (value === null || value === "") return null;
+  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) return undefined;
+  const parsed = new Date(value);
+  return parsed.getTime() > Date.now() + 60_000 ? undefined : parsed;
+}
+
+const SEARCH_STOP_WORDS = new Set(["a", "an", "and", "at", "cover", "covering", "for", "in", "of", "on", "or", "the", "who", "with", "journalist", "journalists", "reporter", "reporters", "editor", "editors", "writing", "writes"]);
+const SEARCH_EXPANSIONS: Record<string, string[]> = {
+  ai: ["ai", "artificial intelligence"],
+  fintech: ["fintech", "financial technology"],
+  tech: ["tech", "technology"],
+  uk: ["uk", "united kingdom", "britain", "british"],
+  us: ["us", "usa", "united states", "american"],
+};
+
+function searchTokens(query: string): string[][] {
+  const tokens: string[] = query.match(/[a-z0-9-]+/g) ?? [];
+  return tokens
+    .filter((token) => token.length > 1 && !SEARCH_STOP_WORDS.has(token))
+    .map((token) => SEARCH_EXPANSIONS[token] ?? [token]);
+}
+
+function countryMatchesFilter(filter: string, country: string, geography: string): boolean {
+  if (!filter) return true;
+  const haystack = `${country} ${geography}`.toLowerCase();
+  if (filter === "uk") return /\b(uk|united kingdom|britain|british|england|scotland|wales|london)\b/.test(haystack);
+  if (filter === "us") return /\b(us|usa|united states|american|new york|washington|california)\b/.test(haystack);
+  return haystack.includes(filter);
+}
+
+function normalisedOutletDomain(value: string): string {
+  if (!value) return "";
+  try {
+    return new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function inferredOutletCountry(geography: string): string {
+  const value = geography.toLowerCase();
+  if (/\b(us|usa|united states|american|new york|washington|california|chicago|boston|texas)\b/.test(value)) return "United States";
+  if (/\b(uk|united kingdom|britain|british|england|scotland|wales|london)\b/.test(value)) return "United Kingdom";
+  return geography.trim();
+}
+
 router.get(
   "/store/media-db/contacts",
   requirePlatformAuth,
@@ -547,6 +614,9 @@ router.get(
           createdAt: mediaContactsTable.createdAt,
           outletName: mediaOutletsTable.name,
           outletCategory: mediaOutletsTable.category,
+          outletWebsite: mediaOutletsTable.website,
+          outletCountry: mediaOutletsTable.country,
+          outletReachBand: mediaOutletsTable.reachBand,
         })
         .from(mediaContactsTable)
         .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
@@ -585,7 +655,7 @@ router.get(
       }
       const safeResults = results.map((r) => {
         if (r.outletId && !visibleOutletIds.has(r.outletId)) {
-          return { ...r, outletName: null, outletCategory: null };
+          return { ...r, outletName: null, outletCategory: null, outletWebsite: null, outletCountry: null, outletReachBand: null };
         }
         return r;
       });
@@ -600,11 +670,12 @@ router.get(
         ? String(req.query.sort) : "lastName";
       const direction = req.query.direction === "desc" ? -1 : 1;
       const filtered = safeResults.filter((contact) => {
-        const haystack = [contact.firstName, contact.lastName, contact.role, contact.email, contact.outletName, contact.outletCategory, contact.notes]
+        const haystack = [contact.firstName, contact.lastName, contact.role, contact.email, contact.outletName, contact.outletCategory, contact.outletCountry, contact.notes, contact.reviewNotes, contact.geography, contact.beats.join(" "), contact.sectors.join(" ")]
           .filter(Boolean).join(" ").toLowerCase();
-        return (!query || haystack.includes(query))
+        const queryGroups = searchTokens(query);
+        return (!query || queryGroups.every((alternatives) => alternatives.some((token) => haystack.includes(token))))
           && (!category || (contact.outletCategory ?? "").toLowerCase().includes(category))
-          && (!country || haystack.includes(country));
+          && countryMatchesFilter(country, contact.outletCountry ?? "", contact.geography);
       }).sort((a, b) => {
         const av = String(a[sort as keyof typeof a] ?? "").toLowerCase();
         const bv = String(b[sort as keyof typeof b] ?? "").toLowerCase();
@@ -622,7 +693,8 @@ router.post(
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
-      const { outletId, firstName, lastName, role, email, phone, notes } = req.body ?? {};
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const { outletId, firstName, lastName } = body;
       if (!firstName && !lastName) {
         res.status(400).json({ error: "Contact must have at least a first or last name" });
         return;
@@ -647,16 +719,20 @@ router.post(
       }
       // Admins can create global contacts (accountId = null)
       const accountId = isAdmin(req) ? null : normUsername(req.account!.username);
+      const stringValues = cleanContactStrings(body);
+      const beats = cleanContactArray(body.beats);
+      const sectors = cleanContactArray(body.sectors);
+      const lastVerifiedAt = cleanVerifiedDate(body.lastVerifiedAt);
       const [created] = await db
         .insert(mediaContactsTable)
         .values({
           outletId: resolvedOutletId,
           firstName: typeof firstName === "string" ? firstName.trim() : "",
           lastName: typeof lastName === "string" ? lastName.trim() : "",
-          role: typeof role === "string" ? role.trim() : "",
-          email: typeof email === "string" ? email.trim() : "",
-          phone: typeof phone === "string" ? phone.trim() : "",
-          notes: typeof notes === "string" ? notes.trim() : "",
+          ...stringValues,
+          ...(beats ? { beats } : {}),
+          ...(sectors ? { sectors } : {}),
+          ...(lastVerifiedAt !== undefined ? { lastVerifiedAt } : {}),
           accountId,
         })
         .returning();
@@ -692,7 +768,8 @@ router.put(
         res.status(403).json({ error: "You can only edit your own contacts" });
         return;
       }
-      const { outletId, firstName, lastName, role, email, phone, notes } = req.body ?? {};
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const { outletId } = body;
       // Validate outletId if supplied - caller must be able to see that outlet.
       let resolvedOutletId = row.outletId;
       if (outletId !== undefined) {
@@ -715,16 +792,19 @@ router.put(
           }
         }
       }
+      const stringValues = cleanContactStrings(body);
+      const beats = cleanContactArray(body.beats);
+      const sectors = cleanContactArray(body.sectors);
+      const lastVerifiedAt = cleanVerifiedDate(body.lastVerifiedAt);
       const [updated] = await db
         .update(mediaContactsTable)
         .set({
           outletId: resolvedOutletId,
-          firstName: typeof firstName === "string" ? firstName.trim() : row.firstName,
-          lastName: typeof lastName === "string" ? lastName.trim() : row.lastName,
-          role: typeof role === "string" ? role.trim() : row.role,
-          email: typeof email === "string" ? email.trim() : row.email,
-          phone: typeof phone === "string" ? phone.trim() : row.phone,
-          notes: typeof notes === "string" ? notes.trim() : row.notes,
+          ...stringValues,
+          ...(beats ? { beats } : {}),
+          ...(sectors ? { sectors } : {}),
+          ...(lastVerifiedAt !== undefined ? { lastVerifiedAt } : {}),
+          updatedAt: new Date(),
         })
         .where(eq(mediaContactsTable.id, numId))
         .returning();
@@ -732,11 +812,17 @@ router.put(
       // submits the whole record, so treating every supplied value as an
       // override would block later workbook refreshes for untouched fields.
       const owner = mediaOverrideOwner(row.accountId);
-      for (const fieldName of ["firstName", "lastName", "role", "email", "phone", "notes"] as const) {
-        const value = req.body?.[fieldName];
+      for (const fieldName of RICH_CONTACT_STRING_FIELDS) {
+        const value = body[fieldName];
         if (typeof value !== "string" || value.trim() === row[fieldName]) continue;
         await db.delete(mediaContactFieldOverridesTable).where(and(eq(mediaContactFieldOverridesTable.contactId, numId), eq(mediaContactFieldOverridesTable.accountId, owner), eq(mediaContactFieldOverridesTable.fieldName, fieldName)));
         await db.insert(mediaContactFieldOverridesTable).values({ contactId: numId, accountId: owner, fieldName, value: value.trim() });
+      }
+      for (const fieldName of ["beats", "sectors"] as const) {
+        const value = cleanContactArray(body[fieldName]);
+        if (!value || JSON.stringify(value) === JSON.stringify(row[fieldName])) continue;
+        await db.delete(mediaContactFieldOverridesTable).where(and(eq(mediaContactFieldOverridesTable.contactId, numId), eq(mediaContactFieldOverridesTable.accountId, owner), eq(mediaContactFieldOverridesTable.fieldName, fieldName)));
+        await db.insert(mediaContactFieldOverridesTable).values({ contactId: numId, accountId: owner, fieldName, value: JSON.stringify(value) });
       }
       res.json({ ok: true, contact: updated });
     } catch {
@@ -798,10 +884,27 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
     const visible = await visibleAccounts(req);
     const contacts = (await db.select().from(mediaContactsTable).where(isNull(mediaContactsTable.deletedAt)))
       .filter((contact) => contact.accountId === null || visible === null || visible.includes(contact.accountId));
+    const outlets = await db.select().from(mediaOutletsTable).where(isNull(mediaOutletsTable.deletedAt));
+    const outletById = new Map(outlets.filter((outlet) => outletVisible(outlet.accountId, visible)).map((outlet) => [outlet.id, outlet]));
     const ranked = contacts.map((contact) => {
       const corpus = [contact.role, contact.beats.join(" "), contact.sectors.join(" "), contact.notes].join(" ").toLowerCase();
-      const matches = terms.filter((term: string) => corpus.includes(term));
-      return { contact, score: matches.length * 20 + (contact.email ? 10 : 0) + (contact.lastVerifiedAt ? 5 : 0), reasons: matches.map((term: string) => `Matches ${term}`) };
+      const matches = terms.filter((term: string) => !SEARCH_STOP_WORDS.has(term) && term.length > 3 && corpus.includes(term));
+      const reasons = matches.map((term: string) => `Coverage profile matches “${term}”`);
+      if (contact.email) reasons.push("Public contact email is available");
+      if (contact.lastVerifiedAt) reasons.push("Contact record has a verification date");
+      const outlet = contact.outletId ? outletById.get(contact.outletId) : undefined;
+      return {
+        contact: {
+          ...contact,
+          outletName: outlet?.name ?? null,
+          outletCategory: outlet?.category ?? null,
+          outletWebsite: outlet?.website ?? null,
+          outletCountry: outlet?.country ?? null,
+          outletReachBand: outlet?.reachBand ?? null,
+        },
+        score: Math.min(100, matches.length * 20 + (contact.email ? 10 : 0) + (contact.lastVerifiedAt ? 5 : 0)),
+        reasons,
+      };
     }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score || a.contact.id - b.contact.id).slice(0, 100);
     const [set] = await db.insert(mediaRecommendationSetsTable).values({ accountId, projectId, storyKey, criteria: { terms } }).returning();
     if (ranked.length) await db.insert(mediaRecommendationItemsTable).values(ranked.map((item, index) => ({ recommendationSetId: set.id, contactId: item.contact.id, score: item.score, reasons: item.reasons, rank: index + 1 })));
@@ -824,17 +927,23 @@ router.post("/store/media-db/discoveries", requirePlatformAuth, async (req: Requ
       res.status(400).json({ error: "This discovery is not present in the verified search results." });
       return;
     }
+    const visible = await visibleAccounts(req);
     const result = await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`media-discovery:${accountId}`}))`);
-      const ownOutlets = await tx.select().from(mediaOutletsTable).where(and(eq(mediaOutletsTable.accountId, accountId), isNull(mediaOutletsTable.deletedAt)));
-      let outlet = ownOutlets.find((row) => row.name.trim().toLowerCase() === candidate.outletName.toLowerCase());
+      const visibleOutlets = (await tx.select().from(mediaOutletsTable).where(isNull(mediaOutletsTable.deletedAt)))
+        .filter((row) => outletVisible(row.accountId, visible));
+      const candidateDomain = normalisedOutletDomain(candidate.outletWebsite);
+      let outlet = visibleOutlets.find((row) =>
+        row.name.trim().toLowerCase() === candidate.outletName.toLowerCase()
+        || (!!candidateDomain && normalisedOutletDomain(row.website) === candidateDomain),
+      );
       if (!outlet) {
         [outlet] = await tx.insert(mediaOutletsTable).values({
           name: candidate.outletName,
           website: candidate.outletWebsite,
-          category: "",
+          category: candidate.sectors?.[0] ?? "",
           description: "",
-          country: "United Kingdom",
+          country: inferredOutletCountry(candidate.geography ?? ""),
           accountId,
         }).returning();
       }
@@ -846,7 +955,41 @@ router.post("/store/media-db/discoveries", requirePlatformAuth, async (req: Requ
         && row.lastName.trim().toLowerCase() === candidate.lastName.toLowerCase()
         && (!verifiedEmail || !row.email || row.email.trim().toLowerCase() === verifiedEmail),
       );
-      if (existing) return { contact: existing, outlet, existing: true };
+      const discoveryNotes = [
+        candidate.mediaOpportunity ? `AI-suggested media opportunity: ${candidate.mediaOpportunity}` : "",
+        candidate.evidence ? `Cited source evidence: ${candidate.evidence}` : "",
+      ].filter(Boolean).join("\n\n");
+      if (existing) {
+        const mergedBeats = Array.from(new Set([...existing.beats, ...candidate.beats]));
+        const mergedSectors = Array.from(new Set([...existing.sectors, ...(candidate.sectors ?? [])]));
+        const mergedNotes = discoveryNotes && !existing.notes.includes(discoveryNotes)
+          ? [existing.notes, discoveryNotes].filter(Boolean).join("\n\n")
+          : existing.notes;
+        const [contact] = await tx.update(mediaContactsTable).set({
+          email: existing.email || verifiedEmail,
+          role: existing.role || candidate.role,
+          beats: mergedBeats,
+          sectors: mergedSectors,
+          geography: existing.geography || candidate.geography || "",
+          sourceUrl: existing.sourceUrl || candidate.sourceUrl,
+          sourceRef: existing.sourceRef || "Live public web research",
+          confidence: existing.confidence || candidate.confidence,
+          reviewNotes: existing.reviewNotes || candidate.evidence,
+          notes: mergedNotes,
+          provenance: {
+            ...existing.provenance,
+            latestPublicDiscovery: {
+              provider: "OpenAI web search",
+              sourceUrl: candidate.sourceUrl,
+              evidence: candidate.evidence,
+              discoveredAt: candidate.verifiedAt,
+              modelDerivedFields: ["role", "beats", "sectors", "geography", "mediaOpportunity"],
+            },
+          },
+          updatedAt: new Date(),
+        }).where(eq(mediaContactsTable.id, existing.id)).returning();
+        return { contact, outlet, existing: true };
+      }
       const verifiedAt = new Date(candidate.verifiedAt);
       const [contact] = await tx.insert(mediaContactsTable).values({
         outletId: outlet.id,
@@ -855,15 +998,20 @@ router.post("/store/media-db/discoveries", requirePlatformAuth, async (req: Requ
         role: candidate.role,
         email: verifiedEmail,
         beats: candidate.beats,
+        sectors: candidate.sectors ?? [],
+        geography: candidate.geography ?? "",
         sourceUrl: candidate.sourceUrl,
         sourceRef: "Live public web research",
         confidence: candidate.confidence,
         reviewNotes: candidate.evidence,
+        notes: discoveryNotes,
         provenance: {
           provider: "OpenAI web search",
           sourceUrl: candidate.sourceUrl,
           evidence: candidate.evidence,
           discoveredAt: candidate.verifiedAt,
+          mediaOpportunity: candidate.mediaOpportunity ?? "",
+          modelDerivedFields: ["role", "beats", "sectors", "geography", "mediaOpportunity"],
         },
         lastVerifiedAt: verifiedAt,
         accountId,
@@ -899,11 +1047,35 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
   const accountId = normUsername(req.account!.username);
   const decisions = await db.select().from(mediaRecommendationDecisionsTable).where(and(eq(mediaRecommendationDecisionsTable.accountId, accountId), eq(mediaRecommendationDecisionsTable.projectId, projectId), eq(mediaRecommendationDecisionsTable.storyKey, storyKey)));
   const sets = await db.select({ id: mediaRecommendationSetsTable.id }).from(mediaRecommendationSetsTable).where(and(eq(mediaRecommendationSetsTable.accountId, accountId), eq(mediaRecommendationSetsTable.projectId, projectId), eq(mediaRecommendationSetsTable.storyKey, storyKey)));
-  const candidateItems = sets.length ? await db.select({ id: mediaRecommendationItemsTable.id, recommendationSetId: mediaRecommendationItemsTable.recommendationSetId, score: mediaRecommendationItemsTable.score, rank: mediaRecommendationItemsTable.rank, reasons: mediaRecommendationItemsTable.reasons, contact: mediaContactsTable })
+  const candidateItems = sets.length ? await db.select({ id: mediaRecommendationItemsTable.id, recommendationSetId: mediaRecommendationItemsTable.recommendationSetId, score: mediaRecommendationItemsTable.score, rank: mediaRecommendationItemsTable.rank, reasons: mediaRecommendationItemsTable.reasons, contact: mediaContactsTable, outletName: mediaOutletsTable.name, outletCategory: mediaOutletsTable.category, outletWebsite: mediaOutletsTable.website, outletCountry: mediaOutletsTable.country, outletReachBand: mediaOutletsTable.reachBand, outletAccountId: mediaOutletsTable.accountId, outletDeletedAt: mediaOutletsTable.deletedAt })
     .from(mediaRecommendationItemsTable)
     .innerJoin(mediaContactsTable, eq(mediaRecommendationItemsTable.contactId, mediaContactsTable.id))
+    .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
     .where(and(inArray(mediaRecommendationItemsTable.recommendationSetId, sets.map((set) => set.id)), isNull(mediaContactsTable.deletedAt))) : [];
-  const items = filterVisibleRecommendationItems(candidateItems, await visibleAccounts(req));
+  const visible = await visibleAccounts(req);
+  const items = filterVisibleRecommendationItems(candidateItems, visible).map((item) => {
+    const canSeeOutlet = !item.outletDeletedAt && outletVisible(item.outletAccountId, visible);
+    const outletFields = canSeeOutlet ? {
+      outletName: item.outletName,
+      outletCategory: item.outletCategory,
+      outletWebsite: item.outletWebsite,
+      outletCountry: item.outletCountry,
+      outletReachBand: item.outletReachBand,
+    } : {
+      outletName: null,
+      outletCategory: null,
+      outletWebsite: null,
+      outletCountry: null,
+      outletReachBand: null,
+    };
+    return {
+      ...item,
+      ...outletFields,
+      outletAccountId: undefined,
+      outletDeletedAt: undefined,
+      contact: { ...item.contact, ...outletFields },
+    };
+  });
   res.json({ decisions, items });
 });
 
