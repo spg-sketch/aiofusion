@@ -122,8 +122,33 @@ async function fetchHtml(url: string): Promise<string> {
     if (!res.ok) throw new Error(`Site returned HTTP ${res.status}`);
     const contentLength = res.headers.get("content-length");
     if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) throw new Error("Response too large");
-    const buffer = await res.arrayBuffer();
-    if (buffer.byteLength > MAX_RESPONSE_SIZE) throw new Error("Response too large");
+    if (!res.body) return "";
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let received = 0;
+    const deadline = Date.now() + FETCH_TIMEOUT;
+    try {
+      while (true) {
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) throw new Error("Site request timed out");
+        const result = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Site request timed out")), remaining)),
+        ]);
+        if (result.done) break;
+        received += result.value.byteLength;
+        if (received > MAX_RESPONSE_SIZE) throw new Error("Response too large");
+        chunks.push(result.value);
+      }
+    } finally {
+      await reader.cancel().catch(() => {});
+    }
+    const buffer = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) {
+      buffer.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
     return new TextDecoder().decode(buffer);
   } finally {
     await agent.close().catch(() => {});

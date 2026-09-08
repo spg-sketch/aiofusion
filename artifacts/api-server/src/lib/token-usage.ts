@@ -27,9 +27,10 @@ export async function logTokenUsage(
   inputTokens: number,
   outputTokens: number,
   projectId?: string | null,
+  additionalCostGbp = 0,
 ): Promise<void> {
   try {
-    const costGbpEstimate = estimateCostGbp(model, inputTokens, outputTokens);
+    const costGbpEstimate = estimateCostGbp(model, inputTokens, outputTokens) + Math.max(0, additionalCostGbp);
     await db.insert(tokenUsageTable).values({
       accountId,
       operation,

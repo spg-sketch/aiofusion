@@ -785,6 +785,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "PUT /store/media-db/contacts/:id",
   "DELETE /store/media-db/contacts/:id",
   "POST /store/media-db/import",
+  "POST /store/media-db/discoveries",
   "POST /store/media-db/recommendations",
   "GET /store/media-db/recommendations/decisions",
   "PUT /store/media-db/recommendations/decisions",

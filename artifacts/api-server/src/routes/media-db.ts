@@ -17,6 +17,7 @@ import {
   planMediaImport,
 } from "../lib/media-csv-import";
 import type { MediaImportRow } from "../lib/media-csv-import";
+import { verifyMediaDiscoveries } from "../lib/media-discovery-token";
 
 const router: IRouter = Router();
 
@@ -806,6 +807,74 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
     if (ranked.length) await db.insert(mediaRecommendationItemsTable).values(ranked.map((item, index) => ({ recommendationSetId: set.id, contactId: item.contact.id, score: item.score, reasons: item.reasons, rank: index + 1 })));
     res.json({ ok: true, recommendationSet: set, items: ranked.map((item, index) => ({ rank: index + 1, contact: item.contact, score: item.score, reasons: item.reasons })) });
   } catch (error) { req.log.error({ err: error }, "media recommendations failed"); res.status(500).json({ error: "Failed to create recommendations" }); }
+});
+
+router.post("/store/media-db/discoveries", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const token = typeof req.body?.discoveryToken === "string" ? req.body.discoveryToken : "";
+    const candidateKey = typeof req.body?.candidateKey === "string" ? req.body.candidateKey : "";
+    const trusted = verifyMediaDiscoveries(token);
+    const accountId = normUsername(req.account!.username);
+    if (!trusted || trusted.accountId !== accountId) {
+      res.status(400).json({ error: "This discovery has expired or is not valid for this account. Run the search again." });
+      return;
+    }
+    const candidate = trusted.items.find((item) => item.candidateKey === candidateKey);
+    if (!candidate) {
+      res.status(400).json({ error: "This discovery is not present in the verified search results." });
+      return;
+    }
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`media-discovery:${accountId}`}))`);
+      const ownOutlets = await tx.select().from(mediaOutletsTable).where(and(eq(mediaOutletsTable.accountId, accountId), isNull(mediaOutletsTable.deletedAt)));
+      let outlet = ownOutlets.find((row) => row.name.trim().toLowerCase() === candidate.outletName.toLowerCase());
+      if (!outlet) {
+        [outlet] = await tx.insert(mediaOutletsTable).values({
+          name: candidate.outletName,
+          website: candidate.outletWebsite,
+          category: "",
+          description: "",
+          country: "United Kingdom",
+          accountId,
+        }).returning();
+      }
+      const ownContacts = await tx.select().from(mediaContactsTable).where(and(eq(mediaContactsTable.accountId, accountId), isNull(mediaContactsTable.deletedAt)));
+      const verifiedEmail = candidate.email.trim().toLowerCase();
+      const existing = ownContacts.find((row) =>
+        row.outletId === outlet.id
+        && row.firstName.trim().toLowerCase() === candidate.firstName.toLowerCase()
+        && row.lastName.trim().toLowerCase() === candidate.lastName.toLowerCase()
+        && (!verifiedEmail || !row.email || row.email.trim().toLowerCase() === verifiedEmail),
+      );
+      if (existing) return { contact: existing, outlet, existing: true };
+      const verifiedAt = new Date(candidate.verifiedAt);
+      const [contact] = await tx.insert(mediaContactsTable).values({
+        outletId: outlet.id,
+        firstName: candidate.firstName,
+        lastName: candidate.lastName,
+        role: candidate.role,
+        email: verifiedEmail,
+        beats: candidate.beats,
+        sourceUrl: candidate.sourceUrl,
+        sourceRef: "Live public web research",
+        confidence: candidate.confidence,
+        reviewNotes: candidate.evidence,
+        provenance: {
+          provider: "OpenAI web search",
+          sourceUrl: candidate.sourceUrl,
+          evidence: candidate.evidence,
+          discoveredAt: candidate.verifiedAt,
+        },
+        lastVerifiedAt: verifiedAt,
+        accountId,
+      }).returning();
+      return { contact, outlet, existing: false };
+    });
+    res.status(result.existing ? 200 : 201).json({ ok: true, ...result });
+  } catch (error) {
+    req.log.error({ err: error }, "saving live media discovery failed");
+    res.status(500).json({ error: "Failed to save this discovery to the Media Database." });
+  }
 });
 
 router.put("/store/media-db/recommendations/decisions", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {

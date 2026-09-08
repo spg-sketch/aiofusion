@@ -82,6 +82,23 @@ URLs/emails are interpolated into `href`/`mailto` attributes.
 **Why:** model output is untrusted; unescaped interpolation is an HTML/attribute injection risk
 in generated documents.
 
+## Live public-web media discovery integrity
+
+Treat search-model output as untrusted even when the provider reports web grounding. A discovery
+is saveable only when its exact normalized source page appears in the provider citations, the
+person's full name appears on an SSRF-safe bounded fetch of that page, and any email is an exact
+complete address found in that fetched text. Bind saveable results to the authenticated account
+with a short-lived signed token so the browser cannot rewrite provenance.
+
+**Why:** model-authored URLs, evidence, confidence, and email fields can look grounded while still
+being fabricated or mismatched. Host-only citation checks also let a homepage validate an unrelated
+profile, and browser-submitted discoveries can falsely acquire a "verified" label.
+
+**How to apply:** keep source downloads bounded through body consumption, not just response headers.
+Serialize account saves and deduplicate by person plus outlet rather than source page alone because
+several journalists may share a staff page or article. Count every web-search tool call in spend
+accounting, including responses that fail JSON parsing.
+
 ## Typecheck
 
 Use `pnpm exec tsc --noEmit -p tsconfig.check.json` (plain tsc is unreliable here due to TS6306).

@@ -1,14 +1,19 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { logger } from "../lib/logger";
 import { contentAiLimiter } from "../middleware/rate-limit";
 import { deepStripEmDashes } from "../lib/text-sanitise";
 import { fetchSiteContent, fetchSiteContentWithSubpages } from "../lib/safe-fetch";
-import { db, mediaOutletsTable, mediaContactsTable, auditLocksTable } from "@workspace/db";
+import { db, mediaOutletsTable, mediaContactsTable, auditLocksTable, projectsTable } from "@workspace/db";
 import { isNull, eq, and, gte } from "drizzle-orm";
 import { logTokenUsage } from "../lib/token-usage";
 import { checkFairUsage, checkMonthlySpendLimit, detectAndLogSpike } from "../lib/fair-usage";
 import { features } from "../lib/features";
+import { getVisibleUsernames, normUsername } from "../lib/platform-auth";
+import { inAssignedScope } from "../lib/member-guards";
+import { signMediaDiscoveries, type TrustedMediaDiscovery } from "../lib/media-discovery-token";
+import { countWebSearchCalls } from "../lib/media-discovery-usage";
 
 const contentAiRouter = Router();
 
@@ -68,6 +73,67 @@ function createAnthropicClient(): Anthropic | null {
   const apiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
   if (!baseURL || !apiKey) return null;
   return new Anthropic({ baseURL, apiKey });
+}
+
+function createOpenAIClient(): OpenAI | null {
+  const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  if (!baseURL || !apiKey) return null;
+  return new OpenAI({ baseURL, apiKey });
+}
+
+async function mediaDiscoveryProjectVisible(req: Request, projectId: string): Promise<boolean> {
+  if (!inAssignedScope(req, projectId)) return false;
+  const visible = await getVisibleUsernames(req.account!);
+  const rows = await db.select({ owner: projectsTable.owner, deletedAt: projectsTable.deletedAt })
+    .from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  return !!rows[0] && !rows[0].deletedAt
+    && (visible === null || (!!rows[0].owner && visible.includes(rows[0].owner)));
+}
+
+function citedUrls(output: unknown): string[] {
+  if (!Array.isArray(output)) return [];
+  const urls: string[] = [];
+  for (const item of output) {
+    if (!item || typeof item !== "object" || (item as { type?: unknown }).type !== "message") continue;
+    const content = (item as { content?: unknown }).content;
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      const annotations = part && typeof part === "object" ? (part as { annotations?: unknown }).annotations : null;
+      if (!Array.isArray(annotations)) continue;
+      for (const annotation of annotations) {
+        const url = annotation && typeof annotation === "object" ? (annotation as { url?: unknown }).url : null;
+        if (typeof url !== "string" || !/^https?:\/\//i.test(url)) continue;
+        urls.push(url);
+        try {
+          const wrapper = new URL(url);
+          const target = wrapper.hostname === "please.untaint.us" ? wrapper.searchParams.get("url") : null;
+          if (target && /^https?:\/\//i.test(target)) urls.push(target);
+        } catch { /* ignore malformed citation wrappers */ }
+      }
+    }
+  }
+  return urls;
+}
+
+function normalisedPublicPage(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    parsed.hash = "";
+    for (const key of Array.from(parsed.searchParams.keys())) {
+      if (/^(utm_|gclid$|fbclid$|ref$|source$)/i.test(key)) parsed.searchParams.delete(key);
+    }
+    parsed.hostname = parsed.hostname.toLowerCase();
+    parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function isSupportedByCitation(sourceUrl: string, citations: string[]): boolean {
+  const source = normalisedPublicPage(sourceUrl);
+  return source !== null && citations.some((citation) => normalisedPublicPage(citation) === source);
 }
 
 // Escapes raw control characters (literal newlines, tabs, etc.) that appear
@@ -972,6 +1038,168 @@ contentAiRouter.post(
     } catch (err) {
       logger.error({ err }, "content-ai: media-list call failed");
       sseFail(res, err, "The media list could not be generated right now. Please try again.");
+    }
+  },
+);
+
+contentAiRouter.post(
+  "/content/media-discover",
+  contentAiLimiter,
+  fairUsageCheck,
+  async (req: Request, res: Response): Promise<void> => {
+    if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const content = (body.content ?? {}) as Record<string, unknown>;
+    const title = asString(content.title, 400);
+    const headline = asString(content.headline, 2000);
+    const standfirst = asString(content.standfirst, 4000);
+    const bodyCopy = asString(content.bodyCopy || content.body, 5000);
+    const mediaCategories = asStringArray(body.mediaCategories);
+    const keyMessages = asStringArray(body.keyMessages);
+    const projectId = asString(body.projectId, 200);
+    if (!projectId || (!title && !headline && !bodyCopy)) {
+      res.status(400).json({ error: "Choose a saved article and active project before searching the web." });
+      return;
+    }
+    if (!(await mediaDiscoveryProjectVisible(req, projectId))) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+
+    const client = createOpenAIClient();
+    if (!client) {
+      res.status(503).json({ error: "Live media research is not configured. Please try again later." });
+      return;
+    }
+
+    const prompt = `You are a careful UK media researcher. Search the current public web for journalists and editors who demonstrably cover the supplied story topic.
+
+Rules:
+1. Return no more than 10 people, ranked by editorial relevance.
+2. Every person must be supported by a current public author page, staff profile, or recent article byline at sourceUrl.
+3. Never infer or generate an email address. Include an email only when the exact address appears publicly in the searched evidence.
+4. Do not use people-search, data-broker, scraped contact database, or private social profile data.
+5. evidence must briefly state what the cited page proves. Do not claim facts absent from that page.
+6. confidence is "High" only for an official outlet profile or very recent outlet byline, "Medium" for strong current evidence, otherwise "Low".
+7. Prefer UK publications and people active in the topic. Exclude generic newsroom contacts and unverifiable names.
+
+Story title: ${title || "(untitled)"}
+Headline: ${headline || "(none)"}
+Standfirst: ${standfirst || "(none)"}
+Body excerpt: ${bodyCopy || "(none)"}
+Media categories: ${mediaCategories.join(", ") || "(not supplied)"}
+Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
+
+    try {
+      const response = await client.responses.create({
+        model: "gpt-5.4-mini",
+        tools: [{ type: "web_search" }],
+        max_output_tokens: 8192,
+        input: prompt,
+        text: {
+          format: {
+            type: "json_schema",
+            name: "live_media_discovery",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                items: {
+                  type: "array",
+                  maxItems: 10,
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      firstName: { type: "string" },
+                      lastName: { type: "string" },
+                      role: { type: "string" },
+                      email: { type: "string" },
+                      outletName: { type: "string" },
+                      outletWebsite: { type: "string" },
+                      sourceUrl: { type: "string" },
+                      evidence: { type: "string" },
+                      beats: { type: "array", items: { type: "string" }, maxItems: 8 },
+                      confidence: { type: "string", enum: ["High", "Medium", "Low"] },
+                    },
+                    required: ["firstName", "lastName", "role", "email", "outletName", "outletWebsite", "sourceUrl", "evidence", "beats", "confidence"],
+                  },
+                },
+              },
+              required: ["items"],
+            },
+          },
+        },
+      });
+      void logTokenUsage(
+        req.account.username,
+        "content-media-discover",
+        "gpt-5.4-mini",
+        response.usage?.input_tokens ?? 0,
+        response.usage?.output_tokens ?? 0,
+        projectId,
+        // Conservative allowance per managed web-search tool call. A single
+        // Responses request may search more than once.
+        Math.max(1, countWebSearchCalls(response.output)) * 0.02,
+      );
+      const parsed = JSON.parse(response.output_text || "{\"items\":[]}") as { items?: unknown[] };
+      const citations = citedUrls(response.output);
+      const now = new Date().toISOString();
+      const candidates: TrustedMediaDiscovery[] = (Array.isArray(parsed.items) ? parsed.items : []).slice(0, 10).flatMap((raw) => {
+        if (!raw || typeof raw !== "object") return [];
+        const item = raw as Record<string, unknown>;
+        const firstName = asString(item.firstName, 120);
+        const lastName = asString(item.lastName, 120);
+        const outletName = asString(item.outletName, 240);
+        const sourceUrl = asString(item.sourceUrl, 2000);
+        if ((!firstName && !lastName) || !outletName || !isSupportedByCitation(sourceUrl, citations)) return [];
+        const rawConfidence = asString(item.confidence, 20);
+        const confidence: TrustedMediaDiscovery["confidence"] =
+          rawConfidence === "High" || rawConfidence === "Medium" ? rawConfidence : "Low";
+        return [{
+          candidateKey: Buffer.from(`${firstName}|${lastName}|${outletName}|${sourceUrl}`.toLowerCase()).toString("base64url").slice(0, 120),
+          firstName,
+          lastName,
+          role: asString(item.role, 240),
+          email: asString(item.email, 320),
+          outletName,
+          outletWebsite: /^https?:\/\//i.test(asString(item.outletWebsite, 2000)) ? asString(item.outletWebsite, 2000) : "",
+          sourceUrl,
+          evidence: asString(item.evidence, 2000),
+          beats: asStringArray(item.beats).slice(0, 8),
+          confidence,
+          verifiedAt: now,
+        }];
+      });
+      const checked = await Promise.all(candidates.map(async (candidate): Promise<TrustedMediaDiscovery | null> => {
+        try {
+          const source = await fetchSiteContent(candidate.sourceUrl, 20_000);
+          const evidenceText = `${source.title} ${source.description} ${source.text}`.toLowerCase();
+          const fullName = `${candidate.firstName} ${candidate.lastName}`.trim().toLowerCase();
+          if (!fullName || !evidenceText.includes(fullName)) return null;
+          const publishedEmails = new Set(
+            (evidenceText.match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+/gi) || [])
+              .map((email) => email.toLowerCase()),
+          );
+          const candidateEmail = candidate.email.trim().toLowerCase();
+          const email = candidateEmail && publishedEmails.has(candidateEmail) ? candidateEmail : "";
+          return { ...candidate, email };
+        } catch {
+          return null;
+        }
+      }));
+      const items = checked.filter((candidate): candidate is TrustedMediaDiscovery => candidate !== null);
+      const discoveryToken = signMediaDiscoveries({
+        accountId: normUsername(req.account.username),
+        projectId,
+        expiresAt: Date.now() + 30 * 60 * 1000,
+        items,
+      });
+      res.json({ ok: true, items, discoveryToken });
+    } catch (error) {
+      logger.error({ err: error }, "content-ai: live media discovery failed");
+      res.status(502).json({ error: "Live media research could not be completed right now. Please try again." });
     }
   },
 );
