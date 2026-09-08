@@ -223,7 +223,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
           <CalendarDays size={26} color="#ffffff" />
           <h1 className="text-3xl sm:text-4xl mb-2 leading-[1.1]" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Comms Planner</h1>
         </div>
-        <p className="text-[15px] font-light max-w-5xl" style={{ color: "rgba(255,255,255,0.85)" }}>Plan your whole PR and marketing schedule in one place and see a live score for the AI authority each activity will earn. A joined-up plan means every release, article and event builds your visibility in AI answers instead of working in isolation. Click any content item to open and edit it in the Content Optimiser.</p>
+        <p className="text-[15px] font-light max-w-5xl" style={{ color: "rgba(255,255,255,0.85)" }}>Plan your PR and marketing schedule in one place and see a configurable estimate of its visibility and authority potential. The score responds to content type, selected release channels and workflow status. Click any content item to open and edit it in the Content Optimiser.</p>
       </div>
 
       {!contentVersion && (
@@ -284,7 +284,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
       <div className="rounded-2xl border-2 overflow-hidden mb-6" style={{ background: "white", borderColor: "rgba(16,43,54,0.12)" }}>
         <div className="px-5 py-4 flex items-center gap-3" style={{ background: ink }}>
           <span className="w-1.5 h-6 rounded-full" style={{ background: accentPink }} />
-          <p className="text-[13px] font-bold uppercase tracking-[0.2em]" style={{ color: paper }}>Score Breakdown by Content Type</p>
+          <p className="text-[13px] font-bold uppercase tracking-[0.2em]" style={{ color: paper }}>Raw Item Points by Content Type</p>
           <span className="text-[12px] font-light ml-auto" style={{ color: "rgba(251,246,236,0.55)" }}>All {Object.keys(cfg.typeWeights).length} configured types</span>
         </div>
         <div className="p-6 flex flex-wrap gap-3">
@@ -302,7 +302,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                   className="flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold shrink-0"
                   style={{ background: vars.gold, color: "white" }}
                 >
-                  {Math.round(s)}
+                   {Math.round(s)}
                 </span>
               </div>
             );
@@ -463,7 +463,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                                 <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, maxWidth: 220 }}>{p.keyMessage || ""}</td>
                                 <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600 }}>{p.spokesperson || ""}</td>
                                 <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, whiteSpace: "nowrap" }}>{p.releaseDate || ""}</td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer text-right font-bold hover:bg-slate-100 transition-colors text-[12px]" style={{ background: slotBg, borderColor: vars.navy, color: vars.teal }}>{Math.round(s!.authority)}<span style={{ color: vars.g500, fontWeight: 400 }}> pts</span></td>
+                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer text-right font-bold hover:bg-slate-100 transition-colors text-[12px]" style={{ background: slotBg, borderColor: vars.navy, color: vars.teal }}>{Math.round(s!.visibility + s!.authority)}<span style={{ color: vars.g500, fontWeight: 400 }}> pts</span></td>
                                 <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, maxWidth: 240 }}>{p.notes || ""}</td>
                               </>
                             ) : (
@@ -545,7 +545,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                     <td className="px-3 py-3 align-top sticky left-0 z-10 bg-white" style={{ minWidth: 100 }}>
                       <div className="text-[13px] font-semibold" style={{ color: vars.navy }}>w/c {wcLabel}</div>
                       <div className="text-[10px] font-light mt-0.5" style={{ color: vars.g400 }}>Week {w}</div>
-                      {wkScore > 0 && <div className="text-[10px] font-semibold mt-1 px-1.5 py-0.5 rounded inline-block" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>{Math.round(wkScore)} pts</div>}
+                      {wkScore > 0 && <div className="text-[10px] font-semibold mt-1 px-1.5 py-0.5 rounded inline-block" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>{Math.round(wkScore)} auth</div>}
                     </td>
                     <td className="px-3 py-3">
                       {wkProjects.length === 0 ? (
@@ -566,7 +566,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                                   <p className="text-[11px] font-light mb-2" style={{ color: vars.g500 }}>{p.contentType}{p.spokesperson ? ` · ${p.spokesperson}` : ""}</p>
                                   <div className="flex items-center justify-between text-[11px] mb-2">
                                     <span style={{ color: vars.g400 }}>{p.channels.length} channel{p.channels.length === 1 ? "" : "s"}</span>
-                                    <span className="font-bold" style={{ color: vars.accent }}>{Math.round(s.authority)} pts</span>
+                                    <span className="font-bold" style={{ color: vars.accent }}>{Math.round(s.authority)} auth</span>
                                   </div>
                                 </button>
                                 <div className="flex items-center gap-1 pt-2 border-t" style={{ borderColor: vars.g100 }}>
@@ -619,39 +619,60 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
               <button onClick={() => setShowMethodology(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
             </div>
             <div className="p-6 text-[13px] font-light leading-relaxed space-y-4" style={{ color: vars.g600 }}>
-              <p>The Comms Planner ranks and combines a 12-week schedule of communications activity across <strong style={{ color: vars.navy }}>three categories of GEO content</strong>. Each item is scored on two dimensions, each out of 10:</p>
+              <p>The Comms Planner ranks your communications schedule. Each item is scored on two dimensions based <strong style={{ color: vars.navy }}>only on content type, configured channel count, and workflow status</strong>:</p>
               <ul className="space-y-2 pl-4 list-disc">
-                <li><strong style={{ color: vars.navy }}>Authority</strong> - how strongly the content type contributes to LLM citation. Trade publication articles score highest (9/10).</li>
-                <li><strong style={{ color: vars.navy }}>Visibility</strong> - how many channels and audiences see it. Press releases and social posts score high here.</li>
+                <li><strong style={{ color: vars.navy }}>Authority</strong> - how strongly the content contributes to LLM citation footprint.</li>
+                <li><strong style={{ color: vars.navy }}>Visibility</strong> - scaled by how many configured channels you target.</li>
               </ul>
-              <p>Both dimensions feed a <strong style={{ color: vars.navy }}>Combined</strong> score (the average of the two). The default weighting table is shown below - change any value in <em>Score settings</em>.</p>
               <div className="rounded-lg p-3 border" style={{ background: "rgba(200,73,122,0.05)", borderColor: "rgba(200,73,122,0.2)" }}>
-                <p className="font-semibold text-[12px] mb-1" style={{ color: vars.navy }}>How the plan total is calculated</p>
-                <p>Each new piece of content adds to your plan score, but with <strong style={{ color: vars.navy }}>diminishing returns</strong> - the first high-quality article makes the biggest difference, and a well-rounded plan of different content types will always score higher than repeating the same format. This keeps the Visibility and Authority totals meaningful and capped at 50 each (100 combined), no matter how many items are in the plan.</p>
+                <p className="font-semibold text-[12px] mb-1" style={{ color: vars.navy }}>Score Formula</p>
+                <ul className="text-[12px] space-y-1.5 mb-2 pl-4 list-disc" style={{ color: vars.g600 }}>
+                  <li><strong>Item Visibility</strong> = 5 &times; round-to-0.1(Base visibility weight &times; 0.625 &times; Channel Multiplier &times; Status Multiplier), capped at 50.</li>
+                  <li><strong>Item Authority</strong> = 5 &times; round-to-0.1(Base authority weight &times; 0.5 &times; Status Multiplier), capped at 50.</li>
+                </ul>
+                <p className="font-semibold text-[12px] mb-1 mt-3" style={{ color: vars.navy }}>Total Plan Score</p>
+                <p>Raw item points are summed separately for Visibility and Authority. Each dimension is calculated internally as <strong>round-to-0.1(50 &times; (1 - e<sup>-raw/50</sup>))</strong>. Cards, badges and item score labels round their underlying values to whole numbers for display. The final score is the whole-number rounded sum of the two internal dimensions. This creates diminishing returns and caps each dimension at 50.</p>
               </div>
-              <div className="rounded-lg border overflow-hidden" style={{ borderColor: vars.g200 }}>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="rounded-lg border p-3" style={{ borderColor: vars.g200 }}>
+                  <p className="font-semibold text-[12px] mb-1" style={{ color: vars.navy }}>Channel Multiplier</p>
+                  <p className="text-[11px] mb-2">Base ({cfg.channelBase}) + (Channels &times; Step {cfg.channelStep}), capped at {cfg.channelCap}. Configured channels:</p>
+                  <ul className="text-[11px] space-y-0.5 pl-4 list-disc">
+                    {cfg.channels.map(c => <li key={c}>{c}</li>)}
+                  </ul>
+                </div>
+                <div className="rounded-lg border p-3" style={{ borderColor: vars.g200 }}>
+                  <p className="font-semibold text-[12px] mb-1" style={{ color: vars.navy }}>Status Multiplier</p>
+                  <ul className="text-[11px] space-y-1">
+                    <li className="flex justify-between"><span>Approved</span> <span>{cfg.statusMultipliers.Approved}x</span></li>
+                    <li className="flex justify-between"><span>Review</span> <span>{cfg.statusMultipliers.Review}x</span></li>
+                    <li className="flex justify-between"><span>Drafting</span> <span>{cfg.statusMultipliers.Drafting}x</span></li>
+                    <li className="flex justify-between"><span>Planned</span> <span>{cfg.statusMultipliers.Planned}x</span></li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="rounded-lg border overflow-hidden mt-4" style={{ borderColor: vars.g200 }}>
                 <table className="w-full text-[12px]">
                   <thead style={{ background: vars.g50 }}>
                     <tr>
                       <th className="px-3 py-2 text-left font-semibold" style={{ color: vars.g500 }}>Content type</th>
-                      <th className="px-3 py-2 text-right font-semibold" style={{ color: vars.g500 }}>Authority</th>
-                      <th className="px-3 py-2 text-right font-semibold" style={{ color: vars.g500 }}>Visibility</th>
-                      <th className="px-3 py-2 text-right font-semibold" style={{ color: vars.g500 }}>Combined</th>
+                      <th className="px-3 py-2 text-right font-semibold" style={{ color: vars.g500 }}>Base Authority</th>
+                      <th className="px-3 py-2 text-right font-semibold" style={{ color: vars.g500 }}>Base Visibility</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.entries(DEFAULT_SCORING.typeWeights).map(([t, w]) => (
+                    {Object.entries(cfg.typeWeights).sort((a, b) => (b[1].vis + b[1].auth) - (a[1].vis + a[1].auth)).map(([t, w]) => (
                       <tr key={t} className="border-t" style={{ borderColor: vars.g100 }}>
                         <td className="px-3 py-2" style={{ color: vars.navy }}>{t}</td>
                         <td className="px-3 py-2 text-right font-semibold" style={{ color: vars.teal }}>{w.auth}</td>
                         <td className="px-3 py-2 text-right font-semibold" style={{ color: vars.accent }}>{w.vis}</td>
-                        <td className="px-3 py-2 text-right font-bold" style={{ color: vars.navy }}>{((w.auth + w.vis) / 2).toFixed(1)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <p className="text-[12px] italic" style={{ color: vars.g500 }}>Status (Approved / Review / Drafting / Planned) and the number of release channels also factor in as multipliers. Items still in Planned earn 50% of their potential score.</p>
             </div>
             <div className="px-6 py-3 border-t flex justify-end" style={{ borderColor: vars.g200 }}>
               <button onClick={() => setShowMethodology(false)} className="text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.accent }}>Got it</button>

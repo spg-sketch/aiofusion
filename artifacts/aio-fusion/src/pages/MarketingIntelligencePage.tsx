@@ -14,7 +14,6 @@ import { buildProjectDataText, escapeHtml, safeHttpUrl, downloadWordDocument, ap
 import { TRADE_MEDIA_CATEGORIES } from "../tradeMediaCategories";
 import { getKeyMessages, getProjectMediaCategories, getActiveProjectId } from "../IntakeForm";
 import { Labelled, CategoryPickerModal } from "./shared";
-type EventConfirmFlag = "C" | "U";
 type EventOpportunity = {
   type: "Conference entry" | "Award entry" | "Speaker" | "Sponsorship";
   cost: string;
@@ -28,50 +27,24 @@ type EventItem = {
   name: string;
   url: string;
   category: string;
-  date: string;
+  startDate: string;
+  endDate: string;
   audience: string;
   titleDescription: string;
   location: string;
-  confirmStatus: EventConfirmFlag;
   authority: number;
   relevanceReason: string;
   opportunities: EventOpportunity[];
+  sourceCheckedAt: string;
+};
+type SearchCriteria = {
+  marketingTypes: string[];
+  categories: string[];
+  period: "6m" | "12m";
+  region: "UK" | "NA";
 };
 
-const EVENTS_RESEARCH_LLM_PROMPT_V2 = `You are acting as a senior UK PR event attendance and participation-list builder.
-Produce an exhaustive list of marketing types chosen
-In business categories selected:
-Over period selected:
-Use information and instructions in the Project Data document to inform your search.
-You are given permission to web-search and verify named contacts before answering.
-Use web search for every named contact before writing the row. Do not rely on training-data knowledge of who works where.
-
-For each event, return in this order:
-- Event name and homepage URL
-- Category using the business categories above
-- Event date
-- One-sentence description of its audience (job titles, seniority, sector)
-- One-sentence description of the title (owner or related media publication, format, frequency, subjects and industry covered)
-- Event location / address
-- Event participation submission date / deadline/s
-- Entry cost (for conferences)
-- Award entry costs (for awards only)
-- Participation costs (for speaker opportunities only)
-- Sponsorship costs (for sponsorship opportunities only - include other relevant information including contact details)
-- Events confirmed published data within next <12 months mark as [C] Confirmed
-- Unverified - events unconfirmed within next <12 months but held in previous 24 months - mark as [U] Unconfirmed
-- Authority score (0-100) - provide an LLM authority score for relevance weighted to categories listed above, the business, quality of audience and other relevant criteria
-- Short summary of reasons why an event is relevant to business
-- Flag the top 3 most immediately actionable opportunities - events with open entry windows, upcoming deadlines, or speaker pitch processes currently live.
-
-Hard rules:
-- Do not invent URLs, events, titles, or emails.
-
-Deliverable:
-- A sortable Excel with one row per opportunity - include multiple opportunities for each event.
-- A structured list on a Word document.`;
 function MarketingIntelligencePage() {
-  const [showLLMBrief, setShowLLMBrief] = useState(false);
   const projectCategories = getProjectMediaCategories();
   const [marketingType, setMarketingType] = useState<string[]>(["Trade Conferences"]);
   const [categories, setCategories] = useState<string[]>(projectCategories);
@@ -79,12 +52,19 @@ function MarketingIntelligencePage() {
   const [region, setRegion] = useState<"UK" | "NA">("UK");
   const [showCatPicker, setShowCatPicker] = useState(false);
   const [results, setResults] = useState<EventItem[] | null>(null);
+  const [resultCriteria, setResultCriteria] = useState<SearchCriteria | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
 
   const MARKETING_TYPES = ["Trade Conferences", "Conference Sponsorships", "Trade Speaker", "Trade Awards", "Networking"];
 
   const search = async () => {
+    const requested: SearchCriteria = {
+      marketingTypes: [...marketingType],
+      categories: [...categories],
+      period,
+      region,
+    };
     setSearching(true);
     setResults(null);
     setSearchError("");
@@ -94,10 +74,10 @@ function MarketingIntelligencePage() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          marketingTypes: marketingType,
-          categories,
-          period,
-          region,
+          marketingTypes: requested.marketingTypes,
+          categories: requested.categories,
+          period: requested.period,
+          region: requested.region,
           projectData: buildProjectDataText(),
           projectId: getActiveProjectId(),
         }),
@@ -108,6 +88,7 @@ function MarketingIntelligencePage() {
       }
       const data = await resp.json() as { events: EventItem[] };
       setResults(Array.isArray(data.events) ? data.events : []);
+      setResultCriteria(requested);
     } catch (err) {
       setSearchError(err instanceof Error ? err.message : "Search could not complete. Please try again.");
       setResults(null);
@@ -115,54 +96,49 @@ function MarketingIntelligencePage() {
       setSearching(false);
     }
   };
-  void EVENTS_RESEARCH_LLM_PROMPT_V2;
 
   const actionableOps = (results || []).flatMap((e) =>
     e.opportunities.filter((o) => o.actionable).map((o) => ({ event: e, op: o }))
   ).slice(0, 3);
-
-  const confirmStyle = (c: EventConfirmFlag) =>
-    c === "C"
-      ? { color: "#1F7244", bg: "rgba(31,114,68,0.12)", label: "[C] Confirmed in next 12 months" }
-      : { color: "#A04040", bg: "rgba(160,64,64,0.12)", label: "[U] Unconfirmed - held in last 24 months" };
+  const exportCriteria = resultCriteria ?? { marketingTypes: marketingType, categories, period, region };
 
   const downloadWordReport = () => {
     if (!results) return;
     const itemsHtml = results.map((e) => {
-      const cs = confirmStyle(e.confirmStatus);
       const opsHtml = e.opportunities.map((o) => `
-        <li><b>${o.type}</b> - <b>Cost:</b> ${o.cost} · <b>Deadline:</b> ${o.deadline}
-          ${o.contactDetails ? `<br/><i style="color:#666;">Contact: ${o.contactDetails}</i>` : ""}
-          ${o.notes ? `<br/><i style="color:#666;">${o.notes}</i>` : ""}
-          ${o.actionable ? `<br/><span style="color:#C8497A;font-weight:bold;">★ Top 3 actionable</span>` : ""}
+        <li><b>${escapeHtml(o.type)}</b> - <b>Cost:</b> ${escapeHtml(o.cost || "Not published")} &middot; <b>Deadline:</b> ${escapeHtml(o.deadline || "Not published")}
+          ${o.contactDetails ? `<br/><i style="color:#666;">Contact: ${escapeHtml(o.contactDetails)}</i>` : ""}
+          ${o.notes ? `<br/><i style="color:#666;">${escapeHtml(o.notes)}</i>` : ""}
+          ${o.actionable ? `<br/><span style="color:#C8497A;font-weight:bold;">Top 3 upcoming verified deadline</span>` : ""}
         </li>
       `).join("");
       return `
-        <h2 style="font-family:Georgia,serif;color:#102B36;margin-bottom:4px;">${e.rank}. ${e.name}</h2>
-        <p style="margin:0 0 8px 0;color:#1f748f;"><a href="${e.url}">${e.url}</a> · ${e.category} · <b>Authority ${e.authority}/100</b> · <span style="color:${cs.color};font-weight:bold;">${cs.label}</span></p>
-        <p><b>Date:</b> ${e.date}</p>
-        <p><b>Audience:</b> ${e.audience}</p>
-        <p><b>Title / owner:</b> ${e.titleDescription}</p>
-        <p><b>Location:</b> ${e.location}</p>
-        <p><b>Why it's relevant:</b> ${e.relevanceReason}</p>
+        <h2 style="font-family:Georgia,serif;color:#102B36;margin-bottom:4px;">${escapeHtml(String(e.rank))}. ${escapeHtml(e.name)}</h2>
+        <p style="margin:0 0 8px 0;color:#1f748f;"><a href="${escapeHtml(safeHttpUrl(e.url))}">${escapeHtml(e.url)}</a> &middot; ${escapeHtml(e.category)} &middot; <b>Authority ${escapeHtml(String(e.authority))}/100</b></p>
+        <p><b>Date:</b> ${escapeHtml(e.startDate)} to ${escapeHtml(e.endDate)}</p>
+        <p><b>Audience:</b> ${escapeHtml(e.audience)}</p>
+        <p><b>Title / owner:</b> ${escapeHtml(e.titleDescription)}</p>
+        <p><b>Location:</b> ${escapeHtml(e.location)}</p>
+        <p><b>Why it is relevant:</b> ${escapeHtml(e.relevanceReason)}</p>
+        <p><b>Source checked:</b> ${escapeHtml(e.sourceCheckedAt)}</p>
         <p><b>Opportunities (${e.opportunities.length}):</b></p>
         <ul>${opsHtml}</ul>
         <hr/>
       `;
     }).join("");
-    const topActionHtml = actionableOps.length === 0 ? "<p><i>No live windows flagged at search time.</i></p>" :
-      `<ol>${actionableOps.map((a) => `<li><b>${a.event.name}</b> - ${a.op.type} - deadline: ${a.op.deadline}</li>`).join("")}</ol>`;
+    const topActionHtml = actionableOps.length === 0 ? "<p><i>No upcoming verified deadlines found.</i></p>" :
+      `<ol>${actionableOps.map((a) => `<li><b>${escapeHtml(a.event.name)}</b> - ${escapeHtml(a.op.type)} - deadline: ${escapeHtml(a.op.deadline || "Not published")}</li>`).join("")}</ol>`;
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Event Opportunities Report</title></head><body style="font-family:Calibri,Arial,sans-serif;color:#102B36;">
       <h1 style="font-family:Georgia,serif;">Event Opportunities Report</h1>
-      <p><b>Marketing types:</b> ${marketingType.join(", ")}</p>
-      <p><b>Business categories:</b> ${categories.join(", ")}</p>
-      <p><b>Period:</b> ${period === "6m" ? "Next 6 months" : "Next 12 months"} · <b>Region:</b> ${region === "UK" ? "United Kingdom" : "North America"}</p>
-      <h2 style="font-family:Georgia,serif;color:#102B36;">Top 3 immediately actionable opportunities</h2>
+      <p><b>Marketing types:</b> ${escapeHtml(exportCriteria.marketingTypes.join(", "))}</p>
+      <p><b>Business categories:</b> ${escapeHtml(exportCriteria.categories.join(", "))}</p>
+      <p><b>Period:</b> ${escapeHtml(exportCriteria.period === "6m" ? "Next 6 months" : "Next 12 months")} &middot; <b>Region:</b> ${escapeHtml(exportCriteria.region === "UK" ? "United Kingdom" : "North America")}</p>
+      <h2 style="font-family:Georgia,serif;color:#102B36;">Top 3 upcoming verified deadlines</h2>
       ${topActionHtml}
       <hr/>
       ${itemsHtml}
       <h2 style="font-family:Georgia,serif;color:#102B36;">Methodology &amp; source caveats</h2>
-      <p>Generated using the Project Data brief, with web-search verification of every named contact, event URL and deadline. Events with confirmed published dates within the next 12 months are marked <b>[C] Confirmed</b>; events unconfirmed for the next 12 months but held in the previous 24 months are marked <b>[U] Unconfirmed</b> and should be re-checked before commitment. Authority scores (0-100) are relevance-weighted to the selected business categories, audience quality and LLM citation footprint. URLs, events, titles and emails are not invented - unverifiable entries are dropped.</p>
+      <p>Generated using the Project Data brief and current web search. Every result links to a cited event page where the event name and selected-period date were checked. A deadline is shown only when it appeared near submission or entry language on the same page. Authority scores (0-100) are an AI relevance estimate based on category fit, audience quality and potential third-party visibility, not measured reach.</p>
     </body></html>`;
     const blob = new Blob([html], { type: "application/msword" });
     const url = URL.createObjectURL(blob);
@@ -177,26 +153,26 @@ function MarketingIntelligencePage() {
     if (!results) return;
     // One row per opportunity
     const rows = results.flatMap((e) => {
-      const cs = confirmStyle(e.confirmStatus);
       return e.opportunities.map((o) => `
         <tr>
-          <td>${e.rank}</td>
-          <td>${e.name}</td>
-          <td>${e.url}</td>
-          <td>${e.category}</td>
-          <td>${e.date}</td>
-          <td>${e.location}</td>
-          <td>${e.audience}</td>
-          <td>${e.titleDescription}</td>
-          <td style="color:${cs.color};font-weight:bold;">${e.confirmStatus} - ${cs.label.replace(`[${e.confirmStatus}] `, "")}</td>
-          <td>${e.authority}</td>
-          <td>${o.type}</td>
-          <td>${o.cost}</td>
-          <td>${o.deadline}</td>
-          <td>${o.contactDetails || ""}</td>
-          <td>${o.notes || ""}</td>
+          <td>${escapeHtml(String(e.rank))}</td>
+          <td>${escapeHtml(e.name)}</td>
+          <td><a href="${escapeHtml(safeHttpUrl(e.url))}">${escapeHtml(e.url)}</a></td>
+          <td>${escapeHtml(e.category)}</td>
+          <td>${escapeHtml(e.startDate)}</td>
+          <td>${escapeHtml(e.endDate)}</td>
+          <td>${escapeHtml(e.location)}</td>
+          <td>${escapeHtml(e.audience)}</td>
+          <td>${escapeHtml(e.titleDescription)}</td>
+          <td>${escapeHtml(String(e.authority))}</td>
+          <td>${escapeHtml(o.type)}</td>
+          <td>${escapeHtml(o.cost || "Not published")}</td>
+          <td>${escapeHtml(o.deadline || "Not published")}</td>
+          <td>${escapeHtml(o.contactDetails || "")}</td>
+          <td>${escapeHtml(o.notes || "")}</td>
           <td>${o.actionable ? "YES" : ""}</td>
-          <td>${e.relevanceReason}</td>
+          <td>${escapeHtml(e.relevanceReason)}</td>
+          <td>${escapeHtml(e.sourceCheckedAt)}</td>
         </tr>
       `);
     }).join("");
@@ -204,16 +180,16 @@ function MarketingIntelligencePage() {
 <head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Opportunities</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet><x:ExcelWorksheet><x:Name>Methodology</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
 <body>
 <h2>Event Opportunities - one row per opportunity</h2>
-<p><b>Marketing types:</b> ${marketingType.join(", ")} · <b>Categories:</b> ${categories.join(", ")} · <b>Period:</b> ${period === "6m" ? "Next 6 months" : "Next 12 months"} · <b>Region:</b> ${region === "UK" ? "United Kingdom" : "North America"}</p>
+<p><b>Marketing types:</b> ${escapeHtml(exportCriteria.marketingTypes.join(", "))} &middot; <b>Categories:</b> ${escapeHtml(exportCriteria.categories.join(", "))} &middot; <b>Period:</b> ${escapeHtml(exportCriteria.period === "6m" ? "Next 6 months" : "Next 12 months")} &middot; <b>Region:</b> ${escapeHtml(exportCriteria.region === "UK" ? "United Kingdom" : "North America")}</p>
 <table border="1">
   <thead><tr style="background:#102B36;color:white;font-weight:bold;">
-    <th>Rank</th><th>Event name</th><th>URL</th><th>Category</th><th>Date</th><th>Location</th><th>Audience</th><th>Title / owner</th><th>Confirm status</th><th>Authority /100</th><th>Opportunity type</th><th>Cost</th><th>Deadline</th><th>Contact details</th><th>Notes</th><th>Top 3 actionable</th><th>Why relevant</th>
+    <th>Rank</th><th>Event name</th><th>URL</th><th>Category</th><th>Start Date</th><th>End Date</th><th>Location</th><th>Audience</th><th>Title / owner</th><th>AI relevance /100</th><th>Opportunity type</th><th>Cost</th><th>Deadline</th><th>Contact details</th><th>Notes</th><th>Top 3 upcoming verified deadlines</th><th>Why relevant</th><th>Source checked</th>
   </tr></thead>
   <tbody>${rows}</tbody>
 </table>
 <br/><br/>
 <h2>Methodology</h2>
-<p>Generated using the Project Data brief, with web-search verification of every named contact, event URL and deadline. Events with confirmed published dates within the next 12 months are marked [C] Confirmed; events unconfirmed for the next 12 months but held in the previous 24 months are marked [U] Unconfirmed and should be re-checked before commitment. Authority scores (0-100) are relevance-weighted to selected business categories, audience quality and LLM citation footprint. URLs, events, titles and emails are not invented - unverifiable entries are dropped.</p>
+<p>Generated using the Project Data brief and current web search. Every result links to a cited event page where the event name and selected-period date were checked. A deadline is shown only when it appeared near submission or entry language on the same page. Authority scores (0-100) are an AI relevance estimate based on category fit, audience quality and potential third-party visibility, not measured reach.</p>
 </body></html>`;
     const blob = new Blob([html], { type: "application/vnd.ms-excel" });
     const url = URL.createObjectURL(blob);
@@ -232,7 +208,7 @@ function MarketingIntelligencePage() {
           <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Marketing Intelligence</h1>
         </div>
         <p className="text-[15px] font-light" style={{ color: "rgba(255,255,255,0.97)" }}>
-          Find the awards, conferences and speaker platforms worth pursuing, each scored on the AI authority it can deliver. Award wins and speaking slots create the credible, independent mentions that AI tools reward, strengthening your place in their answers. Recommendations are tailored to your Project Data brief.
+          Find current awards, conferences and speaker platforms worth pursuing. Each result is checked against its cited event page and ranked using an AI relevance estimate tailored to your Project Data brief.
         </p>
       </div>
 
@@ -299,16 +275,10 @@ function MarketingIntelligencePage() {
                 <><Search size={14} /> Search Events</>
               )}
             </button>
-            <button onClick={() => setShowLLMBrief((v) => !v)} className="flex items-center gap-2 px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-[0.2em] border-2 transition-colors" style={{ borderColor: "#C8497A", color: showLLMBrief ? "white" : "#C8497A", background: showLLMBrief ? "#C8497A" : "white" }}>
-              <Sparkles size={12} /> {showLLMBrief ? "Hide LLM brief" : "LLM Brief"}
-            </button>
           </div>
           <p className="text-[14px] font-normal leading-relaxed" style={{ color: vars.navy }}>
-            Builds an exhaustive, web-verified list of UK PR events for the chosen marketing types and business categories, with one row per opportunity (entry, award, speaker, sponsorship). Events confirmed in the next 12 months are flagged <strong style={{ color: "#1F7244" }}>[C] Confirmed</strong>; events held in the previous 24 months but not yet confirmed forward are flagged <strong style={{ color: "#A04040" }}>[U] Unconfirmed</strong>. Each event carries an LLM authority score (0-100), a relevance summary and named-contact details verified at search time. No URLs, events, titles or emails are invented.
+            Searches current event pages for the chosen marketing types, categories, period and region. Results are retained only when the cited page contains the event identity and published date. Deadlines appear only when found near submission or entry language. The authority figure is an AI relevance estimate, not measured reach.
           </p>
-          {showLLMBrief && (
-            <pre className="mt-3 p-3 rounded-lg text-[11px] font-mono leading-relaxed whitespace-pre-wrap overflow-auto max-h-[320px]" style={{ background: vars.g50, border: `1px solid ${vars.g100}`, color: vars.g600 }}>{EVENTS_RESEARCH_LLM_PROMPT_V2}</pre>
-          )}
         </div>
       </div>
 
@@ -332,9 +302,9 @@ function MarketingIntelligencePage() {
           ) : (
           <>
           <div className="rounded-2xl p-5" style={{ background: "white", border: `1px solid ${vars.g200}` }}>
-            <p className="text-[13px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: vars.coral }}>Top 3 immediately actionable opportunities</p>
+            <p className="text-[13px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: vars.coral }}>Top 3 upcoming verified deadlines</p>
             {actionableOps.length === 0 ? (
-              <p className="text-[12px] italic" style={{ color: vars.g500 }}>No live windows flagged at search time.</p>
+              <p className="text-[12px] italic" style={{ color: vars.g500 }}>No upcoming verified deadlines found.</p>
             ) : (
               <ul className="space-y-1.5">
                 {actionableOps.map((a, i) => (
@@ -349,11 +319,10 @@ function MarketingIntelligencePage() {
           <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: vars.g200 }}>
             <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
               <h3 className="text-sm font-bold uppercase tracking-[0.12em]" style={{ color: vars.navy }}>Recommended events ({results.length})</h3>
-              <span className="text-[11px]" style={{ color: vars.g500 }}>Ranked by LLM authority + category fit</span>
+              <span className="text-[11px]" style={{ color: vars.g500 }}>Ranked by AI relevance estimate and category fit</span>
             </div>
             <div className="divide-y" style={{ borderColor: vars.g100 }}>
               {results.map((e) => {
-                const cs = confirmStyle(e.confirmStatus);
                 return (
                   <div key={e.name} className="p-5">
                     <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
@@ -363,19 +332,21 @@ function MarketingIntelligencePage() {
                         </p>
                         <a href={e.url} target="_blank" rel="noreferrer" className="text-[11px] underline" style={{ color: vars.accent }}>{e.url}</a>
                         <p className="text-[13px] font-light mt-1" style={{ color: vars.g600 }}>
-                          {e.category} · {e.date} · {e.location}
+                          {e.category} &middot; {e.startDate} to {e.endDate}{e.location ? <> &middot; {e.location}</> : null}
+                        </p>
+                        <p className="text-[11px] font-light mt-0.5" style={{ color: vars.g500 }}>
+                          Source checked: {new Date(e.sourceCheckedAt).toLocaleDateString()}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] font-bold px-2 py-1 rounded-full" style={{ background: cs.bg, color: cs.color }}>{cs.label}</span>
-                        <span className="text-[10px] font-bold px-2.5 py-1 rounded-full" style={{ background: "rgba(201,160,78,0.18)", color: "#7A5E25" }}>Authority {e.authority}/100</span>
+                        <span className="text-[10px] font-bold px-2.5 py-1 rounded-full" style={{ background: "rgba(201,160,78,0.18)", color: "#7A5E25" }}>AI relevance {e.authority}/100</span>
                       </div>
                     </div>
                     <p className="text-[12px] font-light leading-relaxed mb-1" style={{ color: vars.g600 }}>
-                      <strong style={{ color: vars.navy }}>Audience:</strong> {e.audience}
+                      <strong style={{ color: vars.navy }}>AI-summarised audience:</strong> {e.audience}
                     </p>
                     <p className="text-[12px] font-light leading-relaxed mb-1" style={{ color: vars.g600 }}>
-                      <strong style={{ color: vars.navy }}>Title / owner:</strong> {e.titleDescription}
+                      <strong style={{ color: vars.navy }}>AI-summarised organiser:</strong> {e.titleDescription}
                     </p>
                     <p className="text-[12px] font-light leading-relaxed mb-2" style={{ color: vars.g600 }}>
                       <strong style={{ color: vars.navy }}>Why relevant:</strong> {e.relevanceReason}
@@ -388,11 +359,11 @@ function MarketingIntelligencePage() {
                             <div className="flex items-start justify-between gap-2 flex-wrap">
                               <strong style={{ color: vars.navy }}>{o.type}</strong>
                               {o.actionable && (
-                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(224,120,86,0.12)", color: vars.coral }}>★ Top 3 actionable</span>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(224,120,86,0.12)", color: vars.coral }}>Top 3 actionable</span>
                               )}
                             </div>
-                            <p className="mt-0.5"><strong>Cost:</strong> {o.cost}</p>
-                            <p><strong>Deadline:</strong> <span style={{ color: o.actionable ? vars.coral : vars.g600 }}>{o.deadline}</span></p>
+                            <p className="mt-0.5"><strong>Cost:</strong> {o.cost || "Not published"}</p>
+                            <p><strong>Deadline:</strong> <span style={{ color: o.actionable ? vars.coral : vars.g600 }}>{o.deadline || "Not published"}</span></p>
                             {o.contactDetails && <p className="italic" style={{ color: vars.g600 }}>Contact: {o.contactDetails}</p>}
                             {o.notes && <p className="italic" style={{ color: vars.g600 }}>{o.notes}</p>}
                           </li>

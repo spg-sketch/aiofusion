@@ -8,6 +8,8 @@ const COST_PER_M: Record<string, { input: number; output: number }> = {
   "claude-sonnet-4-5": { input: 2.37, output: 11.81 },
   "claude-sonnet-4-6": { input: 2.37, output: 11.81 },
   "gpt-5": { input: 7.87, output: 31.50 },
+  // OpenAI public price: $0.75 / $4.50 per 1M tokens, converted at ~1.27 USD/GBP.
+  "gpt-5.4-mini": { input: 0.59, output: 3.54 },
 };
 
 export function estimateCostGbp(
