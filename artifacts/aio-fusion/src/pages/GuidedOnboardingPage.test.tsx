@@ -11,20 +11,22 @@ function response(body: unknown) {
   return { ok: true, json: async () => body } as Response;
 }
 
-function renderSetup(checkoutResult?: "success" | "cancelled" | null) {
-  return render(
+function renderSetup(checkoutResult?: "success" | "cancelled" | null, onComplete = vi.fn(async () => ({ ok: true }))) {
+  return {
+    onComplete,
+    ...render(
     <GuidedOnboardingPage
       checkoutResult={checkoutResult}
       onSignOut={vi.fn()}
       onRoleChanged={vi.fn()}
-      onCreateFirstProject={vi.fn(async () => ({ ok: true }))}
-      onResumeFirstProject={vi.fn(async () => ({ ok: true }))}
+      onComplete={onComplete}
     />,
-  );
+    ),
+  };
 }
 
 describe("GuidedOnboardingPage", () => {
-  it("leaves the workspace name blank when only the signed-in person's name exists", async () => {
+  it("leaves the company name blank when only the signed-in person's name exists", async () => {
     vi.stubGlobal("fetch", vi.fn()
       .mockResolvedValueOnce(response({ state: { step: "workspace_basics" } }))
       .mockResolvedValueOnce(response({
@@ -33,9 +35,9 @@ describe("GuidedOnboardingPage", () => {
       })));
     renderSetup();
 
-    const workspaceName = await screen.findByLabelText("Workspace name");
-    expect(workspaceName).toHaveValue("");
-    expect(workspaceName).toHaveAttribute("placeholder", "e.g. Acme Corp");
+    const companyName = await screen.findByLabelText("Company name");
+    expect(companyName).toHaveValue("");
+    expect(companyName).toHaveAttribute("placeholder", "e.g. Acme Corp");
   });
 
   it("prefills a genuine existing workspace profile", async () => {
@@ -47,8 +49,31 @@ describe("GuidedOnboardingPage", () => {
       })));
     renderSetup();
 
-    expect(await screen.findByLabelText("Workspace name")).toHaveValue("Acme Corp");
+    expect(await screen.findByLabelText("Company name")).toHaveValue("Acme Corp");
     expect(screen.getByLabelText("Company website")).toHaveValue("https://acme.example");
+  });
+
+  it("keeps focus while typing into the company details fields", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(response({ state: { step: "workspace_basics" } }))
+      .mockResolvedValueOnce(response({ accountProfile: {} })));
+    renderSetup();
+
+    const companyName = await screen.findByLabelText("Company name");
+    companyName.focus();
+    fireEvent.change(companyName, { target: { value: "A" } });
+    expect(document.activeElement).toBe(companyName);
+    fireEvent.change(companyName, { target: { value: "Acme" } });
+    expect(document.activeElement).toBe(companyName);
+    expect(companyName).toHaveValue("Acme");
+
+    const companyWebsite = screen.getByLabelText("Company website");
+    companyWebsite.focus();
+    fireEvent.change(companyWebsite, { target: { value: "h" } });
+    expect(document.activeElement).toBe(companyWebsite);
+    fireEvent.change(companyWebsite, { target: { value: "https://acme.example" } });
+    expect(document.activeElement).toBe(companyWebsite);
+    expect(companyWebsite).toHaveValue("https://acme.example");
   });
 
   it("shows the access sequence and beta skips billing", async () => {
@@ -56,10 +81,11 @@ describe("GuidedOnboardingPage", () => {
       .mockResolvedValueOnce(response({ state: { step: "access" } }))
       .mockResolvedValueOnce(response({ accountProfile: {} }))
       .mockResolvedValueOnce(response({ state: { step: "first_project", accessChoice: "beta" } })));
-    renderSetup();
+    const { onComplete } = renderSetup();
     expect(await screen.findByText("Choose how to start")).toBeInTheDocument();
     fireEvent.click(screen.getByText("60-day beta"));
-    expect(await screen.findByText("Create your first project")).toBeInTheDocument();
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText("Create your first project")).not.toBeInTheDocument();
     expect(screen.queryByText("Billing and payment")).not.toBeInTheDocument();
   });
 

@@ -53,6 +53,10 @@ vi.mock("./pages/PlatformHomePage", async () => ({
   },
 }));
 
+vi.mock("./pages/GuidedOnboardingPage", () => ({
+  GuidedOnboardingPage: () => <div>Guided onboarding</div>,
+}));
+
 vi.mock("./lib/contentAi", async (importOriginal) => {
   const mod = await importOriginal<typeof import("./lib/contentAi")>();
   return { ...mod, apiBase: () => "" };
@@ -259,4 +263,50 @@ describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () =
         .toBeInTheDocument(),
     { timeout: 8000 });
   }, 40000);
+
+  it("does not flash Project Hub while a slow setup-status check redirects a new client to onboarding", async () => {
+    let loggedIn = false;
+    let resolveSetupCheck!: (response: Response) => void;
+    const delayedSetupCheck = new Promise<Response>((resolve) => {
+      resolveSetupCheck = resolve;
+    });
+
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const urlStr = String(url);
+      if (urlStr.includes("/api/platform/me")) {
+        return loggedIn ? delayedSetupCheck : unauth();
+      }
+      if (urlStr.includes("/api/store/projects")) {
+        return makeResponse({ projects: [], deletedIds: [] });
+      }
+      return unauth();
+    }));
+
+    window.history.replaceState({}, "", "/?oauth_status=ok");
+    const { default: App } = await import("./App");
+    render(<App />);
+
+    const signInBtn = await screen.findByRole("button", { name: /Mock sign in/i }, { timeout: 8000 });
+    loggedIn = true;
+
+    await act(async () => {
+      fireEvent.click(signInBtn);
+    });
+
+    expect(screen.queryByRole("button", { name: /Project Hub/i })).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveSetupCheck(makeResponse({
+        account: { username: "newbrand", role: "client" },
+        setupComplete: false,
+        onboarding: { step: "account_type" },
+        hasPassword: true,
+        emailVerified: true,
+        accountProfile: { displayName: "New Brand", website: "https://newbrand.example" },
+      }));
+    });
+
+    expect(await screen.findByText("Guided onboarding", {}, { timeout: 8000 })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Project Hub/i })).not.toBeInTheDocument();
+  }, 20000);
 });

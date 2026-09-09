@@ -3,33 +3,106 @@ import { ArrowRight, Check, Loader2, LogOut, CreditCard, Play, AlertTriangle, Al
 import AccountTypeSelectPage from "./AccountTypeSelectPage";
 import { BillingDetailsCard } from "../components/BillingDetailsCard";
 import { SubscriptionCard } from "../components/SubscriptionCard";
-import { CreateProjectModal } from "../components/CreateProjectModal";
 import { apiBase } from "../lib/apiHelpers";
 import { vars } from "../marketing/vars";
 
 type Step = "account_type" | "workspace_basics" | "access" | "billing" | "first_project";
 type State = { step: Step; accessChoice?: "beta" | "paid" };
-type ExistingProject = { id: string; name: string };
 
 const STEPS = [
   ["account_type", "Account type"],
-  ["workspace_basics", "Workspace"],
+  ["workspace_basics", "Company"],
   ["access", "Access"],
   ["billing", "Billing"],
-  ["first_project", "First project"],
 ] as const;
+
+function OnboardingLayout({
+  state,
+  onSignOut,
+  children,
+}: {
+  state: State;
+  onSignOut: () => void;
+  children: React.ReactNode;
+}) {
+  const activeIndex = STEPS.findIndex(([key]) => key === state.step);
+
+  return (
+    <div className="min-h-screen flex flex-col md:flex-row font-sans" style={{ background: vars.cream, color: vars.navy }}>
+      <aside className="w-full md:w-[320px] lg:w-[380px] shrink-0 md:h-screen md:sticky md:top-0 flex flex-col justify-between z-10" style={{ background: vars.navy }}>
+        <div className="p-6 md:p-10 lg:p-12 relative">
+          <div className="flex items-center justify-between mb-8 md:mb-16">
+            <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="h-8 md:h-10" />
+            <button onClick={onSignOut} className="md:hidden p-2 text-white/60 hover:text-white transition-colors" aria-label="Sign out">
+              <LogOut size={20} />
+            </button>
+          </div>
+
+          <nav aria-label="Progress" className="hidden md:block">
+            <ol className="space-y-8">
+              {STEPS.map(([key, label], index) => {
+                const isActive = index === activeIndex;
+                const isPast = index < activeIndex;
+
+                return (
+                  <li key={key} className="flex items-center gap-4 relative">
+                    {index !== STEPS.length - 1 && (
+                      <div className="absolute top-6 left-[11px] w-px h-8" style={{ background: isPast ? vars.accent : "rgba(255,255,255,0.1)" }} />
+                    )}
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold transition-colors duration-300 ${
+                      isPast ? "" : isActive ? "" : "bg-white/10 text-white/40"
+                    }`} style={{
+                      background: isPast || isActive ? vars.accent : undefined,
+                      color: isPast || isActive ? "white" : undefined,
+                    }}>
+                      {isPast ? <Check size={12} strokeWidth={3} /> : index + 1}
+                    </div>
+                    <span className={`text-sm font-medium transition-colors duration-300 ${
+                      isActive ? "text-white" : isPast ? "text-white/80" : "text-white/40"
+                    }`}>
+                      {label}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          </nav>
+
+          <nav className="md:hidden">
+            <div className="flex items-center gap-2 text-white/90 text-sm font-medium">
+              Step {activeIndex + 1} of {STEPS.length}: {STEPS[activeIndex][1]}
+            </div>
+            <div className="h-1.5 w-full bg-white/10 rounded-full mt-3 overflow-hidden">
+              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${((activeIndex + 1) / STEPS.length) * 100}%`, background: vars.accent }} />
+            </div>
+          </nav>
+        </div>
+
+        <div className="hidden md:block p-6 md:p-10 lg:p-12">
+          <button onClick={onSignOut} className="flex items-center gap-2 text-white/60 hover:text-white transition-colors text-sm font-medium">
+            <LogOut size={16} /> Sign out
+          </button>
+        </div>
+      </aside>
+
+      <main className="flex-1 flex flex-col min-h-[calc(100vh-140px)] md:min-h-screen relative z-0">
+        <div className="flex-1 w-full max-w-2xl mx-auto p-6 md:p-12 lg:p-20 flex flex-col justify-center">
+          {children}
+        </div>
+      </main>
+    </div>
+  );
+}
 
 export function GuidedOnboardingPage({
   onSignOut,
   onRoleChanged,
-  onCreateFirstProject,
-  onResumeFirstProject,
+  onComplete,
   checkoutResult,
 }: {
   onSignOut: () => void;
   onRoleChanged: (role: "agency" | "client") => void;
-  onCreateFirstProject: (name: string, logo?: string) => Promise<{ ok: boolean; error?: string; saved?: boolean }>;
-  onResumeFirstProject: (project: ExistingProject) => Promise<{ ok: boolean; error?: string; saved?: boolean }>;
+  onComplete: () => Promise<{ ok: boolean; error?: string }>;
   checkoutResult?: "success" | "cancelled" | null;
 }) {
   const [state, setState] = useState<State | null>(null);
@@ -38,8 +111,16 @@ export function GuidedOnboardingPage({
   const [website, setWebsite] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showProject, setShowProject] = useState(false);
-  const [existingProject, setExistingProject] = useState<ExistingProject | null>(null);
+
+  const complete = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    const result = await onComplete();
+    if (!result.ok) {
+      setError(result.error ?? "Could not finish account setup.");
+      setBusy(false);
+    }
+  }, [onComplete]);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -48,10 +129,13 @@ export function GuidedOnboardingPage({
         fetch(`${apiBase()}/api/platform/onboarding`, { credentials: "include", cache: "no-store" }),
         fetch(`${apiBase()}/api/platform/me`, { credentials: "include", cache: "no-store" }),
       ]);
-      const setup = await setupRes.json().catch(() => ({})) as { state?: State; existingProject?: ExistingProject | null; error?: string };
+      const setup = await setupRes.json().catch(() => ({})) as { state?: State; error?: string };
       if (!setupRes.ok || !setup.state) throw new Error(setup.error ?? "Could not load account setup.");
+      if (setup.state.step === "first_project") {
+        await complete();
+        return;
+      }
       setState(setup.state);
-      setExistingProject(setup.existingProject ?? null);
       if (meRes.ok) {
         const me = await meRes.json() as {
           accountProfile?: { displayName?: string | null; website?: string | null };
@@ -62,7 +146,7 @@ export function GuidedOnboardingPage({
     } catch (cause) {
       setLoadError(cause instanceof Error ? cause.message : "Could not load account setup.");
     }
-  }, []);
+  }, [complete]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -82,7 +166,7 @@ export function GuidedOnboardingPage({
         setError(json.error ?? "Could not save this step.");
         return null;
       }
-      if (json.state) setState(json.state);
+      if (json.state && json.state.step !== "first_project") setState(json.state);
       return json.state ?? null;
     } catch {
       setError("Could not connect. Check your connection and try again.");
@@ -119,79 +203,6 @@ export function GuidedOnboardingPage({
     );
   }
 
-  // Layout wrapper component
-  const Layout = ({ children }: { children: React.ReactNode }) => {
-    const activeIndex = state ? STEPS.findIndex(([key]) => key === state.step) : 0;
-    
-    return (
-      <div className="min-h-screen flex flex-col md:flex-row font-sans" style={{ background: vars.cream, color: vars.navy }}>
-        {/* Sidebar */}
-        <aside className="w-full md:w-[320px] lg:w-[380px] shrink-0 md:h-screen md:sticky md:top-0 flex flex-col justify-between z-10" style={{ background: vars.navy }}>
-          <div className="p-6 md:p-10 lg:p-12 relative">
-            <div className="flex items-center justify-between mb-8 md:mb-16">
-              <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="h-8 md:h-10" />
-              <button onClick={onSignOut} className="md:hidden p-2 text-white/60 hover:text-white transition-colors" aria-label="Sign out">
-                <LogOut size={20} />
-              </button>
-            </div>
-            
-            <nav aria-label="Progress" className="hidden md:block">
-              <ol className="space-y-8">
-                {STEPS.map(([key, label], index) => {
-                  const isActive = index === activeIndex;
-                  const isPast = index < activeIndex || (state?.step === "first_project" && key === "billing" && state?.accessChoice === "beta");
-                  
-                  return (
-                    <li key={key} className="flex items-center gap-4 relative">
-                      {index !== STEPS.length - 1 && (
-                        <div className="absolute top-6 left-[11px] w-px h-8" style={{ background: isPast ? vars.accent : "rgba(255,255,255,0.1)" }} />
-                      )}
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold transition-colors duration-300 ${
-                        isPast ? "" : isActive ? "" : "bg-white/10 text-white/40"
-                      }`} style={{
-                        background: isPast || isActive ? vars.accent : undefined,
-                        color: isPast || isActive ? "white" : undefined,
-                      }}>
-                        {isPast ? <Check size={12} strokeWidth={3} /> : index + 1}
-                      </div>
-                      <span className={`text-sm font-medium transition-colors duration-300 ${
-                        isActive ? "text-white" : isPast ? "text-white/80" : "text-white/40"
-                      }`}>
-                        {label}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ol>
-            </nav>
-
-            <nav className="md:hidden">
-              <div className="flex items-center gap-2 text-white/90 text-sm font-medium">
-                Step {activeIndex + 1} of {STEPS.length}: {STEPS[activeIndex][1]}
-              </div>
-              <div className="h-1.5 w-full bg-white/10 rounded-full mt-3 overflow-hidden">
-                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${((activeIndex + 1) / STEPS.length) * 100}%`, background: vars.accent }} />
-              </div>
-            </nav>
-          </div>
-
-          <div className="hidden md:block p-6 md:p-10 lg:p-12">
-            <button onClick={onSignOut} className="flex items-center gap-2 text-white/60 hover:text-white transition-colors text-sm font-medium">
-              <LogOut size={16} /> Sign out
-            </button>
-          </div>
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1 flex flex-col min-h-[calc(100vh-140px)] md:min-h-screen relative z-0">
-          <div className="flex-1 w-full max-w-2xl mx-auto p-6 md:p-12 lg:p-20 flex flex-col justify-center">
-            {children}
-          </div>
-        </main>
-      </div>
-    );
-  };
-
   if (state.step === "account_type") {
     return (
       <AccountTypeSelectPage
@@ -205,21 +216,21 @@ export function GuidedOnboardingPage({
   }
 
   return (
-    <Layout>
+    <OnboardingLayout state={state} onSignOut={onSignOut}>
       {state.step === "workspace_basics" && (
         <div className="animate-in fade-in duration-700">
           <h1 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
-            Set up your workspace
+            Set up your company
           </h1>
           <p className="text-base sm:text-lg mb-10 leading-relaxed text-slate-600">
-            Confirm the company or workspace details used throughout your account.
+            Confirm the company details used throughout your account.
           </p>
 
           <div className="space-y-6 mb-10">
             <div>
-              <label htmlFor="workspace-name" className="block text-sm font-semibold text-slate-900 mb-2">Workspace name</label>
+              <label htmlFor="company-name" className="block text-sm font-semibold text-slate-900 mb-2">Company name</label>
               <input 
-                id="workspace-name"
+                id="company-name"
                 className="w-full rounded-xl border px-4 py-3.5 text-base focus:outline-none focus:ring-1 focus:ring-[#C8497A] focus:border-[#C8497A] transition-all bg-white"
                 style={{ borderColor: vars.g200 }}
                 value={displayName} 
@@ -271,7 +282,9 @@ export function GuidedOnboardingPage({
           <div className="grid sm:grid-cols-2 gap-5 mb-8">
             <button 
               disabled={busy} 
-              onClick={() => void post("/api/platform/onboarding/access", { choice: "beta" })} 
+              onClick={() => void post("/api/platform/onboarding/access", { choice: "beta" }).then((next) => {
+                if (next?.step === "first_project") void complete();
+              })}
               className="text-left rounded-2xl bg-white border-2 p-6 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-50 group"
               style={{ borderColor: vars.g200 }}
             >
@@ -339,70 +352,6 @@ export function GuidedOnboardingPage({
         </div>
       )}
 
-      {state.step === "first_project" && (
-        <div className="animate-in fade-in duration-700 text-center max-w-xl mx-auto">
-          <h1 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
-            Create your first project
-          </h1>
-          <p className="text-base sm:text-lg mb-10 leading-relaxed text-slate-600">
-            Name the brand, product or campaign you want to work on. Next, you will enter Project Set-Up.
-          </p>
-          
-          {existingProject ? (
-            <button
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                setError(null);
-                const result = await onResumeFirstProject(existingProject);
-                setBusy(false);
-                if (!result.ok) setError(result.error ?? "Could not continue to Project Set-Up.");
-              }}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl px-8 py-4 text-white text-sm font-bold uppercase tracking-wider transition-all duration-300 hover:brightness-110 disabled:opacity-50"
-              style={{ background: vars.accent }}
-            >
-              {busy ? <Loader2 size={18} className="animate-spin" /> : null}
-              {busy ? "Continuing..." : `Continue ${existingProject.name || "project"} setup`}
-              {!busy && <ArrowRight size={18} />}
-            </button>
-          ) : (
-            <button 
-              onClick={() => setShowProject(true)} 
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl px-8 py-4 text-white text-sm font-bold uppercase tracking-wider transition-all duration-300 hover:brightness-110" 
-              style={{ background: vars.accent }}
-            >
-              Create first project <ArrowRight size={18} />
-            </button>
-          )}
-          
-          {error && (
-            <div className="mt-8 p-4 rounded-xl bg-red-50 text-red-700 text-sm font-medium border border-red-100 flex items-start gap-3 text-left">
-              <AlertCircle size={18} className="shrink-0 mt-0.5 text-red-500" />
-              <p>{error}</p>
-            </div>
-          )}
-        </div>
-      )}
-      
-      {showProject && (
-        <CreateProjectModal
-          onCancel={() => setShowProject(false)}
-          onCreate={async (name, logo) => {
-            setBusy(true);
-            setError(null);
-            const result = await onCreateFirstProject(name, logo);
-            setBusy(false);
-            if (!result.ok) {
-              setError(result.error ?? "Could not create the project.");
-              if (result.saved) {
-                setShowProject(false);
-                await load();
-              }
-            }
-            return result;
-          }}
-        />
-      )}
-    </Layout>
+    </OnboardingLayout>
   );
 }

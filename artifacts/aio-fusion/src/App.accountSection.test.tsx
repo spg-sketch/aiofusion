@@ -121,7 +121,7 @@ describe("settings-section deep link survives refresh (account_section param)", 
     await renderAppAt("/?needs_setup=1&account_section=billing");
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /manage your account, your team and client's projects/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /company and billing information/i })).toBeInTheDocument();
     });
     expect(screen.queryByRole("heading", { name: /thank you for signing up to AIO Fusion/i })).toBeNull();
   });
@@ -148,7 +148,7 @@ describe("settings-section deep link survives refresh (account_section param)", 
     expect(screen.queryByRole("heading", { name: /thank you for signing up to AIO Fusion/i })).toBeNull();
   });
 
-  it("lets an owner explicitly correct a flagged imported workspace name", async () => {
+  it("lets an owner explicitly correct a flagged imported company name", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.includes("/api/platform/me")) {
@@ -178,7 +178,7 @@ describe("settings-section deep link survives refresh (account_section param)", 
     vi.stubGlobal("fetch", fetchMock);
 
     await renderAppAt("/?account_section=profile");
-    const input = await screen.findByLabelText(/workspace name/i);
+    const input = await screen.findByLabelText(/company name/i);
     expect(input).toHaveValue("Morgan Owner");
     fireEvent.change(input, { target: { value: "Morgan Communications" } });
     fireEvent.click(screen.getByRole("button", { name: /confirm name/i }));
@@ -194,7 +194,7 @@ describe("settings-section deep link survives refresh (account_section param)", 
       });
     });
     await waitFor(() => {
-      expect(screen.queryByRole("heading", { name: /please check your workspace name/i })).toBeNull();
+      expect(screen.queryByRole("heading", { name: /please check your company name/i })).toBeNull();
       expect(screen.getByText("Morgan Communications")).toBeInTheDocument();
     });
   });

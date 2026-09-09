@@ -337,6 +337,48 @@ describe("POST /api/platform/settings/account-type", () => {
     }
   });
 
+  it("finishes onboarding without forcing a project after beta or paid access is active", async () => {
+    await seed("finish-beta", "agency", false);
+    await seed("finish-paid", "client", false);
+    await seed("finish-unfunded", "client", false);
+    await db.insert(platformMetaTable).values([
+      { key: "account:onboarding:v1:finish-beta", value: JSON.stringify({ step: "first_project", accessChoice: "beta" }) },
+      { key: "account:onboarding:v1:finish-paid", value: JSON.stringify({ step: "first_project", accessChoice: "paid" }) },
+      { key: "account:onboarding:v1:finish-unfunded", value: JSON.stringify({ step: "first_project", accessChoice: "paid" }) },
+    ]);
+    await db.execute(`UPDATE platform_companies SET beta_trial_started_at = now(), beta_trial_ends_at = now() + interval '60 days' WHERE slug = 'finish-beta'`);
+    await db.update(platformCompaniesTable).set({ subscriptionStatus: "active", plan: "inhouse" }).where(eq(platformCompaniesTable.slug, "finish-paid"));
+
+    for (const account of [
+      { username: "finish-beta", role: "agency" },
+      { username: "finish-paid", role: "client" },
+    ]) {
+      const app = makeApp({ ...account, membershipRole: "owner" });
+      const srv = app.listen(0);
+      await new Promise<void>((resolve) => srv.once("listening", resolve));
+      const res = await fetch(`http://localhost:${(srv.address() as AddressInfo).port}/api/platform/onboarding/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      srv.close();
+      expect(res.status).toBe(200);
+      const [company] = await db.select().from(platformCompaniesTable).where(eq(platformCompaniesTable.slug, account.username));
+      expect(company?.setupComplete).toBe(true);
+    }
+
+    const unfundedApp = makeApp({ username: "finish-unfunded", role: "client", membershipRole: "owner" });
+    const unfundedSrv = unfundedApp.listen(0);
+    await new Promise<void>((resolve) => unfundedSrv.once("listening", resolve));
+    const unfunded = await fetch(`http://localhost:${(unfundedSrv.address() as AddressInfo).port}/api/platform/onboarding/complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    unfundedSrv.close();
+    expect(unfunded.status).toBe(409);
+  });
+
   it("completes only after a durable owned first project and exempts established, member, and admin sessions", async () => {
     await seed("durable-first", "agency", false);
     await db.insert(platformMetaTable).values({ key: "account:onboarding:v1:durable-first", value: JSON.stringify({ step: "first_project" }) });

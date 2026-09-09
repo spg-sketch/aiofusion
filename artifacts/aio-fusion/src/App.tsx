@@ -647,66 +647,25 @@ function App() {
     }
   };
 
-  const resumeOnboardingProject = async (
-    projectSummary: { id: string; name: string },
-  ): Promise<{ ok: boolean; error?: string; saved?: boolean }> => {
-    // Do not complete the server-side setup marker until this browser has
-    // loaded the durable project it is about to enter.
-    await resyncProjects();
-    const projects = loadStoredProjects();
-    const project = projects.find((candidate) => candidate.id === projectSummary.id);
-    if (!project) {
-      return { ok: false, error: "Your project is saved, but it is still loading. Refresh and continue setup.", saved: true };
-    }
+  const completeAccountOnboarding = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
     try {
       const response = await fetch(`${apiBase()}/api/platform/onboarding/complete`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: projectSummary.id }),
+        body: JSON.stringify({}),
       });
       const json = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) return { ok: false, error: json.error ?? "Could not finish account setup." };
     } catch {
-      return { ok: false, error: "Your project was saved, but setup could not finish. Check your connection and try again." };
+      return { ok: false, error: "Account setup could not finish. Check your connection and try again." };
     }
-    setKnownProjectIds(projects.map((candidate) => candidate.id));
-    setActiveProjectId(project.id);
-    setActiveClient({ ...project, logo: clientLogos[project.id] });
     setNeedsSetup(false);
-    warmRoute(loadIntakePage);
     startTransition(() => {
-      setCurrentPage("intake");
-      setView("platform");
+      setView("platform-home");
     });
     return { ok: true };
-  };
-
-  const confirmOnboardingProject = async (name: string, logo?: string): Promise<{ ok: boolean; error?: string; saved?: boolean }> => {
-    if (!session) return { ok: false, error: "Your session has expired. Sign in again." };
-    const allowance = await fetchProjectAllowance();
-    if (allowance?.atLimit) {
-      return { ok: false, error: "Your project allowance is full. Check your access choice and try again." };
-    }
-    const project = createStoredProject(name);
-    const afterCreate = loadStoredProjects();
-    setStoredProjects(afterCreate);
-    setKnownProjectIds(afterCreate.map((p) => p.id));
-    if (logo) setClientLogos((previous) => ({ ...previous, [project.id]: logo }));
-    const pushed = await pushProjectMeta(
-      project as unknown as Record<string, unknown> & { id: string },
-      logo,
-    );
-    if (!pushed.ok) {
-      const rolled = loadStoredProjects().filter((p) => p.id !== project.id);
-      saveStoredProjects(rolled);
-      setStoredProjects(rolled);
-      setKnownProjectIds(rolled.map((p) => p.id));
-      return { ok: false, error: pushed.error ?? "Could not save the project. Check your connection and try again." };
-    }
-    const completed = await resumeOnboardingProject({ id: project.id, name: project.name });
-    return completed.ok ? completed : { ...completed, saved: true };
-  };
+  }, []);
   const [session, setSessionState] = useState<LocalSession | null>(() => {
     if (typeof window === "undefined") return null;
     seedAdminIfEmpty();
@@ -1287,6 +1246,14 @@ function App() {
     );
   }
 
+  // A successful login establishes a provisional client session before the
+  // server-authoritative setup status has been rehydrated. Keep authenticated
+  // destinations hidden during that short window so a slower /platform/me
+  // response cannot flash Project Hub or Account Settings before onboarding.
+  if (authLoading && session) {
+    return <RouteLoading fullScreen />;
+  }
+
   // Billing team members see invoices/billing only - no project data or tools.
   // Agency-partner clients have no billing of their own (the agency is billed),
   // so their billing members fall through to the normal read-only app instead.
@@ -1309,8 +1276,7 @@ function App() {
           setSessionState({ ...session, role });
           void refreshAccountsCache();
         }}
-        onCreateFirstProject={confirmOnboardingProject}
-        onResumeFirstProject={resumeOnboardingProject}
+        onComplete={completeAccountOnboarding}
         onSignOut={handleSignOut}
       />
     );
@@ -1375,22 +1341,35 @@ function App() {
             onLoginSuccess={(s) => {
               setSessionExpiredNotice(undefined);
               setGeorgeAnonOpen(false);
+              setAuthLoading(true);
               setSessionState(s);
-              // Refresh accountProfile so an in-session login (password / SSO /
-              // MFA) gets the same prefill as a page-load bootstrapAuth call.
-              void fetchAccountProfile().then((ap) => setAccountProfile(ap));
-              void initContentStore().then(() => resyncProjects());
-            }}
-            onSignOut={handleSignOut}
-            // Login and MFA responses contain only a transient hint. Rehydrate
-            // from /platform/me before opening the full-page gate so a stale or
-            // exempt response (member, staff, managed workspace) cannot trap a
-            // user in setup.
-            onNeedsSetup={() => {
-              void bootstrapAuth().then(({ needsSetup: eligible }) => {
+              setNeedsSetup(false);
+              setHasPassword(undefined);
+              setAccountProfile(null);
+              // Rehydrate the complete server-authoritative session before
+              // rendering any authenticated destination. This makes in-session
+              // login follow the same guarded path as a fresh page load.
+              void bootstrapAuth().then(({
+                session: confirmedSession,
+                needsSetup: eligible,
+                hasPassword: confirmedHasPassword,
+                workspaces: confirmedWorkspaces,
+                accountProfile: confirmedProfile,
+              }) => {
+                const nextSession = confirmedSession ?? s;
+                setSessionState(nextSession);
                 setNeedsSetup(eligible === true);
+                setWorkspaces(confirmedWorkspaces ?? []);
+                if (confirmedHasPassword !== undefined) setHasPassword(confirmedHasPassword);
+                if (confirmedProfile && (nextSession.role === "client" || nextSession.role === "agency")) {
+                  setAccountProfile(confirmedProfile);
+                }
+              }).finally(() => {
+                setAuthLoading(false);
+                void initContentStore().then(() => resyncProjects());
               });
             }}
+            onSignOut={handleSignOut}
             onManageUsers={() => {
               if (session?.role === "admin") {
                 setAccountSection("agencies");

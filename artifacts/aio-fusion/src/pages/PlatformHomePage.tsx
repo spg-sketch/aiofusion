@@ -46,7 +46,6 @@ function PlatformHomePage({
   onBackToLanding,
   session,
   onLoginSuccess,
-  onNeedsSetup,
   onSignOut,
   onManageUsers,
   onManageSubAccounts,
@@ -70,7 +69,6 @@ function PlatformHomePage({
   backToAgency?: React.ReactNode;
   session: LocalSession | null;
   onLoginSuccess: (s: LocalSession) => void;
-  onNeedsSetup?: () => void;
   onSignOut: () => void;
   onManageUsers: () => void;
   onManageSubAccounts: () => void;
@@ -718,7 +716,6 @@ function PlatformHomePage({
                   setMfaChallenge(null);
                   setUsername("");
                   onLoginSuccess(mfaSession);
-                  if (needsSetup) onNeedsSetup?.();
                 }}
               />
             ) : (
@@ -795,7 +792,6 @@ function PlatformHomePage({
                         setUsername("");
                         setPassword("");
                         onLoginSuccess(result.session);
-                        if (result.needsSetup) onNeedsSetup?.();
                       } else if ("mfa" in result) {
                         setPassword("");
                         setMfaChallenge(result.mfa);
@@ -889,7 +885,7 @@ function PlatformHomePage({
                     {getSessionIdentityLabels(session).signedInAs}
                   </h2>
                   <div className="mt-2 space-y-0.5 text-[12px] break-words" style={{ color: "rgba(255,255,255,0.78)" }}>
-                    <p><span className="font-bold uppercase tracking-[0.12em]">Company / workspace:</span> {getSessionIdentityLabels(session).companyName}</p>
+                    <p><span className="font-bold uppercase tracking-[0.12em]">Company:</span> {getSessionIdentityLabels(session).companyName}</p>
                     <p><span className="font-bold uppercase tracking-[0.12em]">Access:</span> {getSessionIdentityLabels(session).access}</p>
                   </div>
                 </div>

@@ -1077,12 +1077,12 @@ function SubAccountsPage({
             <div className="flex items-start gap-3">
               <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" style={{ color: "#A0720A" }} />
               <div className="flex-1 min-w-0">
-                <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Please check your workspace name</h2>
+                <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Please check your company name</h2>
                 <p className="text-[13px] leading-[1.65] mb-4" style={{ color: "#7A5500" }}>
                   An earlier Google or Microsoft sign-up may have used your personal name here. Confirm it if it is correct, or enter your organisation's name.
                 </p>
                 <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }} htmlFor="workspace-name-review">
-                  Workspace name
+                  Company name
                 </label>
                 <div className="flex flex-col sm:flex-row gap-3">
                   <input

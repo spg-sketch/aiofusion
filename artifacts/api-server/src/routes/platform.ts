@@ -2610,7 +2610,7 @@ router.post("/platform/onboarding/workspace-basics", requirePlatformAuth, async 
     const displayName = typeof req.body?.displayName === "string" ? req.body.displayName.trim().slice(0, 64) : "";
     let website = typeof req.body?.website === "string" ? req.body.website.trim().slice(0, 200) : "";
     if (!displayName || !website) {
-      res.status(400).json({ error: "Enter your workspace name and website." });
+      res.status(400).json({ error: "Enter your company name and website." });
       return;
     }
     if (!/^https?:\/\//i.test(website)) website = `https://${website}`;
@@ -2627,8 +2627,8 @@ router.post("/platform/onboarding/workspace-basics", requirePlatformAuth, async 
     await writeOnboardingState(username, state);
     res.json({ ok: true, state });
   } catch (err) {
-    logger.error({ err }, "onboarding: failed to save workspace basics");
-    res.status(500).json({ error: "Could not save workspace details." });
+    logger.error({ err }, "onboarding: failed to save company basics");
+    res.status(500).json({ error: "Could not save company details." });
   }
 });
 
@@ -2684,12 +2684,28 @@ router.post("/platform/onboarding/complete", requirePlatformAuth, async (req: Re
       return;
     }
     const projectId = typeof req.body?.projectId === "string" ? req.body.projectId.trim() : "";
-    const [project] = await db.select({ id: projectsTable.id }).from(projectsTable)
-      .where(and(eq(projectsTable.id, projectId), eq(projectsTable.owner, username), isNull(projectsTable.deletedAt)))
-      .limit(1);
-    if (!project) {
-      res.status(409).json({ error: "Your project must be saved before setup can finish." });
-      return;
+    if (projectId) {
+      // Preserve compatibility for an older browser that already created its
+      // first project before this account-only completion flow was introduced.
+      const [project] = await db.select({ id: projectsTable.id }).from(projectsTable)
+        .where(and(eq(projectsTable.id, projectId), eq(projectsTable.owner, username), isNull(projectsTable.deletedAt)))
+        .limit(1);
+      if (!project) {
+        res.status(409).json({ error: "Your project must be saved before setup can finish." });
+        return;
+      }
+    } else {
+      // New onboarding ends before project creation. Revalidate the selected
+      // access server-side so callers cannot skip the beta/payment step by
+      // posting directly to this endpoint.
+      const billing = await getBillingState(username);
+      const accessIsActive = current.accessChoice === "paid"
+        ? hasPaidSubscription(billing)
+        : current.accessChoice === "beta" && getBetaTrialSummary(billing).status === "active";
+      if (!accessIsActive) {
+        res.status(409).json({ error: "Activate beta or paid access before finishing account setup.", state: current });
+        return;
+      }
     }
     await db.transaction(async (tx) => {
       await tx.update(platformCompaniesTable).set({ setupComplete: true })
