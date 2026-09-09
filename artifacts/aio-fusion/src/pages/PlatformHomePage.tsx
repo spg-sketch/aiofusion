@@ -920,7 +920,9 @@ function PlatformHomePage({
                     className="flex min-w-0 items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
                     style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
                   >
-                    {canCreateSubAccounts(session.role) ? <><Users size={15} /> My Account</> : <><User size={15} /> Account Settings</>}
+                    {session.role === "agency"
+                      ? <><Users size={15} /> Account, Client and Team Settings</>
+                      : <><User size={15} /> Account and Team Settings</>}
                   </button>
                 )}
                 <button

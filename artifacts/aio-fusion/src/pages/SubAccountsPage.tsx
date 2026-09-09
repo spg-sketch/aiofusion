@@ -876,15 +876,15 @@ function SubAccountsPage({
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
             {canCreateSubAccounts(session.role) ? <Users size={12} color={accent} /> : <User size={12} color={accent} />}
             <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
-              {isAgencyPartner ? "Client Projects" : canCreateSubAccounts(session.role) ? "Client accounts" : "Account settings"}
+              {isAgencyPartner ? "Account, client and team settings" : canCreateSubAccounts(session.role) ? "Client accounts" : "Account and team settings"}
             </span>
           </div>
           <h1 className="text-3xl sm:text-4xl leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-            {isAgencyPartner ? "Manage your Account, your team and Client's Projects" : canCreateSubAccounts(session.role) ? "Manage your client accounts" : "Account settings"}
+            {isAgencyPartner ? "Account, client and team settings" : canCreateSubAccounts(session.role) ? "Manage your client accounts" : "Account and team settings"}
           </h1>
           <p className="text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
             {isAgencyPartner
-              ? "Add the Client Projects your agency manages and open their projects directly. These clients do not need a separate AIO Fusion login."
+              ? "Manage your agency account, team and Client Projects in one place. Open managed projects directly without requiring clients to have a separate AIO Fusion login."
               : canCreateSubAccounts(session.role)
               ? "Give a client their own login so they can sign in and work on their own projects. They only ever see their own projects, while you still see everything across all of your clients."
               : "Manage your account settings, team members, and security options."}
