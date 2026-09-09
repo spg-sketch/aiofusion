@@ -740,6 +740,20 @@ export async function serverDeleteUser(
   return { ok: true };
 }
 
+export async function serverResetStagingTestAccount(
+  username: string,
+): Promise<{ ok: true; deletedProjectCount: number } | { ok: false; error: string }> {
+  const { ok, json } = await postJson(
+    `/api/platform/admin/accounts/${encodeURIComponent(username)}/reset-staging-test`,
+  );
+  if (!ok) return { ok: false, error: json?.error || "Failed to reset the staging test account." };
+  await refreshAccountsCache();
+  return {
+    ok: true,
+    deletedProjectCount: typeof json?.deletedProjectCount === "number" ? json.deletedProjectCount : 0,
+  };
+}
+
 export async function serverArchiveUser(
   username: string,
   archive: boolean,

@@ -11,6 +11,7 @@ export type AdminAction =
   | "forced_website_audit"
   | "account_delete"
   | "account_self_delete"
+  | "staging_test_account_reset"
   | "account_role_change"
   | "project_owner_reassign"
   | "platform_migrate"

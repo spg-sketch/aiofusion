@@ -24,6 +24,12 @@ import {
   mediaOutletsTable,
   mediaContactsTable,
   mediaCategoriesTable,
+  mediaContactCategoriesTable,
+  mediaImportBatchesTable,
+  mediaContactFieldOverridesTable,
+  mediaRecommendationSetsTable,
+  mediaRecommendationItemsTable,
+  mediaRecommendationDecisionsTable,
   tokenUsageTable,
   auditLocksTable,
   adminEventsTable,
@@ -5641,6 +5647,303 @@ router.post(
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to reset two-factor login" });
+    }
+  },
+);
+
+// The frontend uses this server-authoritative capability check to hide the
+// destructive QA control everywhere except staging.
+router.get(
+  "/platform/admin/staging-test-reset",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    if (
+      !isStagingDeployment()
+      || normalizeRole(req.account!.role) !== "admin"
+      || await isImpersonatedRequest(req)
+      || isRestrictedMaster(req.account!)
+    ) {
+      res.status(404).json({ error: "Not found." });
+      return;
+    }
+    res.json({ enabled: true });
+  },
+);
+
+// Return a top-level password account to the beginning of onboarding without
+// deleting its login identity. This is intentionally staging-only so a reusable
+// QA login can exercise the new-account journey without risking live data.
+router.post(
+  "/platform/admin/accounts/:username/reset-staging-test",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      if (!isStagingDeployment()) {
+        res.status(404).json({ error: "Not found." });
+        return;
+      }
+      const actor = req.account!;
+      if (normalizeRole(actor.role) !== "admin") {
+        res.status(403).json({ error: "Admin access is required." });
+        return;
+      }
+      if (await isImpersonatedRequest(req)) {
+        res.status(403).json({ error: IMPERSONATION_BLOCKED_MESSAGE });
+        return;
+      }
+      if (isRestrictedMaster(actor)) {
+        res.status(403).json({ error: MASTER_OWNER_REQUIRED_MESSAGE });
+        return;
+      }
+
+      const target = normUsername(req.params.username);
+      const account = await getAccount(target);
+      if (!account) {
+        res.status(404).json({ error: "Account not found." });
+        return;
+      }
+      if (normalizeRole(account.role) === "admin") {
+        res.status(400).json({ error: "Admin accounts cannot be used as reusable signup test accounts." });
+        return;
+      }
+      if (account.parent) {
+        res.status(400).json({ error: "Only a top-level account can be reset to the new-account journey." });
+        return;
+      }
+
+      const owners = await db
+        .select({ id: platformUsersTable.id, passwordHash: platformUsersTable.passwordHash })
+        .from(platformMembershipsTable)
+        .innerJoin(platformUsersTable, eq(platformMembershipsTable.userId, platformUsersTable.id))
+        .where(and(
+          eq(platformMembershipsTable.companySlug, target),
+          eq(platformMembershipsTable.role, "owner"),
+        ));
+      if (owners.length !== 1 || !owners[0]?.passwordHash) {
+        res.status(400).json({ error: "Choose a dedicated account with one password owner." });
+        return;
+      }
+      const ownerMemberships = await db
+        .select({ companySlug: platformMembershipsTable.companySlug })
+        .from(platformMembershipsTable)
+        .where(eq(platformMembershipsTable.userId, owners[0].id));
+      const companyMemberships = await db
+        .select({ userId: platformMembershipsTable.userId })
+        .from(platformMembershipsTable)
+        .where(eq(platformMembershipsTable.companySlug, target));
+      if (ownerMemberships.length !== 1 || companyMemberships.length !== 1) {
+        res.status(400).json({
+          error: "This reset requires a dedicated test login that belongs only to this workspace and has no team members.",
+        });
+        return;
+      }
+      const children = await db
+        .select({ username: platformAccountsTable.username })
+        .from(platformAccountsTable)
+        .where(eq(platformAccountsTable.parent, target));
+      if (children.length > 0) {
+        res.status(400).json({ error: "Remove this account's client accounts before resetting it." });
+        return;
+      }
+      const [company] = await db
+        .select({
+          stripeCustomerId: platformCompaniesTable.stripeCustomerId,
+          stripeSubscriptionId: platformCompaniesTable.stripeSubscriptionId,
+          subscriptionStatus: platformCompaniesTable.subscriptionStatus,
+        })
+        .from(platformCompaniesTable)
+        .where(eq(platformCompaniesTable.slug, target))
+        .limit(1);
+      if (!company) {
+        res.status(400).json({ error: "This account does not have a workspace record." });
+        return;
+      }
+      if (
+        company.stripeCustomerId
+        || company.stripeSubscriptionId
+        || (company.subscriptionStatus && company.subscriptionStatus !== "none")
+      ) {
+        res.status(400).json({
+          error: "A Stripe-linked account cannot be reset. Use a dedicated staging account that has never entered checkout.",
+        });
+        return;
+      }
+
+      const projectRows = await db
+        .select({ id: projectsTable.id })
+        .from(projectsTable)
+        .where(eq(projectsTable.owner, target));
+
+      const workspaceMetaKeys = [
+        "account:last-sign-in:",
+        "account:onboarding:v1:",
+        "account:profile:",
+        "account:archived:",
+        "account:master-owner:",
+        "account:managed:",
+        "account:mfa:",
+        "account:mfa-trusted:",
+        "account:team-seats:",
+        "account:image:logo:",
+        "account:image:avatar:",
+        "account-discount:",
+        "projectAddons:",
+        "checkout:pending:",
+        "billing:last-payment:",
+        "fairUsage:multiplier:",
+        "spendLimit:monthly:gbp:",
+        "suspended-via:",
+      ].map((prefix) => `${prefix}${target}`);
+
+      await db.transaction(async (tx) => {
+        const contacts = await tx
+          .select({ id: mediaContactsTable.id })
+          .from(mediaContactsTable)
+          .where(eq(mediaContactsTable.accountId, target));
+        const contactIds = contacts.map((row) => row.id);
+        const outlets = await tx
+          .select({ id: mediaOutletsTable.id })
+          .from(mediaOutletsTable)
+          .where(eq(mediaOutletsTable.accountId, target));
+        const outletIds = outlets.map((row) => row.id);
+        const categories = await tx
+          .select({ id: mediaCategoriesTable.id })
+          .from(mediaCategoriesTable)
+          .where(eq(mediaCategoriesTable.accountId, target));
+        const categoryIds = categories.map((row) => row.id);
+        const recommendationSets = await tx
+          .select({ id: mediaRecommendationSetsTable.id })
+          .from(mediaRecommendationSetsTable)
+          .where(eq(mediaRecommendationSetsTable.accountId, target));
+        const recommendationSetIds = recommendationSets.map((row) => row.id);
+
+        if (contactIds.length > 0) {
+          const [sharedRecommendationItem] = await tx
+            .select({ id: mediaRecommendationItemsTable.id })
+            .from(mediaRecommendationItemsTable)
+            .innerJoin(
+              mediaRecommendationSetsTable,
+              eq(mediaRecommendationItemsTable.recommendationSetId, mediaRecommendationSetsTable.id),
+            )
+            .where(and(
+              inArray(mediaRecommendationItemsTable.contactId, contactIds),
+              ne(mediaRecommendationSetsTable.accountId, target),
+            ))
+            .limit(1);
+          const [sharedDecision] = await tx
+            .select({ id: mediaRecommendationDecisionsTable.id })
+            .from(mediaRecommendationDecisionsTable)
+            .where(and(
+              inArray(mediaRecommendationDecisionsTable.contactId, contactIds),
+              ne(mediaRecommendationDecisionsTable.accountId, target),
+            ))
+            .limit(1);
+          if (sharedRecommendationItem || sharedDecision) {
+            throw new Error("STAGING_TEST_SHARED_MEDIA");
+          }
+        }
+        if (outletIds.length > 0) {
+          const [sharedOutletContact] = await tx
+            .select({ id: mediaContactsTable.id })
+            .from(mediaContactsTable)
+            .where(and(
+              inArray(mediaContactsTable.outletId, outletIds),
+              sql`${mediaContactsTable.accountId} IS DISTINCT FROM ${target}`,
+            ))
+            .limit(1);
+          if (sharedOutletContact) throw new Error("STAGING_TEST_SHARED_MEDIA");
+        }
+        if (categoryIds.length > 0) {
+          const [sharedCategoryLink] = await tx
+            .select({ id: mediaContactCategoriesTable.id })
+            .from(mediaContactCategoriesTable)
+            .where(and(
+              inArray(mediaContactCategoriesTable.categoryId, categoryIds),
+              sql`${mediaContactCategoriesTable.accountId} IS DISTINCT FROM ${target}`,
+            ))
+            .limit(1);
+          if (sharedCategoryLink) throw new Error("STAGING_TEST_SHARED_MEDIA");
+        }
+
+        await tx.delete(mediaRecommendationDecisionsTable)
+          .where(eq(mediaRecommendationDecisionsTable.accountId, target));
+        if (recommendationSetIds.length > 0) {
+          await tx.delete(mediaRecommendationItemsTable)
+            .where(inArray(mediaRecommendationItemsTable.recommendationSetId, recommendationSetIds));
+        }
+        await tx.delete(mediaRecommendationSetsTable)
+          .where(eq(mediaRecommendationSetsTable.accountId, target));
+        if (contactIds.length > 0) {
+          await tx.delete(mediaContactCategoriesTable)
+            .where(inArray(mediaContactCategoriesTable.contactId, contactIds));
+          await tx.delete(mediaContactFieldOverridesTable)
+            .where(inArray(mediaContactFieldOverridesTable.contactId, contactIds));
+        }
+        await tx.delete(mediaContactCategoriesTable).where(eq(mediaContactCategoriesTable.accountId, target));
+        await tx.delete(mediaContactFieldOverridesTable).where(eq(mediaContactFieldOverridesTable.accountId, target));
+        await tx.delete(mediaImportBatchesTable).where(eq(mediaImportBatchesTable.accountId, target));
+        await tx.delete(mediaContactsTable).where(eq(mediaContactsTable.accountId, target));
+        await tx.delete(mediaOutletsTable).where(eq(mediaOutletsTable.accountId, target));
+        await tx.delete(mediaCategoriesTable).where(eq(mediaCategoriesTable.accountId, target));
+
+        await tx.delete(archiveItemsTable).where(eq(archiveItemsTable.owner, target));
+        await tx.delete(plannerItemsTable).where(eq(plannerItemsTable.owner, target));
+        await tx.delete(scoringConfigsTable).where(eq(scoringConfigsTable.owner, target));
+        await tx.delete(auditLocksTable).where(eq(auditLocksTable.owner, target));
+        await tx.delete(projectSnapshotsTable).where(eq(projectSnapshotsTable.owner, target));
+        await tx.delete(projectsTable).where(eq(projectsTable.owner, target));
+        await tx.delete(tokenUsageTable).where(eq(tokenUsageTable.accountId, target));
+        await tx.delete(platformInvitationsTable).where(eq(platformInvitationsTable.companySlug, target));
+        await tx.delete(platformSessionsTable).where(eq(platformSessionsTable.username, target));
+        await tx.delete(platformMetaTable).where(inArray(platformMetaTable.key, workspaceMetaKeys));
+
+        await tx
+          .update(platformAccountsTable)
+          .set({ role: "agency", status: "active", maxSeats: null })
+          .where(eq(platformAccountsTable.username, target));
+        await tx.execute(sql`
+          UPDATE platform_companies
+          SET role = 'agency',
+              status = 'active',
+              max_seats = NULL,
+              setup_complete = false,
+              free_access = false,
+              billing_email = NULL,
+              key_account_holder_email = NULL,
+              vat_number = NULL,
+              billing_address = NULL,
+              billing_address_version = NULL,
+              plan = NULL,
+              billing_frequency = NULL,
+              subscription_status = NULL,
+              current_period_end = NULL,
+              beta_trial_started_at = NULL,
+              beta_trial_ends_at = NULL
+          WHERE slug = ${target}
+        `);
+        await tx.insert(platformMetaTable).values({
+          key: onboardingKey(target),
+          value: JSON.stringify({ step: "account_type" } satisfies OnboardingState),
+        });
+      });
+
+      await logAdminEvent(
+        { username: actor.username, id: actor.userId },
+        "staging_test_account_reset",
+        target,
+        "account",
+        { deletedProjectCount: projectRows.length },
+      );
+      res.json({ ok: true, username: target, deletedProjectCount: projectRows.length });
+    } catch (error) {
+      if (error instanceof Error && error.message === "STAGING_TEST_SHARED_MEDIA") {
+        res.status(409).json({
+          error: "This account has media records referenced by another workspace. Remove those shared references before resetting it.",
+        });
+        return;
+      }
+      logger.error({ err: error, target: req.params.username }, "staging test account reset failed");
+      res.status(500).json({ error: "Failed to reset the staging test account." });
     }
   },
 );

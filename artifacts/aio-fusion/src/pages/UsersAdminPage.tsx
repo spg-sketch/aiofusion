@@ -14,7 +14,7 @@ import { TokenUsageSection } from "./TokenUsageSection";
 import { BetaParticipantsSection } from "./BetaParticipantsSection";
 import { UsersAdminDemoSection } from "./UsersAdminDemoSection";
 
-import { type Session as LocalSession, type SessionInfo, type User as LocalUser, type Role as LocalRole, type PendingAccount, getUsers as getLocalUsers, serverAddUser, serverDeleteUser, serverChangePassword, serverResetMfa, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverChangeRole, serverSetSeatCap, serverGetAccountSessions, serverRevokeSession, serverImpersonate, serverGetPendingAccounts, serverApproveAccount, serverRejectAccount, refreshAccountsCache, canCreateSubAccounts, serverSetMasterOwner, serverGetMasterOwners } from "../lib/auth";
+import { type Session as LocalSession, type SessionInfo, type User as LocalUser, type Role as LocalRole, type PendingAccount, getUsers as getLocalUsers, serverAddUser, serverDeleteUser, serverChangePassword, serverResetMfa, serverResetStagingTestAccount, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverChangeRole, serverSetSeatCap, serverGetAccountSessions, serverRevokeSession, serverImpersonate, serverGetPendingAccounts, serverApproveAccount, serverRejectAccount, refreshAccountsCache, canCreateSubAccounts, serverSetMasterOwner, serverGetMasterOwners } from "../lib/auth";
 import { roleLabel, accountLabel } from "../lib/accountLabels";
 import { loadStoredProjects } from "../lib/projectStore";
 import { apiBase } from "../lib/contentAi";
@@ -49,6 +49,15 @@ export function UsersAdminPage({
   const green = vars.green;
   const [tick, setTick] = useState(0);
   const [users, setUsers] = useState<LocalUser[]>(() => getLocalUsers());
+  const [stagingTestResetEnabled, setStagingTestResetEnabled] = useState(false);
+
+  useEffect(() => {
+    if (session.role !== "admin") return;
+    void fetch(`${apiBase()}/api/platform/admin/staging-test-reset`, { credentials: "include" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data: { enabled?: boolean } | null) => setStagingTestResetEnabled(data?.enabled === true))
+      .catch(() => setStagingTestResetEnabled(false));
+  }, [session.role]);
 
   // ── Pending approvals ─────────────────────────────────────────────────────
   const [pendingAccounts, setPendingAccounts] = useState<PendingAccount[] | null>(null);
@@ -687,6 +696,23 @@ export function UsersAdminPage({
     })();
   };
 
+  const handleResetStagingTestAccount = (username: string) => {
+    if (!confirm(
+      `Reset '${username}' to a brand-new account?\n\nThis permanently removes its projects, onboarding, billing, media and workspace data, and signs it out everywhere. Its email and password are preserved. This action only works on staging.`,
+    )) return;
+    void (async () => {
+      const result = await serverResetStagingTestAccount(username);
+      if (!result.ok) {
+        alert(result.error);
+        return;
+      }
+      alert(
+        `'${username}' is ready for another signup test. Sign in with the same email and password to begin onboarding again.`,
+      );
+      refresh();
+    })();
+  };
+
   const handleSavePassword = (e: React.FormEvent) => {
     e.preventDefault();
     setPwError(null);
@@ -932,6 +958,16 @@ export function UsersAdminPage({
                       <MonitorSmartphone size={13} /> Sessions
                     </button>
                     <div className="my-1 border-t" style={{ borderColor: vars.g200 }} />
+                    {stagingTestResetEnabled && !isMe && u.role !== "admin" && !u.parent && (
+                      <button
+                        onClick={() => { setManageMenuUser(null); handleResetStagingTestAccount(u.username); }}
+                        title="Staging only: preserve this login but clear its new-account journey"
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] font-medium text-left hover:bg-black/5"
+                        style={{ color: accent }}
+                      >
+                        <RefreshCw size={13} /> Reset signup test
+                      </button>
+                    )}
                     <button
                       onClick={() => { setManageMenuUser(null); handleDelete(u.username); }}
                       disabled={isMe}

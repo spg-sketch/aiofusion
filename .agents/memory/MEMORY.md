@@ -67,3 +67,4 @@
 - [PostgreSQL pool disconnect resilience](postgres-pool-disconnect-resilience.md) — idle-client errors must be handled on the shared pool or a database-side recycle can terminate the API mid-request.
 - [SSO destructive-action confirmation](aio-fusion-sso-destructive-confirmation.md) — bind fresh SSO proof to a passwordless owner, provider identity, and one-time server token; recheck eligibility on use.
 - [Market Intelligence evidence labels](aio-fusion-market-intelligence-evidence.md) — distinguish page-verified event facts from AI summaries; relevance estimates are never measured authority.
+- [Reusable staging signup accounts](aio-fusion-staging-signup-reset.md) — reset only dedicated password identities; keep cleanup atomic and refuse Stripe-linked or cross-workspace data.
