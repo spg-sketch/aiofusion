@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { TeamOverview } from "../lib/auth";
 
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 const getTeamMock = vi.hoisted(() => vi.fn());
+const updateMemberMock = vi.hoisted(() => vi.fn(() => Promise.resolve({ ok: true })));
 
 vi.mock("../lib/auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/auth")>();
@@ -15,6 +16,7 @@ vi.mock("../lib/auth", async (importOriginal) => {
     mock[k] = typeof v === "function" ? vi.fn(() => Promise.resolve({ ok: true })) : v;
   }
   mock.serverGetTeam = getTeamMock;
+  mock.serverUpdateTeamMember = updateMemberMock;
   mock.serverGetMyInvites = vi.fn(() => Promise.resolve({ ok: true, invites: [] }));
   return mock;
 });
@@ -47,7 +49,10 @@ const baseTeam = (over: Partial<TeamOverview>): TeamOverview => ({
   ...over,
 });
 
-beforeEach(() => getTeamMock.mockReset());
+beforeEach(() => {
+  getTeamMock.mockReset();
+  updateMemberMock.mockClear();
+});
 
 describe("TeamSection team modes", () => {
   it("direct clients receive the full Agency Partner team controls", async () => {
@@ -121,5 +126,67 @@ describe("TeamSection team modes", () => {
     await waitFor(() => expect(screen.getByText(/\/ 3 seats/)).toBeTruthy());
     expect(document.querySelector("select")).toBeTruthy();
     expect(screen.queryByText(/account seats/)).toBeNull();
+  });
+
+  it("offers Owner only for existing members when the server grants master-owner capability", async () => {
+    getTeamMock.mockResolvedValue({
+      ok: true,
+      team: baseTeam({
+        canPromoteOwners: true,
+        members: [
+          ...baseTeam({}).members,
+          {
+            userId: "u-natalie",
+            email: "natalie@x.test",
+            name: "Natalie",
+            role: "admin",
+            projectAccess: null,
+            position: null,
+            createdAt: "2026-01-02",
+            isSelf: false,
+          } as any,
+        ],
+      }),
+    });
+    render(<TeamSection />);
+    await screen.findByText("Natalie");
+
+    const selects = Array.from(document.querySelectorAll("select"));
+    const inviteRole = selects[0] as HTMLSelectElement;
+    const memberRole = selects[1] as HTMLSelectElement;
+    expect(Array.from(inviteRole.options).some((o) => o.value === "owner")).toBe(false);
+    expect(Array.from(memberRole.options).some((o) => o.value === "owner")).toBe(true);
+
+    fireEvent.change(memberRole, { target: { value: "owner" } });
+    await waitFor(() => expect(updateMemberMock).toHaveBeenCalledWith("u-natalie", { role: "owner" }));
+
+    // Existing owner rows remain badges: no role control or removal button.
+    expect(screen.getByText("Owner (you)").closest("div")?.parentElement?.querySelector("select")).toBeNull();
+    expect(screen.queryByTitle("Remove from team") ? screen.getAllByTitle("Remove from team") : []).toHaveLength(1);
+  });
+
+  it("does not offer Owner when the server denies the capability", async () => {
+    getTeamMock.mockResolvedValue({
+      ok: true,
+      team: baseTeam({
+        canPromoteOwners: false,
+        members: [
+          ...baseTeam({}).members,
+          {
+            userId: "u-natalie-admin-view",
+            email: "natalie-admin@x.test",
+            name: "Natalie Admin View",
+            role: "admin",
+            projectAccess: null,
+            position: null,
+            createdAt: "2026-01-02",
+            isSelf: false,
+          } as any,
+        ],
+      }),
+    });
+    render(<TeamSection />);
+    await screen.findByText("Natalie Admin View");
+    expect(Array.from(document.querySelectorAll("option")).some((o) => o.value === "owner")).toBe(false);
   });
 });

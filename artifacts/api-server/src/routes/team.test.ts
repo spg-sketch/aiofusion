@@ -409,6 +409,32 @@ async function seedAgency(slug: string, email: string) {
   return { company: company!, user: user!, sid };
 }
 
+async function seedMaster(slug: string, email: string) {
+  await db.insert(platformAccountsTable).values({
+    username: slug,
+    passwordHash: hashPassword("owner-password-1"),
+    role: "admin",
+    status: "active",
+    email,
+  });
+  const [company] = await db
+    .insert(platformCompaniesTable)
+    .values({ slug, role: "admin", status: "active", displayName: `${slug} Master`, setupComplete: true, freeAccess: true })
+    .returning();
+  const [user] = await db
+    .insert(platformUsersTable)
+    .values({ email, passwordHash: hashPassword("owner-password-1"), emailVerified: true })
+    .returning();
+  await db.insert(platformMembershipsTable).values({
+    userId: user!.id,
+    companyId: company!.id,
+    companySlug: slug,
+    role: "owner",
+  });
+  const sid = await createPlatformSession(slug, null, user!.id, company!.id);
+  return { company: company!, user: user!, sid };
+}
+
 beforeAll(async () => {
   const app = buildApp();
   await new Promise<void>((resolve) => {
@@ -416,6 +442,218 @@ beforeAll(async () => {
       baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
       resolve();
     });
+  });
+});
+
+describe("master workspace owner promotion", () => {
+  async function addMember(
+    company: { id: string; slug: string },
+    email: string,
+    role: "admin" | "viewer" = "viewer",
+  ) {
+    const [user] = await db
+      .insert(platformUsersTable)
+      .values({ email, passwordHash: hashPassword("member-password-1"), emailVerified: true })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: user!.id,
+      companyId: company.id,
+      companySlug: company.slug,
+      role,
+    });
+    return user!;
+  }
+
+  it("lets a canonical master owner add an owner without changing existing owners", async () => {
+    const { company, user: originalOwner, sid } = await seedMaster("promote-master", "owner@promote-master.test");
+    const member = await addMember(company, "natalie@promote-master.test");
+
+    const before = await api("/api/platform/team", { sid });
+    expect(before.status).toBe(200);
+    expect(before.json.canPromoteOwners).toBe(true);
+
+    const promoted = await api(`/api/platform/team/members/${member.id}`, {
+      method: "PATCH",
+      sid,
+      body: { role: "owner", projectIds: ["stale-project-scope"] },
+    });
+    expect(promoted.status).toBe(200);
+
+    const memberships = await db
+      .select({ userId: platformMembershipsTable.userId, role: platformMembershipsTable.role })
+      .from(platformMembershipsTable)
+      .where(eq(platformMembershipsTable.companyId, company.id));
+    expect(memberships.find((m) => m.userId === originalOwner.id)?.role).toBe("owner");
+    expect(memberships.find((m) => m.userId === member.id)?.role).toBe("owner");
+    const [promotedRow] = await db
+      .select({ projectAccess: platformMembershipsTable.projectAccess })
+      .from(platformMembershipsTable)
+      .where(
+        and(
+          eq(platformMembershipsTable.userId, member.id),
+          eq(platformMembershipsTable.companyId, company.id),
+        ),
+      );
+    expect(promotedRow?.projectAccess).toBeNull();
+
+    const demoteAdditionalOwner = await api(`/api/platform/team/members/${member.id}`, {
+      method: "PATCH",
+      sid,
+      body: { role: "admin" },
+    });
+    expect(demoteAdditionalOwner.status).toBe(403);
+    const removeAdditionalOwner = await api(`/api/platform/team/members/${member.id}/remove`, {
+      method: "POST",
+      sid,
+    });
+    expect(removeAdditionalOwner.status).toBe(403);
+  });
+
+  it("rejects master admins and owners of non-master workspaces", async () => {
+    const master = await seedMaster("admin-cannot-promote", "owner@admin-cannot-promote.test");
+    const admin = await addMember(master.company, "admin@admin-cannot-promote.test", "admin");
+    const target = await addMember(master.company, "target@admin-cannot-promote.test");
+    const adminSid = await createPlatformSession(master.company.slug, null, admin.id, master.company.id);
+
+    const adminTeam = await api("/api/platform/team", { sid: adminSid });
+    expect(adminTeam.status).toBe(200);
+    expect(adminTeam.json.canPromoteOwners).toBe(false);
+    const deniedAdmin = await api(`/api/platform/team/members/${target.id}`, {
+      method: "PATCH",
+      sid: adminSid,
+      body: { role: "owner" },
+    });
+    expect(deniedAdmin.status).toBe(403);
+
+    const agency = await seedAgency("agency-cannot-promote", "owner@agency-cannot-promote.test");
+    const agencyTarget = await addMember(agency.company, "target@agency-cannot-promote.test");
+    const deniedAgency = await api(`/api/platform/team/members/${agencyTarget.id}`, {
+      method: "PATCH",
+      sid: agency.sid,
+      body: { role: "owner" },
+    });
+    expect(deniedAgency.status).toBe(403);
+  });
+
+  it("never permits owner invitations and keeps owner rows immutable", async () => {
+    const { company, user: owner, sid } = await seedMaster("immutable-master", "owner@immutable-master.test");
+
+    const invite = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "invited-owner@immutable-master.test", role: "owner" },
+    });
+    expect(invite.status).toBe(400);
+
+    const demote = await api(`/api/platform/team/members/${owner.id}`, {
+      method: "PATCH",
+      sid,
+      body: { role: "admin" },
+    });
+    expect(demote.status).toBe(400);
+    const remove = await api(`/api/platform/team/members/${owner.id}/remove`, { method: "POST", sid });
+    expect(remove.status).toBe(400);
+
+    const [unchanged] = await db
+      .select({ role: platformMembershipsTable.role })
+      .from(platformMembershipsTable)
+      .where(
+        and(
+          eq(platformMembershipsTable.userId, owner.id),
+          eq(platformMembershipsTable.companyId, company.id),
+        ),
+      );
+    expect(unchanged?.role).toBe("owner");
+  });
+
+  it("blocks seeded owner invitations at public lookup, resend, acceptance, and consume for master and ordinary workspaces", async () => {
+    const master = await seedMaster("legacy-owner-invite-master", "owner@legacy-owner-invite-master.test");
+    const ordinary = await seedAgency("legacy-owner-invite-agency", "owner@legacy-owner-invite-agency.test");
+    const cases = [
+      { company: master.company, sid: master.sid, token: "legacy-owner-master-token" },
+      { company: ordinary.company, sid: ordinary.sid, token: "legacy-owner-agency-token" },
+    ];
+    for (const testCase of cases) {
+      await db.insert(platformInvitationsTable).values({
+        token: testCase.token,
+        email: `legacy-${testCase.token}@test.test`,
+        companyId: testCase.company.id,
+        companySlug: testCase.company.slug,
+        role: "owner",
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+
+      const info = await api(`/api/platform/invite/${testCase.token}`);
+      expect(info.status).toBe(409);
+      const resend = await api(`/api/platform/team/invites/${testCase.token}/resend`, {
+        method: "POST",
+        sid: testCase.sid,
+      });
+      expect(resend.status).toBe(409);
+      const accepted = await api("/api/platform/invite/accept", {
+        body: { token: testCase.token, password: "valid-password-1" },
+      });
+      expect(accepted.status).toBe(409);
+
+      const [row] = await db
+        .select({ usedAt: platformInvitationsTable.usedAt, revokedAt: platformInvitationsTable.revokedAt })
+        .from(platformInvitationsTable)
+        .where(eq(platformInvitationsTable.token, testCase.token));
+      expect(row?.usedAt).toBeNull();
+      expect(row?.revokedAt).toBeNull();
+    }
+  });
+
+  it("does not remove a member when the actor's canonical membership is no longer manageable", async () => {
+    const { company, user: actor, sid } = await seedMaster("stale-removal-actor", "owner@stale-removal-actor.test");
+    const target = await addMember(company, "target@stale-removal-actor.test");
+    // Simulate a role change racing with an already-issued actor session.
+    await db
+      .update(platformMembershipsTable)
+      .set({ role: "viewer" })
+      .where(
+        and(
+          eq(platformMembershipsTable.userId, actor.id),
+          eq(platformMembershipsTable.companyId, company.id),
+        ),
+      );
+
+    const removed = await api(`/api/platform/team/members/${target.id}/remove`, {
+      method: "POST",
+      sid,
+    });
+    expect(removed.status).toBe(403);
+    const [stillPresent] = await db
+      .select({ userId: platformMembershipsTable.userId })
+      .from(platformMembershipsTable)
+      .where(
+        and(
+          eq(platformMembershipsTable.userId, target.id),
+          eq(platformMembershipsTable.companyId, company.id),
+        ),
+      );
+    expect(stillPresent?.userId).toBe(target.id);
+  });
+
+  it("allows a legitimate legacy owner session to remove a non-owner member", async () => {
+    const { company } = await seedAgency("legacy-remove-owner", "owner@legacy-remove-owner.test");
+    const target = await addMember(company, "target@legacy-remove-owner.test");
+    const legacySid = await createPlatformSession(company.slug, null, null, null);
+
+    const removed = await api(`/api/platform/team/members/${target.id}/remove`, {
+      method: "POST",
+      sid: legacySid,
+    });
+    expect(removed.status).toBe(200);
+    const [stillPresent] = await db
+      .select({ userId: platformMembershipsTable.userId })
+      .from(platformMembershipsTable)
+      .where(
+        and(
+          eq(platformMembershipsTable.userId, target.id),
+          eq(platformMembershipsTable.companyId, company.id),
+        ),
+      );
+    expect(stillPresent).toBeUndefined();
   });
 });
 

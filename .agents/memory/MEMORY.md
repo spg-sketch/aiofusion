@@ -34,6 +34,7 @@
 - [AIO Fusion staging custom domain](aio-fusion-staging-domain.md) — A+TXT only; deployment identity stays outside `.replit`; domain binds on Republish; verify SSL with curl.
 - [AIO Fusion fair usage policy](aio-fusion-fair-usage.md) — 50 actions/project/month for content-% ops only; audits (llm-check%) and llm-queries excluded (own 21-day lock); checkFairUsage() takes optional projectId; all content routes must send projectId in body.
 - [Team seat pools per workspace type](aio-fusion-team-seat-pools.md) — Agency Partners and direct Clients share the full two-pool model; agency-managed Clients have no team controls.
+- [Multiple Master Owners](aio-fusion-multiple-master-owners.md) — Master workspace may have multiple Owners; only an existing Owner can promote a current member, never through invitations.
 - [AIO Fusion team invites + membership roles](aio-fusion-team-invites.md) — 5-tier member roles ride on the session; createPlatformSession revokes per user_id NOT per slug; blockReadOnlyMembers must stay path-scoped.
 - [AIO Fusion password reset](aio-fusion-password-reset.md) — passwords live in BOTH platform_users and legacy platform_accounts (sync both); App.tsx history-sync wipes URL query params before lazy pages mount, capture email-link params in App state.
 - [AIO Fusion last sign-in semantics](aio-fusion-last-sign-in.md) — persist successful authentication timestamps in platform_meta; logout deletes sessions, and impersonation/workspace switching must never count as client sign-in.

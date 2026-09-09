@@ -394,6 +394,9 @@ export async function consumeInvite(
       .for("update")
       .limit(1);
     if (!company || company.status === "suspended") return false;
+    // Defense in depth for legacy/corrupt rows: owner can only be assigned by
+    // the authenticated member-promotion endpoint, never by invitation use.
+    if (normalizeMembershipRole(invite.role) === "owner") return false;
 
     // Atomic single-use claim: only the request that flips used_at from NULL
     // wins. Check expiry here as well as at lookup time because the invite can

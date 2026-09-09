@@ -1218,6 +1218,8 @@ export type TeamOverview = {
   /** Agency mode only: per-project pool size (3) and seats used per project id. */
   projectSeatLimit?: number;
   projectSeats?: Record<string, number>;
+  /** Server-authoritative UI capability for promoting an existing member. */
+  canPromoteOwners?: boolean;
 };
 
 export type TeamRoleViolation = {

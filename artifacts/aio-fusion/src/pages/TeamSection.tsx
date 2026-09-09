@@ -34,6 +34,8 @@ const ROLE_OPTIONS: { value: MembershipRole; label: string; hint: string }[] = [
   { value: "viewer", label: "Viewer", hint: "Read-only access" },
 ];
 
+const OWNER_OPTION = { value: "owner" as const, label: "Owner", hint: "Full ownership access" };
+
 const roleLabel = (r: MembershipRole) =>
   ROLE_OPTIONS.find((o) => o.value === r)?.label ?? (r === "owner" ? "Owner" : r);
 
@@ -633,6 +635,9 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
                       {ROLE_OPTIONS.map((o) => (
                         <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
+                      {team.canPromoteOwners && (
+                        <option value={OWNER_OPTION.value}>{OWNER_OPTION.label}</option>
+                      )}
                     </select>
                   )}
                   {(m.role === "content" || m.role === "viewer") && (

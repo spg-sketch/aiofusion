@@ -207,6 +207,13 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
     const now = new Date();
     const pendingCount = inviteRows.filter((i) => !i.declinedAt && i.expiresAt > now).length;
         const seatLimit = await getTeamSeatLimit(company.slug);
+    // This capability is derived from the canonical membership row, rather
+    // than the session role. A stale session must not expose owner promotion.
+    const actorMembership = memberRows.find((m) => m.userId === req.account!.userId);
+    const canPromoteOwners =
+      normalizeRole(company.role) === "admin" &&
+      actorMembership !== undefined &&
+      normalizeMembershipRole(actorMembership.role) === "owner";
 
     // Agency mode: the headline seat counter covers the ACCOUNT pool only
     // (members/invites with no project restriction); project-scoped people sit
@@ -249,6 +256,7 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
       })),
       seatLimit,
       seatsUsed,
+      canPromoteOwners,
     });
   } catch (err) {
     logger.error({ err }, "team: failed to list team");
@@ -677,6 +685,15 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
         // An invite that no longer fits this workspace's team model must not
         // be re-activated.
         const freshRole = normalizeMembershipRole(fresh.role);
+        // Owner is a promotion-only role. Never regenerate a legacy or
+        // corrupted owner invitation into a usable link.
+        if (freshRole === "owner") {
+          return {
+            ok: false as const,
+            status: 409 as const,
+            error: "Owner invitations are not permitted. Promote an existing team member instead.",
+          };
+        }
         const freshProjects = parseProjectAccess(fresh.projectAccess);
         const violatesMode =
           (teamMode === "client" && freshRole !== "content") ||
@@ -921,15 +938,20 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
     const updates: Record<string, unknown> = {};
     if (req.body?.role !== undefined) {
       const role = normalizeMembershipRole(req.body.role);
-      if (!INVITABLE_ROLES.includes(role)) {
+      if (!INVITABLE_ROLES.includes(role) && role !== "owner") {
         res.status(400).json({ error: "Role must be one of: admin, billing, content, viewer." });
         return;
       }
       updates.role = role;
+      // Owners always have workspace-wide access.
+      if (role === "owner") updates.projectAccess = null;
     }
     if (req.body?.projectIds !== undefined) {
       updates.projectAccess = normaliseProjectAccess(req.body.projectIds);
     }
+    // Owner promotion always grants workspace-wide access. Do this after
+    // parsing projectIds so a combined PATCH cannot retain scoped access.
+    if (updates.role === "owner") updates.projectAccess = null;
     if (Object.keys(updates).length === 0) {
       res.status(400).json({ error: "Nothing to update." });
       return;
@@ -1041,6 +1063,29 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
       }
       if (!lockedTeamMode) return { ok: false as const, reason: "team_unavailable" as const };
 
+      // Owner promotion is deliberately narrower than ordinary role edits:
+      // only an existing canonical owner membership in the master workspace
+      // may add another owner. Recheck it under the same workspace lock as the
+      // update so a concurrent demotion/reconfiguration cannot authorize it.
+      if (updates.role === "owner") {
+        if (normalizeRole(lockedCompany.role) !== "admin" || !req.account!.userId) {
+          return { ok: false as const, reason: "owner_promotion_forbidden" as const };
+        }
+        const [freshActor] = await tx
+          .select({ role: platformMembershipsTable.role })
+          .from(platformMembershipsTable)
+          .where(
+            and(
+              eq(platformMembershipsTable.userId, req.account!.userId),
+              eq(platformMembershipsTable.companyId, company.id),
+            ),
+          )
+          .limit(1);
+        if (!freshActor || normalizeMembershipRole(freshActor.role) !== "owner") {
+          return { ok: false as const, reason: "owner_promotion_forbidden" as const };
+        }
+      }
+
       const [freshTarget] = await tx
         .select()
         .from(platformMembershipsTable)
@@ -1109,6 +1154,8 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
         res.status(404).json({ error: "Member not found." });
       } else if (allocation.reason === "owner") {
         res.status(403).json({ error: "The account owner's role cannot be changed here." });
+      } else if (allocation.reason === "owner_promotion_forbidden") {
+        res.status(403).json({ error: "Only a current owner of the master workspace can promote another owner." });
       } else if (allocation.reason === "team_unavailable") {
         res.status(403).json({ error: NO_TEAM_MESSAGE });
       } else {
@@ -1161,14 +1208,85 @@ router.post("/platform/team/members/:userId/remove", requirePlatformAuth, async 
       return;
     }
 
-    await db
-      .delete(platformMembershipsTable)
-      .where(
-        and(
-          eq(platformMembershipsTable.userId, targetUserId),
-          eq(platformMembershipsTable.companyId, company.id),
-        ),
-      );
+    // Serialize with role changes and re-read the target under the workspace
+    // lock. A member promoted to owner while a removal request was waiting
+    // must never be deleted using the stale non-owner read above.
+    const removal = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT 1 FROM platform_companies WHERE id = ${company.id} FOR UPDATE`);
+      // Revalidate the actor after acquiring the same lock. This prevents a
+      // request authorized by a stale owner/admin session from deleting a
+      // member after that actor's canonical membership was changed.
+      if (req.account!.userId) {
+        const [freshActor] = await tx
+          .select({ role: platformMembershipsTable.role })
+          .from(platformMembershipsTable)
+          .where(
+            and(
+              eq(platformMembershipsTable.userId, req.account!.userId),
+              eq(platformMembershipsTable.companyId, company.id),
+            ),
+          )
+          .limit(1);
+        if (
+          !freshActor ||
+          (normalizeMembershipRole(freshActor.role) !== "owner" &&
+            normalizeMembershipRole(freshActor.role) !== "admin")
+        ) {
+          return "actor_forbidden" as const;
+        }
+      } else {
+        // Legacy sessions predate platform_users/memberships and intentionally
+        // use the account row as their canonical workspace identity. Recheck
+        // that identity under the lock, rather than treating the absent userId
+        // as blanket authorization.
+        const [legacyActor] = await tx
+          .select({ username: platformAccountsTable.username, role: platformAccountsTable.role, status: platformAccountsTable.status })
+          .from(platformAccountsTable)
+          .where(eq(platformAccountsTable.username, company.slug))
+          .limit(1);
+        if (
+          !legacyActor ||
+          legacyActor.status !== "active" ||
+          normUsername(req.account!.username) !== normUsername(company.slug) ||
+          normalizeRole(legacyActor.role) !== normalizeRole(company.role)
+        ) {
+          return "actor_forbidden" as const;
+        }
+      }
+      const [freshTarget] = await tx
+        .select({ role: platformMembershipsTable.role })
+        .from(platformMembershipsTable)
+        .where(
+          and(
+            eq(platformMembershipsTable.userId, targetUserId),
+            eq(platformMembershipsTable.companyId, company.id),
+          ),
+        )
+        .limit(1);
+      if (!freshTarget) return "missing" as const;
+      if (normalizeMembershipRole(freshTarget.role) === "owner") return "owner" as const;
+      await tx
+        .delete(platformMembershipsTable)
+        .where(
+          and(
+            eq(platformMembershipsTable.userId, targetUserId),
+            eq(platformMembershipsTable.companyId, company.id),
+          ),
+        );
+      return "removed" as const;
+    });
+    if (removal === "missing") {
+      res.status(404).json({ error: "Member not found." });
+      return;
+    }
+    if (removal === "owner") {
+      res.status(403).json({ error: "The account owner cannot be removed." });
+      return;
+    }
+    if (removal === "actor_forbidden") {
+      res.status(403).json({ error: "Only current owners and admins can remove team members." });
+      return;
+    }
     // Revoke the removed member's sessions immediately.
     await incrementSessionVersion(targetUserId);
 
@@ -1218,6 +1336,14 @@ router.get("/platform/invite/:token", async (req: Request, res: Response) => {
     if (!invite) {
       const reason = await getInviteInvalidReason(token);
       res.status(404).json({ error: INVITE_INVALID_MESSAGES[reason], reason });
+      return;
+    }
+    // Owner is never an invitation role, including rows created by older or
+    // corrupted code paths. Promotion is only for an existing member.
+    if (normalizeMembershipRole(invite.role) === "owner") {
+      res.status(409).json({
+        error: "Owner invitations are not permitted. Promote an existing team member instead.",
+      });
       return;
     }
     const [company] = await db
@@ -1295,6 +1421,12 @@ router.post("/platform/invite/accept", loginLimiter, async (req: Request, res: R
     if (!invite) {
       const reason = await getInviteInvalidReason(token);
       res.status(404).json({ error: INVITE_INVALID_MESSAGES[reason], reason });
+      return;
+    }
+    if (normalizeMembershipRole(invite.role) === "owner") {
+      res.status(409).json({
+        error: "Owner invitations are not permitted. Promote an existing team member instead.",
+      });
       return;
     }
 
