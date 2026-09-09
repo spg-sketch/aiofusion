@@ -50,18 +50,25 @@ const baseTeam = (over: Partial<TeamOverview>): TeamOverview => ({
 beforeEach(() => getTeamMock.mockReset());
 
 describe("TeamSection team modes", () => {
-  it("client mode: fixed content role, no project restriction UI", async () => {
-    getTeamMock.mockResolvedValue({ ok: true, team: baseTeam({ teamMode: "client" }) });
+  it("direct clients receive the full Agency Partner team controls", async () => {
+    getTeamMock.mockResolvedValue({
+      ok: true,
+      team: baseTeam({
+        teamMode: "agency",
+        projectSeatLimit: 3,
+        projectSeats: { p1: 0, p2: 0 },
+      }),
+    });
     render(<TeamSection />);
-    await waitFor(() => expect(screen.getByText(/Team members/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/account seats/)).toBeTruthy());
 
-    // Role is a fixed label, not a dropdown.
-    expect(screen.getByText("Content Team Member")).toBeTruthy();
-    expect(document.querySelector("select")).toBeNull();
-    // No project-restriction checkbox.
-    expect(screen.queryByText(/Limit to specific projects/)).toBeNull();
-    expect(screen.queryByText(/Assign to specific projects/)).toBeNull();
-    expect(screen.getByText(/Invite up to 3 colleagues/)).toBeTruthy();
+    expect(document.querySelector("select")).toBeTruthy();
+    const toggle = screen.getByText(/Assign to specific projects/);
+    expect(toggle).toBeTruthy();
+    (toggle.querySelector("input") as HTMLInputElement).click();
+    await waitFor(() => expect(screen.getByText("Content Team Member")).toBeTruthy());
+    expect(screen.getByText("Project One")).toBeTruthy();
+    expect(screen.getByText("Project Two")).toBeTruthy();
   });
 
   it("agency mode: account-seat counter, project seats with per-project counts", async () => {

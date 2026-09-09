@@ -1,18 +1,15 @@
 ---
 name: Team seat pools per workspace type
-description: Agency two-pool team seats, direct-client colleague teams, managed clients have no team
+description: Full two-pool team access for Agency Partners and direct Clients; managed Clients have no team
 ---
 
-Team model is resolved per workspace in `resolveTeamMode` (routes/team.ts):
-- **agency** (company role "agency"): two pools — account seats (projectAccess NULL members/invites, any invitable role, cap = getTeamSeatLimit) and PROJECT_TEAM_SEATS (3) content-only seats per project (a member/invite holds one seat in EACH listed project).
-- **client** direct (no agency parent in platform_accounts): single pool, content role only.
-- **null** for agency-managed partner clients (parent account role "agency"): every team endpoint (list, invite, resend, revoke, PATCH, remove) must return 403 — gate all new team routes the same way.
-- **standard** for admin/legacy "user" accounts: original single-pool behaviour.
+Agency Partners and direct Client accounts use the same complete team model:
+- Account seats support Admin, Content Team Member, Billing and Viewer roles.
+- Project seats are Content Team Member only, with three seats available per project.
+- Account and project pools are counted separately.
 
-**Why:** Client rule — agency staff manage the account or specific projects; direct clients bring up to 3 colleagues; managed clients collaborate only via the agency's project seats.
+Agency-managed Client subaccounts have no team controls. Their collaboration is managed through the parent Agency Partner's project seats.
 
-**How to apply:**
-- Any new invite/member mutation must validate the RESULTING role+projectAccess against the mode, not the request fields alone; resend must refuse legacy invites that violate the current mode (409).
-- Per-project full errors list seat-holder names (`getProjectSeatHolders`), include `limitReached` + `projectId`.
-- Legacy members with non-content roles + projectAccess are deliberately left working; UI shows their true role so they can be corrected. Seat checks are read-then-write (raceable) — consistent with the pre-existing seat cap, accepted.
-- Client UI: TeamSection switches on `team.teamMode`; SubAccountsPage hides the team nav for `session.agencyManagedClient`.
+**Why:** The user explicitly corrected the earlier Content-only direct Client model on 2026-09-09 and confirmed that direct Clients must match the Agency Partner version completely.
+
+**How to apply:** Keep direct Client UI, API permissions, role changes, seat counting and project restrictions aligned with Agency Partners. Continue blocking every team-management operation for agency-managed Client subaccounts.

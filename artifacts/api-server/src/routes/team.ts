@@ -62,8 +62,8 @@ async function getActiveCompany(req: Request) {
 //  - "agency"   Agency/Partner accounts: two seat pools - account-level seats
 //               (people managing the account, any invitable role) plus up to
 //               PROJECT_TEAM_SEATS content members per project.
-//  - "client"   Direct client accounts (signed up themselves): a single pool
-//               of colleagues, content role only.
+//  - "client"   Legacy response mode retained for backwards compatibility.
+//               Direct clients now use the same two-pool model as agencies.
 //  - "standard" Master admin / legacy accounts: the original single-pool model.
 //  - null       Agency-managed partner clients: no team at all - collaboration
 //               on their projects happens through the agency's project seats.
@@ -79,7 +79,7 @@ async function resolveTeamMode(company: { slug: string; role: string }): Promise
     const parent = await getAccount(normUsername(acc.parent));
     if (parent && normalizeRole(parent.role) === "agency") return null;
   }
-  return "client";
+  return "agency";
 }
 
 const NO_TEAM_MESSAGE = "Team management is not available for this account.";
@@ -410,9 +410,9 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
               .from(platformAccountsTable)
               .where(eq(platformAccountsTable.username, normUsername(lockedAccount.parent)))
               .limit(1);
-            lockedTeamMode = parent && normalizeRole(parent.role) === "agency" ? null : "client";
+            lockedTeamMode = parent && normalizeRole(parent.role) === "agency" ? null : "agency";
           } else {
-            lockedTeamMode = "client";
+            lockedTeamMode = "agency";
           }
         }
       }
@@ -420,15 +420,8 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
         return { ok: false as const, reason: "team_unavailable" as const };
       }
 
-      let allocationRole = role;
-      let allocationProjectAccess = projectAccess;
-      if (lockedTeamMode === "client") {
-        if (allocationRole !== "content") {
-          return { ok: false as const, reason: "client_role" as const };
-        }
-        allocationRole = "content";
-        allocationProjectAccess = null;
-      }
+      const allocationRole = role;
+      const allocationProjectAccess = projectAccess;
       const allocationProjectIds = parseProjectAccess(allocationProjectAccess);
       const allocationIsAgencyProjectSeat =
         lockedTeamMode === "agency" && allocationProjectAccess !== null;
@@ -508,8 +501,6 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
           limitReached: true,
           projectId: inviteResult.projectId,
         });
-      } else if (inviteResult.reason === "client_role") {
-        res.status(400).json({ error: "Colleagues on a client account are always Content Team Members." });
       } else if (inviteResult.reason === "team_unavailable") {
         res.status(403).json({ error: "Team invitations are not available for this account." });
       } else {
@@ -1043,9 +1034,9 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
             .from(platformAccountsTable)
             .where(eq(platformAccountsTable.username, normUsername(lockedAccount.parent)))
             .limit(1);
-          lockedTeamMode = parent && normalizeRole(parent.role) === "agency" ? null : "client";
+          lockedTeamMode = parent && normalizeRole(parent.role) === "agency" ? null : "agency";
         } else {
-          lockedTeamMode = "client";
+          lockedTeamMode = "agency";
         }
       }
       if (!lockedTeamMode) return { ok: false as const, reason: "team_unavailable" as const };
@@ -1071,20 +1062,6 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
       const freshAccess = updates.projectAccess !== undefined
         ? parseProjectAccess(updates.projectAccess as string | null)
         : parseProjectAccess(freshTarget.projectAccess);
-
-      if (lockedTeamMode === "client") {
-        if (freshRole !== "content") return { ok: false as const, reason: "client_role" as const };
-        await tx
-          .update(platformMembershipsTable)
-          .set({ ...updates, role: "content", projectAccess: null })
-          .where(
-            and(
-              eq(platformMembershipsTable.userId, targetUserId),
-              eq(platformMembershipsTable.companyId, company.id),
-            ),
-          );
-        return { ok: true as const };
-      }
 
       if (lockedTeamMode === "agency") {
         const oldAccess = parseProjectAccess(freshTarget.projectAccess);
@@ -1124,8 +1101,6 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
           limitReached: true,
           projectId: allocation.projectId,
         });
-      } else if (allocation.reason === "client_role") {
-        res.status(400).json({ error: "Colleagues on a client account are always Content Team Members." });
       } else if (allocation.reason === "project_role") {
         res.status(400).json({ error: "Project team members are always Content Team Members. Use an account seat for admin, billing or viewer roles." });
       } else if (allocation.reason === "project_empty") {

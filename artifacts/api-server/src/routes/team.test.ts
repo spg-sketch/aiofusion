@@ -624,10 +624,11 @@ describe("team invitations", () => {
     expect(invites.find((invite) => invite.token === first.json.token)?.revokedAt).not.toBeNull();
   });
 
-  it("clears existing and requested project restrictions when updating a client colleague", async () => {
+  it("lets a direct client manage project restrictions with the Agency Partner rules", async () => {
     const { sid, company } = await seedAgency("client-member-scope", "owner@client-member-scope.test");
     await db.update(platformCompaniesTable).set({ role: "client" }).where(eq(platformCompaniesTable.id, company.id));
     await db.update(platformAccountsTable).set({ role: "client" }).where(eq(platformAccountsTable.username, "client-member-scope"));
+    await seedProject("owned-project", "client-member-scope");
     const [member] = await db
       .insert(platformUsersTable)
       .values({ email: "colleague@client-member-scope.test", passwordHash: hashPassword("member-password-1") })
@@ -643,14 +644,14 @@ describe("team invitations", () => {
     const updated = await api(`/api/platform/team/members/${member!.id}`, {
       method: "PATCH",
       sid,
-      body: { role: "content", projectIds: ["ignored-project"] },
+      body: { role: "content", projectIds: ["owned-project"] },
     });
     expect(updated.status).toBe(200);
     const [stored] = await db
       .select({ projectAccess: platformMembershipsTable.projectAccess })
       .from(platformMembershipsTable)
       .where(eq(platformMembershipsTable.userId, member!.id));
-    expect(stored?.projectAccess).toBeNull();
+    expect(JSON.parse(stored?.projectAccess ?? "[]")).toEqual(["owned-project"]);
   });
 
   it("blocks viewer members from writes and billing members from project access entirely", async () => {
@@ -1954,35 +1955,47 @@ describe("agency two-pool seat model", () => {
 });
 
 describe("direct-client teams", () => {
-  it("a direct client can invite up to 3 content colleagues; other roles rejected", async () => {
+  it("a direct client gets the complete Agency Partner role and project-seat model", async () => {
     const { sid } = await seedWorkspace("direct-client", "owner@direct.test", "client");
+    await seedProject("direct-project", "direct-client");
 
     const t = await api("/api/platform/team", { sid });
     expect(t.status).toBe(200);
-    expect(t.json.teamMode).toBe("client");
+    expect(t.json.teamMode).toBe("agency");
+    expect(t.json.projectSeatLimit).toBe(PROJECT_TEAM_SEATS);
 
     const admin = await api("/api/platform/team/invite", { sid, body: { email: "a@direct.test", role: "admin" } });
-    expect(admin.status).toBe(400);
+    expect(admin.status).toBe(201);
 
     const c1 = await api("/api/platform/team/invite", { sid, body: { email: "c1@direct.test", role: "content" } });
-    const c2 = await api("/api/platform/team/invite", { sid, body: { email: "c2@direct.test", role: "content" } });
     expect(c1.status).toBe(201);
-    expect(c2.status).toBe(201);
-    // Owner + 2 pending = 3 seats: the pool is full.
-    const c3 = await api("/api/platform/team/invite", { sid, body: { email: "c3@direct.test", role: "content" } });
-    expect(c3.status).toBe(403);
-    expect(c3.json.limitReached).toBe(true);
+    // Owner + two account invitations fill the account pool.
+    const billing = await api("/api/platform/team/invite", { sid, body: { email: "billing@direct.test", role: "billing" } });
+    expect(billing.status).toBe(403);
+    expect(billing.json.limitReached).toBe(true);
 
-    // A colleague can never be promoted off the content role.
-    const accept = await api("/api/platform/invite/accept", { body: { token: c1.json.token, password: "colleague-pass-1" } });
+    // Project seats remain available even when the account pool is full.
+    const projectMember = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "project@direct.test", role: "content", projectIds: ["direct-project"] },
+    });
+    expect(projectMember.status).toBe(201);
+    const invalidProjectRole = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "project-admin@direct.test", role: "admin", projectIds: ["direct-project"] },
+    });
+    expect(invalidProjectRole.status).toBe(400);
+
+    // Account-level members can use the same role controls as Agency Partners.
+    const accept = await api("/api/platform/invite/accept", { body: { token: admin.json.token, password: "colleague-pass-1" } });
     expect(accept.status).toBe(200);
-    const [colleague] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.email, "c1@direct.test"));
-    const promote = await api(`/api/platform/team/members/${colleague!.id}`, {
+    const [colleague] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.email, "a@direct.test"));
+    const changeRole = await api(`/api/platform/team/members/${colleague!.id}`, {
       sid,
       method: "PATCH",
       body: { role: "billing" },
     });
-    expect(promote.status).toBe(400);
+    expect(changeRole.status).toBe(200);
   });
 
   it("agency-managed partner clients have no team at all - list, invite and every mutation endpoint", async () => {
@@ -1999,9 +2012,9 @@ describe("direct-client teams", () => {
     expect((await api("/api/platform/team/members/00000000-0000-0000-0000-000000000000/remove", { sid, body: {} })).status).toBe(403);
   });
 
-  it("resend refuses legacy invites whose role no longer fits the team model", async () => {
+  it("resend accepts account-role invites now that direct clients use the full team model", async () => {
     const { sid, company } = await seedWorkspace("legacy-inv-client", "owner@leginv.test", "client");
-    // Seed a legacy admin invite directly (pre-dates the content-only rule).
+    // Seed an account-level admin invite directly.
     await db.insert(platformInvitationsTable).values({
       token: "legacy-admin-invite",
       email: "old-admin@leginv.test",
@@ -2011,7 +2024,7 @@ describe("direct-client teams", () => {
       expiresAt: new Date(Date.now() + 60_000),
     });
     const resend = await api("/api/platform/team/invites/legacy-admin-invite/resend", { sid, body: {} });
-    expect(resend.status).toBe(409);
+    expect(resend.status).toBe(200);
   });
 });
 
@@ -2086,39 +2099,18 @@ describe("project ownership: downward-only + resend validation", () => {
     await db.update(platformAccountsTable)
       .set({ parent: "par-own-ag" })
       .where(eq(platformAccountsTable.username, "par-own-cl"));
-    // Make the parent non-agency so the client keeps a team (client mode).
+    // Make the parent non-agency so the client keeps its own team.
     await db.update(platformAccountsTable)
       .set({ role: "client" })
       .where(eq(platformAccountsTable.username, "par-own-ag"));
-    // Client-mode invites discard any project scoping - the parent's project
-    // id must not end up stored on the invitation.
+    // The direct client now has project-seat controls, so a parent-owned project
+    // must be rejected rather than silently discarded.
     const r = await api("/api/platform/team/invite", {
       sid,
       body: { email: "x@par-own-cl.test", role: "content", projectIds: ["parent-owned-proj"] },
     });
-    expect(r.status).toBe(201);
-    const [stored] = await db
-      .select()
-      .from(platformInvitationsTable)
-      .where(eq(platformInvitationsTable.email, "x@par-own-cl.test"));
-    expect(stored!.projectAccess).toBeNull();
-
-    // Nor can a member update smuggle the parent's project in: client-mode
-    // updates silently clear all project scoping.
-    const accept = await api("/api/platform/invite/accept", { body: { token: r.json.token, password: "member-pass-9" } });
-    expect(accept.status).toBe(200);
-    const [member] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.email, "x@par-own-cl.test"));
-    const patch = await api(`/api/platform/team/members/${member!.id}`, {
-      sid,
-      method: "PATCH",
-      body: { projectIds: ["parent-owned-proj"] },
-    });
-    expect(patch.status).toBe(200);
-    const [updatedMember] = await db
-      .select({ projectAccess: platformMembershipsTable.projectAccess })
-      .from(platformMembershipsTable)
-      .where(eq(platformMembershipsTable.userId, member!.id));
-    expect(updatedMember?.projectAccess).toBeNull();
+    expect(r.status).toBe(400);
+    expect(r.json.error).toMatch(/don't belong to this account/i);
   });
 
   it("resend refuses an expired invite whose project no longer belongs to the workspace", async () => {
@@ -2179,7 +2171,7 @@ describe("admin team-violation report and fix", () => {
     expect(rf.status).toBe(403);
   });
 
-  it("lets a workspace owner review and fix only their own role mismatches", async () => {
+  it("lets a direct-client owner review and fix project-seat role mismatches", async () => {
     const { sid, company } = await seedWorkspace("owner-role-review", "owner@role-review.test", "client");
     const [member] = await db
       .insert(platformUsersTable)
@@ -2190,6 +2182,7 @@ describe("admin team-violation report and fix", () => {
       companyId: company.id,
       companySlug: "owner-role-review",
       role: "viewer",
+      projectAccess: JSON.stringify(["owned-project"]),
     });
 
     const report = await api("/api/platform/team/violations", { sid });
@@ -2207,7 +2200,7 @@ describe("admin team-violation report and fix", () => {
     expect(updated?.role).toBe("content");
   });
 
-  it("reports violations: agency project-seat member with non-content role and client member with non-content role", async () => {
+  it("reports only project-seat role violations across Agency Partner and direct Client accounts", async () => {
     const { sid: adminSid } = await seedMasterAdmin("violations-admin", "admin@violations.test");
 
     // Agency workspace with a project-scoped member that has 'billing' role (legacy).
@@ -2260,12 +2253,13 @@ describe("admin team-violation report and fix", () => {
 
     const r = await api("/api/platform/admin/team-violations", { sid: adminSid });
     expect(r.status).toBe(200);
-    expect(r.json.total).toBeGreaterThanOrEqual(4);
+    expect(r.json.total).toBeGreaterThanOrEqual(2);
 
-    // Both violating companies must appear in the report.
+    // Only the project-scoped violations appear. Account-level roles are valid
+    // for both Agency Partner and direct Client accounts.
     const slugs: string[] = r.json.companies.map((c: any) => c.companySlug);
     expect(slugs).toContain("v-agency");
-    expect(slugs).toContain("v-client");
+    expect(slugs).not.toContain("v-client");
 
     // The agency company must show the billing member + admin invite as violations.
     const agencyEntry = r.json.companies.find((c: any) => c.companySlug === "v-agency");
@@ -2274,14 +2268,7 @@ describe("admin team-violation report and fix", () => {
     expect(agencyViolations.some((v: any) => v.kind === "member" && v.currentRole === "billing")).toBe(true);
     expect(agencyViolations.some((v: any) => v.kind === "invite" && v.currentRole === "admin")).toBe(true);
 
-    // The client company must show the viewer member + billing invite as violations.
-    const clientEntry = r.json.companies.find((c: any) => c.companySlug === "v-client");
-    expect(clientEntry).toBeDefined();
-    expect(clientEntry.violations.some((v: any) => v.kind === "member" && v.currentRole === "viewer")).toBe(true);
-    expect(clientEntry.violations.some((v: any) => v.kind === "invite" && v.currentRole === "billing")).toBe(true);
-
     // Workspace owners are included in the report for notification purposes.
-    expect(clientEntry.ownerEmail).toBe("owner@v-client.test");
     expect(agencyEntry.ownerEmail).toBe("owner@v-agency.test");
   });
 
@@ -2344,6 +2331,7 @@ describe("admin team-violation report and fix", () => {
       companyId: dryClient.id,
       companySlug: "v-dryrun-client",
       role: "billing",
+      projectAccess: JSON.stringify(["dry-project"]),
     });
 
     const dry = await api("/api/platform/admin/team-violations/fix", {

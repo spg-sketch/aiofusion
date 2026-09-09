@@ -93,7 +93,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
 
   // Which team model this workspace runs (see TeamOverview.teamMode):
   //  - "agency": two pools - account seats (any role) + 3 content seats/project.
-  //  - "client": a single pool of colleagues, always content members.
+  //  - "client": legacy response mode from older servers.
   //  - "standard": the original single-pool model.
   const mode = team?.teamMode ?? "standard";
   const isAgency = mode === "agency";

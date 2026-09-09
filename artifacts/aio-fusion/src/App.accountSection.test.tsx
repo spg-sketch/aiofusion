@@ -107,6 +107,24 @@ describe("settings-section deep link survives refresh (account_section param)", 
     });
   });
 
+  it("normal return to account settings opens Profile at the top instead of the previous section", async () => {
+    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    await renderAppAt("/?account_section=security");
+
+    await screen.findByRole("heading", { name: /sign-in & security/i });
+    fireEvent.click(screen.getByRole("button", { name: /back to platform/i }));
+
+    const openSettings = await screen.findByRole("button", { name: /account, client and team settings/i });
+    fireEvent.click(openSettings);
+
+    await waitFor(() => {
+      expect(screen.getByText("Account type")).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: /sign-in & security/i })).toBeNull();
+      expect(window.location.search).toContain("account_section=profile");
+    });
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
+  });
+
   it("landing on /?account_section=team with a disallowed role falls back to Profile", async () => {
     // Agency owner CAN see team; use a nonsense section instead to assert the
     // safe fallback path never renders a broken page.

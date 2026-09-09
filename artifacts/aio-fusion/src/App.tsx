@@ -662,8 +662,10 @@ function App() {
     }
     setNeedsSetup(false);
     startTransition(() => {
-      setView("platform-home");
+      setAccountSection("profile");
+      setView("sub-accounts");
     });
+    window.scrollTo(0, 0);
     return { ok: true };
   }, []);
   const [session, setSessionState] = useState<LocalSession | null>(() => {
@@ -1225,6 +1227,11 @@ function App() {
   };
 
   const enterPlatform = () => transitionToView("platform-home");
+  const openAccountSettings = () => {
+    setAccountSection("profile");
+    transitionToView("sub-accounts");
+    window.scrollTo(0, 0);
+  };
 
   const isAuthed = !!session;
 
@@ -1376,7 +1383,7 @@ function App() {
                 transitionToView("users-admin");
               }
             }}
-            onManageSubAccounts={() => requireSessionThen(() => transitionToView("sub-accounts"))}
+            onManageSubAccounts={() => requireSessionThen(openAccountSettings)}
             onInsightsAdmin={() => { if (session?.insightsCmsAccess) transitionToView("insights-admin"); }}
             onCreateProject={beginCreateProject}
             onContinueToProjects={() => requireSessionThen(() => transitionToView("platform"))}
@@ -1457,8 +1464,16 @@ function App() {
         checkoutResult={checkoutResult}
         onSectionChange={(s) => setAccountSection(s)}
         session={session}
-        onBack={() => transitionToView("platform-home")}
-        onOpenProject={() => transitionToView("platform")}
+        onBack={() => {
+          setAccountSection(null);
+          transitionToView("platform-home");
+          window.scrollTo(0, 0);
+        }}
+        onOpenProject={() => {
+          setAccountSection(null);
+          transitionToView("platform");
+          window.scrollTo(0, 0);
+        }}
         onAssignProjectOwner={handleAssignProjectOwner}
         onRoleChanged={handleRoleChanged}
         onWorkspacesChanged={() => {
@@ -1567,7 +1582,7 @@ function App() {
         onOpenSavedTechGeo={(id) => { setPendingTechGeoId(id); transitionToPage("seo-audit"); }}
         onOpenGeorge={() => { setGeorgeOpen(true); setGeorgeHasUpdate(false); }}
         georgeHasUpdate={georgeHasUpdate}
-        onOpenAccount={() => transitionToView("sub-accounts")}
+        onOpenAccount={openAccountSettings}
       />
       <GeorgeSupport
         open={georgeOpen}
