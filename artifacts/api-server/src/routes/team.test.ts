@@ -330,6 +330,7 @@ import {
   platformCompaniesTable,
   platformMembershipsTable,
   platformInvitationsTable,
+  platformSessionsTable,
   platformMetaTable,
   projectsTable,
 } from "@workspace/db";
@@ -2425,7 +2426,12 @@ describe("project ownership: downward-only + resend validation", () => {
 // ---------------------------------------------------------------------------
 describe("admin team-violation report and fix", () => {
   // Seed a master-admin session (role === "admin" at the account level).
-  async function seedMasterAdmin(slug: string, email: string) {
+  async function seedMasterAdmin(_fixtureName: string, email: string) {
+    const slug = "admin";
+    await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, slug));
+    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, slug));
+    await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, slug));
+    await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, slug));
     await db.insert(platformAccountsTable).values({
       username: slug,
       passwordHash: hashPassword("admin-pw-1"),

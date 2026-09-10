@@ -232,7 +232,7 @@ import platformRouter from "./platform";
 // Test helpers
 // ---------------------------------------------------------------------------
 
-const ADMIN_USERNAME = "exit-impersonation-admin";
+const ADMIN_USERNAME = "admin";
 const CLIENT_USERNAME = "exit-impersonation-client";
 const ADMIN_SID = "stash-sid-admin-test-001";
 const CLIENT_SID = "view-as-sid-client-test-001";

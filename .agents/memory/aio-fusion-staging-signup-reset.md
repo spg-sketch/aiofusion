@@ -1,9 +1,9 @@
 ---
 name: Reusable staging signup accounts
-description: Safety constraints for returning a dedicated password login to first-time onboarding on staging.
+description: Safety constraints for returning a dedicated login identity to first-time onboarding on staging.
 ---
 
-Reusable signup resets must be staging-only, admin-controlled and limited to a dedicated password owner with one workspace membership, no teammates and no child accounts. Preserve the login identity, but revoke its sessions and reset onboarding, trial and workspace data in one database transaction. Refuse Stripe-linked accounts and accounts whose media records are referenced across workspaces.
+Reusable signup resets must be staging-only, admin-controlled and limited to one dedicated owner with a usable password, Google or Microsoft identity, one workspace membership, no teammates and no child accounts. Preserve the login identity, but revoke its sessions and reset onboarding, trial and workspace data in one database transaction. Refuse Stripe-linked accounts and accounts whose media records are referenced across workspaces.
 
 **Why:** A reusable login is useful for repeat onboarding tests, but partial cleanup, shared identities or external billing links can erase unrelated data or leave the account in a state that cannot start onboarding again.
 

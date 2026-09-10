@@ -5729,21 +5729,31 @@ router.post(
       }
 
       const owners = await db
-        .select({ id: platformUsersTable.id, passwordHash: platformUsersTable.passwordHash })
+        .select({
+          id: platformUsersTable.id,
+          passwordHash: platformUsersTable.passwordHash,
+          googleId: platformUsersTable.googleId,
+          microsoftId: platformUsersTable.microsoftId,
+        })
         .from(platformMembershipsTable)
         .innerJoin(platformUsersTable, eq(platformMembershipsTable.userId, platformUsersTable.id))
         .where(and(
           eq(platformMembershipsTable.companySlug, target),
           eq(platformMembershipsTable.role, "owner"),
         ));
-      if (owners.length !== 1 || !owners[0]?.passwordHash) {
-        res.status(400).json({ error: "Choose a dedicated account with one password owner." });
+      const owner = owners[0];
+      if (
+        owners.length !== 1
+        || !owner
+        || (!owner.passwordHash && !owner.googleId && !owner.microsoftId)
+      ) {
+        res.status(400).json({ error: "Choose a dedicated account with one owner who can sign in." });
         return;
       }
       const ownerMemberships = await db
         .select({ companySlug: platformMembershipsTable.companySlug })
         .from(platformMembershipsTable)
-        .where(eq(platformMembershipsTable.userId, owners[0].id));
+        .where(eq(platformMembershipsTable.userId, owner.id));
       const companyMemberships = await db
         .select({ userId: platformMembershipsTable.userId })
         .from(platformMembershipsTable)

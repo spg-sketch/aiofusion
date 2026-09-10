@@ -76,14 +76,26 @@ vi.mock("../middleware/platform-auth", () => ({
 }));
 vi.mock("../lib/admin-events", () => ({ logAdminEvent: () => Promise.resolve() }));
 
-import { db, platformAccountsTable, platformCompaniesTable, platformUsersTable,
-  platformMembershipsTable, projectsTable, platformMetaTable, mediaOutletsTable,
-  mediaContactsTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable } from "@workspace/db";
+import {
+  db,
+  platformAccountsTable,
+  platformCompaniesTable,
+  platformUsersTable,
+  platformMembershipsTable,
+  projectsTable,
+  platformMetaTable,
+  mediaOutletsTable,
+  mediaContactsTable,
+  mediaRecommendationSetsTable,
+  mediaRecommendationItemsTable,
+} from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../lib/platform-auth";
 import router from "./platform";
 
-function appFor(actor: { username: string; role: string; userId?: string; membershipRole?: string | null }) {
+type Actor = { username: string; role: string; userId?: string; membershipRole?: string | null };
+
+function appFor(actor: Actor) {
   const app = express();
   app.use(express.json());
   app.use(cookieParser());
@@ -92,23 +104,45 @@ function appFor(actor: { username: string; role: string; userId?: string; member
   return app;
 }
 
-async function request(actor: { username: string; role: string; userId?: string; membershipRole?: string | null },
-  target: string) {
-  const app = appFor(actor);
-  const server = app.listen(0);
+async function request(actor: Actor, target: string) {
+  const server = appFor(actor).listen(0);
   await new Promise<void>((resolve) => server.once("listening", resolve));
   const port = (server.address() as { port: number }).port;
-  const response = await fetch(`http://127.0.0.1:${port}/api/platform/admin/accounts/${target}/reset-staging-test`, { method: "POST" });
+  const response = await fetch(
+    `http://127.0.0.1:${port}/api/platform/admin/accounts/${target}/reset-staging-test`,
+    { method: "POST" },
+  );
   server.close();
   return response;
 }
 
-async function seed(target: string, opts: { stripe?: boolean } = {}) {
-  await db.insert(platformAccountsTable).values({ username: target, passwordHash: hashPassword("original"), role: "agency", status: "active" });
-  await db.insert(platformCompaniesTable).values({ id: target, slug: target, role: "agency", setupComplete: true,
-    ...(opts.stripe ? { stripeCustomerId: "cus_test" } : {}) });
-  const [user] = await db.insert(platformUsersTable).values({ email: `${target}@test.invalid`, name: "Owner", passwordHash: hashPassword("original") }).returning();
-  await db.insert(platformMembershipsTable).values({ userId: user!.id, companyId: target, companySlug: target, role: "owner" });
+async function seed(target: string, opts: { stripe?: boolean; googleOnly?: boolean } = {}) {
+  await db.insert(platformAccountsTable).values({
+    username: target,
+    passwordHash: opts.googleOnly ? "" : hashPassword("original"),
+    role: "agency",
+    status: "active",
+  });
+  await db.insert(platformCompaniesTable).values({
+    id: target,
+    slug: target,
+    role: "agency",
+    setupComplete: true,
+    ...(opts.stripe ? { stripeCustomerId: "cus_test" } : {}),
+  });
+  const [user] = await db.insert(platformUsersTable).values({
+    email: `${target}@test.invalid`,
+    name: "Owner",
+    passwordHash: opts.googleOnly ? null : hashPassword("original"),
+    googleId: opts.googleOnly ? `google-${target}` : null,
+    emailVerified: true,
+  }).returning();
+  await db.insert(platformMembershipsTable).values({
+    userId: user!.id,
+    companyId: target,
+    companySlug: target,
+    role: "owner",
+  });
   return user!.id;
 }
 
@@ -120,7 +154,8 @@ describe("staging reusable signup reset", () => {
     process.env.DEPLOYMENT_ENV = "production";
     const app = appFor({ username: "admin", role: "admin", membershipRole: "owner" });
     app.get("/api/platform/admin/staging-test-reset", (req, res, next) => next());
-    const server = app.listen(0); await new Promise<void>((r) => server.once("listening", r));
+    const server = app.listen(0);
+    await new Promise<void>((resolve) => server.once("listening", resolve));
     const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
     expect((await fetch(`${base}/api/platform/admin/staging-test-reset`)).status).toBe(404);
     expect((await fetch(`${base}/api/platform/admin/accounts/production-target/reset-staging-test`, { method: "POST" })).status).toBe(404);
@@ -129,59 +164,94 @@ describe("staging reusable signup reset", () => {
 
   it("denies a non-admin actor", async () => {
     await seed("non-admin-target");
-    expect((await request({ username: "non-admin", role: "agency", membershipRole: "owner" }, "non-admin-target")).status).toBe(403);
+    expect((await request(
+      { username: "non-admin", role: "agency", membershipRole: "owner" },
+      "non-admin-target",
+    )).status).toBe(403);
   });
 
   it("resets a dedicated password account while preserving identity and onboarding state", async () => {
     const userId = await seed("reusable");
     const [before] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.id, userId));
     await db.insert(projectsTable).values({ id: "reusable-project", owner: "reusable", name: "Old", data: {} });
-    await db.insert(platformMetaTable).values({ key: "account:onboarding:v1:reusable", value: JSON.stringify({ step: "first_project" }) });
+    await db.insert(platformMetaTable).values({
+      key: "account:onboarding:v1:reusable",
+      value: JSON.stringify({ step: "first_project" }),
+    });
     const response = await request({ username: "admin", role: "admin", membershipRole: "owner" }, "reusable");
     expect(response.status).toBe(200);
     const result = await response.json() as { deletedProjectCount: number };
     expect(result.deletedProjectCount).toBe(1);
-    expect((await db.select().from(platformUsersTable).where(eq(platformUsersTable.id, userId))).length).toBe(1);
     const [account] = await db.select().from(platformAccountsTable).where(eq(platformAccountsTable.username, "reusable"));
     const [company] = await db.select().from(platformCompaniesTable).where(eq(platformCompaniesTable.slug, "reusable"));
     const [checkpoint] = await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, "account:onboarding:v1:reusable"));
+    const [after] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.id, userId));
     expect(account?.passwordHash).toBeTruthy();
-    expect((await db.select().from(platformUsersTable).where(eq(platformUsersTable.id, userId)))[0]?.passwordHash)
-      .toBe(before?.passwordHash);
+    expect(after?.passwordHash).toBe(before?.passwordHash);
     expect(company?.setupComplete).toBe(false);
     expect(JSON.parse(checkpoint!.value)).toEqual({ step: "account_type" });
     expect((await db.select().from(projectsTable).where(eq(projectsTable.owner, "reusable"))).length).toBe(0);
   });
 
+  it("resets a dedicated Google-only account while preserving its sign-in identity", async () => {
+    const userId = await seed("google-reusable", { googleOnly: true });
+    const [before] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.id, userId));
+    const response = await request(
+      { username: "admin", role: "admin", membershipRole: "owner" },
+      "google-reusable",
+    );
+    expect(response.status).toBe(200);
+    const [after] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.id, userId));
+    const [company] = await db.select().from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, "google-reusable"));
+    expect(after?.googleId).toBe(before?.googleId);
+    expect(after?.passwordHash).toBeNull();
+    expect(company?.setupComplete).toBe(false);
+  });
+
   it("rejects Stripe-linked and shared-identity accounts before deletion", async () => {
     await seed("stripe-target", { stripe: true });
-    expect((await request({ username: "admin", role: "admin", membershipRole: "owner" }, "stripe-target")).status).toBe(400);
+    expect((await request(
+      { username: "admin", role: "admin", membershipRole: "owner" },
+      "stripe-target",
+    )).status).toBe(400);
     const sharedOwner = await seed("shared-target");
     await db.insert(projectsTable).values({ id: "shared-project", owner: "shared-target", name: "Keep", data: {} });
-    const [sharedUser] = await db.insert(platformUsersTable).values({ email: "other@test.invalid", passwordHash: hashPassword("x") }).returning();
+    const [sharedUser] = await db.insert(platformUsersTable)
+      .values({ email: "other@test.invalid", passwordHash: hashPassword("x") }).returning();
     await db.insert(platformMembershipsTable).values([
       { userId: sharedUser!.id, companyId: "other", companySlug: "other", role: "owner" },
       { userId: sharedOwner, companyId: "other", companySlug: "other", role: "viewer" },
     ]);
-    expect((await request({ username: "admin", role: "admin", membershipRole: "owner" }, "shared-target")).status).toBe(400);
+    expect((await request(
+      { username: "admin", role: "admin", membershipRole: "owner" },
+      "shared-target",
+    )).status).toBe(400);
     expect((await db.select().from(projectsTable).where(eq(projectsTable.owner, "shared-target"))).length).toBe(1);
   });
 
   it("returns 409 for shared media without partially deleting projects", async () => {
     await seed("media-target");
     await db.insert(projectsTable).values({ id: "media-project", owner: "media-target", name: "Keep", data: {} });
-    const [outlet] = await db.insert(mediaOutletsTable).values({ name: "Outlet", accountId: "media-target" }).returning();
-    const [contact] = await db.insert(mediaContactsTable).values({ outletId: outlet!.id, accountId: "media-target" }).returning();
-    const [set] = await db.insert(mediaRecommendationSetsTable).values({ accountId: "other", projectId: "other-project", storyKey: "story" }).returning();
+    const [outlet] = await db.insert(mediaOutletsTable)
+      .values({ name: "Outlet", accountId: "media-target" }).returning();
+    const [contact] = await db.insert(mediaContactsTable)
+      .values({ outletId: outlet!.id, accountId: "media-target" }).returning();
+    const [set] = await db.insert(mediaRecommendationSetsTable)
+      .values({ accountId: "other", projectId: "other-project", storyKey: "story" }).returning();
     await db.insert(mediaRecommendationItemsTable).values({
       recommendationSetId: set!.id,
       contactId: contact!.id,
       score: 1,
       rank: 1,
     });
-    const response = await request({ username: "admin", role: "admin", membershipRole: "owner" }, "media-target");
+    const response = await request(
+      { username: "admin", role: "admin", membershipRole: "owner" },
+      "media-target",
+    );
     expect(response.status).toBe(409);
     expect((await db.select().from(projectsTable).where(eq(projectsTable.owner, "media-target"))).length).toBe(1);
-    expect((await db.select().from(platformAccountsTable).where(eq(platformAccountsTable.username, "media-target"))).length).toBe(1);
+    expect((await db.select().from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, "media-target"))).length).toBe(1);
   });
 });
