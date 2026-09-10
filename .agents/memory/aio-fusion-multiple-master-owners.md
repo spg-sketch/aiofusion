@@ -5,8 +5,8 @@ description: Product and security rules for adding more than one Owner to the Ma
 
 The Master workspace may have multiple Owners at the same time. Promoting a new Owner must preserve every existing Owner.
 
-Only a current canonical Owner of the Master workspace may promote an existing member to Owner. Owner status cannot be granted through invitations, ordinary Admin permissions, an email domain, or the separate agency-level master-owner flag. Existing Owners cannot be demoted or removed through normal team controls.
+Only a current canonical Owner of the Master workspace may promote an existing member to Owner. The sole bootstrap exception is the original active legacy `admin` identity in the canonical `admin` workspace when no named Owner is available. Owner status cannot be granted through invitations, ordinary Admin permissions, an email domain, or the separate agency-level master-owner flag. Existing Owners cannot be demoted or removed through normal team controls.
 
 **Why:** The user confirmed on 2026-09-09 that Natalie and the existing Master Owner should both retain full Master ownership, including account deletion. Keeping promotion owner-authorized avoids granting destructive access to all staff.
 
-**How to apply:** Treat Owner promotion as an exceptional Master-workspace-only role change. Recheck the acting Owner and target membership server-side under the workspace lock, force unrestricted workspace access, and reject Owner roles in every invitation path.
+**How to apply:** Treat Owner promotion as an exceptional Master-workspace-only role change. Recheck the acting Owner and target membership server-side under the workspace lock, force unrestricted workspace access, and reject Owner roles in every invitation path. Keep the legacy bootstrap predicate restricted to the exact `admin` account and workspace.

@@ -25,6 +25,7 @@ import {
   normalizeRole,
   getVisibleUsernames,
   type MembershipRole,
+  DEFAULT_ADMIN_USERNAME,
 } from "../lib/platform-auth";
 import {
   INVITE_TTL_MS,
@@ -56,6 +57,20 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 async function getActiveCompany(req: Request) {
   if (req.company) return req.company;
   return getCompanyBySlug(normUsername(req.account!.username));
+}
+
+function isCanonicalLegacyMasterAdmin(
+  account: { userId?: string; username: string },
+  company: { slug: string; role: string },
+  canonical: { username: string; role: string; status: string } | undefined,
+): boolean {
+  return !account.userId &&
+    normUsername(account.username) === DEFAULT_ADMIN_USERNAME &&
+    normUsername(company.slug) === DEFAULT_ADMIN_USERNAME &&
+    canonical?.username === DEFAULT_ADMIN_USERNAME &&
+    canonical.status === "active" &&
+    normalizeRole(company.role) === "admin" &&
+    normalizeRole(canonical.role) === "admin";
 }
 
 // Which team model a workspace runs:
@@ -210,10 +225,18 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
     // This capability is derived from the canonical membership row, rather
     // than the session role. A stale session must not expose owner promotion.
     const actorMembership = memberRows.find((m) => m.userId === req.account!.userId);
-    const canPromoteOwners =
+    let canPromoteOwners =
       normalizeRole(company.role) === "admin" &&
       actorMembership !== undefined &&
       normalizeMembershipRole(actorMembership.role) === "owner";
+    if (!canPromoteOwners && !req.account!.userId && normalizeRole(company.role) === "admin") {
+      const [legacyActor] = await db
+        .select({ username: platformAccountsTable.username, role: platformAccountsTable.role, status: platformAccountsTable.status })
+        .from(platformAccountsTable)
+        .where(eq(platformAccountsTable.username, company.slug))
+        .limit(1);
+      canPromoteOwners = isCanonicalLegacyMasterAdmin(req.account!, company, legacyActor);
+    }
 
     // Agency mode: the headline seat counter covers the ACCOUNT pool only
     // (members/invites with no project restriction); project-scoped people sit
@@ -1068,21 +1091,32 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
       // may add another owner. Recheck it under the same workspace lock as the
       // update so a concurrent demotion/reconfiguration cannot authorize it.
       if (updates.role === "owner") {
-        if (normalizeRole(lockedCompany.role) !== "admin" || !req.account!.userId) {
+        if (normalizeRole(lockedCompany.role) !== "admin") {
           return { ok: false as const, reason: "owner_promotion_forbidden" as const };
         }
-        const [freshActor] = await tx
-          .select({ role: platformMembershipsTable.role })
-          .from(platformMembershipsTable)
-          .where(
-            and(
-              eq(platformMembershipsTable.userId, req.account!.userId),
-              eq(platformMembershipsTable.companyId, company.id),
-            ),
-          )
-          .limit(1);
-        if (!freshActor || normalizeMembershipRole(freshActor.role) !== "owner") {
-          return { ok: false as const, reason: "owner_promotion_forbidden" as const };
+        if (req.account!.userId) {
+          const [freshActor] = await tx
+            .select({ role: platformMembershipsTable.role })
+            .from(platformMembershipsTable)
+            .where(
+              and(
+                eq(platformMembershipsTable.userId, req.account!.userId),
+                eq(platformMembershipsTable.companyId, company.id),
+              ),
+            )
+            .limit(1);
+          if (!freshActor || normalizeMembershipRole(freshActor.role) !== "owner") {
+            return { ok: false as const, reason: "owner_promotion_forbidden" as const };
+          }
+        } else {
+          const [legacyActor] = await tx
+            .select({ username: platformAccountsTable.username, role: platformAccountsTable.role, status: platformAccountsTable.status })
+            .from(platformAccountsTable)
+            .where(eq(platformAccountsTable.username, lockedCompany.slug))
+            .limit(1);
+          if (!isCanonicalLegacyMasterAdmin(req.account!, lockedCompany, legacyActor)) {
+            return { ok: false as const, reason: "owner_promotion_forbidden" as const };
+          }
         }
       }
 

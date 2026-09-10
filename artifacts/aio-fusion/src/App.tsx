@@ -1383,6 +1383,10 @@ function App() {
                 transitionToView("users-admin");
               }
             }}
+            onManageTeam={() => requireSessionThen(() => {
+              setAccountSection("team");
+              transitionToView("sub-accounts");
+            })}
             onManageSubAccounts={() => requireSessionThen(openAccountSettings)}
             onInsightsAdmin={() => { if (session?.insightsCmsAccess) transitionToView("insights-admin"); }}
             onCreateProject={beginCreateProject}

@@ -653,8 +653,10 @@ const PUBLIC_ALLOWLIST = new Set<string>([
 
   // ── platform - admin / account management ────────────────────────────────
   "GET /platform/admin/pending",
+  "GET /platform/admin/staging-test-reset",
   "POST /platform/admin/accounts/:username/approve",
   "POST /platform/admin/accounts/:username/reject",
+  "POST /platform/admin/accounts/:username/reset-staging-test",
   "POST /platform/accounts/:username/impersonate",
   "POST /platform/exit-impersonation",
   "GET /platform/admin/master-owners",

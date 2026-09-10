@@ -655,6 +655,56 @@ describe("master workspace owner promotion", () => {
       );
     expect(stillPresent).toBeUndefined();
   });
+
+  it("allows the canonical legacy admin session to bootstrap Natalie as an owner", async () => {
+    await db.insert(platformAccountsTable).values({
+      username: "admin",
+      passwordHash: hashPassword("admin-password-1"),
+      role: "admin",
+      status: "active",
+    });
+    const [company] = await db
+      .insert(platformCompaniesTable)
+      .values({ slug: "admin", role: "admin", status: "active", displayName: "Master", setupComplete: true, freeAccess: true })
+      .returning();
+    const legacyAdminSid = await createPlatformSession("admin", null, null, null);
+    const natalie = await addMember(company!, "natalie-bootstrap@test.test");
+
+    const team = await api("/api/platform/team", { sid: legacyAdminSid });
+    expect(team.status).toBe(200);
+    expect(team.json.canPromoteOwners).toBe(true);
+    const promoted = await api(`/api/platform/team/members/${natalie.id}`, {
+      method: "PATCH",
+      sid: legacyAdminSid,
+      body: { role: "owner" },
+    });
+    expect(promoted.status).toBe(200);
+  });
+
+  it("does not bootstrap an unrelated active admin-role legacy workspace", async () => {
+    await db.insert(platformAccountsTable).values({
+      username: "other-admin",
+      passwordHash: hashPassword("admin-password-1"),
+      role: "admin",
+      status: "active",
+    });
+    const [company] = await db
+      .insert(platformCompaniesTable)
+      .values({ slug: "other-admin", role: "admin", status: "active", displayName: "Other Master", setupComplete: true, freeAccess: true })
+      .returning();
+    const legacySid = await createPlatformSession("other-admin", null, null, null);
+    const natalie = await addMember(company!, "natalie-other-admin@test.test");
+
+    const team = await api("/api/platform/team", { sid: legacySid });
+    expect(team.status).toBe(200);
+    expect(team.json.canPromoteOwners).toBe(false);
+    const promoted = await api(`/api/platform/team/members/${natalie.id}`, {
+      method: "PATCH",
+      sid: legacySid,
+      body: { role: "owner" },
+    });
+    expect(promoted.status).toBe(403);
+  });
 });
 
 beforeEach(() => {

@@ -41,7 +41,7 @@ describe("PlatformHomePage responsive account home", () => {
     expect(screen.getByTestId("platform-home-navigation").className).toContain("flex-wrap");
     expect(screen.getByTestId("platform-home-account-identity").className).toContain("min-w-0");
     expect(screen.getByTestId("platform-home-project-controls").className).toContain("grid-cols-1");
-    expect(screen.getByRole("button", { name: /^my account$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /account, client and team settings/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /project hub/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /back to my agency account/i })).toBeTruthy();
   });
