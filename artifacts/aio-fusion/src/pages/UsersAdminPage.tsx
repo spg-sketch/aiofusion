@@ -1143,7 +1143,6 @@ export function UsersAdminPage({
                 className="px-3 py-2 rounded-lg border text-[13px] bg-white focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               >
-                <option value="admin">Master (Admin)</option>
                 <option value="agency">Agency</option>
                 <option value="client">Direct Client</option>
               </select>

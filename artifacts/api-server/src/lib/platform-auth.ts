@@ -168,6 +168,20 @@ export function makeIpHint(rawIp: string | undefined): string | null {
 export const DEFAULT_ADMIN_USERNAME = "admin";
 const DEV_FALLBACK_ADMIN_PASSWORD = "K9mt-4Rxq-7NzPv2";
 
+/**
+ * Only the canonical AIO Fusion workspace may carry the platform-level admin
+ * role. Older data and tooling could mark an ordinary customer workspace as
+ * admin; treat those rows as agencies at the authentication boundary so a
+ * data classification error can never grant Master access.
+ */
+export function normalizeWorkspaceRole(username: unknown, role: unknown): Role {
+  const normalized = normalizeRole(role);
+  if (normalized === "admin" && normUsername(username) !== DEFAULT_ADMIN_USERNAME) {
+    return "agency";
+  }
+  return normalized;
+}
+
 export async function ensureDefaultAdmin(): Promise<void> {
   const isProd = process.env.NODE_ENV === "production";
   const envPassword = process.env.PLATFORM_ADMIN_PASSWORD;
@@ -201,20 +215,17 @@ export async function ensureDefaultAdmin(): Promise<void> {
   await ensureAutoApprovedAdmins();
 }
 
-// Accounts whose email is listed in PLATFORM_AUTO_APPROVE_ADMIN_EMAILS
-// (comma-separated) are activated and promoted to admin at startup. This lets
-// an operator bootstrap their own SSO-created account (which otherwise lands
-// in pending_approval) without needing a password login to approve it.
-//
-// Safety: promotion only applies when the email belongs to a Google-verified
-// user (platform_users row with googleId set). A password signup can claim any
-// email without proving ownership, so it is never eligible - this closes the
-// obvious privilege-escalation path of registering a listed email first.
-// The promotion also syncs platform_companies and platform_memberships so the
-// newer company-based authorization layer agrees with the legacy account role.
+// Google-verified users listed in PLATFORM_AUTO_APPROVE_ADMIN_EMAILS receive a
+// restricted membership in the one canonical Master workspace. This legacy
+// allowlist must never promote the user's own company to an admin workspace.
 export async function ensureAutoApprovedAdmins(): Promise<void> {
   const raw = process.env.PLATFORM_AUTO_APPROVE_ADMIN_EMAILS;
   if (!raw) return;
+  const masterCompany = await getCompanyBySlug(DEFAULT_ADMIN_USERNAME);
+  if (!masterCompany) {
+    console.warn("[platform-auth] canonical Master company is unavailable; skipping staff allowlist");
+    return;
+  }
   const emails = raw
     .split(",")
     .map((e) => e.trim().toLowerCase())
@@ -228,24 +239,16 @@ export async function ensureAutoApprovedAdmins(): Promise<void> {
       .limit(1);
     if (!user) continue;
 
-    await db.transaction(async (tx) => {
-      const promoted = await tx
-        .update(platformAccountsTable)
-        .set({ status: "active", role: "admin" })
-        .where(sql`lower(${platformAccountsTable.email}) = ${email} and (${platformAccountsTable.status} <> 'active' or ${platformAccountsTable.role} <> 'admin')`)
-        .returning({ username: platformAccountsTable.username });
-      for (const row of promoted) {
-        await tx
-          .update(platformCompaniesTable)
-          .set({ status: "active", role: "admin" })
-          .where(eq(platformCompaniesTable.slug, row.username));
-        await tx
-          .update(platformMembershipsTable)
-          .set({ role: "admin" })
-          .where(and(eq(platformMembershipsTable.companySlug, row.username), eq(platformMembershipsTable.userId, user.id)));
-        console.log(`[platform-auth] auto-approved admin account: ${row.username} (${email})`);
-      }
-    });
+    await db
+      .insert(platformMembershipsTable)
+      .values({
+        userId: user.id,
+        companyId: masterCompany.id,
+        companySlug: DEFAULT_ADMIN_USERNAME,
+        role: "viewer",
+      })
+      .onConflictDoNothing();
+    console.log(`[platform-auth] ensured restricted Master membership for allowlisted staff: ${email}`);
   }
 }
 
@@ -890,7 +893,7 @@ export async function getPlatformSessionAccount(
       }
       return {
         username: company.slug,
-        role: normalizeRole(company.role),
+        role: normalizeWorkspaceRole(company.slug, company.role),
         userId: row.userId ?? undefined,
         activeCompanyId: company.id,
         membershipRole,
@@ -907,7 +910,7 @@ export async function getPlatformSessionAccount(
   }
   return {
     username: account.username,
-    role: account.role,
+    role: normalizeWorkspaceRole(account.username, account.role),
     userId: row.userId ?? undefined,
     activeCompanyId: row.activeCompanyId ?? undefined,
   };

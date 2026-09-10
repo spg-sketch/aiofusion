@@ -84,6 +84,7 @@ import {
   lastSignInKey,
   deleteWorkspaceMetadata,
   DEFAULT_ADMIN_USERNAME,
+  normalizeWorkspaceRole,
 } from "../lib/platform-auth";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { canAccessInsightsCms, isAioFusionStaffEmail } from "../lib/insights-cms-access";
@@ -4548,7 +4549,7 @@ router.post(
         ok: true,
         account: {
           username: mem.companySlug,
-          role: normalizeRole(mem.companyRole),
+          role: normalizeWorkspaceRole(mem.companySlug, mem.companyRole),
           membershipRole: normalizeMembershipRole(mem.membershipRole),
         },
       });
@@ -6530,11 +6531,15 @@ router.post(
         res.status(400).json({ error: "Username is required." });
         return;
       }
-      if (!["admin", "agency", "client"].includes(newRole)) {
-        res.status(400).json({ error: "Role must be admin, agency, or client." });
+      if (!["agency", "client"].includes(newRole)) {
+        res.status(400).json({ error: "Account type must be agency or client. Master access is managed through membership of the AIO Fusion workspace." });
         return;
       }
-      const accountTypeRole = newRole as "admin" | "agency" | "client";
+      if (target === DEFAULT_ADMIN_USERNAME) {
+        res.status(400).json({ error: "The canonical AIO Fusion Master workspace account type cannot be changed." });
+        return;
+      }
+      const accountTypeRole = newRole as "agency" | "client";
       const existing = await getAccount(target);
       if (!existing) {
         res.status(404).json({ error: "Account not found." });
@@ -6543,17 +6548,6 @@ router.post(
       if (existing.role === accountTypeRole) {
         res.json({ ok: true });
         return;
-      }
-      // Prevent removing the last admin.
-      if (existing.role === "admin" && accountTypeRole !== "admin") {
-        const admins = await db
-          .select({ username: platformAccountsTable.username })
-          .from(platformAccountsTable)
-          .where(eq(platformAccountsTable.role, "admin"));
-        if (admins.length <= 1) {
-          res.status(400).json({ error: "Cannot demote the last admin." });
-          return;
-        }
       }
       const prevRole = existing.role;
       const transition = await transitionWorkspaceAccountType(target, accountTypeRole);

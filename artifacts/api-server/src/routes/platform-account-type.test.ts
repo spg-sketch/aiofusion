@@ -669,6 +669,28 @@ describe("POST /api/platform/settings/account-type", () => {
     });
   });
 
+  it("does not allow an ordinary company to be promoted to a Master workspace", async () => {
+    await seed("master-boundary-actor", "admin");
+    await seed("blue-halo", "agency");
+    const app = makeApp({ username: "master-boundary-actor", role: "admin", membershipRole: "owner" });
+    const srv = app.listen(0);
+    await new Promise<void>((r) => srv.once("listening", r));
+    const { port } = srv.address() as AddressInfo;
+    const res = await fetch(`http://localhost:${port}/api/platform/accounts/role`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "blue-halo", role: "admin" }),
+    });
+    srv.close();
+
+    expect(res.status).toBe(400);
+    const [account] = await db
+      .select({ role: platformAccountsTable.role })
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, "blue-halo"));
+    expect(account?.role).toBe("agency");
+  });
+
   it("does not promote non-owners when an admin changes an account type", async () => {
     await seed("admin-role-actor", "admin");
     await db.insert(platformAccountsTable).values({

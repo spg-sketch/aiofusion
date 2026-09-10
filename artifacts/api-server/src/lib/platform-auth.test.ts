@@ -222,6 +222,7 @@ import {
   getVisibleUsernames,
   canManage,
   normalizeRole,
+  normalizeWorkspaceRole,
   canCreateSubAccounts,
   ensurePlatformUser,
   getPlatformSessionAccount,
@@ -247,6 +248,17 @@ describe("normalizeRole (role overload + legacy handling)", () => {
     expect(normalizeRole(undefined)).toBe("user");
     expect(normalizeRole(null)).toBe("user");
     expect(normalizeRole(42)).toBe("user");
+  });
+});
+
+describe("normalizeWorkspaceRole (canonical Master boundary)", () => {
+  it("keeps admin only for the canonical AIO Fusion workspace", () => {
+    expect(normalizeWorkspaceRole("admin", "admin")).toBe("admin");
+    expect(normalizeWorkspaceRole(" ADMIN ", "admin")).toBe("admin");
+  });
+
+  it("treats an ordinary workspace misclassified as admin as an agency", () => {
+    expect(normalizeWorkspaceRole("blue-halo", "admin")).toBe("agency");
   });
 });
 
