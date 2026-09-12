@@ -221,7 +221,10 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
 
     const now = new Date();
     const pendingCount = inviteRows.filter((i) => !i.declinedAt && i.expiresAt > now).length;
-        const seatLimit = await getTeamSeatLimit(company.slug);
+    // Master workspaces are an internal administration surface and have no
+    // team-seat cap. Agency/Partner and direct Client workspaces retain their
+    // configurable account-seat limit.
+    const seatLimit = teamMode === "standard" ? null : await getTeamSeatLimit(company.slug);
     // This capability is derived from the canonical membership row, rather
     // than the session role. A stale session must not expose owner promotion.
     const actorMembership = memberRows.find((m) => m.userId === req.account!.userId);
@@ -407,7 +410,7 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
     // count alone lets two simultaneous invites both observe the last seat as
     // free. Locking the company row makes the count + invitation insert one
     // atomic allocation for the workspace's account-seat pool.
-    const seatLimit = await getTeamSeatLimit(company.slug);
+    const seatLimit = teamMode === "standard" ? null : await getTeamSeatLimit(company.slug);
     const inviteResult = await db.transaction(async (tx) => {
       await tx.execute(sql`SELECT 1 FROM platform_companies WHERE id = ${company.id} FOR UPDATE`);
       // The type may have changed while this request waited on the workspace
@@ -499,12 +502,12 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
             return { ok: false as const, reason: "project_full" as const, projectId };
           }
         }
-      } else {
+      } else if (lockedTeamMode !== "standard") {
         const usage =
           lockedTeamMode === "agency"
             ? await countAccountPoolSeats(company.id, tx)
             : await countSeatsUsed(company.id, tx);
-        if (usage.members + usage.pendingInvites >= seatLimit) {
+        if (usage.members + usage.pendingInvites >= seatLimit!) {
           return { ok: false as const, reason: "full" as const };
         }
       }
@@ -536,7 +539,7 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
         res.status(403).json({ error: "Team invitations are not available for this account." });
       } else {
         res.status(403).json({
-          error: `You've reached your team seat limit (${seatLimit}). Contact info@aiofusion.ai to add more seats.`,
+          error: `You've reached your team seat limit (${seatLimit ?? await getTeamSeatLimit(company.slug)}). Contact info@aiofusion.ai to add more seats.`,
           limitReached: true,
         });
       }
@@ -603,7 +606,7 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
     const oldToken = String(req.params.token || "").trim();
 
     // Seat limit is a config value; fetch it before the transaction.
-    const resendSeatLimit = await getTeamSeatLimit(company.slug);
+    const resendSeatLimit = teamMode === "standard" ? null : await getTeamSeatLimit(company.slug);
 
     // Pre-compute owned project IDs outside the transaction.
     // getOwnedProjectIds uses plain `db`; calling it inside db.transaction()
@@ -768,7 +771,7 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
               teamMode === "agency"
                 ? await countAccountPoolSeats(company.id, tx)
                 : await countSeatsUsed(company.id, tx);
-            if (members + pendingInvites >= resendSeatLimit) {
+            if (teamMode !== "standard" && members + pendingInvites >= resendSeatLimit!) {
               return {
                 ok: false as const,
                 status: 403 as const,

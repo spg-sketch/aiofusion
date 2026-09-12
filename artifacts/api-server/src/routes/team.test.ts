@@ -881,6 +881,24 @@ describe("team invitations", () => {
     expect(c2.status).toBe(201);
   });
 
+  it("does not apply a team seat limit to a Master workspace", async () => {
+    const { sid } = await seedMaster("unlimited-master", "owner@unlimited-master.test");
+
+    for (const email of ["one@master.test", "two@master.test", "three@master.test", "four@master.test"]) {
+      const invite = await api("/api/platform/team/invite", {
+        sid,
+        body: { email, role: "viewer" },
+      });
+      expect(invite.status).toBe(201);
+    }
+
+    const team = await api("/api/platform/team", { sid });
+    expect(team.status).toBe(200);
+    expect(team.json.teamMode).toBe("standard");
+    expect(team.json.seatLimit).toBeNull();
+    expect(team.json.seatsUsed).toBe(5);
+  });
+
   it("replaces an expired invite even when the unresolved-invite unique index exists", async () => {
     const { sid } = await seedAgency("expired-reinvite", "owner@expired-reinvite.test");
     await db.execute(sql`

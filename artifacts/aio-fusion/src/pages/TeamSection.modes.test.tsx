@@ -120,10 +120,11 @@ describe("TeamSection team modes", () => {
     await waitFor(() => expect((screen.getByText(/Send invite/).closest("button") as HTMLButtonElement).disabled).toBe(false));
   });
 
-  it("standard mode keeps the original single-pool form", async () => {
-    getTeamMock.mockResolvedValue({ ok: true, team: baseTeam({}) });
+  it("Master mode shows unlimited team members and keeps the role form", async () => {
+    getTeamMock.mockResolvedValue({ ok: true, team: baseTeam({ seatLimit: null }) });
     render(<TeamSection />);
-    await waitFor(() => expect(screen.getByText(/\/ 3 seats/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Unlimited team members/)).toBeTruthy());
+    expect(screen.getByText(/separate from customer and Agency Partner seat allowances/)).toBeTruthy();
     expect(document.querySelector("select")).toBeTruthy();
     expect(screen.queryByText(/account seats/)).toBeNull();
   });

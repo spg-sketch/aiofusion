@@ -100,6 +100,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
   const mode = team?.teamMode ?? "standard";
   const isAgency = mode === "agency";
   const isClient = mode === "client";
+  const isMaster = mode === "standard" && team?.seatLimit === null;
   const projectSeatLimit = team?.projectSeatLimit ?? 3;
   const projectSeatsUsed = (id: string) => team?.projectSeats?.[id] ?? 0;
 
@@ -392,7 +393,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
     return <>{errorCard}{invitationsBlock}</>;
   }
 
-  const seatsFull = team.seatsUsed >= team.seatLimit;
+  const seatsFull = team.seatLimit !== null && team.seatsUsed >= team.seatLimit;
   // In agency mode a full account pool only blocks account-seat invites -
   // project seats have their own per-project pools.
   const submitBlocked = seatsFull && !(isAgency && restrict);
@@ -438,11 +439,13 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
       <div className="flex items-center justify-between mb-1">
         <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Team members</h2>
         <span className="text-[11px] font-bold uppercase tracking-[0.14em] px-3 py-1 rounded-full" style={{ background: seatsFull ? "#FDECEC" : accentSoft, color: seatsFull ? "#B3261E" : accent }}>
-          {team.seatsUsed} / {team.seatLimit} {isAgency ? "account seats" : "seats"}
+          {isMaster ? "Unlimited team members" : `${team.seatsUsed} / ${team.seatLimit} ${isAgency ? "account seats" : "seats"}`}
         </span>
       </div>
       <p className="text-[13px] font-light mb-5 leading-[1.6]" style={{ color: vars.g600 }}>
-        {isClient
+        {isMaster
+          ? "Invite internal colleagues to the Master workspace. Master team membership is unlimited and is separate from customer and Agency Partner seat allowances."
+          : isClient
           ? `Invite up to ${team.seatLimit} colleagues to work on your content. Each person gets their own login as a Content Team Member.`
           : isAgency
             ? `Invite your own staff. Account seats (up to ${team.seatLimit}) are for people managing this account - for example billing. Or assign a team member to specific projects: each project has ${projectSeatLimit} seats of its own, and project members work on those projects only.`

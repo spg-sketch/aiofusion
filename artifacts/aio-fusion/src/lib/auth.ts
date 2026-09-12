@@ -1211,7 +1211,8 @@ export type TeamOverview = {
   members: TeamMember[];
   invites: TeamInvite[];
   /** In "agency" mode this is the ACCOUNT pool (people managing the account). */
-  seatLimit: number;
+  /** Null for the unlimited Master workspace; numeric for Agency/Partner and Client workspaces. */
+  seatLimit: number | null;
   seatsUsed: number;
   /** Which team model this workspace runs; absent on older servers = standard. */
   teamMode?: TeamMode;
