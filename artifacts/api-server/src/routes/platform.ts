@@ -4229,6 +4229,16 @@ router.get(
   async (req: Request, res: Response) => {
     const userId = req.account?.userId;
     if (!userId) {
+      // The canonical bootstrap Master login is intentionally a legacy
+      // account-only identity. It cannot receive person-addressed invitations,
+      // so an empty list is correct and avoids a permanent refresh warning.
+      if (
+        req.account?.username === DEFAULT_ADMIN_USERNAME
+        && normalizeRole(req.account.role) === "admin"
+      ) {
+        res.json({ invites: [] });
+        return;
+      }
       res.status(409).json({
         error: SESSION_REFRESH_REQUIRED_MESSAGE,
         reason: SESSION_REFRESH_REQUIRED,
