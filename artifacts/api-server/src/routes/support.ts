@@ -416,6 +416,18 @@ router.get(
         return;
       }
 
+      if (req.query.summary === "outstanding") {
+        const outstandingTickets = await db
+          .select({ status: supportTicketsTable.status })
+          .from(supportTicketsTable)
+          .where(or(
+            eq(supportTicketsTable.status, "open"),
+            eq(supportTicketsTable.status, "in_progress"),
+          ));
+        res.json({ outstandingCount: outstandingTickets.length });
+        return;
+      }
+
       const statusFilter =
         typeof req.query.status === "string" ? req.query.status.trim() : "";
       const categoryFilter =

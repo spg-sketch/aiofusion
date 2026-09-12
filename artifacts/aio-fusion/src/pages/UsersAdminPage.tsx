@@ -50,6 +50,7 @@ export function UsersAdminPage({
   const [tick, setTick] = useState(0);
   const [users, setUsers] = useState<LocalUser[]>(() => getLocalUsers());
   const [stagingTestResetEnabled, setStagingTestResetEnabled] = useState(false);
+  const [supportOutstandingCount, setSupportOutstandingCount] = useState<number | null>(null);
 
   useEffect(() => {
     if (session.role !== "admin") return;
@@ -58,6 +59,18 @@ export function UsersAdminPage({
       .then((data: { enabled?: boolean } | null) => setStagingTestResetEnabled(data?.enabled === true))
       .catch(() => setStagingTestResetEnabled(false));
   }, [session.role]);
+
+  useEffect(() => {
+    if (session.role !== "admin" || !onSupportAdmin) return;
+    void fetch(`${apiBase()}/api/support/tickets?summary=outstanding`, { credentials: "include" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data: { outstandingCount?: number } | null) => {
+        setSupportOutstandingCount(
+          typeof data?.outstandingCount === "number" ? data.outstandingCount : null,
+        );
+      })
+      .catch(() => setSupportOutstandingCount(null));
+  }, [onSupportAdmin, session.role]);
 
   // ── Pending approvals ─────────────────────────────────────────────────────
   const [pendingAccounts, setPendingAccounts] = useState<PendingAccount[] | null>(null);
@@ -1370,33 +1383,6 @@ export function UsersAdminPage({
           <img src={`${import.meta.env.BASE_URL}images/logo-navy.png`} alt="AIO Fusion" className="h-16 sm:h-24" onError={(e) => { (e.target as HTMLImageElement).src = `${import.meta.env.BASE_URL}images/logo-white.png`; }} />
         </button>
         <div className="flex items-center gap-3">
-          {onInsightsAdmin && (
-            <button
-              onClick={onInsightsAdmin}
-              className="flex items-center gap-2 px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] rounded-xl border transition-all hover:brightness-95"
-              style={{ borderColor: vars.g200, color: ink, background: "white" }}
-            >
-              <FileText size={14} /> Insights
-            </button>
-          )}
-          {onLeadsAdmin && (
-            <button
-              onClick={onLeadsAdmin}
-              className="flex items-center gap-2 px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] rounded-xl border transition-all hover:brightness-95"
-              style={{ borderColor: vars.g200, color: ink, background: "white" }}
-            >
-              <Mail size={14} /> Leads
-            </button>
-          )}
-          {onSupportAdmin && (
-            <button
-              onClick={onSupportAdmin}
-              className="flex items-center gap-2 px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] rounded-xl border transition-all hover:brightness-95"
-              style={{ borderColor: vars.g200, color: ink, background: "white" }}
-            >
-              <MessageSquare size={14} /> Support
-            </button>
-          )}
           <button
             onClick={onBack}
             className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] rounded-xl transition-all hover:brightness-110"
@@ -1436,6 +1422,47 @@ export function UsersAdminPage({
                 </nav>
               </div>
             ))}
+            {(onInsightsAdmin || onLeadsAdmin || onSupportAdmin) && (
+              <div>
+                <h3 className="px-3 mb-2 text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: vars.g500 }}>
+                  Content &amp; Enquiries
+                </h3>
+                <nav className="space-y-1">
+                  {onInsightsAdmin && (
+                    <button
+                      type="button"
+                      onClick={onInsightsAdmin}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] font-semibold text-gray-600 transition-all hover:bg-gray-100 hover:text-gray-900"
+                    >
+                      <FileText size={16} className="text-gray-400" /> Insights
+                    </button>
+                  )}
+                  {onLeadsAdmin && (
+                    <button
+                      type="button"
+                      onClick={onLeadsAdmin}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] font-semibold text-gray-600 transition-all hover:bg-gray-100 hover:text-gray-900"
+                    >
+                      <Mail size={16} className="text-gray-400" /> Leads
+                    </button>
+                  )}
+                  {onSupportAdmin && (
+                    <button
+                      type="button"
+                      onClick={onSupportAdmin}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-[13px] font-semibold text-gray-600 transition-all hover:bg-gray-100 hover:text-gray-900"
+                    >
+                      <MessageSquare size={16} className="shrink-0 text-gray-400" />
+                      <span>
+                        {supportOutstandingCount === null
+                          ? "Support"
+                          : `Support (${supportOutstandingCount} ${supportOutstandingCount === 1 ? "ticket" : "tickets"} outstanding)`}
+                      </span>
+                    </button>
+                  )}
+                </nav>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1461,6 +1488,43 @@ export function UsersAdminPage({
                 ))}
               </select>
             </label>
+            {(onInsightsAdmin || onLeadsAdmin || onSupportAdmin) && (
+              <div className="grid grid-cols-2 gap-2 md:hidden">
+                {onInsightsAdmin && (
+                  <button
+                    type="button"
+                    onClick={onInsightsAdmin}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border bg-white px-3 py-3 text-[12px] font-semibold"
+                    style={{ borderColor: vars.g200, color: ink }}
+                  >
+                    <FileText size={15} /> Insights
+                  </button>
+                )}
+                {onLeadsAdmin && (
+                  <button
+                    type="button"
+                    onClick={onLeadsAdmin}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border bg-white px-3 py-3 text-[12px] font-semibold"
+                    style={{ borderColor: vars.g200, color: ink }}
+                  >
+                    <Mail size={15} /> Leads
+                  </button>
+                )}
+                {onSupportAdmin && (
+                  <button
+                    type="button"
+                    onClick={onSupportAdmin}
+                    className="col-span-2 flex items-center justify-center gap-2 rounded-xl border bg-white px-3 py-3 text-[12px] font-semibold"
+                    style={{ borderColor: vars.g200, color: ink }}
+                  >
+                    <MessageSquare size={15} />
+                    {supportOutstandingCount === null
+                      ? "Support"
+                      : `Support (${supportOutstandingCount} ${supportOutstandingCount === 1 ? "ticket" : "tickets"} outstanding)`}
+                  </button>
+                )}
+              </div>
+            )}
             
             {section === "demo" && <UsersAdminDemoSection onProjectCreated={() => { refresh(); onProjectCreated?.(); }} />}
             {section === "beta" && (

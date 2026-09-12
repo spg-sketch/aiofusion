@@ -671,6 +671,15 @@ describe("GET /api/support/tickets", () => {
     expect(json.tickets.every((t: any) => t.status === "in_progress")).toBe(true);
   });
 
+  it("admin can load the outstanding ticket count without downloading the queue", async () => {
+    const app = buildWithActor(adminActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status, json } = await req(baseUrl, "GET", "/api/support/tickets?summary=outstanding");
+    expect(status).toBe(200);
+    expect(json).toEqual({ outstandingCount: 2 });
+  });
+
   it("mine=true with hasUpdate=true returns only tickets with unseen admin replies", async () => {
     const app = buildWithActor(userActor);
     ({ server, baseUrl } = await listen(app));

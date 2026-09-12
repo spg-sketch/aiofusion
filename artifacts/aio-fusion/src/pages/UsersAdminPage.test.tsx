@@ -317,6 +317,31 @@ describe("UsersAdminPage - hierarchy: archived parent / active child", () => {
 });
 
 describe("UsersAdminPage - URL-backed section prop", () => {
+  it("shows the outstanding support ticket count in navigation", async () => {
+    mockGetLocalUsers.mockReturnValue([]);
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      const body = url.includes("summary=outstanding")
+        ? { outstandingCount: 3 }
+        : { rows: [] };
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    render(
+      <UsersAdminPage
+        session={ADMIN_SESSION}
+        onBack={() => {}}
+        onAssignProjectOwner={async () => ({ ok: true })}
+        onSupportAdmin={() => {}}
+      />,
+    );
+
+    expect(await screen.findAllByRole("button", { name: "Support (3 tickets outstanding)" })).toHaveLength(2);
+  });
+
   it("opens usage directly and responds when browser history changes the prop", async () => {
     mockGetLocalUsers.mockReturnValue([]);
     const props = {
