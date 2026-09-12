@@ -119,78 +119,91 @@ id = "epTCa_t7Z4honvy8uHpVo"
 uri = "file://attached_assets/Meeting-Notes-Patrick-Spencer-Mar27-Clean.md"
 type = "text"
 title = "Meeting Notes — Patrick & Spencer, 27 March"
+logical_id = "3602c17c-94d0-4603-8a03-7435dabeed87"
 
 [[outputs]]
 id = "f6JwjGiEskUjCpL7HrBS3"
 uri = "file://AIO_Fusion_Logo_Brief.md"
 type = "text"
 title = "AIO Fusion Logo Design Brief"
+logical_id = "66ec0c1b-b866-43ae-8bb7-e4ee68c18f3f"
 
 [[outputs]]
 id = "qawjlreOycm5uPDnUUiup"
 uri = "file://AIO_Fusion_User_Workflow.txt"
 type = "text"
 title = "AIO Fusion — User Workflow"
+logical_id = "690e3844-9946-429f-9db7-7ed6e23a6d28"
 
 [[outputs]]
 id = "vSQTxMdY-DnWm9Gb5_KDF"
 uri = "file://COVERAGE_CHECKLIST.md"
 type = "text"
 title = "AIO Fusion — Build Coverage Checklist (with scoring)"
+logical_id = "f0118cdc-eaa9-430b-bc16-4e801dc85f3a"
 
 [[outputs]]
 id = "pUOB0IlskzDSc_RnYtAPh"
 uri = "file://.local/patrick_feedback/email_followup_examples.md"
 type = "text"
 title = "Follow-up email to Patrick — example outputs"
+logical_id = "e8c9459c-8141-4f81-886f-cae48e03f414"
 
 [[outputs]]
 id = "RM427gbuRRBzQzMoU4E3H"
 uri = "file://.local/patrick_feedback/pricing_discussion.md"
 type = "text"
 title = "AIO Fusion — Pricing Discussion (for Patrick)"
+logical_id = "1b2e7468-e2be-474a-98e2-f8041bc5827e"
 
 [[outputs]]
 id = "8ERP0rwrhqzuUxYlXlHoR"
 uri = "file://AIO_Fusion_Investor_Spec.md"
 type = "text"
 title = "AIO Fusion - Product Specification & Investor Brief"
+logical_id = "13da5b01-2bcb-4835-8510-d252603e8fc1"
 
 [[outputs]]
 id = "POE8BU8mnecBpFNafgWBa"
 uri = "file://backups/aio-fusion-db-20260612-151628.sql.gz"
 type = "unspecified"
 title = "AIO Fusion database backup (12 Jun 2026)"
+logical_id = "b70bea33-c471-4172-bd1a-92ecbacce53a"
 
 [[outputs]]
 id = "bs-RCgb120pxP8R9NqDV8"
 uri = "file://docs/competitor-semrush-pr-toolkit.md"
 type = "text"
 title = "AIO Fusion vs Semrush AI PR Toolkit — Competitor Analysis"
+logical_id = "c661eee2-d3d8-42a9-b394-46858f0479ad"
 
 [[outputs]]
 id = "FB5Ea7PdAQCPA4EPi3e3W"
 uri = "file://AIO_Fusion_Style_Guide.md"
 type = "text"
 title = "AIO Fusion Style Guide & Brief"
+logical_id = "db45a9bc-0070-4b8b-a14f-91822d9d3544"
 
 [[outputs]]
 id = "DVdFRa-GS8rTuzPyyUy2o"
 uri = "file://investor-faq.md"
 type = "text"
 title = "Investor Technical Due Diligence FAQ"
+logical_id = "bbb695d8-efa5-45e7-90b7-5a2179b8c422"
 
 [[outputs]]
 id = "xuztEBNe0sMw264AIWkUw"
 uri = "file://aio-fusion-august-roadmap.pdf"
 type = "pdf"
 title = "AIO Fusion — August Roadmap & Architecture (v2)"
+logical_id = "2c3071f3-847b-4a11-9c6b-ba4766633e62"
 
 [[outputs]]
 id = "dwoujI6kjL0YIklb9djA9"
 uri = "file://artifacts/aio-fusion-promo/public/audio/bg_music.mp3"
 type = "audio"
 title = "background music"
+logical_id = "e6e5202e-9d18-4edb-9481-c0a3705ac196"
 
 [[outputs]]
 id = "K1bhyo6p84awaduvZ3YKe"
@@ -198,3 +211,18 @@ uri = "file://artifacts/aio-fusion/PATRICK-COMBINED-GROWTH-ACTION-PLAN.md"
 type = "text"
 title = "Patrick's Combined Growth Action Plan"
 description = "A combined SEO, demo-readiness and evidence-led product-priority programme based on the 49-question demo bank and Task 158 baseline."
+logical_id = "e9ea4703-23c7-4582-a609-f476aec60621"
+
+[[outputs]]
+id = "tCs8lW8e7rI42Yxz7UcQe"
+uri = "file://exports/aio-fusion-stripe-logo.png"
+type = "image"
+title = "AIO Fusion Stripe Logo"
+description = "Tightly cropped transparent PNG sized for Stripe Checkout branding."
+logical_id = "946b063b-f1cb-4ef9-8b0e-f8a6ec5750c8"
+content_hash = "sha256:4121e603b7f0d5f0e62a870e19d635233f320c7397a0249e560cb50c3146801b"
+size = 54596
+mtime_ms = 1789211548259
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/946b063b-f1cb-4ef9-8b0e-f8a6ec5750c8/1627f150-790f-4bcf-b6c1-75e698cb152c"
+storage_version_token = "1789211553650183"
+content_type = "image/png"
