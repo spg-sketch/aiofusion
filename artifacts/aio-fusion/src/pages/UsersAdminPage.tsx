@@ -49,15 +49,19 @@ export function UsersAdminPage({
   const green = vars.green;
   const [tick, setTick] = useState(0);
   const [users, setUsers] = useState<LocalUser[]>(() => getLocalUsers());
-  const [stagingTestResetEnabled, setStagingTestResetEnabled] = useState(false);
+  const [stagingTestResetUsername, setStagingTestResetUsername] = useState<string | null>(null);
   const [supportOutstandingCount, setSupportOutstandingCount] = useState<number | null>(null);
 
   useEffect(() => {
     if (session.role !== "admin") return;
     void fetch(`${apiBase()}/api/platform/admin/staging-test-reset`, { credentials: "include" })
       .then((response) => response.ok ? response.json() : null)
-      .then((data: { enabled?: boolean } | null) => setStagingTestResetEnabled(data?.enabled === true))
-      .catch(() => setStagingTestResetEnabled(false));
+      .then((data: { enabled?: boolean; username?: string } | null) => {
+        setStagingTestResetUsername(
+          data?.enabled === true && typeof data.username === "string" ? data.username : null,
+        );
+      })
+      .catch(() => setStagingTestResetUsername(null));
   }, [session.role]);
 
   useEffect(() => {
@@ -971,7 +975,7 @@ export function UsersAdminPage({
                       <MonitorSmartphone size={13} /> Sessions
                     </button>
                     <div className="my-1 border-t" style={{ borderColor: vars.g200 }} />
-                    {stagingTestResetEnabled && !isMe && u.role !== "admin" && !u.parent && (
+                    {stagingTestResetUsername === u.username && !isMe && u.role !== "admin" && !u.parent && (
                       <button
                         onClick={() => { setManageMenuUser(null); handleResetStagingTestAccount(u.username); }}
                         title="Staging only: preserve this login but clear its new-account journey"
@@ -2063,4 +2067,3 @@ export function UsersAdminPage({
     </div>
   );
 }
-

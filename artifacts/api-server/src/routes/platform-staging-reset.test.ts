@@ -40,6 +40,14 @@ vi.mock("@workspace/db", async () => {
     CREATE TABLE token_usage (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), account_id varchar);
     CREATE TABLE audit_locks (project_id varchar NOT NULL, audit_type varchar NOT NULL, owner varchar DEFAULT '',
       last_run_at timestamptz DEFAULT now(), PRIMARY KEY(project_id, audit_type));
+    CREATE TABLE saved_audits (id varchar PRIMARY KEY, project_id varchar NOT NULL, owner varchar NOT NULL,
+      saved_at varchar NOT NULL, result jsonb NOT NULL, deleted_at timestamptz);
+    CREATE TABLE saved_diagnostics (id varchar PRIMARY KEY, project_id varchar NOT NULL, owner varchar NOT NULL,
+      saved_at varchar NOT NULL, result jsonb NOT NULL, deleted_at timestamptz);
+    CREATE TABLE saved_content_geo (id varchar PRIMARY KEY, project_id varchar NOT NULL, owner varchar NOT NULL,
+      saved_at varchar NOT NULL, result jsonb NOT NULL, deleted_at timestamptz);
+    CREATE TABLE saved_tech_geo (id varchar PRIMARY KEY, project_id varchar NOT NULL, owner varchar NOT NULL,
+      saved_at varchar NOT NULL, result jsonb NOT NULL, deleted_at timestamptz);
     CREATE TABLE platform_invitations (token varchar PRIMARY KEY, email varchar, company_id varchar, company_slug varchar,
       role varchar DEFAULT 'viewer', project_access text, invited_name varchar, position varchar, invited_by_user_id uuid,
       expires_at timestamptz DEFAULT now(), used_at timestamptz, revoked_at timestamptz, declined_at timestamptz,
@@ -88,6 +96,10 @@ import {
   mediaContactsTable,
   mediaRecommendationSetsTable,
   mediaRecommendationItemsTable,
+  savedAuditsTable,
+  savedDiagnosticsTable,
+  savedContentGeoTable,
+  savedTechGeoTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../lib/platform-auth";
@@ -116,7 +128,17 @@ async function request(actor: Actor, target: string) {
   return response;
 }
 
+async function requestMe(actor: Actor) {
+  const server = appFor(actor).listen(0);
+  await new Promise<void>((resolve) => server.once("listening", resolve));
+  const port = (server.address() as { port: number }).port;
+  const response = await fetch(`http://127.0.0.1:${port}/api/platform/me`);
+  server.close();
+  return response;
+}
+
 async function seed(target: string, opts: { stripe?: boolean; googleOnly?: boolean } = {}) {
+  process.env.STAGING_SIGNUP_TEST_EMAIL = `${target}@test.invalid`;
   await db.insert(platformAccountsTable).values({
     username: target,
     passwordHash: opts.googleOnly ? "" : hashPassword("original"),
@@ -170,10 +192,47 @@ describe("staging reusable signup reset", () => {
     )).status).toBe(403);
   });
 
+  it("rejects every account except the configured reusable signup identity", async () => {
+    await seed("configured-target");
+    await seed("wrong-target");
+    process.env.STAGING_SIGNUP_TEST_EMAIL = "configured-target@test.invalid";
+    await db.insert(projectsTable).values({
+      id: "wrong-target-project",
+      owner: "wrong-target",
+      name: "Keep",
+      data: {},
+    });
+    const response = await request(
+      { username: "admin", role: "admin", membershipRole: "owner" },
+      "wrong-target",
+    );
+    expect(response.status).toBe(403);
+    expect((await db.select().from(projectsTable)
+      .where(eq(projectsTable.owner, "wrong-target"))).length).toBe(1);
+  });
+
   it("resets a dedicated password account while preserving identity and onboarding state", async () => {
     const userId = await seed("reusable");
     const [before] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.id, userId));
+    await db.update(platformAccountsTable)
+      .set({ website: "https://old-company.test" })
+      .where(eq(platformAccountsTable.username, "reusable"));
+    await db.update(platformCompaniesTable)
+      .set({ displayName: "Old Company", website: "https://old-company.test" })
+      .where(eq(platformCompaniesTable.slug, "reusable"));
     await db.insert(projectsTable).values({ id: "reusable-project", owner: "reusable", name: "Old", data: {} });
+    await db.insert(savedAuditsTable).values({
+      id: "audit-1", projectId: "reusable-project", owner: "reusable", savedAt: "now", result: {},
+    });
+    await db.insert(savedDiagnosticsTable).values({
+      id: "diagnostic-1", projectId: "reusable-project", owner: "reusable", savedAt: "now", result: {},
+    });
+    await db.insert(savedContentGeoTable).values({
+      id: "content-geo-1", projectId: "reusable-project", owner: "reusable", savedAt: "now", result: {},
+    });
+    await db.insert(savedTechGeoTable).values({
+      id: "tech-geo-1", projectId: "reusable-project", owner: "reusable", savedAt: "now", result: {},
+    });
     await db.insert(platformMetaTable).values({
       key: "account:onboarding:v1:reusable",
       value: JSON.stringify({ step: "first_project" }),
@@ -187,10 +246,47 @@ describe("staging reusable signup reset", () => {
     const [checkpoint] = await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, "account:onboarding:v1:reusable"));
     const [after] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.id, userId));
     expect(account?.passwordHash).toBeTruthy();
+    expect(account?.website).toBeNull();
     expect(after?.passwordHash).toBe(before?.passwordHash);
     expect(company?.setupComplete).toBe(false);
+    expect(company?.displayName).toBeNull();
+    expect(company?.website).toBeNull();
     expect(JSON.parse(checkpoint!.value)).toEqual({ step: "account_type" });
-    expect((await db.select().from(projectsTable).where(eq(projectsTable.owner, "reusable"))).length).toBe(0);
+    const [projectTombstone] = await db.select().from(projectsTable)
+      .where(eq(projectsTable.owner, "reusable"));
+    expect(projectTombstone?.deletedAt).toBeTruthy();
+    expect(projectTombstone?.data).toEqual({});
+    expect(projectTombstone?.intake).toBeNull();
+    expect((await db.select().from(savedAuditsTable)
+      .where(eq(savedAuditsTable.owner, "reusable"))).length).toBe(0);
+    expect((await db.select().from(savedDiagnosticsTable)
+      .where(eq(savedDiagnosticsTable.owner, "reusable"))).length).toBe(0);
+    expect((await db.select().from(savedContentGeoTable)
+      .where(eq(savedContentGeoTable.owner, "reusable"))).length).toBe(0);
+    expect((await db.select().from(savedTechGeoTable)
+      .where(eq(savedTechGeoTable.owner, "reusable"))).length).toBe(0);
+
+    const meResponse = await requestMe({
+      username: "reusable",
+      role: "agency",
+      userId,
+      membershipRole: "owner",
+    });
+    expect(meResponse.status).toBe(200);
+    const me = await meResponse.json() as {
+      setupComplete: boolean;
+      onboarding: { step: string } | null;
+      accountProfile: { displayName: string | null; website: string | null };
+      sessionIdentity: { companyName: string };
+    };
+    expect(me.setupComplete).toBe(false);
+    expect(me.onboarding).toEqual({ step: "account_type" });
+    expect(me.accountProfile).toEqual({
+      displayName: null,
+      website: null,
+      workspaceNameNeedsReview: false,
+    });
+    expect(me.sessionIdentity.companyName).toBe("reusable");
   });
 
   it("resets a dedicated Google-only account while preserving its sign-in identity", async () => {

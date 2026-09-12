@@ -114,7 +114,7 @@ describe("settings-section deep link survives refresh (account_section param)", 
     await screen.findByRole("heading", { name: /sign-in & security/i });
     fireEvent.click(screen.getByRole("button", { name: /back to platform/i }));
 
-    const openSettings = await screen.findByRole("button", { name: /account, client and team settings/i });
+    const openSettings = await screen.findByRole("button", { name: /account, client & team settings/i });
     fireEvent.click(openSettings);
 
     await waitFor(() => {

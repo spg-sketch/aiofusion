@@ -629,6 +629,8 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /platform/request-set-password",
   "POST /platform/team/invites/:token/resend",
   "POST /platform/logout",
+  "GET /platform/admin/staging-test-reset",
+  "POST /platform/admin/accounts/:username/reset-staging-test",
 
   // ── platform - MFA ────────────────────────────────────────────────────────
   "POST /platform/mfa/setup",

@@ -32,6 +32,10 @@ import {
   mediaRecommendationDecisionsTable,
   tokenUsageTable,
   auditLocksTable,
+  savedAuditsTable,
+  savedDiagnosticsTable,
+  savedContentGeoTable,
+  savedTechGeoTable,
   adminEventsTable,
   platformEmailVerificationsTable,
   platformPasswordResetsTable,
@@ -5680,6 +5684,26 @@ router.post(
 
 // The frontend uses this server-authoritative capability check to hide the
 // destructive QA control everywhere except staging.
+function configuredStagingSignupTestEmail(): string | null {
+  const email = process.env.STAGING_SIGNUP_TEST_EMAIL?.trim().toLowerCase() ?? "";
+  if (!email || email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  return email;
+}
+
+async function configuredStagingSignupTestUsername(): Promise<string | null> {
+  const email = configuredStagingSignupTestEmail();
+  if (!email) return null;
+  const rows = await db
+    .select({ companySlug: platformMembershipsTable.companySlug })
+    .from(platformMembershipsTable)
+    .innerJoin(platformUsersTable, eq(platformMembershipsTable.userId, platformUsersTable.id))
+    .where(and(
+      sql`lower(${platformUsersTable.email}) = ${email}`,
+      eq(platformMembershipsTable.role, "owner"),
+    ));
+  return rows.length === 1 ? normUsername(rows[0]!.companySlug) : null;
+}
+
 router.get(
   "/platform/admin/staging-test-reset",
   requirePlatformAuth,
@@ -5693,7 +5717,12 @@ router.get(
       res.status(404).json({ error: "Not found." });
       return;
     }
-    res.json({ enabled: true });
+    const username = await configuredStagingSignupTestUsername();
+    if (!username) {
+      res.status(404).json({ error: "Not found." });
+      return;
+    }
+    res.json({ enabled: true, username });
   },
 );
 
@@ -5724,6 +5753,11 @@ router.post(
       }
 
       const target = normUsername(req.params.username);
+      const configuredTarget = await configuredStagingSignupTestUsername();
+      if (!configuredTarget || configuredTarget !== target) {
+        res.status(403).json({ error: "Only the configured reusable staging signup account can be reset." });
+        return;
+      }
       const account = await getAccount(target);
       if (!account) {
         res.status(404).json({ error: "Account not found." });
@@ -5806,10 +5840,7 @@ router.post(
         return;
       }
 
-      const projectRows = await db
-        .select({ id: projectsTable.id })
-        .from(projectsTable)
-        .where(eq(projectsTable.owner, target));
+      let deletedProjectCount = 0;
 
       const workspaceMetaKeys = [
         "account:last-sign-in:",
@@ -5833,6 +5864,82 @@ router.post(
       ].map((prefix) => `${prefix}${target}`);
 
       await db.transaction(async (tx) => {
+        // Lock the account and company, then repeat every destructive
+        // eligibility check inside the transaction. This prevents a reset from
+        // proceeding on stale preflight state if membership, hierarchy, or
+        // billing changes while the request is in flight.
+        await tx.execute(sql`SELECT 1 FROM platform_accounts WHERE username = ${target} FOR UPDATE`);
+        await tx.execute(sql`SELECT 1 FROM platform_companies WHERE slug = ${target} FOR UPDATE`);
+
+        const [lockedAccount] = await tx
+          .select({ role: platformAccountsTable.role, parent: platformAccountsTable.parent })
+          .from(platformAccountsTable)
+          .where(eq(platformAccountsTable.username, target))
+          .limit(1);
+        const lockedOwners = await tx
+          .select({
+            id: platformUsersTable.id,
+            email: platformUsersTable.email,
+            passwordHash: platformUsersTable.passwordHash,
+            googleId: platformUsersTable.googleId,
+            microsoftId: platformUsersTable.microsoftId,
+          })
+          .from(platformMembershipsTable)
+          .innerJoin(platformUsersTable, eq(platformMembershipsTable.userId, platformUsersTable.id))
+          .where(and(
+            eq(platformMembershipsTable.companySlug, target),
+            eq(platformMembershipsTable.role, "owner"),
+          ));
+        const lockedOwner = lockedOwners[0];
+        const lockedOwnerMemberships = lockedOwner
+          ? await tx
+            .select({ companySlug: platformMembershipsTable.companySlug })
+            .from(platformMembershipsTable)
+            .where(eq(platformMembershipsTable.userId, lockedOwner.id))
+          : [];
+        const lockedCompanyMemberships = await tx
+          .select({ userId: platformMembershipsTable.userId })
+          .from(platformMembershipsTable)
+          .where(eq(platformMembershipsTable.companySlug, target));
+        const lockedChildren = await tx
+          .select({ username: platformAccountsTable.username })
+          .from(platformAccountsTable)
+          .where(eq(platformAccountsTable.parent, target));
+        const [lockedCompany] = await tx
+          .select({
+            stripeCustomerId: platformCompaniesTable.stripeCustomerId,
+            stripeSubscriptionId: platformCompaniesTable.stripeSubscriptionId,
+            subscriptionStatus: platformCompaniesTable.subscriptionStatus,
+          })
+          .from(platformCompaniesTable)
+          .where(eq(platformCompaniesTable.slug, target))
+          .limit(1);
+        const configuredEmail = configuredStagingSignupTestEmail();
+        if (
+          !lockedAccount
+          || normalizeRole(lockedAccount.role) === "admin"
+          || lockedAccount.parent
+          || lockedOwners.length !== 1
+          || !lockedOwner
+          || lockedOwner.email?.trim().toLowerCase() !== configuredEmail
+          || (!lockedOwner.passwordHash && !lockedOwner.googleId && !lockedOwner.microsoftId)
+          || lockedOwnerMemberships.length !== 1
+          || lockedCompanyMemberships.length !== 1
+          || lockedChildren.length > 0
+          || !lockedCompany
+          || !!lockedCompany.stripeCustomerId
+          || !!lockedCompany.stripeSubscriptionId
+          || (!!lockedCompany.subscriptionStatus && lockedCompany.subscriptionStatus !== "none")
+        ) {
+          throw new Error("STAGING_TEST_ELIGIBILITY_CHANGED");
+        }
+
+        const lockedProjects = await tx
+          .select({ id: projectsTable.id })
+          .from(projectsTable)
+          .where(and(eq(projectsTable.owner, target), isNull(projectsTable.deletedAt)));
+        deletedProjectCount = lockedProjects.length;
+
         const contacts = await tx
           .select({ id: mediaContactsTable.id })
           .from(mediaContactsTable)
@@ -5927,8 +6034,24 @@ router.post(
         await tx.delete(plannerItemsTable).where(eq(plannerItemsTable.owner, target));
         await tx.delete(scoringConfigsTable).where(eq(scoringConfigsTable.owner, target));
         await tx.delete(auditLocksTable).where(eq(auditLocksTable.owner, target));
+        await tx.delete(savedAuditsTable).where(eq(savedAuditsTable.owner, target));
+        await tx.delete(savedDiagnosticsTable).where(eq(savedDiagnosticsTable.owner, target));
+        await tx.delete(savedContentGeoTable).where(eq(savedContentGeoTable.owner, target));
+        await tx.delete(savedTechGeoTable).where(eq(savedTechGeoTable.owner, target));
         await tx.delete(projectSnapshotsTable).where(eq(projectSnapshotsTable.owner, target));
-        await tx.delete(projectsTable).where(eq(projectsTable.owner, target));
+        // Keep tombstone rows so the next browser sync removes locally cached
+        // projects instead of treating them as missing server data to recover.
+        await tx
+          .update(projectsTable)
+          .set({
+            name: "",
+            data: {},
+            intake: null,
+            logo: null,
+            tier: null,
+            deletedAt: new Date(),
+          })
+          .where(eq(projectsTable.owner, target));
         await tx.delete(tokenUsageTable).where(eq(tokenUsageTable.accountId, target));
         await tx.delete(platformInvitationsTable).where(eq(platformInvitationsTable.companySlug, target));
         await tx.delete(platformSessionsTable).where(eq(platformSessionsTable.username, target));
@@ -5936,7 +6059,7 @@ router.post(
 
         await tx
           .update(platformAccountsTable)
-          .set({ role: "agency", status: "active", maxSeats: null })
+          .set({ role: "agency", status: "active", maxSeats: null, website: null })
           .where(eq(platformAccountsTable.username, target));
         await tx.execute(sql`
           UPDATE platform_companies
@@ -5945,6 +6068,8 @@ router.post(
               max_seats = NULL,
               setup_complete = false,
               free_access = false,
+              display_name = NULL,
+              website = NULL,
               billing_email = NULL,
               key_account_holder_email = NULL,
               vat_number = NULL,
@@ -5969,10 +6094,16 @@ router.post(
         "staging_test_account_reset",
         target,
         "account",
-        { deletedProjectCount: projectRows.length },
+        { deletedProjectCount },
       );
-      res.json({ ok: true, username: target, deletedProjectCount: projectRows.length });
+      res.json({ ok: true, username: target, deletedProjectCount });
     } catch (error) {
+      if (error instanceof Error && error.message === "STAGING_TEST_ELIGIBILITY_CHANGED") {
+        res.status(409).json({
+          error: "This account changed while the reset was starting. Review its team, clients, and billing state, then try again.",
+        });
+        return;
+      }
       if (error instanceof Error && error.message === "STAGING_TEST_SHARED_MEDIA") {
         res.status(409).json({
           error: "This account has media records referenced by another workspace. Remove those shared references before resetting it.",
