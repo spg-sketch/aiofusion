@@ -301,11 +301,11 @@ export function GuidedOnboardingPage({
               disabled={busy} 
               onClick={() => setSelectedAccessChoice("beta")}
               aria-pressed={selectedAccessChoice === "beta"}
-              className="text-left rounded-2xl bg-white border-2 p-6 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-50 group"
-              style={{
-                borderColor: selectedAccessChoice === "beta" ? vars.accent : vars.g200,
-                boxShadow: selectedAccessChoice === "beta" ? `0 0 0 1px ${vars.accent}` : undefined,
-              }}
+              className={`text-left rounded-2xl bg-white border p-6 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:border-[#C8497A] disabled:opacity-50 group ${
+                selectedAccessChoice === "beta"
+                  ? "border-[#C8497A] shadow-[0_0_0_1px_#C8497A]"
+                  : "border-slate-200"
+              }`}
             >
               <div className="w-10 h-10 rounded-full flex items-center justify-center mb-4 transition-colors" style={{ background: "#F1F5F9" }}>
                 <Play size={18} className="text-slate-600 ml-0.5" />
@@ -320,11 +320,11 @@ export function GuidedOnboardingPage({
               disabled={busy} 
               onClick={() => setSelectedAccessChoice("paid")}
               aria-pressed={selectedAccessChoice === "paid"}
-              className="text-left rounded-2xl bg-white border-2 p-6 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-50 group" 
-              style={{
-                borderColor: selectedAccessChoice === "paid" ? vars.accent : vars.g200,
-                boxShadow: selectedAccessChoice === "paid" ? `0 0 0 1px ${vars.accent}` : undefined,
-              }}
+              className={`text-left rounded-2xl bg-white border p-6 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:border-[#C8497A] disabled:opacity-50 group ${
+                selectedAccessChoice === "paid"
+                  ? "border-[#C8497A] shadow-[0_0_0_1px_#C8497A]"
+                  : "border-slate-200"
+              }`}
             >
               <div className="w-10 h-10 rounded-full flex items-center justify-center mb-4 transition-colors" style={{ background: vars.accent }}>
                 <CreditCard size={18} className="text-white" />
