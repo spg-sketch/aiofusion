@@ -872,12 +872,12 @@ function PlatformHomePage({
         ) : (
           <div className="rounded-2xl p-6 sm:p-8 mb-6 sm:mb-8 transition-all" style={{ background: "#1A647B", boxShadow: "0 12px 32px -12px rgba(26,100,123,0.35)" }}>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5">
-              <div data-testid="platform-home-account-identity" className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
+              <div data-testid="platform-home-account-identity" className="flex min-w-0 items-start gap-3 sm:min-w-[170px] sm:items-center sm:gap-4">
                 <div className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 rounded-2xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.2)", color: "white" }}>
                   <User size={24} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="inline-flex max-w-full items-center mb-1.5 px-3 sm:px-5 py-2 rounded-md text-[15px] sm:text-[20px] font-bold uppercase tracking-[0.1em] sm:tracking-[0.16em] break-words" style={{ background: session.role === "admin" ? ink : "rgba(255,255,255,0.18)", color: "white" }}>
+                  <span className="inline-flex max-w-full items-center whitespace-nowrap mb-1.5 px-3 sm:px-5 py-2 rounded-md text-[15px] sm:text-[20px] font-bold uppercase tracking-[0.1em] sm:tracking-[0.16em]" style={{ background: session.role === "admin" ? ink : "rgba(255,255,255,0.18)", color: "white" }}>
                     {session.role === "client"
                       ? session.agencyManagedClient ? "Client Project" : "Client Account"
                       : session.role === "agency" ? "Agency Partner Account" : roleLabel(session.role)}
@@ -916,7 +916,7 @@ function PlatformHomePage({
                       className="flex min-w-0 items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
                       style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
                     >
-                      <Users size={15} /> Account and Team Settings
+                      <Users size={15} /> Account &amp; Team Settings
                     </button>
                   </>
                 ) : (
@@ -926,8 +926,8 @@ function PlatformHomePage({
                     style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
                   >
                     {session.role === "agency"
-                      ? <><Users size={15} /> Account, Client and Team Settings</>
-                      : <><User size={15} /> Account and Team Settings</>}
+                      ? <><Users size={15} /> Account, Client &amp; Team Settings</>
+                      : <><User size={15} /> Account &amp; Team Settings</>}
                   </button>
                 )}
                 <button

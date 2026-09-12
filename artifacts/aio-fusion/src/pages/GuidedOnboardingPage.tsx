@@ -12,7 +12,7 @@ type State = { step: Step; accessChoice?: "beta" | "paid" };
 const STEPS = [
   ["account_type", "Account type"],
   ["workspace_basics", "Company"],
-  ["access", "Access"],
+  ["access", "Trial or plan"],
   ["billing", "Billing"],
 ] as const;
 
