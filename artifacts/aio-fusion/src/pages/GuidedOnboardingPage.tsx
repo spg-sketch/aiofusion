@@ -9,11 +9,10 @@ import { vars } from "../marketing/vars";
 type Step = "account_type" | "workspace_basics" | "access" | "billing" | "first_project";
 type State = { step: Step; accessChoice?: "beta" | "paid" };
 
-const STEPS = [
+const BASE_STEPS = [
   ["account_type", "Account type"],
   ["workspace_basics", "Company"],
   ["access", "Trial or plan"],
-  ["billing", "Billing"],
 ] as const;
 
 function OnboardingLayout({
@@ -25,7 +24,10 @@ function OnboardingLayout({
   onSignOut: () => void;
   children: React.ReactNode;
 }) {
-  const activeIndex = STEPS.findIndex(([key]) => key === state.step);
+  const steps = state.step === "billing" || state.accessChoice === "paid"
+    ? [...BASE_STEPS, ["billing", "Billing"] as const]
+    : BASE_STEPS;
+  const activeIndex = steps.findIndex(([key]) => key === state.step);
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row font-sans" style={{ background: vars.cream, color: vars.navy }}>
@@ -40,13 +42,13 @@ function OnboardingLayout({
 
           <nav aria-label="Progress" className="hidden md:block">
             <ol className="space-y-8">
-              {STEPS.map(([key, label], index) => {
+              {steps.map(([key, label], index) => {
                 const isActive = index === activeIndex;
                 const isPast = index < activeIndex;
 
                 return (
                   <li key={key} className="flex items-center gap-4 relative">
-                    {index !== STEPS.length - 1 && (
+                    {index !== steps.length - 1 && (
                       <div className="absolute top-6 left-[11px] w-px h-8" style={{ background: isPast ? vars.accent : "rgba(255,255,255,0.1)" }} />
                     )}
                     <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold transition-colors duration-300 ${
@@ -70,10 +72,10 @@ function OnboardingLayout({
 
           <nav className="md:hidden">
             <div className="flex items-center gap-2 text-white/90 text-sm font-medium">
-              Step {activeIndex + 1} of {STEPS.length}: {STEPS[activeIndex][1]}
+              Step {activeIndex + 1} of {steps.length}: {steps[activeIndex][1]}
             </div>
             <div className="h-1.5 w-full bg-white/10 rounded-full mt-3 overflow-hidden">
-              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${((activeIndex + 1) / STEPS.length) * 100}%`, background: vars.accent }} />
+              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${((activeIndex + 1) / steps.length) * 100}%`, background: vars.accent }} />
             </div>
           </nav>
         </div>
@@ -87,6 +89,14 @@ function OnboardingLayout({
 
       <main className="flex-1 flex flex-col min-h-[calc(100vh-140px)] md:min-h-screen relative z-0">
         <div className="flex-1 w-full max-w-2xl mx-auto p-6 md:p-12 lg:p-20 flex flex-col justify-center">
+          <header className="mb-10 border-b pb-8" style={{ borderColor: vars.g200 }}>
+            <h1 className="text-4xl sm:text-5xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
+              New Customer Onboarding
+            </h1>
+            <p className="text-base sm:text-lg leading-relaxed text-slate-600">
+              Welcome to AIO Fusion. For faster customer onboarding, please complete the following steps.
+            </p>
+          </header>
           {children}
         </div>
       </main>
@@ -109,6 +119,7 @@ export function GuidedOnboardingPage({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [website, setWebsite] = useState("");
+  const [selectedAccessChoice, setSelectedAccessChoice] = useState<"beta" | "paid" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -176,6 +187,12 @@ export function GuidedOnboardingPage({
     }
   }
 
+  async function continueWithAccessChoice() {
+    if (!selectedAccessChoice) return;
+    const next = await post("/api/platform/onboarding/access", { choice: selectedAccessChoice });
+    if (next?.step === "first_project") await complete();
+  }
+
   if (!state && !loadError) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
@@ -219,9 +236,9 @@ export function GuidedOnboardingPage({
     <OnboardingLayout state={state} onSignOut={onSignOut}>
       {state.step === "workspace_basics" && (
         <div className="animate-in fade-in duration-700">
-          <h1 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
+          <h2 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
             Set up your company
-          </h1>
+          </h2>
           <p className="text-base sm:text-lg mb-10 leading-relaxed text-slate-600">
             Confirm the company details used throughout your account.
           </p>
@@ -272,9 +289,9 @@ export function GuidedOnboardingPage({
 
       {state.step === "access" && (
         <div className="animate-in fade-in duration-700">
-          <h1 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
+          <h2 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
             Choose how to start
-          </h1>
+          </h2>
           <p className="text-base sm:text-lg mb-10 leading-relaxed text-slate-600">
             Start the existing 60-day beta without a card, or continue with a paid plan.
           </p>
@@ -282,11 +299,13 @@ export function GuidedOnboardingPage({
           <div className="grid sm:grid-cols-2 gap-5 mb-8">
             <button 
               disabled={busy} 
-              onClick={() => void post("/api/platform/onboarding/access", { choice: "beta" }).then((next) => {
-                if (next?.step === "first_project") void complete();
-              })}
+              onClick={() => setSelectedAccessChoice("beta")}
+              aria-pressed={selectedAccessChoice === "beta"}
               className="text-left rounded-2xl bg-white border-2 p-6 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-50 group"
-              style={{ borderColor: vars.g200 }}
+              style={{
+                borderColor: selectedAccessChoice === "beta" ? vars.accent : vars.g200,
+                boxShadow: selectedAccessChoice === "beta" ? `0 0 0 1px ${vars.accent}` : undefined,
+              }}
             >
               <div className="w-10 h-10 rounded-full flex items-center justify-center mb-4 transition-colors" style={{ background: "#F1F5F9" }}>
                 <Play size={18} className="text-slate-600 ml-0.5" />
@@ -299,9 +318,13 @@ export function GuidedOnboardingPage({
 
             <button 
               disabled={busy} 
-              onClick={() => void post("/api/platform/onboarding/access", { choice: "paid" })} 
+              onClick={() => setSelectedAccessChoice("paid")}
+              aria-pressed={selectedAccessChoice === "paid"}
               className="text-left rounded-2xl bg-white border-2 p-6 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-50 group" 
-              style={{ borderColor: vars.accent }}
+              style={{
+                borderColor: selectedAccessChoice === "paid" ? vars.accent : vars.g200,
+                boxShadow: selectedAccessChoice === "paid" ? `0 0 0 1px ${vars.accent}` : undefined,
+              }}
             >
               <div className="w-10 h-10 rounded-full flex items-center justify-center mb-4 transition-colors" style={{ background: vars.accent }}>
                 <CreditCard size={18} className="text-white" />
@@ -312,6 +335,16 @@ export function GuidedOnboardingPage({
               </span>
             </button>
           </div>
+
+          <button
+            disabled={busy || !selectedAccessChoice}
+            onClick={() => void continueWithAccessChoice()}
+            className="inline-flex items-center justify-center gap-2 rounded-xl px-8 py-4 text-white text-sm font-bold uppercase tracking-wider transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110"
+            style={{ background: vars.accent }}
+          >
+            {busy ? <Loader2 size={18} className="animate-spin" /> : "Continue"}
+            {!busy && <ArrowRight size={18} />}
+          </button>
           
           {error && (
             <div className="mb-8 p-4 rounded-xl bg-red-50 text-red-700 text-sm font-medium border border-red-100 flex items-start gap-3">
@@ -324,9 +357,9 @@ export function GuidedOnboardingPage({
 
       {state.step === "billing" && (
         <div className="animate-in fade-in duration-700 w-full max-w-3xl mx-auto">
-          <h1 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
+          <h2 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
             Billing and payment
-          </h1>
+          </h2>
           <p className="text-base sm:text-lg mb-8 leading-relaxed text-slate-600">
             Save the required billing information before choosing your payment schedule.
           </p>

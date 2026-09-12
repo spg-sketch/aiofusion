@@ -66,9 +66,15 @@ export default function AccountTypeSelectPage({ onComplete, onSignOut }: Props) 
           </div>
         </div>
 
-        <h1 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
-          Thank you for signing up to AIO Fusion
+        <h1 className="text-4xl sm:text-5xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
+          New Customer Onboarding
         </h1>
+        <p className="text-base sm:text-lg mb-8 leading-relaxed text-slate-600">
+          Welcome to AIO Fusion. For faster customer onboarding, please complete the following steps.
+        </p>
+        <h2 className="text-2xl sm:text-3xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
+          Choose your account type
+        </h2>
         <p className="text-base sm:text-lg mb-2 leading-relaxed text-slate-600">
           We offer two types of account: a <strong className="font-semibold text-slate-900">Direct Client</strong> account for managing your own company or brand, and an <strong className="font-semibold text-slate-900">Agency / Partner</strong> account for managing PR and marketing on behalf of multiple clients.
         </p>
