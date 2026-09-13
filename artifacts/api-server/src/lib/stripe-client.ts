@@ -59,6 +59,19 @@ export function selectStripeConnectionItem(items: StripeConnectionItem[]): Strip
  * Not cached - tokens can rotate, so fetch fresh each time.
  */
 export async function getStripeCredentials(): Promise<{ secretKey: string; webhookSecret?: string }> {
+  if (process.env.DEPLOYMENT_ENV?.toLowerCase().trim() === "staging") {
+    const stagingSecretKey = process.env.STRIPE_STAGING_SECRET_KEY?.trim();
+    if (stagingSecretKey) {
+      if (!/^(sk|rk)_test_/.test(stagingSecretKey)) {
+        throw new Error(
+          "STRIPE_STAGING_SECRET_KEY must be a Stripe test key. " +
+            "Refusing to use a non-test Stripe key on staging.",
+        );
+      }
+      return { secretKey: stagingSecretKey };
+    }
+  }
+
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY
     ? "repl " + process.env.REPL_IDENTITY
