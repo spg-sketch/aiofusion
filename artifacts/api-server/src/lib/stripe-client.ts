@@ -1,6 +1,63 @@
 import Stripe from "stripe";
 import { StripeSync } from "stripe-replit-sync";
 
+type StripeConnectionItem = {
+  environment?: string | null;
+  disabled?: boolean;
+  status?: string | null;
+  settings?: {
+    secret?: string;
+    secret_key?: string;
+    webhook_secret?: string;
+  };
+  webhook_config?: { secret?: string; webhook_secret?: string } | null;
+};
+
+function stripeKeyFor(item: StripeConnectionItem): string | undefined {
+  return item.settings?.secret ?? item.settings?.secret_key;
+}
+
+function stripeKeyMode(key: string | undefined): "test" | "live" | null {
+  if (/^(sk|rk)_test_/.test(key ?? "")) return "test";
+  if (/^(sk|rk)_live_/.test(key ?? "")) return "live";
+  return null;
+}
+
+/**
+ * Replit exposes the Stripe sandbox as the `development` connection and the
+ * live account as the `production` connection. The API may return both, and
+ * their order is not stable between the workspace and a deployment.
+ */
+export function selectStripeConnectionItem(items: StripeConnectionItem[]): StripeConnectionItem {
+  const deploymentEnv = process.env.DEPLOYMENT_ENV?.toLowerCase().trim();
+  const wantsLive = deploymentEnv === "production";
+  const wantedEnvironment = wantsLive ? "production" : "development";
+  const wantedMode = wantsLive ? "live" : "test";
+  const usable = items.filter((item) => !item.disabled && stripeKeyFor(item));
+
+  const selected =
+    usable.find(
+      (item) =>
+        item.environment?.toLowerCase() === wantedEnvironment &&
+        stripeKeyMode(stripeKeyFor(item)) === wantedMode,
+    ) ??
+    usable.find(
+      (item) =>
+        !item.environment &&
+        stripeKeyMode(stripeKeyFor(item)) === wantedMode,
+    );
+
+  if (!selected) {
+    const currentEnv = deploymentEnv || process.env.NODE_ENV || "development";
+    throw new Error(
+      `Stripe ${wantedMode} credentials are not connected for ${currentEnv}. ` +
+        `Refusing to use Stripe credentials from another environment.`,
+    );
+  }
+
+  return selected;
+}
+
 /**
  * Fetches Stripe credentials from the Replit connection API.
  * Not cached - tokens can rotate, so fetch fresh each time.
@@ -32,17 +89,8 @@ export async function getStripeCredentials(): Promise<{ secretKey: string; webho
     throw new Error(`Failed to fetch Stripe credentials: ${resp.status} ${resp.statusText}`);
   }
 
-  const data = (await resp.json()) as {
-    items?: Array<{
-      settings?: {
-        secret?: string;
-        secret_key?: string;
-        webhook_secret?: string;
-      };
-      webhook_config?: { secret?: string; webhook_secret?: string } | null;
-    }>;
-  };
-  const item = data.items?.[0];
+  const data = (await resp.json()) as { items?: StripeConnectionItem[] };
+  const item = selectStripeConnectionItem(data.items ?? []);
   // The connection exposes the API key as `secret` (older shapes used
   // `secret_key`); accept either.
   const secretKey = item?.settings?.secret ?? item?.settings?.secret_key;
