@@ -3,6 +3,11 @@ import { logger } from "./logger";
 import { getStripeSync, getUncachableStripeClient, stripeConfigured } from "./stripe-client";
 import { ensureAllPrices, warnIfTaxDeactivated } from "./billing";
 
+export function shouldRegisterManagedStripeWebhook(): boolean {
+  const deploymentEnv = process.env.DEPLOYMENT_ENV?.toLowerCase().trim();
+  return deploymentEnv === "staging" || deploymentEnv === "production";
+}
+
 // Startup Stripe initialisation:
 //   1. create the `stripe` schema tables (idempotent)
 //   2. register the managed webhook at <domain>/api/stripe/webhook
@@ -28,11 +33,15 @@ export async function initStripe(): Promise<void> {
   const stripeSync = await getStripeSync();
 
   const domain = process.env.REPLIT_DOMAINS?.split(",")[0];
-  if (domain) {
+  if (domain && shouldRegisterManagedStripeWebhook()) {
     const webhook = await stripeSync.findOrCreateManagedWebhook(
       `https://${domain}/api/stripe/webhook`,
     );
     logger.info({ url: webhook?.url }, "stripe-init: managed webhook configured");
+  } else if (domain) {
+    logger.info(
+      "stripe-init: development environment - leaving the published Stripe webhook unchanged",
+    );
   } else {
     logger.warn("stripe-init: REPLIT_DOMAINS not set - webhook not registered");
   }
