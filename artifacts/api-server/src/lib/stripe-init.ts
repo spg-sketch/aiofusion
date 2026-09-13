@@ -15,7 +15,8 @@ export function shouldRegisterManagedStripeWebhook(): boolean {
 //   4. backfill existing Stripe data into the stripe schema (background)
 //
 // Reading REPLIT_DOMAINS here is correct: in a deployment it resolves to the
-// production domain; in the dev workspace it registers a dev-domain webhook.
+// published domain. Development intentionally does not manage the webhook
+// because it may share Stripe and PostgreSQL state with published staging.
 export async function initStripe(): Promise<void> {
   if (!stripeConfigured()) {
     logger.warn("stripe-init: Stripe connection not available in this environment - skipping");

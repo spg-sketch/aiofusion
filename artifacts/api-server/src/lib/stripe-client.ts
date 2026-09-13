@@ -122,9 +122,15 @@ export async function getStripeCredentials(): Promise<{ secretKey: string; webho
 
 /** Whether the Replit Stripe connection is available in this environment. */
 export function stripeConfigured(): boolean {
+  const deploymentEnv = process.env.DEPLOYMENT_ENV?.toLowerCase().trim();
+  const stagingOverrideAvailable =
+    deploymentEnv === "staging" &&
+    /^(sk|rk)_test_/.test(process.env.STRIPE_STAGING_SECRET_KEY?.trim() ?? "");
+
   return Boolean(
-    process.env.REPLIT_CONNECTORS_HOSTNAME &&
-      (process.env.REPL_IDENTITY || process.env.WEB_REPL_RENEWAL),
+    stagingOverrideAvailable ||
+      (process.env.REPLIT_CONNECTORS_HOSTNAME &&
+        (process.env.REPL_IDENTITY || process.env.WEB_REPL_RENEWAL)),
   );
 }
 

@@ -1,8 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { getStripeCredentials, selectStripeConnectionItem } from "./stripe-client";
+import {
+  getStripeCredentials,
+  selectStripeConnectionItem,
+  stripeConfigured,
+} from "./stripe-client";
 
 const originalDeploymentEnv = process.env.DEPLOYMENT_ENV;
 const originalStagingSecretKey = process.env.STRIPE_STAGING_SECRET_KEY;
+const originalConnectorsHostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
+const originalReplIdentity = process.env.REPL_IDENTITY;
+const originalWebReplRenewal = process.env.WEB_REPL_RENEWAL;
 
 afterEach(() => {
   if (originalDeploymentEnv === undefined) {
@@ -14,6 +21,14 @@ afterEach(() => {
     delete process.env.STRIPE_STAGING_SECRET_KEY;
   } else {
     process.env.STRIPE_STAGING_SECRET_KEY = originalStagingSecretKey;
+  }
+  for (const [key, value] of [
+    ["REPLIT_CONNECTORS_HOSTNAME", originalConnectorsHostname],
+    ["REPL_IDENTITY", originalReplIdentity],
+    ["WEB_REPL_RENEWAL", originalWebReplRenewal],
+  ] as const) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
   }
 });
 
@@ -85,5 +100,24 @@ describe("getStripeCredentials staging override", () => {
     await expect(getStripeCredentials()).rejects.toThrow(
       /must be a Stripe test key/,
     );
+  });
+});
+
+describe("stripeConfigured", () => {
+  it("recognises the protected test-key override on a staging deployment", () => {
+    process.env.DEPLOYMENT_ENV = "staging";
+    process.env.STRIPE_STAGING_SECRET_KEY = "sk_test_staging_override";
+
+    expect(stripeConfigured()).toBe(true);
+  });
+
+  it("does not treat the staging override as configured outside staging", () => {
+    process.env.DEPLOYMENT_ENV = "production";
+    process.env.STRIPE_STAGING_SECRET_KEY = "sk_test_staging_override";
+    delete process.env.REPLIT_CONNECTORS_HOSTNAME;
+    delete process.env.REPL_IDENTITY;
+    delete process.env.WEB_REPL_RENEWAL;
+
+    expect(stripeConfigured()).toBe(false);
   });
 });
