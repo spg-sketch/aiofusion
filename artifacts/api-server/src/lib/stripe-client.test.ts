@@ -7,6 +7,7 @@ import {
 
 const originalDeploymentEnv = process.env.DEPLOYMENT_ENV;
 const originalStagingSecretKey = process.env.STRIPE_STAGING_SECRET_KEY;
+const originalStagingWebhookSecret = process.env.STRIPE_STAGING_WEBHOOK_SECRET;
 const originalConnectorsHostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
 const originalReplIdentity = process.env.REPL_IDENTITY;
 const originalWebReplRenewal = process.env.WEB_REPL_RENEWAL;
@@ -21,6 +22,11 @@ afterEach(() => {
     delete process.env.STRIPE_STAGING_SECRET_KEY;
   } else {
     process.env.STRIPE_STAGING_SECRET_KEY = originalStagingSecretKey;
+  }
+  if (originalStagingWebhookSecret === undefined) {
+    delete process.env.STRIPE_STAGING_WEBHOOK_SECRET;
+  } else {
+    process.env.STRIPE_STAGING_WEBHOOK_SECRET = originalStagingWebhookSecret;
   }
   for (const [key, value] of [
     ["REPLIT_CONNECTORS_HOSTNAME", originalConnectorsHostname],
@@ -99,6 +105,27 @@ describe("getStripeCredentials staging override", () => {
 
     await expect(getStripeCredentials()).rejects.toThrow(
       /must be a Stripe test key/,
+    );
+  });
+
+  it("returns the staging webhook signing secret when configured", async () => {
+    process.env.DEPLOYMENT_ENV = "staging";
+    process.env.STRIPE_STAGING_SECRET_KEY = "sk_test_staging_override";
+    process.env.STRIPE_STAGING_WEBHOOK_SECRET = "whsec_staging_webhook";
+
+    await expect(getStripeCredentials()).resolves.toEqual({
+      secretKey: "sk_test_staging_override",
+      webhookSecret: "whsec_staging_webhook",
+    });
+  });
+
+  it("rejects an invalid staging webhook signing secret", async () => {
+    process.env.DEPLOYMENT_ENV = "staging";
+    process.env.STRIPE_STAGING_SECRET_KEY = "sk_test_staging_override";
+    process.env.STRIPE_STAGING_WEBHOOK_SECRET = "not-a-signing-secret";
+
+    await expect(getStripeCredentials()).rejects.toThrow(
+      /must be a Stripe webhook signing secret/,
     );
   });
 });

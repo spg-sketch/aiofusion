@@ -68,7 +68,16 @@ export async function getStripeCredentials(): Promise<{ secretKey: string; webho
             "Refusing to use a non-test Stripe key on staging.",
         );
       }
-      return { secretKey: stagingSecretKey };
+      const webhookSecret = process.env.STRIPE_STAGING_WEBHOOK_SECRET?.trim();
+      if (webhookSecret && !webhookSecret.startsWith("whsec_")) {
+        throw new Error(
+          "STRIPE_STAGING_WEBHOOK_SECRET must be a Stripe webhook signing secret.",
+        );
+      }
+      return {
+        secretKey: stagingSecretKey,
+        ...(webhookSecret ? { webhookSecret } : {}),
+      };
     }
   }
 

@@ -1,11 +1,61 @@
 import { runMigrations } from "stripe-replit-sync";
 import { logger } from "./logger";
-import { getStripeSync, getUncachableStripeClient, stripeConfigured } from "./stripe-client";
+import {
+  getStripeCredentials,
+  getStripeSync,
+  getUncachableStripeClient,
+  stripeConfigured,
+} from "./stripe-client";
 import { ensureAllPrices, warnIfTaxDeactivated } from "./billing";
 
 export function shouldRegisterManagedStripeWebhook(): boolean {
   const deploymentEnv = process.env.DEPLOYMENT_ENV?.toLowerCase().trim();
   return deploymentEnv === "staging" || deploymentEnv === "production";
+}
+
+async function configureStagingWebhookUrl(): Promise<void> {
+  const domain = process.env.REPLIT_DOMAINS?.split(",")[0];
+  if (!domain) {
+    logger.warn("stripe-init: REPLIT_DOMAINS not set - staging webhook not configured");
+    return;
+  }
+
+  const { webhookSecret } = await getStripeCredentials();
+  if (!webhookSecret) {
+    logger.warn(
+      "stripe-init: STRIPE_STAGING_WEBHOOK_SECRET is not set - staging webhook URL unchanged",
+    );
+    return;
+  }
+
+  const stripe = await getUncachableStripeClient();
+  const targetUrl = `https://${domain}/api/stripe/webhook`;
+  const endpoints = await stripe.webhookEndpoints.list({ limit: 100 });
+  const exact = endpoints.data.find(
+    (endpoint) => endpoint.url === targetUrl && endpoint.status === "enabled",
+  );
+  if (exact) {
+    logger.info({ url: targetUrl }, "stripe-init: staging webhook already configured");
+    return;
+  }
+
+  const managed = endpoints.data.find((endpoint) => {
+    const managedBy = endpoint.metadata?.managed_by
+      ?.toLowerCase()
+      .replace(/[\s-]+/g, "");
+    const description = endpoint.description?.toLowerCase().replace(/[\s-]+/g, "") ?? "";
+    return managedBy === "stripesync" || description.includes("stripesync");
+  });
+  if (!managed) {
+    logger.warn(
+      { url: targetUrl },
+      "stripe-init: no existing Stripe-managed webhook found to move to staging",
+    );
+    return;
+  }
+
+  await stripe.webhookEndpoints.update(managed.id, { url: targetUrl });
+  logger.info({ url: targetUrl }, "stripe-init: staging webhook URL configured");
 }
 
 // Startup Stripe initialisation:
@@ -25,6 +75,18 @@ export async function initStripe(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     logger.warn("stripe-init: DATABASE_URL not set - skipping");
+    return;
+  }
+
+  if (process.env.DEPLOYMENT_ENV?.toLowerCase().trim() === "staging") {
+    await configureStagingWebhookUrl();
+    try {
+      const stripe = await getUncachableStripeClient();
+      await ensureAllPrices(stripe);
+      logger.info("stripe-init: staging plan products/prices ensured");
+    } catch (err) {
+      logger.warn({ err }, "stripe-init: failed to ensure staging plan prices (non-fatal)");
+    }
     return;
   }
 
