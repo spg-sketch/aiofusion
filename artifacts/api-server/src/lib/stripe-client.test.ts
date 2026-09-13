@@ -48,4 +48,16 @@ describe("selectStripeConnectionItem", () => {
 
     expect(selectStripeConnectionItem([legacyTestConnection])).toBe(legacyTestConnection);
   });
+
+  it("accepts a sandbox key assigned to Replit's deployment credential slot on staging", () => {
+    process.env.DEPLOYMENT_ENV = "staging";
+    const deployedSandboxConnection = {
+      environment: "production",
+      settings: { secret: "sk_test_staging_deployment" },
+    };
+
+    expect(selectStripeConnectionItem([deployedSandboxConnection])).toBe(
+      deployedSandboxConnection,
+    );
+  });
 });

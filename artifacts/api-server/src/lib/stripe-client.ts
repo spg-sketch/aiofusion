@@ -41,11 +41,7 @@ export function selectStripeConnectionItem(items: StripeConnectionItem[]): Strip
         item.environment?.toLowerCase() === wantedEnvironment &&
         stripeKeyMode(stripeKeyFor(item)) === wantedMode,
     ) ??
-    usable.find(
-      (item) =>
-        !item.environment &&
-        stripeKeyMode(stripeKeyFor(item)) === wantedMode,
-    );
+    usable.find((item) => stripeKeyMode(stripeKeyFor(item)) === wantedMode);
 
   if (!selected) {
     const currentEnv = deploymentEnv || process.env.NODE_ENV || "development";
