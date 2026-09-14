@@ -198,6 +198,18 @@ export async function ensureMediaSchema(): Promise<void> {
       updated_at timestamptz NOT NULL DEFAULT now()
     )
   `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS media_recommendation_feedback (
+      id serial PRIMARY KEY,
+      account_id varchar NOT NULL,
+      project_id varchar NOT NULL,
+      story_key varchar(200) NOT NULL,
+      contact_id integer NOT NULL,
+      signal varchar(12) NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
 
   await db.execute(sql`
     CREATE UNIQUE INDEX IF NOT EXISTS media_contact_categories_unique
@@ -222,6 +234,10 @@ export async function ensureMediaSchema(): Promise<void> {
   await db.execute(sql`
     CREATE UNIQUE INDEX IF NOT EXISTS media_recommendation_decisions_unique
       ON media_recommendation_decisions (account_id, project_id, story_key, contact_id)
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS media_recommendation_feedback_unique
+      ON media_recommendation_feedback (account_id, project_id, story_key, contact_id)
   `);
 
   // NOT VALID preserves every legacy row if a partially-created table contains
@@ -257,6 +273,10 @@ export async function ensureMediaSchema(): Promise<void> {
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_recommendation_decisions_contact_id_fkey') THEN
         ALTER TABLE media_recommendation_decisions ADD CONSTRAINT media_recommendation_decisions_contact_id_fkey
           FOREIGN KEY (contact_id) REFERENCES media_contacts(id) NOT VALID;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_recommendation_feedback_contact_id_fkey') THEN
+        ALTER TABLE media_recommendation_feedback ADD CONSTRAINT media_recommendation_feedback_contact_id_fkey
+          FOREIGN KEY (contact_id) REFERENCES media_contacts(id) ON DELETE CASCADE NOT VALID;
       END IF;
     END
     $$
