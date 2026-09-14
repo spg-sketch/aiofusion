@@ -5,7 +5,7 @@ import {
   CheckCircle2,
   ChevronRight,
   FileText,
-  HelpCircle,
+  MessageCircle,
   ShieldCheck,
   User,
   Users,
@@ -66,7 +66,7 @@ export function WiderReadable() {
                   <li key={label}>
                     <button
                       onClick={() => setActiveNav(label)}
-                      className={`nav-button flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-[13px] text-[#0a1628] ${active ? "bg-[#fff0f5] font-bold" : "font-semibold"}`}
+                      className={`nav-button flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-[13px] text-[#0a1628] ${active ? "nav-button-active bg-[#FBE3ED] font-bold" : "font-semibold"}`}
                     >
                       <span className="flex items-center gap-3">
                         <span className={`flex h-8 w-8 items-center justify-center rounded-lg text-white ${tone === "pink" ? "bg-[#C8497A]" : "bg-[#0a1628]"}`}>
@@ -80,11 +80,11 @@ export function WiderReadable() {
                 );
               })}
             </ul>
-            <div className="mt-9 rounded-xl border border-[#cde2e0] bg-[#eaf5f3] p-4">
-              <p className="text-[11px] font-bold uppercase tracking-[.16em] text-[#17677a]">Need a hand?</p>
-              <p className="mt-2 text-[12px] leading-5 text-[#17212b]">Our support team is here when a setting needs a second look.</p>
-              <button className="lift mt-4 flex items-center gap-2 rounded-md bg-[#0a1628] px-4 py-2.5 text-[10px] font-bold uppercase tracking-[.12em] text-white hover:bg-[#1A647B]">
-                <HelpCircle size={13} /> Contact support
+            <div className="mt-9 rounded-xl border border-[#F1C5D6] bg-[#FFF5F8] p-4">
+              <p className="text-[11px] font-bold uppercase tracking-[.16em] text-[#0a1628]">Need help?</p>
+              <p className="mt-2 text-[12px] leading-5 text-[#17212b]">GEOrge is ready to help with your account and platform questions.</p>
+              <button className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#C8497A] px-3 py-2.5 text-[12px] font-semibold text-white transition-all hover:brightness-110 active:scale-95">
+                <MessageCircle size={15} /> Ask GEOrge
               </button>
             </div>
           </aside>
@@ -105,11 +105,11 @@ export function WiderReadable() {
                     <span className="hidden h-11 w-11 items-center justify-center rounded-xl bg-[#0a1628] text-white sm:flex"><Building2 size={21} strokeWidth={1.7} /></span>
                   </div>
                   <div className="account-options grid grid-cols-2 gap-4">
-                    <button onClick={() => setAccountType("agency")} className={`lift rounded-xl border-2 p-5 text-left ${accountType === "agency" ? "border-[#17677a] bg-[#edf7f6]" : "border-[#e2eceb] bg-[#fbfdfc] hover:border-[#a8cdca]"}`}>
+                    <button onClick={() => setAccountType("agency")} className={`lift rounded-xl border-2 p-5 text-left ${accountType === "agency" ? "border-[#C8497A] bg-[#FDF0F5] shadow-[0_0_0_1px_#C8497A]" : "border-[#e2e8f0] bg-[#fbfdfc] hover:border-[#E3A2BB]"}`}>
                       <div className="mb-3 flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0a1628] text-white"><Building2 size={18} /></div><span className="text-[14px] font-bold">Agency / Partner</span></div>
                       <p className="text-[12px] leading-5 text-[#17212b]">Manage PR for multiple clients. Create Client Projects and view all dashboards from one place.</p>
                     </button>
-                    <button onClick={() => setAccountType("client")} className={`lift rounded-xl border-2 p-5 text-left ${accountType === "client" ? "border-[#17677a] bg-[#edf7f6] shadow-[0_0_0_1px_#17677a]" : "border-[#e2eceb] bg-[#fbfdfc] hover:border-[#a8cdca]"}`}>
+                    <button onClick={() => setAccountType("client")} className={`lift rounded-xl border-2 p-5 text-left ${accountType === "client" ? "border-[#C8497A] bg-[#FDF0F5] shadow-[0_0_0_1px_#C8497A]" : "border-[#e2e8f0] bg-[#fbfdfc] hover:border-[#E3A2BB]"}`}>
                       <div className="mb-3 flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#C8497A]"><User size={18} color="white" /></div><div><p className="text-[14px] font-bold">Client</p><span className="text-[10px] font-bold uppercase tracking-[.14em] text-[#C8497A]">{accountType === "client" ? "Current" : "Select"}</span></div></div>
                       <p className="text-[12px] leading-5 text-[#17212b]">Manage PR for your own brand. One focused workspace for all your projects.</p>
                     </button>

@@ -1,0 +1,46 @@
+@import url("https://fonts.googleapis.com/css2?family=Alice&family=Inter:wght@400;500;600;700&display=swap");
+
+.embedded-onboarding {
+  --eo-ink: #0a1628;
+  --eo-copy: #17212b;
+  --eo-muted: #52606b;
+  --eo-line: #dce9e9;
+  --eo-paper: #fbfdfc;
+  --eo-mist: #f2f8f7;
+  --eo-pink: #c8497a;
+  --eo-pink-wash: #fbe3ed;
+  --eo-navy: #102b36;
+  min-height: 100dvh;
+  color: var(--eo-ink);
+  font-family: "Inter", system-ui, sans-serif;
+  background:
+    radial-gradient(circle at 91% 8%, rgba(215, 239, 235, .8), transparent 25rem),
+    #f5faf9;
+}
+
+.embedded-onboarding * { box-sizing: border-box; }
+.embedded-onboarding button,
+.embedded-onboarding input { font: inherit; }
+.embedded-onboarding .eo-serif { font-family: "Alice", Georgia, serif; }
+.embedded-onboarding .eo-rise { animation: eo-rise .5s ease both; }
+.embedded-onboarding .eo-delay { animation-delay: .08s; }
+.embedded-onboarding .eo-lift { transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease, background-color .22s ease; }
+.embedded-onboarding .eo-lift:hover { transform: translateY(-2px); box-shadow: 0 16px 30px -20px rgba(13, 69, 86, .48); }
+.embedded-onboarding .eo-nav-button { transition: color .2s ease, background-color .2s ease, transform .2s ease; }
+.embedded-onboarding .eo-nav-button:hover { transform: translateX(3px); background: #fff3f7; }
+.embedded-onboarding .eo-nav-button-active { box-shadow: inset 3px 0 0 var(--eo-pink); }
+.embedded-onboarding .eo-option { min-height: 188px; }
+.embedded-onboarding .eo-option:focus-visible,
+.embedded-onboarding button:focus-visible,
+.embedded-onboarding input:focus-visible { outline: 3px solid rgba(200, 73, 122, .28); outline-offset: 3px; }
+.embedded-onboarding .eo-input:focus { border-color: var(--eo-pink); box-shadow: 0 0 0 3px rgba(200, 73, 122, .12); outline: none; }
+@keyframes eo-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+@media (max-width: 800px) {
+  .embedded-onboarding .eo-layout { display: block; }
+  .embedded-onboarding .eo-aside { position: static; margin-bottom: 24px; }
+  .embedded-onboarding .eo-step-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .embedded-onboarding .eo-step-label { display: none; }
+  .embedded-onboarding .eo-step { justify-content: center; padding: 9px 4px; }
+  .embedded-onboarding .eo-options { grid-template-columns: 1fr; }
+}
