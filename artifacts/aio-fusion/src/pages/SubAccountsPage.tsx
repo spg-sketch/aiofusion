@@ -869,8 +869,8 @@ function SubAccountsPage({
           {backToAgency}
           <button
             onClick={onBack}
-            className="settings-back-button flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80"
-            style={{ background: ink, color: paper }}
+            className="settings-back-button flex items-center gap-2 px-4 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all"
+            style={{ background: accent, color: paper }}
           >
             <ArrowLeft size={16} /> Back to platform
           </button>
@@ -879,16 +879,10 @@ function SubAccountsPage({
 
       <main className="settings-main px-4 sm:px-10 py-10 sm:py-14 max-w-[1320px] mx-auto">
         <div className="settings-intro mb-8">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
-            {canCreateSubAccounts(session.role) ? <Users size={12} color={accent} /> : <User size={12} color={accent} />}
-            <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
-              {isAgencyPartner ? "Account, client and team settings" : canCreateSubAccounts(session.role) ? "Client accounts" : "Account and team settings"}
-            </span>
-          </div>
           <h1 className="text-3xl sm:text-4xl leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-            {isAgencyPartner ? "Account, client and team settings" : canCreateSubAccounts(session.role) ? "Manage your client accounts" : "Account and team settings"}
+            Account Settings
           </h1>
-          <p className="text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
+          <p className="settings-intro-description text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
             {isAgencyPartner
               ? "Manage your agency account, team and Client Projects in one place. Open managed projects directly without requiring clients to have a separate AIO Fusion login."
               : canCreateSubAccounts(session.role)
@@ -1304,10 +1298,10 @@ function SubAccountsPage({
                   <button
                     type="button"
                     onClick={onOpenProject}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white"
+                    className="settings-project-action flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white"
                     style={{ background: accent }}
                   >
-                    <FolderOpen size={12} /> Go to project
+                    <FolderOpen size={13} /> Go to project
                   </button>
                   {isOwner && (
                     <button
@@ -1320,10 +1314,10 @@ function SubAccountsPage({
                         }
                         setEditingActiveProject((editing) => !editing);
                       }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                      className="settings-project-action flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] transition-all hover:bg-black/5"
                       style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
                     >
-                      <FileEdit size={12} /> {editingActiveProject ? "Cancel" : "Edit details"}
+                      <FileEdit size={13} /> {editingActiveProject ? "Cancel" : "Edit details"}
                     </button>
                   )}
                 </>
@@ -1688,16 +1682,16 @@ function SubAccountsPage({
                             ? void handleOpenClientProjects(u.username, owned.length === 1 ? owned[0].id : null)
                             : handleEnterAccount(u.username))}
                           disabled={enteringUsername === u.username || checkingAllowanceFor === u.username}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all text-white"
+                          className="settings-project-action flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] transition-all text-white"
                           style={{ background: accent, opacity: enteringUsername === u.username ? 0.7 : 1 }}
                         >
                           {enteringUsername === u.username || checkingAllowanceFor === u.username
-                            ? <Loader2 size={12} className="animate-spin" />
+                            ? <Loader2 size={13} className="animate-spin" />
                             : isAgencyPartner && owned.length === 0
-                            ? <Plus size={12} />
+                            ? <Plus size={13} />
                             : isAgencyPartner
-                            ? <FolderOpen size={12} />
-                            : <LogIn size={12} />}
+                            ? <FolderOpen size={13} />
+                            : <LogIn size={13} />}
                           {checkingAllowanceFor === u.username
                             ? "Checking allowance"
                             : isAgencyPartner
@@ -1718,10 +1712,10 @@ function SubAccountsPage({
                             setProfileWebsite(u.website || "");
                             setProfileError(null);
                           }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                          className="settings-project-action flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] transition-all hover:bg-black/5"
                           style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
                         >
-                          <FileEdit size={12} /> {editingProfile ? "Cancel" : "Edit details"}
+                          <FileEdit size={13} /> {editingProfile ? "Cancel" : "Edit details"}
                         </button>
                         {!isAgencyPartner && !u.agencyManaged && (
                         <button

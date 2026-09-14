@@ -66,6 +66,16 @@ const agencySession = { username: "acme-agency", role: "agency" as const };
 const clientSession = { username: "solo-client", role: "client" as const };
 
 describe("SubAccountsPage left-hand navigation", () => {
+  it.each([
+    ["direct client", clientSession],
+    ["agency", agencySession],
+    ["Master", { username: "master", role: "admin" as const }],
+  ])("uses the shared Account Settings introduction for %s", (_label, session) => {
+    render(<SubAccountsPage {...baseProps} session={session as any} />);
+    expect(screen.getByRole("heading", { level: 1, name: "Account Settings" })).toBeTruthy();
+    expect(screen.queryByText("Account and team settings")).toBeNull();
+  });
+
   it("shows both nav groups for an agency owner and defaults to Profile", () => {
     render(<SubAccountsPage {...baseProps} session={agencySession as any} />);
     expect(screen.getByText("My Account")).toBeTruthy();
