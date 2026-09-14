@@ -125,7 +125,7 @@ function OptimiserPage({
     setShowRetrieve(false);
   };
 
-  const archiveItem = (status: "Draft" | "Final") => {
+  const archiveItem = async (status: "Draft" | "Final") => {
     const items = loadArchive();
     const item: ArchiveItem = {
       id: `arch-${Date.now()}`,
@@ -145,10 +145,14 @@ function OptimiserPage({
       createdAt: new Date().toISOString(),
       source: "optimiser",
     };
-    saveArchive([item, ...items]);
-    alert(`Saved "${item.title}" to Content Library as ${status}.`);
+    try {
+      await saveArchive([item, ...items]);
+      alert(`Saved "${item.title}" to Content Library as ${status}.`);
+    } catch {
+      alert("This item was not saved. Check your connection, then try again.");
+    }
   };
-  const pushToPlanner = () => {
+  const pushToPlanner = async () => {
     if (!projectTitle.trim()) {
       alert("Add a Content Title before placing it on the Comms Planner.");
       return;
@@ -168,9 +172,13 @@ function OptimiserPage({
       releaseDate: pubDate,
       notes: actionNotes.trim() || "Sent from Content Optimiser.",
     };
-    savePlannerProjects([proj, ...projects]);
-    alert(`"${proj.title}" added to the Comms Planner (w/c ${weekDateLabel(proj.week)}).`);
-    onNavigate("planner");
+    try {
+      await savePlannerProjects([proj, ...projects]);
+      alert(`"${proj.title}" added to the Comms Planner (w/c ${weekDateLabel(proj.week)}).`);
+      onNavigate("planner");
+    } catch {
+      alert("This planner item was not saved. Check your connection, then try again.");
+    }
   };
   const shareDraft = () => {
     const subject = encodeURIComponent(`Draft for review: ${projectTitle || "Untitled"}`);
@@ -257,10 +265,11 @@ function OptimiserPage({
     setShowDownloadNotesModal(false);
   };
 
-  const sendToMediaResearch = () => {
+  const sendToMediaResearch = async () => {
     const id = `temp-${Date.now()}`;
     const items = loadArchive();
-    saveArchive([{
+    try {
+      await saveArchive([{
       id,
       title: projectTitle || "Untitled draft",
       contentType,
@@ -272,9 +281,12 @@ function OptimiserPage({
       standfirst: standfirst,
       bodyCopy: bodyCopy,
       createdAt: new Date().toISOString(),
-    }, ...items]);
-    try { localStorage.setItem("aio.research.preload", id); } catch { /* noop */ }
-    onNavigate("media-research");
+      }, ...items]);
+      try { localStorage.setItem("aio.research.preload", id); } catch { /* noop */ }
+      onNavigate("media-research");
+    } catch {
+      alert("This draft was not saved. Check your connection, then try again.");
+    }
   };
   const canResearch = RESEARCH_TYPES.includes(contentType);
   const intakeReady = !!intake;

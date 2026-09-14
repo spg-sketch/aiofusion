@@ -1,8 +1,16 @@
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import {
   scoreProject,
   aggregatePlanScore,
   DEFAULT_SCORING,
+  getContentStoreState,
+  initContentStore,
+  loadArchive,
+  loadPlannerProjects,
+  saveArchive,
+  savePlannerProjects,
+  saveScoringConfig,
+  type ArchiveItem,
   type PlannerProject,
   type ScoringConfig,
 } from "./contentStore";
@@ -28,6 +36,167 @@ function makeProject(overrides: Partial<PlannerProject> = {}): PlannerProject {
 }
 
 const CFG = DEFAULT_SCORING;
+
+const jsonResponse = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+
+const archiveItem: ArchiveItem = {
+  id: "a1", title: "Confirmed", contentType: "Article", status: "Draft",
+  tags: [], body: "Body", createdAt: "2026-01-01T00:00:00.000Z", projectId: "default",
+};
+
+describe("content store reliability", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("keeps a failed initial load distinct from an empty ready store and recovers on retry", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ error: "down" }, 503)));
+    await initContentStore();
+    expect(getContentStoreState().status).toBe("network-error");
+    expect(loadArchive()).toEqual([]);
+
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [archiveItem] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [] }))
+      .mockResolvedValueOnce(jsonResponse({ config: null })));
+    await initContentStore();
+    expect(getContentStoreState().status).toBe("ready");
+    expect(loadArchive()).toHaveLength(1);
+  });
+
+  it("reports session expiry separately from transient load failures", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonResponse({}, 401))
+      .mockResolvedValueOnce(jsonResponse({ items: [] }))
+      .mockResolvedValueOnce(jsonResponse({ config: null })));
+    await initContentStore();
+    expect(getContentStoreState().status).toBe("authentication-error");
+  });
+
+  it("preserves confirmed archive state after a rejected edit and applies it once on retry", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [archiveItem] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [] }))
+      .mockResolvedValueOnce(jsonResponse({ config: null })));
+    await initContentStore();
+    const edited = { ...archiveItem, title: "Edited" };
+
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [archiveItem] }))
+      .mockResolvedValueOnce(jsonResponse({ error: "down" }, 503)));
+    await expect(saveArchive([edited])).rejects.toThrow("network");
+    expect(loadArchive()[0].title).toBe("Confirmed");
+    expect(getContentStoreState().mutationError).toBe("network");
+
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [archiveItem] }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+      .mockResolvedValueOnce(jsonResponse({ items: [edited] })));
+    await saveArchive([edited]);
+    expect(loadArchive()[0].title).toBe("Edited");
+  });
+
+  it("does not duplicate a planner create when the first response is lost", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [] }))
+      .mockResolvedValueOnce(jsonResponse({ config: null })));
+    await initContentStore();
+    const project = makeProject();
+
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [] }))
+      .mockRejectedValueOnce(new TypeError("connection lost")));
+    await expect(savePlannerProjects([project])).rejects.toThrow("network");
+
+    const existing = { ...project, projectId: "default" };
+    const retryFetch = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [existing] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [existing] }));
+    vi.stubGlobal("fetch", retryFetch);
+    await savePlannerProjects([project]);
+    expect(retryFetch).toHaveBeenCalledTimes(2);
+    expect(loadPlannerProjects()).toHaveLength(1);
+  });
+
+  it("confirms an archive edit on retry when the update succeeded but its response was lost", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [archiveItem] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [] }))
+      .mockResolvedValueOnce(jsonResponse({ config: null })));
+    await initContentStore();
+    const edited = { ...archiveItem, title: "Edited once" };
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [archiveItem] }))
+      .mockRejectedValueOnce(new TypeError("response lost")));
+    await expect(saveArchive([edited])).rejects.toThrow("network");
+
+    const retryFetch = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [edited] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [edited] }));
+    vi.stubGlobal("fetch", retryFetch);
+    await saveArchive([edited]);
+    expect(retryFetch).toHaveBeenCalledTimes(2);
+    expect(loadArchive()[0].title).toBe("Edited once");
+  });
+
+  it("retries only the unapplied part of a partially successful planner save", async () => {
+    const first = makeProject({ id: "p1", title: "First" });
+    const second = makeProject({ id: "p2", title: "Second" });
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [first, second].map((p) => ({ ...p, projectId: "default" })) }))
+      .mockResolvedValueOnce(jsonResponse({ config: null })));
+    await initContentStore();
+    const editedFirst = { ...first, title: "First edited" };
+    const editedSecond = { ...second, title: "Second edited" };
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [first, second].map((p) => ({ ...p, projectId: "default" })) }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+      .mockResolvedValueOnce(jsonResponse({ error: "down" }, 503)));
+    await expect(savePlannerProjects([editedFirst, editedSecond])).rejects.toThrow("network");
+
+    const partlyApplied = [{ ...editedFirst, projectId: "default" }, { ...second, projectId: "default" }];
+    const confirmed = [{ ...editedFirst, projectId: "default" }, { ...editedSecond, projectId: "default" }];
+    const retryFetch = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: partlyApplied }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+      .mockResolvedValueOnce(jsonResponse({ items: confirmed }));
+    vi.stubGlobal("fetch", retryFetch);
+    await savePlannerProjects([editedFirst, editedSecond]);
+    expect(retryFetch).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(retryFetch.mock.calls[1][1]?.body as string).id).toBe("p2");
+    expect(loadPlannerProjects().map((p) => p.title)).toEqual(["First edited", "Second edited"]);
+  });
+
+  it("does not overwrite a newer server edit and reloads it for a safe retry", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [archiveItem] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [] }))
+      .mockResolvedValueOnce(jsonResponse({ config: null })));
+    await initContentStore();
+    const localEdit = { ...archiveItem, title: "My edit" };
+    const newerServerEdit = { ...archiveItem, title: "Newer server edit" };
+    const conflictFetch = vi.fn().mockResolvedValueOnce(jsonResponse({ items: [newerServerEdit] }));
+    vi.stubGlobal("fetch", conflictFetch);
+
+    await expect(saveArchive([localEdit])).rejects.toThrow("conflict");
+    expect(conflictFetch).toHaveBeenCalledTimes(1);
+    expect(loadArchive()[0].title).toBe("Newer server edit");
+  });
+
+  it("keeps the confirmed scoring config when its save is rejected", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [] }))
+      .mockResolvedValueOnce(jsonResponse({ config: DEFAULT_SCORING })));
+    await initContentStore();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({}, 401)));
+    await expect(saveScoringConfig({ ...DEFAULT_SCORING, channelCap: 9 })).rejects.toThrow("authentication");
+    expect(getContentStoreState().mutationError).toBe("authentication");
+  });
+});
 
 describe("scoreProject", () => {
   it("visibility never exceeds 50", () => {

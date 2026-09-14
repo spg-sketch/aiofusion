@@ -31,7 +31,7 @@ export function ScoringSettingsModal({ cfg, onSave, onClose }: { cfg: ScoringCon
         <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
           <div>
             <h2 className="text-[16px] font-semibold" style={{ color: vars.navy }}>Scoring settings</h2>
-            <p className="text-[11px]" style={{ color: vars.g500 }}>Tune how Visibility and Authority scores are calculated. Saved per browser.</p>
+            <p className="text-[11px]" style={{ color: vars.g500 }}>Tune how Visibility and Authority scores are calculated. Saved to your account.</p>
           </div>
           <button onClick={onClose} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
         </div>

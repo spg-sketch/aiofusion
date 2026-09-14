@@ -27,11 +27,14 @@ function ReleaseGatewayPage() {
     { name: "PRWeb (Cision)", desc: "SEO-focused press release distribution.", color: "#C94A3E" },
   ];
 
-  const handleRelease = (item: ArchiveItem, channel: string) => {
+  const handleRelease = async (item: ArchiveItem, channel: string) => {
     const updated = archive.map((a) => a.id === item.id ? { ...a, releasedAt: new Date().toISOString(), releaseChannel: channel } : a);
-    setArchive(updated);
-    saveArchive(updated);
-    alert(`"${item.title}" queued for release via ${channel}. (Live API integration coming soon.)`);
+    try {
+      await saveArchive(updated);
+      alert(`"${item.title}" queued for release via ${channel}. (Live API integration coming soon.)`);
+    } catch {
+      alert("The release status was not saved. Check your connection, then try again.");
+    }
   };
 
   return (

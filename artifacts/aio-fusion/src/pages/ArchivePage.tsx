@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { loadArchive, saveArchive, useContentStore, isContentStoreAuthError, type ArchiveItem, splitArchiveBody, loadPlannerProjects, savePlannerProjects, getISOWeek, weekDateLabel, type PlannerProject } from "../lib/contentStore";
+import { loadArchive, saveArchive, useContentStore, getContentStoreState, initContentStore, type ArchiveItem, splitArchiveBody, loadPlannerProjects, savePlannerProjects, getISOWeek, weekDateLabel, type PlannerProject } from "../lib/contentStore";
 import CountdownBanner from "../components/CountdownBanner";
 import { loadIntakeData, getKeyMessages, getSpokespeople } from "../IntakeForm";
 import { CONTENT_TYPES } from "./shared";
@@ -24,6 +24,8 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
 
   const [archive, setArchive] = useState<ArchiveItem[]>(() => loadArchive());
   useEffect(() => { setArchive(loadArchive()); }, [contentVersion]);
+  const storeState = getContentStoreState();
+  const [actionError, setActionError] = useState("");
   const [query, setQuery] = useState("");
   const [periodFilter, setPeriodFilter] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<string>("");
@@ -70,11 +72,12 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
     return true;
   });
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Delete this archive item?")) return;
     const updated = archive.filter((a) => a.id !== id);
-    setArchive(updated);
-    saveArchive(updated);
+    setActionError("");
+    try { await saveArchive(updated); }
+    catch { setActionError(getContentStoreState().mutationError === "authentication" ? "Your session expired. Sign in again before retrying." : "The item was not deleted. Check your connection and retry."); }
   };
 
   const sendToTool = (id: string) => {
@@ -85,7 +88,7 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
     onNavigate(dest);
   };
 
-  const pushArchiveToPlanner = (item: ArchiveItem) => {
+  const pushArchiveToPlanner = async (item: ArchiveItem) => {
     const projects = loadPlannerProjects();
     const releaseDate = (item.releasedAt || item.createdAt || "").slice(0, 10);
     const currentWeek = getISOWeek(new Date());
@@ -108,9 +111,14 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
       releaseDate,
       notes: `Pushed from Content Library · ${item.status} · ${new Date(item.createdAt).toLocaleDateString()}`,
     };
-    savePlannerProjects([proj, ...projects]);
-    alert(`"${proj.title}" added to the Comms Planner (w/c ${weekDateLabel(wk)}).`);
-    onNavigate("planner");
+    setActionError("");
+    try {
+      await savePlannerProjects([proj, ...projects]);
+      alert(`"${proj.title}" added to the Comms Planner (w/c ${weekDateLabel(wk)}).`);
+      onNavigate("planner");
+    } catch {
+      setActionError(getContentStoreState().mutationError === "authentication" ? "Your session expired. Sign in again before retrying." : "The planner item was not saved. Check your connection and retry.");
+    }
   };
 
   const clearFilters = () => {
@@ -127,6 +135,15 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
           Your full, searchable library of every accepted, drafted and reviewed piece for this project, filtered by message, spokesperson, content type and time period. A well kept library lets you reuse proven content and keep messaging consistent, which compounds your authority with AI over time.
         </p>
       </div>
+
+      {(storeState.status === "network-error" || storeState.status === "authentication-error" || actionError || storeState.mutationPending) && (
+        <div className="bg-white border rounded-xl px-4 py-3 mb-4 flex items-center justify-between gap-3" style={{ borderColor: storeState.mutationPending ? vars.g200 : vars.red }}>
+          <p className="text-[13px]" style={{ color: vars.navy }}>
+            {storeState.mutationPending ? "Saving changes…" : actionError || (storeState.status === "authentication-error" ? "Your session expired. Sign in again to load your Content Library." : "We could not load your Content Library. Your saved content has not been replaced.")}
+          </p>
+          {storeState.status === "network-error" && <button onClick={() => void initContentStore()} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg" style={{ background: vars.accent, color: "white" }}><RefreshCw size={13} className="inline mr-1" />Retry</button>}
+        </div>
+      )}
 
       {/* Search panel */}
       <div className="bg-white border rounded-2xl p-5 mb-6" style={{ borderColor: vars.g200 }}>
@@ -202,10 +219,10 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
         <div className="bg-white border rounded-2xl p-10 text-center" style={{ borderColor: vars.g200 }}>
           <Archive size={36} color={vars.teal} className="mx-auto mb-4" />
           <p className="text-[16px] font-medium" style={{ color: vars.navy }}>
-            {!contentVersion ? "Loading your content…" : isContentStoreAuthError() ? "Session expired" : archive.length === 0 ? "Library is empty" : "No matching items"}
+            {storeState.status === "loading" ? "Loading your content…" : storeState.status === "authentication-error" ? "Session expired" : storeState.status === "network-error" ? "Content unavailable" : archive.length === 0 ? "Library is empty" : "No matching items"}
           </p>
           <p className="text-[14px] font-light mt-2" style={{ color: vars.g500 }}>
-            {!contentVersion ? "Fetching your saved pieces from the server." : isContentStoreAuthError() ? "Your session has expired. Please log out and sign back in - your content is safe and will reappear." : archive.length === 0 ? "Save a draft or final piece from the Content Optimiser, Content Creator or Comms Planner to start building your library." : "Try clearing your filters."}
+            {storeState.status === "loading" ? "Fetching your saved pieces from the server." : storeState.status === "authentication-error" ? "Your session has expired. Please sign back in - your content is safe and will reappear." : storeState.status === "network-error" ? "Retry the load when your connection is restored." : archive.length === 0 ? "Save a draft or final piece from the Content Optimiser, Content Creator or Comms Planner to start building your library." : "Try clearing your filters."}
           </p>
         </div>
       ) : (

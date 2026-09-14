@@ -114,7 +114,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     }
   }, []);
 
-  const archiveItem = () => {
+  const archiveItem = async (): Promise<boolean> => {
     const items = loadArchive();
     const item: ArchiveItem = {
       id: `arch-${Date.now()}`,
@@ -133,8 +133,14 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       createdAt: new Date().toISOString(),
       source: "creator",
     };
-    saveArchive([item, ...items]);
-    alert(`Saved "${item.title}" to Content Library.`);
+    try {
+      await saveArchive([item, ...items]);
+      alert(`Saved "${item.title}" to Content Library.`);
+      return true;
+    } catch {
+      alert("This item was not saved. Check your connection, then try again.");
+      return false;
+    }
   };
 
   const downloadDoc = () => {
@@ -362,8 +368,8 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     ) : null
   );
 
-  const acceptAndArchive = () => {
-    archiveItem();
+  const acceptAndArchive = async () => {
+    if (!await archiveItem()) return;
     setOptimisedFields(new Set());
     setFieldSnapshots({});
   };
@@ -374,10 +380,11 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     window.open(`mailto:?subject=${subject}&body=${body}`);
   };
 
-  const sendToMediaResearchFromCreator = () => {
+  const sendToMediaResearchFromCreator = async () => {
     const id = `temp-${Date.now()}`;
     const items = loadArchive();
-    saveArchive([{
+    try {
+      await saveArchive([{
       id,
       title: articleHeadline.trim().slice(0, 120) || projectName || "Untitled draft",
       contentType,
@@ -389,12 +396,15 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       standfirst: standfirst,
       bodyCopy: transcript,
       createdAt: new Date().toISOString(),
-    }, ...items]);
-    try { localStorage.setItem("aio.research.preload", id); } catch { /* noop */ }
-    onNavigate("media-research");
+      }, ...items]);
+      try { localStorage.setItem("aio.research.preload", id); } catch { /* noop */ }
+      onNavigate("media-research");
+    } catch {
+      alert("This draft was not saved. Check your connection, then try again.");
+    }
   };
 
-  const pushToCommsPlanner = () => {
+  const pushToCommsPlanner = async () => {
     const projects = loadPlannerProjects();
     const fallbackNote = anyOptimised ? "Pushed from Content Creator (LLM-optimised draft)." : "Pushed from Content Creator.";
     const proj: PlannerProject = {
@@ -414,9 +424,13 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       bodyCopy: transcript,
       actionNotes: actionNotes.trim(),
     };
-    savePlannerProjects([proj, ...projects]);
-    alert(`"${proj.title}" pushed to the Comms Planner (w/c ${weekDateLabel(proj.week)}).`);
-    onNavigate("planner");
+    try {
+      await savePlannerProjects([proj, ...projects]);
+      alert(`"${proj.title}" pushed to the Comms Planner (w/c ${weekDateLabel(proj.week)}).`);
+      onNavigate("planner");
+    } catch {
+      alert("This planner item was not saved. Check your connection, then try again.");
+    }
   };
 
   const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");

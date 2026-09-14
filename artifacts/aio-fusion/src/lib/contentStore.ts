@@ -47,8 +47,7 @@ export function splitArchiveBody(arc: { body?: string; headline?: string; standf
 // Items live in a module-level in-memory cache populated from the server on
 // login. All reads return synchronously from the cache so existing call sites
 // (useMemo, useState initialisers, etc.) keep working without change.
-// Mutations fire REST calls in the background, update the cache immediately,
-// and dispatch `aio:content-store-changed` so subscribed components re-render.
+// Mutations update the cache only after the server confirms them.
 // ---------------------------------------------------------------------------
 
 const CONTENT_STORE_MIGRATED_KEY = "aio.store.migrated.v1";
@@ -59,14 +58,34 @@ const PROJECTS_KEY = "aio.planner.projects.v1";
 let _archiveCache:  (ArchiveItem & { projectId: string })[] | null = null;
 let _plannerCache:  (PlannerProject & { projectId: string })[] | null = null;
 let _scoringCache:  ScoringConfig | null = null;
-let _contentStoreReady = false;
-let _contentStoreAuthError = false;
+export type ContentStoreStatus = "loading" | "ready" | "authentication-error" | "network-error";
+export type ContentStoreState = {
+  status: ContentStoreStatus;
+  mutationPending: boolean;
+  mutationError: "authentication" | "network" | null;
+};
+let _contentStoreState: ContentStoreState = {
+  status: "loading",
+  mutationPending: false,
+  mutationError: null,
+};
+let _archiveMutation = Promise.resolve();
+let _plannerMutation = Promise.resolve();
+let _scoringMutation = Promise.resolve();
+
+function notifyContentStore() {
+  window.dispatchEvent(new Event("aio:content-store-changed"));
+}
+
+export function getContentStoreState(): ContentStoreState {
+  return { ..._contentStoreState };
+}
 
 // True if the last initContentStore call received a 401 - i.e. the session
 // has expired or is missing. Use this to show a "please log in" message
 // rather than a misleading "Library is empty" state.
 export function isContentStoreAuthError(): boolean {
-  return _contentStoreAuthError;
+  return _contentStoreState.status === "authentication-error";
 }
 
 // Resolve the effective project id for a given clientId argument (mirrors the
@@ -79,7 +98,7 @@ export function effectiveProjectId(clientId?: string): string {
 // True once the initial server fetch (see initContentStore) has completed at
 // least once, regardless of whether any component is listening yet.
 export function isContentStoreReady(): boolean {
-  return _contentStoreReady;
+  return _contentStoreState.status === "ready";
 }
 
 // Subscribe to content-store changes and force a re-render. Returns a version
@@ -89,14 +108,14 @@ export function isContentStoreReady(): boolean {
 // resolved and fired its event doesn't get stuck showing a "loading" state
 // forever - it starts already "loaded".
 export function useContentStore(): number {
-  const [version, setVersion] = useState(() => (_contentStoreReady ? 1 : 0));
+  const [version, setVersion] = useState(() => (_contentStoreState.status === "loading" ? 0 : 1));
   useEffect(() => {
     const handler = () => setVersion((v) => v + 1);
     window.addEventListener("aio:content-store-changed", handler);
     // Close the narrow window between this component's initial render and
     // this effect running: if the store became ready in between, sync now
     // instead of waiting for a future change event that may never come.
-    if (_contentStoreReady) setVersion((v) => (v > 0 ? v : 1));
+    if (_contentStoreState.status !== "loading") setVersion((v) => (v > 0 ? v : 1));
     return () => window.removeEventListener("aio:content-store-changed", handler);
   }, []);
   return version;
@@ -110,7 +129,8 @@ export async function initContentStore(): Promise<void> {
   _archiveCache = null;
   _plannerCache = null;
   _scoringCache = null;
-  _contentStoreAuthError = false;
+  _contentStoreState = { ..._contentStoreState, status: "loading", mutationError: null };
+  notifyContentStore();
   try {
     const [archRes, planRes, cfgRes] = await Promise.all([
       fetch(`${apiBase()}/api/store/archive`,       { credentials: "include" }),
@@ -118,12 +138,15 @@ export async function initContentStore(): Promise<void> {
       fetch(`${apiBase()}/api/store/scoring-config`, { credentials: "include" }),
     ]);
     if (archRes.status === 401 || planRes.status === 401 || cfgRes.status === 401) {
-      _contentStoreAuthError = true;
+      _contentStoreState = { ..._contentStoreState, status: "authentication-error" };
+      return;
     }
-    if (archRes.ok)  _archiveCache  = (await archRes.json()).items  ?? [];
-    else             _archiveCache  = [];
-    if (planRes.ok)  _plannerCache  = (await planRes.json()).items  ?? [];
-    else             _plannerCache  = [];
+    if (!archRes.ok || !planRes.ok || !cfgRes.ok) {
+      _contentStoreState = { ..._contentStoreState, status: "network-error" };
+      return;
+    }
+    _archiveCache = (await archRes.json()).items ?? [];
+    _plannerCache = (await planRes.json()).items ?? [];
     if (cfgRes.ok) {
       const raw = (await cfgRes.json()).config as Partial<ScoringConfig> | null;
       _scoringCache = raw
@@ -132,16 +155,44 @@ export async function initContentStore(): Promise<void> {
             typeWeights: raw.typeWeights ?? DEFAULT_SCORING.typeWeights,
             channels:    raw.channels    ?? DEFAULT_SCORING.channels }
         : DEFAULT_SCORING;
-    } else {
-      _scoringCache = DEFAULT_SCORING;
     }
+    _contentStoreState = { ..._contentStoreState, status: "ready" };
   } catch {
-    _archiveCache  = [];
-    _plannerCache  = [];
-    _scoringCache  = DEFAULT_SCORING;
+    _contentStoreState = { ..._contentStoreState, status: "network-error" };
+  } finally {
+    notifyContentStore();
   }
-  _contentStoreReady = true;
-  window.dispatchEvent(new Event("aio:content-store-changed"));
+}
+
+async function checkedFetch(url: string, init?: RequestInit): Promise<Response> {
+  let response: Response;
+  try {
+    response = await fetch(url, init);
+  } catch {
+    throw new Error("network");
+  }
+  if (response.status === 401) throw new Error("authentication");
+  if (!response.ok) throw new Error("network");
+  return response;
+}
+
+function runMutation<T>(queue: Promise<void>, setQueue: (next: Promise<void>) => void, work: () => Promise<T>): Promise<T> {
+  const run = queue.catch(() => undefined).then(async () => {
+    _contentStoreState = { ..._contentStoreState, mutationPending: true, mutationError: null };
+    notifyContentStore();
+    try {
+      return await work();
+    } catch (error) {
+      const kind = error instanceof Error && error.message === "authentication" ? "authentication" : "network";
+      _contentStoreState = { ..._contentStoreState, mutationError: kind };
+      throw error;
+    } finally {
+      _contentStoreState = { ..._contentStoreState, mutationPending: false };
+      notifyContentStore();
+    }
+  });
+  setQueue(run.then(() => undefined, () => undefined));
+  return run;
 }
 
 // One-time migration: upload any data still only in this browser's localStorage
@@ -224,44 +275,50 @@ export function loadArchive(clientId?: string): ArchiveItem[] {
   return _archiveCache.filter((a) => a.projectId === pid);
 }
 
-export function saveArchive(newItems: ArchiveItem[], clientId?: string) {
+export function saveArchive(newItems: ArchiveItem[], clientId?: string): Promise<void> {
   const pid = effectiveProjectId(clientId);
-  const oldItems = _archiveCache === null
-    ? []
-    : _archiveCache.filter((a) => a.projectId === pid);
-
-  const oldMap = new Map(oldItems.map((a) => [a.id, a]));
-  const newMap = new Map(newItems.map((a) => [a.id, a]));
-
-  for (const old of oldItems) {
-    if (!newMap.has(old.id)) {
-      fetch(`${apiBase()}/api/store/archive/${old.id}`,
-        { method: "DELETE", credentials: "include" }).catch(console.error);
+  const baseline = (_archiveCache ?? []).filter((a) => a.projectId === pid);
+  return runMutation(_archiveMutation, (p) => { _archiveMutation = p; }, async () => {
+    const latestRes = await checkedFetch(`${apiBase()}/api/store/archive`, { credentials: "include" });
+    const latestAll = ((await latestRes.json()).items ?? []) as (ArchiveItem & { projectId: string })[];
+    const latest = latestAll.filter((a) => a.projectId === pid);
+    const baselineMap = new Map(baseline.map((a) => [a.id, a]));
+    const latestMap = new Map(latest.map((a) => [a.id, a]));
+    const desiredMap = new Map(newItems.map((a) => [a.id, a]));
+    for (const old of baseline) {
+      if (!desiredMap.has(old.id) && latestMap.has(old.id)) {
+        if (JSON.stringify(stripProjectId(latestMap.get(old.id)!)) !== JSON.stringify(stripProjectId(old))) {
+          _archiveCache = latestAll;
+          notifyContentStore();
+          throw new Error("conflict");
+        }
+        await checkedFetch(`${apiBase()}/api/store/archive/${old.id}`, { method: "DELETE", credentials: "include" });
+      }
     }
-  }
-  for (const item of newItems) {
-    const withPid = { ...item, projectId: pid };
-    if (!oldMap.has(item.id)) {
-      fetch(`${apiBase()}/api/store/archive`, {
-        method: "POST", credentials: "include",
+    for (const item of newItems) {
+      const changed = !baselineMap.has(item.id) || JSON.stringify(stripProjectId(baselineMap.get(item.id)!)) !== JSON.stringify(stripProjectId(item));
+      if (!changed) continue;
+      const exists = latestMap.has(item.id);
+      if (exists) {
+        const latestValue = JSON.stringify(stripProjectId(latestMap.get(item.id)!));
+        const desiredValue = JSON.stringify(stripProjectId(item));
+        if (latestValue === desiredValue) continue;
+        if (!baselineMap.has(item.id) || latestValue !== JSON.stringify(stripProjectId(baselineMap.get(item.id)!))) {
+          _archiveCache = latestAll;
+          notifyContentStore();
+          throw new Error("conflict");
+        }
+      }
+      await checkedFetch(`${apiBase()}/api/store/archive${exists ? `/${item.id}` : ""}`, {
+        method: exists ? "PUT" : "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(withPid),
-      }).catch(console.error);
-    } else if (JSON.stringify(stripProjectId(oldMap.get(item.id)!)) !== JSON.stringify(stripProjectId(item))) {
-      fetch(`${apiBase()}/api/store/archive/${item.id}`, {
-        method: "PUT", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(withPid),
-      }).catch(console.error);
+        body: JSON.stringify({ ...item, projectId: pid }),
+      });
     }
-  }
-
-  const withPid = newItems.map((a) => ({ ...a, projectId: pid }));
-  _archiveCache = [
-    ...(_archiveCache ?? []).filter((a) => a.projectId !== pid),
-    ...withPid,
-  ];
-  window.dispatchEvent(new Event("aio:content-store-changed"));
+    const confirmed = await checkedFetch(`${apiBase()}/api/store/archive`, { credentials: "include" });
+    _archiveCache = (await confirmed.json()).items ?? [];
+    notifyContentStore();
+  });
 }
 
 export type PlannerStatus = "Planned" | "Drafting" | "Review" | "Approved";
@@ -290,44 +347,50 @@ export function loadPlannerProjects(clientId?: string): PlannerProject[] {
   return _plannerCache.filter((p) => p.projectId === pid);
 }
 
-export function savePlannerProjects(newItems: PlannerProject[], clientId?: string) {
+export function savePlannerProjects(newItems: PlannerProject[], clientId?: string): Promise<void> {
   const pid = effectiveProjectId(clientId);
-  const oldItems = _plannerCache === null
-    ? []
-    : _plannerCache.filter((p) => p.projectId === pid);
-
-  const oldMap = new Map(oldItems.map((p) => [p.id, p]));
-  const newMap = new Map(newItems.map((p) => [p.id, p]));
-
-  for (const old of oldItems) {
-    if (!newMap.has(old.id)) {
-      fetch(`${apiBase()}/api/store/planner/${old.id}`,
-        { method: "DELETE", credentials: "include" }).catch(console.error);
+  const baseline = (_plannerCache ?? []).filter((p) => p.projectId === pid);
+  return runMutation(_plannerMutation, (p) => { _plannerMutation = p; }, async () => {
+    const latestRes = await checkedFetch(`${apiBase()}/api/store/planner`, { credentials: "include" });
+    const latestAll = ((await latestRes.json()).items ?? []) as (PlannerProject & { projectId: string })[];
+    const latest = latestAll.filter((p) => p.projectId === pid);
+    const baselineMap = new Map(baseline.map((p) => [p.id, p]));
+    const latestMap = new Map(latest.map((p) => [p.id, p]));
+    const desiredMap = new Map(newItems.map((p) => [p.id, p]));
+    for (const old of baseline) {
+      if (!desiredMap.has(old.id) && latestMap.has(old.id)) {
+        if (JSON.stringify(stripProjectId(latestMap.get(old.id)!)) !== JSON.stringify(stripProjectId(old))) {
+          _plannerCache = latestAll;
+          notifyContentStore();
+          throw new Error("conflict");
+        }
+        await checkedFetch(`${apiBase()}/api/store/planner/${old.id}`, { method: "DELETE", credentials: "include" });
+      }
     }
-  }
-  for (const item of newItems) {
-    const withPid = { ...item, projectId: pid };
-    if (!oldMap.has(item.id)) {
-      fetch(`${apiBase()}/api/store/planner`, {
-        method: "POST", credentials: "include",
+    for (const item of newItems) {
+      const changed = !baselineMap.has(item.id) || JSON.stringify(stripProjectId(baselineMap.get(item.id)!)) !== JSON.stringify(stripProjectId(item));
+      if (!changed) continue;
+      const exists = latestMap.has(item.id);
+      if (exists) {
+        const latestValue = JSON.stringify(stripProjectId(latestMap.get(item.id)!));
+        const desiredValue = JSON.stringify(stripProjectId(item));
+        if (latestValue === desiredValue) continue;
+        if (!baselineMap.has(item.id) || latestValue !== JSON.stringify(stripProjectId(baselineMap.get(item.id)!))) {
+          _plannerCache = latestAll;
+          notifyContentStore();
+          throw new Error("conflict");
+        }
+      }
+      await checkedFetch(`${apiBase()}/api/store/planner${exists ? `/${item.id}` : ""}`, {
+        method: exists ? "PUT" : "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(withPid),
-      }).catch(console.error);
-    } else if (JSON.stringify(stripProjectId(oldMap.get(item.id)!)) !== JSON.stringify(stripProjectId(item))) {
-      fetch(`${apiBase()}/api/store/planner/${item.id}`, {
-        method: "PUT", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(withPid),
-      }).catch(console.error);
+        body: JSON.stringify({ ...item, projectId: pid }),
+      });
     }
-  }
-
-  const withPid = newItems.map((p) => ({ ...p, projectId: pid }));
-  _plannerCache = [
-    ...(_plannerCache ?? []).filter((p) => p.projectId !== pid),
-    ...withPid,
-  ];
-  window.dispatchEvent(new Event("aio:content-store-changed"));
+    const confirmed = await checkedFetch(`${apiBase()}/api/store/planner`, { credentials: "include" });
+    _plannerCache = (await confirmed.json()).items ?? [];
+    notifyContentStore();
+  });
 }
 
 const SEED_PURGED_KEY = "aio.seed.demo.purged.v1";
@@ -430,14 +493,23 @@ export const DEFAULT_SCORING: ScoringConfig = {
 export function loadScoringConfig(): ScoringConfig {
   return _scoringCache ?? DEFAULT_SCORING;
 }
-export function saveScoringConfig(cfg: ScoringConfig) {
-  _scoringCache = cfg;
-  fetch(`${apiBase()}/api/store/scoring-config`, {
-    method: "PUT", credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ config: cfg }),
-  }).catch(console.error);
-  window.dispatchEvent(new Event("aio:content-store-changed"));
+export function saveScoringConfig(cfg: ScoringConfig): Promise<void> {
+  return runMutation(_scoringMutation, (p) => { _scoringMutation = p; }, async () => {
+    await checkedFetch(`${apiBase()}/api/store/scoring-config`, {
+      method: "PUT", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config: cfg }),
+    });
+    const confirmed = await checkedFetch(`${apiBase()}/api/store/scoring-config`, { credentials: "include" });
+    const raw = (await confirmed.json()).config as Partial<ScoringConfig> | null;
+    _scoringCache = raw ? {
+      ...DEFAULT_SCORING, ...raw,
+      statusMultipliers: { ...DEFAULT_SCORING.statusMultipliers, ...(raw.statusMultipliers ?? {}) },
+      typeWeights: raw.typeWeights ?? DEFAULT_SCORING.typeWeights,
+      channels: raw.channels ?? DEFAULT_SCORING.channels,
+    } : DEFAULT_SCORING;
+    notifyContentStore();
+  });
 }
 
 export function scoreProject(p: PlannerProject, cfg: ScoringConfig = loadScoringConfig()) {

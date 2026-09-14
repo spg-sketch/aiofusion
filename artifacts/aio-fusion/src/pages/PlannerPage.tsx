@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { loadPlannerProjects, savePlannerProjects, useContentStore, loadArchive, getISOWeek, weekDateLabel, DEFAULT_SCORING, STATUS_COLOURS, scoreProject, aggregatePlanScore, loadScoringConfig, saveScoringConfig, type PlannerProject, type PlannerStatus, type ScoringConfig } from "../lib/contentStore";
+import { loadPlannerProjects, savePlannerProjects, useContentStore, getContentStoreState, initContentStore, loadArchive, getISOWeek, weekDateLabel, DEFAULT_SCORING, STATUS_COLOURS, scoreProject, aggregatePlanScore, loadScoringConfig, saveScoringConfig, type PlannerProject, type PlannerStatus, type ScoringConfig } from "../lib/contentStore";
 import { getKeyMessages, getSpokespeople, getActiveProjectId } from "../IntakeForm";
 import { CONTENT_TYPES } from "./shared";
 import InfoTip from "../InfoTip";
@@ -128,9 +128,17 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
   const [showSettings, setShowSettings] = useState(false);
   const settingsTriggerRef = useRef<HTMLButtonElement>(null);
   const [view, setView] = useState<"cards" | "spreadsheet">("spreadsheet");
-  const update = (next: PlannerProject[]) => { setProjects(next); savePlannerProjects(next); };
-  const updateCfg = (next: ScoringConfig) => {
-    setCfg(next); saveScoringConfig(next);
+  const storeState = getContentStoreState();
+  const [saveError, setSaveError] = useState("");
+  const update = async (next: PlannerProject[]) => {
+    setSaveError("");
+    try { await savePlannerProjects(next); return true; }
+    catch { setSaveError(getContentStoreState().mutationError === "authentication" ? "Your session expired. Sign in again before retrying." : "Your change was not saved. Check your connection and retry."); return false; }
+  };
+  const updateCfg = async (next: ScoringConfig) => {
+    setSaveError("");
+    try { await saveScoringConfig(next); }
+    catch { setSaveError(getContentStoreState().mutationError === "authentication" ? "Your session expired. Sign in again before retrying." : "Your scoring settings were not saved. Check your connection and retry."); return false; }
     const types = Object.keys(next.typeWeights);
     const fallbackType = types[0] || "Press release";
     const normalised = projects.map((p) => ({
@@ -138,7 +146,8 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
       channels: p.channels.filter((c) => next.channels.includes(c)),
       contentType: next.typeWeights[p.contentType] ? p.contentType : fallbackType,
     }));
-    update(normalised);
+    if (!await update(normalised)) return false;
+    return true;
   };
   const addProject = () => {
     const w = getISOWeek(new Date());
@@ -157,17 +166,17 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
       releaseDate: "",
       notes: "",
     };
-    update([np, ...projects]);
-    setEditing(np);
+    void update([np, ...projects]).then((saved) => { setEditing(np); if (!saved) setSaveError("The new project was not saved. Its draft is still open so you can retry."); });
   };
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editing) return;
-    update(projects.map((p) => (p.id === editing.id ? editing : p)));
-    setEditing(null);
+    const exists = projects.some((p) => p.id === editing.id);
+    const next = exists ? projects.map((p) => (p.id === editing.id ? editing : p)) : [editing, ...projects];
+    if (await update(next)) setEditing(null);
   };
   const deleteProject = (id: string) => {
     if (!confirm("Delete this project?")) return;
-    update(projects.filter((p) => p.id !== id));
+    void update(projects.filter((p) => p.id !== id));
   };
 
   const startWeek = getISOWeek(new Date());
@@ -315,10 +324,16 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
         <p className="text-[15px] font-light max-w-5xl" style={{ color: "rgba(255,255,255,0.85)" }}>Plan your PR and marketing schedule in one place and see a configurable estimate of its visibility and authority potential. The score responds to content type, selected release channels and workflow status. Click any content item to open and edit it in the Content Optimiser.</p>
       </div>
 
-      {!contentVersion && (
+      {storeState.status === "loading" && (
         <div className="rounded-xl px-4 py-3 mb-4 text-[13px] font-light flex items-center gap-2" style={{ background: accentSoft, color: ink, border: `1px solid ${accentPink}30` }}>
           <span className="inline-block w-3 h-3 rounded-full animate-pulse" style={{ background: accentPink }} />
           Loading your planner content from the server…
+        </div>
+      )}
+      {(storeState.status === "network-error" || storeState.status === "authentication-error" || saveError || storeState.mutationPending) && (
+        <div className="rounded-xl px-4 py-3 mb-4 text-[13px] flex items-center justify-between gap-3" style={{ background: "white", color: ink, border: `1px solid ${storeState.mutationPending ? accentPink : "#C94A3E"}` }}>
+          <span>{storeState.mutationPending ? "Saving changes…" : saveError || (storeState.status === "authentication-error" ? "Your session expired. Sign in again to load the planner." : "We could not load your planner. Saved content has not been replaced.")}</span>
+          {storeState.status === "network-error" && <button onClick={() => void initContentStore()} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 font-semibold px-3 py-1.5 rounded-lg text-white" style={{ background: accentPink }}><RefreshCw size={13} className="inline mr-1" />Retry</button>}
         </div>
       )}
 
@@ -939,7 +954,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
       )}
 
       {showSettings && (
-        <ScoringSettingsModal cfg={cfg} onSave={(c) => { updateCfg(c); setShowSettings(false); settingsTriggerRef.current?.focus(); }} onClose={() => { setShowSettings(false); settingsTriggerRef.current?.focus(); }} />
+        <ScoringSettingsModal cfg={cfg} onSave={(c) => { void updateCfg(c).then((saved) => { if (saved) { setShowSettings(false); settingsTriggerRef.current?.focus(); } }); }} onClose={() => { setShowSettings(false); settingsTriggerRef.current?.focus(); }} />
       )}
     </div>
   );
