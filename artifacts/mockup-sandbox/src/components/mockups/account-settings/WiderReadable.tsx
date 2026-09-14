@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   ChevronRight,
   FileText,
+  HelpCircle,
   ShieldCheck,
   User,
   Users,
@@ -42,7 +43,7 @@ export function WiderReadable() {
       <main className="mx-auto max-w-[1320px] px-6 py-10 md:px-14 md:py-16">
         <div className="fade-up mb-11 flex flex-col justify-between gap-6 border-b border-[#dce9e9] pb-9 lg:flex-row lg:items-end">
           <div>
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#d4a1b7] bg-[#fff3f7] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[.2em] text-[#b33e6b]">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#C8497A40] bg-[#FBE3ED] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[.2em] text-[#C8497A]">
               <User size={12} /> Account and team settings
             </div>
             <h1 className="serif text-4xl leading-tight text-[#102b36] md:text-[50px]">Account and team settings</h1>
@@ -82,7 +83,9 @@ export function WiderReadable() {
             <div className="mt-9 rounded-xl border border-[#cde2e0] bg-[#eaf5f3] p-4">
               <p className="text-[11px] font-bold uppercase tracking-[.16em] text-[#17677a]">Need a hand?</p>
               <p className="mt-2 text-[12px] leading-5 text-[#17212b]">Our support team is here when a setting needs a second look.</p>
-              <button className="mt-3 text-[11px] font-bold uppercase tracking-[.12em] text-[#17677a] hover:text-[#c8497a]">Contact support</button>
+              <button className="lift mt-4 flex items-center gap-2 rounded-md bg-[#0a1628] px-4 py-2.5 text-[10px] font-bold uppercase tracking-[.12em] text-white hover:bg-[#1A647B]">
+                <HelpCircle size={13} /> Contact support
+              </button>
             </div>
           </aside>
 
