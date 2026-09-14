@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaContactFieldOverridesTable, mediaImportBatchesTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, projectsTable } from "@workspace/db";
+import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaImportBatchesTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, projectsTable } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { inAssignedScope, memberProjectGate } from "../lib/member-guards";
@@ -18,6 +18,8 @@ import {
 } from "../lib/media-csv-import";
 import type { MediaImportRow } from "../lib/media-csv-import";
 import { verifyMediaDiscoveries } from "../lib/media-discovery-token";
+import { fetchMediaSourceEvidence } from "../lib/safe-fetch";
+import { approvedSourceUpdates, evaluateMediaSource, sourceFetchError } from "../lib/media-source-health";
 
 const router: IRouter = Router();
 
@@ -37,6 +39,19 @@ function outletVisible(accountId: string | null, visible: string[] | null): bool
   if (accountId === null) return true;
   if (visible === null) return true;
   return visible.includes(accountId);
+}
+
+async function editableContact(req: Request, id: number) {
+  const rows = await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, id)).limit(1);
+  const row = rows[0];
+  if (!row || row.deletedAt) return { ok: false as const, status: 404, error: "Contact not found" };
+  if (row.accountId === null && !isAdmin(req)) {
+    return { ok: false as const, status: 403, error: "Only admins may check global contacts" };
+  }
+  if (row.accountId !== null && !isAdmin(req) && row.accountId !== normUsername(req.account!.username)) {
+    return { ok: false as const, status: 403, error: "You can only check your own contacts" };
+  }
+  return { ok: true as const, row, owner: mediaOverrideOwner(row.accountId) };
 }
 
 // ---------------------------------------------------------------------------
@@ -659,6 +674,31 @@ router.get(
         }
         return r;
       });
+      const contactIds = safeResults.map((contact) => contact.id);
+      const checkRows = contactIds.length
+        ? await db.select().from(mediaContactSourceChecksTable)
+          .where(inArray(mediaContactSourceChecksTable.contactId, contactIds))
+          .orderBy(desc(mediaContactSourceChecksTable.checkedAt))
+        : [];
+      const latestCheckByContact = new Map<number, typeof checkRows[number]>();
+      for (const check of checkRows) {
+        if (!latestCheckByContact.has(check.contactId)) latestCheckByContact.set(check.contactId, check);
+      }
+      const sourceReviewDays = 90;
+      const contactsWithSourceHealth = safeResults.map((contact) => {
+        const sourceCheck = latestCheckByContact.get(contact.id) ?? null;
+        const sourceReviewDueAt = sourceCheck
+          ? new Date(sourceCheck.checkedAt.getTime() + sourceReviewDays * 86_400_000)
+          : null;
+        const sourceStatus = !contact.sourceUrl
+          ? "unverified"
+          : !sourceCheck
+            ? "due"
+            : sourceCheck.outcome === "current" && sourceReviewDueAt && sourceReviewDueAt.getTime() <= Date.now()
+              ? "due"
+              : sourceCheck.outcome;
+        return { ...contact, sourceStatus, sourceCheck, sourceReviewDueAt };
+      });
       // Server-side pagination/filtering keeps large imported lists usable while
       // preserving the legacy `contacts` envelope for existing callers.
       const query = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
@@ -669,7 +709,7 @@ router.get(
       const sort = ["firstName", "lastName", "role", "email", "outletName", "createdAt"].includes(String(req.query.sort))
         ? String(req.query.sort) : "lastName";
       const direction = req.query.direction === "desc" ? -1 : 1;
-      const filtered = safeResults.filter((contact) => {
+      const filtered = contactsWithSourceHealth.filter((contact) => {
         const haystack = [contact.firstName, contact.lastName, contact.role, contact.email, contact.outletName, contact.outletCategory, contact.outletCountry, contact.notes, contact.reviewNotes, contact.geography, contact.beats.join(" "), contact.sectors.join(" ")]
           .filter(Boolean).join(" ").toLowerCase();
         const queryGroups = searchTokens(query);
@@ -685,6 +725,112 @@ router.get(
     } catch {
       res.status(500).json({ error: "Failed to load contacts" });
     }
+  },
+);
+
+router.post(
+  "/store/media-db/contacts/:id/source-check",
+  requirePlatformAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    const id = Number(req.params.id);
+    if (!id) {
+      res.status(400).json({ error: "Invalid contact id" });
+      return;
+    }
+    const access = await editableContact(req, id);
+    if (!access.ok) {
+      res.status(access.status).json({ error: access.error });
+      return;
+    }
+    if (!access.row.sourceUrl) {
+      res.status(400).json({ error: "This contact has no source page to check." });
+      return;
+    }
+
+    const checkedAt = new Date();
+    try {
+      const evidence = await fetchMediaSourceEvidence(access.row.sourceUrl);
+      const evaluation = evaluateMediaSource(access.row, evidence);
+      const [sourceCheck] = await db.insert(mediaContactSourceChecksTable).values({
+        contactId: id,
+        accountId: access.owner,
+        sourceUrl: access.row.sourceUrl,
+        outcome: evaluation.outcome,
+        observedEvidence: evaluation.observedEvidence,
+        differences: evaluation.differences,
+        checkedAt,
+      }).returning();
+      await db.update(mediaContactsTable).set({ lastVerifiedAt: checkedAt, updatedAt: checkedAt })
+        .where(eq(mediaContactsTable.id, id));
+      res.json({ ok: true, sourceCheck });
+    } catch (error) {
+      const failure = sourceFetchError(error);
+      const [sourceCheck] = await db.insert(mediaContactSourceChecksTable).values({
+        contactId: id,
+        accountId: access.owner,
+        sourceUrl: access.row.sourceUrl,
+        outcome: "unavailable",
+        errorCode: failure.errorCode,
+        errorMessage: failure.errorMessage,
+        checkedAt,
+      }).returning();
+      res.json({ ok: true, sourceCheck });
+    }
+  },
+);
+
+router.post(
+  "/store/media-db/contacts/:id/source-checks/:checkId/approve",
+  requirePlatformAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    const id = Number(req.params.id);
+    const checkId = Number(req.params.checkId);
+    if (!id || !checkId) {
+      res.status(400).json({ error: "Invalid source check" });
+      return;
+    }
+    const access = await editableContact(req, id);
+    if (!access.ok) {
+      res.status(access.status).json({ error: access.error });
+      return;
+    }
+    const checks = await db.select().from(mediaContactSourceChecksTable)
+      .where(and(
+        eq(mediaContactSourceChecksTable.id, checkId),
+        eq(mediaContactSourceChecksTable.contactId, id),
+        eq(mediaContactSourceChecksTable.accountId, access.owner),
+      ))
+      .limit(1);
+    const check = checks[0];
+    if (!check) {
+      res.status(404).json({ error: "Source check not found" });
+      return;
+    }
+    const overrides = await db.select({ fieldName: mediaContactFieldOverridesTable.fieldName })
+      .from(mediaContactFieldOverridesTable)
+      .where(and(
+        eq(mediaContactFieldOverridesTable.contactId, id),
+        eq(mediaContactFieldOverridesTable.accountId, access.owner),
+      ));
+    const { updates, applied, skipped } = approvedSourceUpdates(
+      check.differences,
+      req.body?.fields,
+      overrides.map((item) => item.fieldName),
+    );
+    const reviewedAt = new Date();
+    let contact = access.row;
+    if (Object.keys(updates).length) {
+      const [updated] = await db.update(mediaContactsTable)
+        .set({ ...updates, updatedAt: reviewedAt })
+        .where(eq(mediaContactsTable.id, id))
+        .returning();
+      contact = updated;
+    }
+    const [sourceCheck] = await db.update(mediaContactSourceChecksTable)
+      .set({ reviewedAt })
+      .where(eq(mediaContactSourceChecksTable.id, checkId))
+      .returning();
+    res.json({ ok: true, applied, skipped, contact, sourceCheck });
   },
 );
 
