@@ -151,6 +151,16 @@ export const mediaRecommendationDecisionsTable = pgTable("media_recommendation_d
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [uniqueIndex("media_recommendation_decisions_unique").on(table.accountId, table.projectId, table.storyKey, table.contactId)]);
 
+export const mediaRecommendationFeedbackTable = pgTable("media_recommendation_feedback", {
+  id: serial("id").primaryKey(),
+  accountId: varchar("account_id").notNull(),
+  projectId: varchar("project_id").notNull(),
+  storyKey: varchar("story_key", { length: 200 }).notNull(),
+  contactId: integer("contact_id").notNull().references(() => mediaContactsTable.id, { onDelete: "cascade" }),
+  signal: varchar("signal", { length: 12 }).notNull(), // more | less
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (table) => [uniqueIndex("media_recommendation_feedback_unique").on(table.accountId, table.projectId, table.storyKey, table.contactId)]);
 export type MediaCategoryRow = typeof mediaCategoriesTable.$inferSelect;
 export type MediaOutletRow = typeof mediaOutletsTable.$inferSelect;
 export type MediaContactRow = typeof mediaContactsTable.$inferSelect;

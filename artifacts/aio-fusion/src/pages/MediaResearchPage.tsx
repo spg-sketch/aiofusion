@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Database, Download, ExternalLink, Loader2, Search, Target, ThumbsDown, Users } from "lucide-react";
+import { Check, Database, Download, ExternalLink, Loader2, RotateCcw, Search, Target, ThumbsDown, Users } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { escapeHtml, apiBase } from "../lib/contentAi";
 import { loadArchive, useContentStore } from "../lib/contentStore";
@@ -135,6 +135,8 @@ function MediaResearchPage() {
   const [liveLoading, setLiveLoading] = useState(false);
   const [savedDiscoveries, setSavedDiscoveries] = useState<Record<string, "saving" | "saved">>({});
   const [discoveryToken, setDiscoveryToken] = useState("");
+  const [feedback, setFeedback] = useState<Record<number, "more" | "less">>({});
+  const [refining, setRefining] = useState<number | "reset" | null>(null);
   const selected = archive.find((a) => a.id === selectedId);
   const storyKey = selected?.id || "";
 
@@ -192,6 +194,7 @@ function MediaResearchPage() {
     const data = await response.json();
     if (decisionLoadSequence.current !== loadId || activeStoryRef.current !== loadKey) return;
     setDecisions(Object.fromEntries((data.decisions || []).map((d: Decision) => [d.contactId, d])));
+    setFeedback(Object.fromEntries((data.feedback || []).map((entry: { contactId: number; signal: "more" | "less" }) => [entry.contactId, entry.signal])));
     setDecisionContacts(Object.fromEntries((Array.isArray(data.decisionContacts) ? data.decisionContacts : [])
       .filter((entry: { contactId?: unknown; contact?: unknown }) => Number(entry.contactId) > 0 && entry.contact && typeof entry.contact === "object")
       .map((entry: { contactId: number; contact: Contact }) => [entry.contactId, entry.contact])));
@@ -366,6 +369,34 @@ function MediaResearchPage() {
       if (decisionRequests.current[contactId]?.id === requestId) delete decisionRequests.current[contactId];
     }
   };
+  const refine = async (contactId: number, signal: "more" | "less" | null) => {
+    if (!projectId || !storyKey) return;
+    setRefining(contactId); setError("");
+    try {
+      const response = await fetch(`${apiBase()}/api/store/media-db/recommendations/feedback`, {
+        method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, storyKey, contactId, signal }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not refine recommendations.");
+      await loadDecisions();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not refine recommendations."); }
+    finally { setRefining(null); }
+  };
+  const resetRefinement = async () => {
+    if (!projectId || !storyKey) return;
+    setRefining("reset"); setError("");
+    try {
+      const response = await fetch(`${apiBase()}/api/store/media-db/recommendations/feedback`, {
+        method: "DELETE", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, storyKey }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not reset refinement.");
+      await loadDecisions();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not reset refinement."); }
+    finally { setRefining(null); }
+  };
   const accepted = Object.values(decisions)
     .filter((d) => d.decision === "shortlisted")
     .map((d) => items.find((i) => i.contact.id === d.contactId)?.contact || decisionContacts[d.contactId])
@@ -406,6 +437,9 @@ function MediaResearchPage() {
         note={note}
         setNote={setNote}
         isShortlist={shortlist}
+        refinement={feedback[item.contact.id]}
+        refinementLoading={refining === item.contact.id}
+        onRefine={shortlist ? undefined : (signal) => void refine(item.contact.id, signal)}
       />
     );
   };
@@ -435,7 +469,7 @@ function MediaResearchPage() {
 
      <div className="mt-5 pt-5 border-t flex flex-wrap gap-3" style={{ borderColor: vars.g100 }}><button data-testid="button-recommend-contacts" disabled={loading || liveLoading || !selected} onClick={() => void recommend()} className="px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-all shadow-sm" style={{ background: vars.coral }}>{loading ? <Loader2 className="inline animate-spin mr-1.5" size={16} /> : <Target className="inline mr-1.5" size={16} />}Match database contacts</button><button data-testid="button-discover-live" disabled={liveLoading || !selected || !searchQuery.trim()} onClick={() => void discoverLive()} className="px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-all shadow-sm" style={{ background: vars.navy }}>{liveLoading ? <Loader2 className="inline animate-spin mr-1.5" size={16} /> : <Search className="inline mr-1.5" size={16} />}Expand with live search</button></div><p className="mt-3 text-[11px]" style={{ color: vars.g500 }}>External live search is explicit and does not run automatically. It sends the selected article excerpt, media categories, key messages and your edited criteria to OpenAI. Email addresses are included only when explicitly published in a cited source.</p></section>
     {error && <p data-testid="status-research-error" className="p-3 rounded bg-white text-[12px] mb-5" style={{ color: vars.red }}>{error}</p>}
-     {(loading || items.length > 0) && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Recommended from your Media Database</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{loading ? "Automatically preparing recommendations from your project and selected article..." : `${items.length} contacts ranked only from saved database fields. Scores include matching beats, sectors, notes, email availability and verification.`}</p></div>{items.map((item) => contactCard(item))}</section>}
+      {(loading || items.length > 0) && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b flex flex-wrap justify-between gap-3" style={{ background: vars.g50, borderColor: vars.g200 }}><div><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Recommended from your Media Database</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{loading ? "Automatically preparing recommendations from your project and selected article..." : `${items.length} contacts ranked from saved database fields and article-specific refinement. Match explanations show how feedback affected the order.`}</p></div>{Object.keys(feedback).length > 0 && <button disabled={refining !== null} onClick={() => void resetRefinement()} className="self-start text-[12px] px-3 py-2 border rounded-lg bg-white disabled:opacity-50" style={{ borderColor: vars.g200 }}><RotateCcw size={14} className={`inline mr-1 ${refining === "reset" ? "animate-spin" : ""}`} />Reset refinement</button>}</div>{items.map((item) => contactCard(item))}</section>}
     {liveItems.length > 0 && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Live public web discoveries</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{liveItems.length} current journalists across {livePublicationCount} publications, grounded in public author pages, profiles or article bylines. Review the evidence before saving.</p></div>
       {liveGroups.filter((group) => group.items.length > 0).map((group) => <div key={group.label}>
         <div className="px-5 py-2.5 border-b text-[12px] font-bold uppercase tracking-wide" style={{ color: vars.navy, background: "rgba(31,116,143,0.07)", borderColor: vars.g200 }}>{group.label} · {group.items.length}</div>

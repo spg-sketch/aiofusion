@@ -1,6 +1,6 @@
 import React from "react";
 import { vars } from "../marketing/vars";
-import { Mail, Phone, MapPin, Globe, ExternalLink, Linkedin, Twitter, Clock, Edit, Check, ThumbsDown, Database, Target, Award, Shield, FileText, User } from "lucide-react";
+import { Mail, Phone, MapPin, Globe, ExternalLink, Linkedin, Twitter, Clock, Edit, Check, ThumbsDown, ThumbsUp, Database, Target, Award, Shield, FileText, Undo2 } from "lucide-react";
 import { MiniDonut } from "./shared";
 
 export type Contact = {
@@ -98,6 +98,9 @@ export function RecommendationCard({
   isShortlist = false,
   onEdit,
   showMatchScore = true,
+  refinement,
+  refinementLoading = false,
+  onRefine,
 }: {
   item: Recommendation;
   decision?: Decision;
@@ -111,6 +114,9 @@ export function RecommendationCard({
   isShortlist?: boolean;
   onEdit?: () => void;
   showMatchScore?: boolean;
+  refinement?: "more" | "less";
+  refinementLoading?: boolean;
+  onRefine?: (signal: "more" | "less" | null) => void;
 }) {
   const c = item.contact;
   return (
@@ -293,6 +299,14 @@ export function RecommendationCard({
           >
             <ThumbsDown size={14} /> Decline
           </button>
+          {onRefine && <>
+            <button disabled={refinementLoading} aria-pressed={refinement === "more"} onClick={() => onRefine(refinement === "more" ? null : "more")} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-semibold border ${refinement === "more" ? "bg-emerald-50 border-emerald-300 text-emerald-800" : "bg-white border-slate-200 text-slate-600"}`}>
+              {refinement === "more" ? <Undo2 size={14} /> : <ThumbsUp size={14} />} {refinement === "more" ? "Undo More like this" : "More like this"}
+            </button>
+            <button disabled={refinementLoading} aria-pressed={refinement === "less"} onClick={() => onRefine(refinement === "less" ? null : "less")} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-semibold border ${refinement === "less" ? "bg-rose-50 border-rose-300 text-rose-800" : "bg-white border-slate-200 text-slate-600"}`}>
+              {refinement === "less" ? <Undo2 size={14} /> : <ThumbsDown size={14} />} {refinement === "less" ? "Undo Less like this" : "Less like this"}
+            </button>
+          </>}
         </div>
       )}
       

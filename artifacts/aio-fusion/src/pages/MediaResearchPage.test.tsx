@@ -357,3 +357,48 @@ describe("MediaResearchPage live discovery", () => {
     expect(screen.queryByDisplayValue("My carefully edited query")).toBeNull();
   });
 });
+
+describe("MediaResearchPage recommendation refinement", () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals(); });
+
+  it("reranks after feedback, supports undo and reset, and keeps shortlist state", async () => {
+    let signal: "more" | "less" | null = null;
+    const contact = { id: 10, outletId: 1, firstName: "Jane", lastName: "Reporter", role: "Energy correspondent", email: "", phone: "", notes: "", accountId: null, beats: ["energy"], sectors: ["technology"] };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/recommendations/feedback") && init?.method === "PUT") {
+        const body = JSON.parse(String(init.body));
+        expect(body).toEqual({ projectId: "project-1", storyKey: "story-1", contactId: 10, signal: "more" });
+        signal = body.signal;
+        return new Response(JSON.stringify({ ok: true }));
+      }
+      if (url.includes("/recommendations/feedback") && init?.method === "DELETE") {
+        signal = null;
+        return new Response(JSON.stringify({ ok: true }));
+      }
+      if (url.endsWith("/store/media-db/recommendations") && init?.method === "POST") {
+        return new Response(JSON.stringify({
+          ok: true,
+          items: [{ rank: 1, score: signal ? 88 : 70, reasons: signal ? ["Marked More like this"] : ["Coverage profile matches energy"], contact }],
+        }));
+      }
+      if (url.includes("/recommendations/decisions")) return new Response(JSON.stringify({
+        decisions: [{ contactId: 10, decision: "shortlisted", note: "Keep note" }],
+        decisionContacts: [{ contactId: 10, contact }],
+        feedback: signal ? [{ contactId: 10, signal }] : [],
+        items: [{ rank: 1, score: signal ? 88 : 70, reasons: signal ? ["Marked More like this"] : ["Coverage profile matches energy"], contact }],
+      }));
+      return new Response("{}", { status: 404 });
+    }));
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect((await screen.findAllByText("Jane Reporter")).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("button", { name: "Less like this" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "More like this" }));
+    expect((await screen.findAllByText("Marked More like this")).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("button", { name: "Undo More like this" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Reset refinement" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Reset refinement" })).toBeNull());
+  });
+});
