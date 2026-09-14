@@ -38,4 +38,21 @@ describe("CreateProjectModal", () => {
     });
     expect(onCancel).not.toHaveBeenCalled();
   });
+
+  it("closes on Escape and returns focus to the invoking control", () => {
+    const trigger = document.createElement("button");
+    trigger.textContent = "New project";
+    document.body.appendChild(trigger);
+    trigger.focus();
+    const onCancel = vi.fn();
+    const { unmount } = render(<CreateProjectModal onCancel={onCancel} onCreate={vi.fn()} />);
+
+    expect(screen.getByRole("dialog", { name: "Name your project" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Project name")).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onCancel).toHaveBeenCalledOnce();
+    unmount();
+    expect(trigger).toHaveFocus();
+    trigger.remove();
+  });
 });

@@ -164,8 +164,8 @@ export function AccountSecurityCard({
   const panelStyle = { background: vars.g50, borderColor: vars.g200 };
 
   return (
-    <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-      <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Sign-in &amp; security</h2>
+    <section aria-labelledby="sign-in-security-heading" className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+      <h2 id="sign-in-security-heading" className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Sign-in &amp; security</h2>
 
       {/* ACTIVE SIGN-IN METHODS */}
       {methodsKnown && activeMethods.length > 0 && (
@@ -198,6 +198,9 @@ export function AccountSecurityCard({
             setShowSessions(next);
             if (next && mySessions === null) loadMySessions();
           }}
+          type="button"
+          aria-expanded={showSessions}
+          aria-controls="account-login-sessions"
           className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity"
           style={{ color: ink }}
         >
@@ -206,14 +209,14 @@ export function AccountSecurityCard({
         </button>
 
         {showSessions && (
-          <div className="mt-5">
+          <div id="account-login-sessions" className="mt-5">
             {sessionsLoading && (
-              <div className="flex items-center gap-2 text-[14px]" style={{ color: vars.g400 }}>
+              <div className="flex items-center gap-2 text-[14px]" role="status" aria-live="polite" style={{ color: vars.g400 }}>
                 <Loader2 size={14} className="animate-spin" /> Loading sessions…
               </div>
             )}
             {sessionsError && (
-              <p className="text-[13px] font-medium" style={{ color: vars.red }}>{sessionsError}</p>
+              <p className="text-[13px] font-medium" role="alert" aria-live="assertive" style={{ color: vars.red }}>{sessionsError}</p>
             )}
             {!sessionsLoading && mySessions !== null && (
               mySessions.length === 0 ? (
@@ -282,6 +285,9 @@ export function AccountSecurityCard({
           <div>
             <button
               onClick={() => { setShowChangePassword((v) => !v); setSetPasswordError(null); }}
+              type="button"
+              aria-expanded={showChangePassword}
+              aria-controls="set-password-panel"
               className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity"
               style={{ color: ink }}
             >
@@ -289,9 +295,9 @@ export function AccountSecurityCard({
               {showChangePassword ? "Hide Set a Password" : "Set a Password"}
             </button>
             {showChangePassword && (
-              <div className="mt-4 rounded-xl p-5 border" style={panelStyle}>
+              <div id="set-password-panel" className="mt-4 rounded-xl p-5 border" style={panelStyle}>
                 {setPasswordSent ? (
-                  <div className="flex items-start gap-3" style={{ color: "#1B7A3E" }}>
+                  <div className="flex items-start gap-3" role="status" aria-live="polite" style={{ color: "#1B7A3E" }}>
                     <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
                     <p className="text-[14px] font-medium leading-[1.6]">
                       Check your email - we've sent you a link to set your password.
@@ -306,7 +312,7 @@ export function AccountSecurityCard({
                       Once set, you can sign in with your email and password as well.
                     </p>
                     {setPasswordError && (
-                      <p className="mb-3 text-[13px] font-medium" style={{ color: vars.red }}>{setPasswordError}</p>
+                      <p className="mb-3 text-[13px] font-medium" role="alert" aria-live="assertive" style={{ color: vars.red }}>{setPasswordError}</p>
                     )}
                     <button
                       type="button"
@@ -335,6 +341,9 @@ export function AccountSecurityCard({
                 setChangeNewPassword1("");
                 setChangeNewPassword2("");
               }}
+              type="button"
+              aria-expanded={showChangePassword}
+              aria-controls="change-password-panel"
               className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity"
               style={{ color: ink }}
             >
@@ -342,7 +351,7 @@ export function AccountSecurityCard({
               {showChangePassword ? "Hide Change Password" : "Change Password"}
             </button>
             {showChangePassword && (
-              <form onSubmit={handleChangePassword} className="mt-4 rounded-xl p-5 border" style={panelStyle}>
+              <form id="change-password-panel" onSubmit={handleChangePassword} className="mt-4 rounded-xl p-5 border" style={panelStyle}>
                 {/* Hidden username field so password managers link the new
                     password to the right saved login and offer to update it. */}
                 {/* Kept visually hidden (not display:none) - Chrome ignores
@@ -369,8 +378,9 @@ export function AccountSecurityCard({
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: vars.g500 }}>Current password</label>
+                        <label htmlFor="current-password" className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: vars.g500 }}>Current password</label>
                         <input
+                          id="current-password"
                           type="password"
                           name="current-password"
                           autoComplete="current-password"
@@ -381,8 +391,9 @@ export function AccountSecurityCard({
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: vars.g500 }}>New password</label>
+                        <label htmlFor="new-password" className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: vars.g500 }}>New password</label>
                         <input
+                          id="new-password"
                           type="password"
                           name="new-password"
                           autoComplete="new-password"
@@ -393,8 +404,9 @@ export function AccountSecurityCard({
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: vars.g500 }}>Confirm new password</label>
+                        <label htmlFor="confirm-new-password" className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: vars.g500 }}>Confirm new password</label>
                         <input
+                          id="confirm-new-password"
                           type="password"
                           name="confirm-new-password"
                           autoComplete="new-password"
@@ -406,7 +418,7 @@ export function AccountSecurityCard({
                       </div>
                     </div>
                     {changePasswordError && (
-                      <p className="mt-3 text-[13px] font-medium" style={{ color: vars.red }}>{changePasswordError}</p>
+                      <p className="mt-3 text-[13px] font-medium" role="alert" aria-live="assertive" style={{ color: vars.red }}>{changePasswordError}</p>
                     )}
                     <button
                       type="submit"
@@ -435,6 +447,9 @@ export function AccountSecurityCard({
             setDeleteDataAcknowledged(false);
             setDeleteIrreversibleAcknowledged(false);
           }}
+          type="button"
+          aria-expanded={showDeleteAccount}
+          aria-controls="delete-account-panel"
           className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity"
           style={{ color: vars.g500 }}
         >
@@ -442,7 +457,7 @@ export function AccountSecurityCard({
           {showDeleteAccount ? "Cancel account deletion" : "Delete my account and data"}
         </button>
         {showDeleteAccount && (
-          <form onSubmit={handleDeleteAccount} className="mt-4 rounded-xl p-5 border" style={panelStyle}>
+          <form id="delete-account-panel" onSubmit={handleDeleteAccount} className="mt-4 rounded-xl p-5 border" style={panelStyle}>
             <p className="text-[13px] font-light leading-[1.7] mb-4" style={{ color: vars.g600 }}>
               This permanently deletes your account, all your projects, archive items, planner entries and other data.
               This cannot be undone. {canCreateSubAccounts(session.role)
@@ -536,7 +551,7 @@ export function AccountSecurityCard({
               </button>
               </div>
             )}
-            {deleteError && <p className="mt-3 text-[13px] font-semibold" style={{ color: vars.red }}>{deleteError}</p>}
+            {deleteError && <p className="mt-3 text-[13px] font-semibold" role="alert" aria-live="assertive" style={{ color: vars.red }}>{deleteError}</p>}
           </form>
         )}
       </div>
@@ -551,6 +566,6 @@ export function AccountSecurityCard({
           <LogOut size={15} /> Sign out
         </button>
       </div>
-    </div>
+    </section>
   );
 }

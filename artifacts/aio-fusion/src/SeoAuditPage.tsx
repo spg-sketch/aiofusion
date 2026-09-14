@@ -163,6 +163,7 @@ function FindingsTable({ findings }: { findings: SeoFinding[] }) {
 }
 
 function Section({
+  sectionId,
   title,
   icon: Icon,
   score,
@@ -170,6 +171,7 @@ function Section({
   defaultOpen = false,
   children,
 }: {
+  sectionId: string;
   title: string;
   icon: any;
   score: number;
@@ -183,8 +185,12 @@ function Section({
   return (
     <div className="border rounded-xl overflow-hidden" style={{ borderColor: vars.g200, background: "white" }}>
       <button
+        type="button"
+        id={`${sectionId}-toggle`}
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-gray-50 transition-colors"
+        aria-expanded={open}
+        aria-controls={`${sectionId}-content`}
+        className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-gray-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-inset"
       >
         <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${color}12` }}>
           <Icon size={16} style={{ color }} />
@@ -201,7 +207,13 @@ function Section({
         </div>
       </button>
       {open && (
-        <div className="px-5 pb-5 border-t" style={{ borderColor: vars.g100 }}>
+        <div
+          id={`${sectionId}-content`}
+          role="region"
+          aria-labelledby={`${sectionId}-toggle`}
+          className="px-5 pb-5 border-t"
+          style={{ borderColor: vars.g100 }}
+        >
           <div className="pt-4">
             {findings && <FindingsTable findings={findings} />}
             {children}
@@ -239,6 +251,7 @@ export default function SeoAuditPage({
   const [url, setUrl] = useState<string>(getWebsite);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [auditAnnouncement, setAuditAnnouncement] = useState("");
   const [result, setResult] = useState<AuditResult | null>(null);
   const [savedTechGeo, setSavedTechGeo] = useState<SavedTechGeo[]>(() => loadSavedTechGeo(activeClient.id));
   const [justSaved, setJustSaved] = useState(false);
@@ -248,6 +261,7 @@ export default function SeoAuditPage({
     setResult(null);
     setUrl(getWebsite());
     setError("");
+    setAuditAnnouncement("");
     setLoading(false);
     setJustSaved(false);
     // Sync Tech GEO history from server so all logins see the same scores.
@@ -401,9 +415,16 @@ export default function SeoAuditPage({
   }
 
   async function runAudit() {
-    if (!url.trim()) return;
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) {
+      const message = "Enter a URL to audit.";
+      setError(message);
+      setAuditAnnouncement("");
+      return;
+    }
     setLoading(true);
     setError("");
+    setAuditAnnouncement(`Website audit started for ${trimmedUrl}. Audit in progress.`);
     setResult(null);
     setJustSaved(false);
     const _auditStart = Date.now();
@@ -414,7 +435,7 @@ export default function SeoAuditPage({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ url: url.trim() }),
+        body: JSON.stringify({ url: trimmedUrl }),
       });
 
       if (!resp.ok) {
@@ -425,9 +446,13 @@ export default function SeoAuditPage({
       const data = await resp.json();
       setResult(data);
       saveAudit(data);
+      setAuditAnnouncement(`Website audit complete. Overall score ${data.scores.overall} out of 100.`);
       recordAuditDuration("website", Date.now() - _auditStart, getAuditDurationSeconds("website") * 1000);
     } catch (err: any) {
-      setError(err.message || "Failed to run audit");
+      const message = err.message || "Failed to run audit";
+      setError(message);
+      // The assertive error region is the single announcement for failures.
+      setAuditAnnouncement("");
     } finally {
       setLoading(false);
     }
@@ -454,23 +479,43 @@ export default function SeoAuditPage({
         </div>
 
         <div className="border rounded-xl p-5 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-          <div className="flex gap-3">
+          <form
+            className="flex gap-3"
+            aria-busy={loading}
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!loading) void runAudit();
+            }}
+          >
             <div className="flex-1 relative">
               <Globe size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
+              <label htmlFor="seo-audit-url" className="sr-only">Website URL to audit</label>
               <input
+                id="seo-audit-url"
                 type="text"
                 value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !loading && runAudit()}
+                onChange={(e) => {
+                  setUrl(e.target.value);
+                  if (error) setError("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (!loading) void runAudit();
+                  }
+                }}
+                aria-describedby={`seo-audit-url-description${error ? " seo-audit-url-error" : ""}`}
+                aria-errormessage={error ? "seo-audit-url-error" : undefined}
+                aria-invalid={error ? true : undefined}
                 placeholder="Enter a URL to audit (e.g. simpatico.pr)"
-                className="w-full pl-10 pr-4 py-3 rounded-lg border text-[14px] outline-none transition-colors"
+                className="w-full pl-10 pr-4 py-3 rounded-lg border text-[14px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-amber-500"
                 style={{ borderColor: vars.g200, color: vars.navy }}
               />
             </div>
             <button
-              onClick={runAudit}
+              type="submit"
               disabled={loading || !url.trim()}
-              className="px-6 py-3 rounded-lg text-white text-[14px] font-semibold flex items-center gap-2 transition-all hover:opacity-90 disabled:opacity-50"
+              className="px-6 py-3 rounded-lg text-white text-[14px] font-semibold flex items-center gap-2 transition-all hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
               style={{ background: vars.accent }}
             >
               {loading ? (
@@ -485,9 +530,19 @@ export default function SeoAuditPage({
                 </>
               )}
             </button>
-          </div>
+          </form>
+          <p id="seo-audit-url-description" className="sr-only">
+            Enter the full website URL you want to audit.
+          </p>
           {error && (
-            <div className="mt-3 p-3 rounded-lg flex items-center gap-2 text-[13px]" style={{ background: "#FEE2E2", color: vars.red }}>
+            <div
+              id="seo-audit-url-error"
+              className="mt-3 p-3 rounded-lg flex items-center gap-2 text-[13px]"
+              role="alert"
+              aria-live="assertive"
+              aria-atomic="true"
+              style={{ background: "#FEE2E2", color: vars.red }}
+            >
               <XCircle size={16} />
               {error}
             </div>
@@ -500,12 +555,19 @@ export default function SeoAuditPage({
           ) : null; })()}
         </div>
 
-        <CountdownBanner
-          active={loading}
-          durationSeconds={getAuditDurationSeconds("website")}
-          label="Website audit running"
-          sampleCount={getAuditSampleCount("website")}
-        />
+        {auditAnnouncement && (
+          <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            {auditAnnouncement}
+          </div>
+        )}
+        <div aria-hidden="true">
+          <CountdownBanner
+            active={loading}
+            durationSeconds={getAuditDurationSeconds("website")}
+            label="Website audit running"
+            sampleCount={getAuditSampleCount("website")}
+          />
+        </div>
 
         {loading && (
           <div className="flex flex-col items-center justify-center py-20">
@@ -522,10 +584,10 @@ export default function SeoAuditPage({
         {result && !loading && (
           <div className="space-y-5">
             <div className="flex items-center gap-3 flex-wrap">
-              <button onClick={() => saveAudit()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium transition-all hover:brightness-95" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
+              <button type="button" onClick={() => saveAudit()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium transition-all hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
                 {justSaved ? <CheckCircle2 size={14} color={vars.green} /> : <Download size={14} />} {justSaved ? "Saved & downloaded" : "Save & download"}
               </button>
-              <button onClick={() => { const s = document.createElement('style'); s.id = 'aio-print-fix'; s.textContent = '@media print { body, #root, [data-radix-scroll-area-viewport], .overflow-y-auto, .overflow-auto { overflow: visible !important; max-height: none !important; height: auto !important; } }'; document.head.appendChild(s); window.print(); setTimeout(() => { const el = document.getElementById('aio-print-fix'); if (el) el.remove(); }, 2000); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium text-white" style={{ background: "#1f748f" }}>
+              <button type="button" onClick={() => { const s = document.createElement('style'); s.id = 'aio-print-fix'; s.textContent = '@media print { body, #root, [data-radix-scroll-area-viewport], .overflow-y-auto, .overflow-auto { overflow: visible !important; max-height: none !important; height: auto !important; } }'; document.head.appendChild(s); window.print(); setTimeout(() => { const el = document.getElementById('aio-print-fix'); if (el) el.remove(); }, 2000); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2" style={{ background: "#1f748f" }}>
                 <Download size={14} /> Print / PDF
               </button>
             </div>
@@ -589,10 +651,10 @@ export default function SeoAuditPage({
               </div>
             )}
 
-            <Section title="Meta Tags & Discoverability" icon={Tag} score={result.scores.meta} findings={result.meta} defaultOpen={true} />
-            <Section title="Heading Structure" icon={FileText} score={result.scores.headings} findings={result.headings} />
-            <Section title="Schema & Structured Data" icon={Code2} score={result.scores.schema} findings={result.schema} />
-            <Section title="Links & Authority Signals" icon={Link} score={result.scores.links} defaultOpen={false}>
+            <Section sectionId="seo-audit-meta" title="Meta Tags & Discoverability" icon={Tag} score={result.scores.meta} findings={result.meta} defaultOpen={true} />
+            <Section sectionId="seo-audit-headings" title="Heading Structure" icon={FileText} score={result.scores.headings} findings={result.headings} />
+            <Section sectionId="seo-audit-schema" title="Schema & Structured Data" icon={Code2} score={result.scores.schema} findings={result.schema} />
+            <Section sectionId="seo-audit-links" title="Links & Authority Signals" icon={Link} score={result.scores.links} defaultOpen={false}>
               <FindingsTable findings={result.links.findings} />
               {result.links.inboundIndicators.length > 0 && (
                 <div className="mt-4">
@@ -629,9 +691,9 @@ export default function SeoAuditPage({
                 </div>
               )}
             </Section>
-            <Section title="Image Optimisation" icon={Image} score={result.scores.images} findings={result.images} />
-            <Section title="AI Readiness" icon={Bot} score={result.scores.aiReadiness} findings={result.aiReadiness} defaultOpen={true} />
-            <Section title="Performance" icon={Zap} score={result.scores.performance} findings={result.performance} />
+            <Section sectionId="seo-audit-images" title="Image Optimisation" icon={Image} score={result.scores.images} findings={result.images} />
+            <Section sectionId="seo-audit-ai-readiness" title="AI Readiness" icon={Bot} score={result.scores.aiReadiness} findings={result.aiReadiness} defaultOpen={true} />
+            <Section sectionId="seo-audit-performance" title="Performance" icon={Zap} score={result.scores.performance} findings={result.performance} />
 
             <div className="text-center py-4">
               <p className="text-[11px]" style={{ color: vars.g400 }}>
@@ -678,16 +740,18 @@ export default function SeoAuditPage({
                     {s.score}/100
                   </div>
                   <button
+                     type="button"
                     onClick={() => loadAudit(s)}
-                    className="px-3 py-1.5 rounded-lg text-[11px] font-semibold flex-shrink-0"
+                     className="px-3 py-1.5 rounded-lg text-[11px] font-semibold flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
                     style={{ background: vars.accent, color: "white" }}
                   >
                     Load
                   </button>
                   <button
+                     type="button"
                     onClick={() => void deleteAudit(s.id)}
-                    aria-label="Delete audit"
-                    className="p-1.5 rounded-lg flex-shrink-0 hover:opacity-70"
+                     aria-label={`Delete audit for ${s.result.url}`}
+                     className="p-1.5 rounded-lg flex-shrink-0 hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
                     style={{ color: vars.g400 }}
                   >
                     <Trash2 size={13} />

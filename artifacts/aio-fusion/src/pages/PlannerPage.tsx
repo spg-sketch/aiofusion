@@ -14,6 +14,89 @@ import { loadPlannerProjects, savePlannerProjects, useContentStore, loadArchive,
 import { getKeyMessages, getSpokespeople, getActiveProjectId } from "../IntakeForm";
 import { CONTENT_TYPES } from "./shared";
 import InfoTip from "../InfoTip";
+
+type PlannerDialogProps = {
+  titleId: string;
+  initialFocusRef?: React.RefObject<HTMLElement | null>;
+  onClose: () => void;
+  children: React.ReactNode;
+  className?: string;
+};
+
+/**
+ * The planner predates the shared dialog components. Keep its dialogs local,
+ * but give all of them the same keyboard and focus behaviour.
+ */
+function PlannerDialog({ titleId, initialFocusRef, onClose, children, className = "" }: PlannerDialogProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const getFocusable = () => Array.from(dialog.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )).filter((element) => !element.hasAttribute("aria-hidden"));
+    const focusTarget = initialFocusRef?.current || getFocusable()[0] || dialog;
+    requestAnimationFrame(() => focusTarget.focus());
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = getFocusable();
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      if (previousFocus?.isConnected) requestAnimationFrame(() => previousFocus.focus());
+    };
+  }, [initialFocusRef]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.5)" }}
+    >
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Close dialog"
+        className="absolute inset-0 cursor-default"
+        onClick={onClose}
+      />
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className={`relative z-10 ${className}`}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
   const contentVersion = useContentStore();
   const [projects, setProjects] = useState<PlannerProject[]>(() => loadPlannerProjects());
@@ -22,6 +105,11 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
   const plannerKeyMessages = useMemo(() => getKeyMessages(), [editing?.id]);
   const [showArchivePicker, setShowArchivePicker] = useState(false);
   const [showMethodology, setShowMethodology] = useState(false);
+  const methodologyTriggerRef = useRef<HTMLButtonElement>(null);
+  const archivePickerTriggerRef = useRef<HTMLButtonElement>(null);
+  const methodologyCloseRef = useRef<HTMLButtonElement>(null);
+  const archivePickerCloseRef = useRef<HTMLButtonElement>(null);
+  const editTitleRef = useRef<HTMLInputElement>(null);
   const archive = useMemo(() => loadArchive(), [showArchivePicker, contentVersion]);
 
   const sendToOptimiser = (archiveId?: string) => {
@@ -38,6 +126,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
   const [cfg, setCfg] = useState<ScoringConfig>(() => loadScoringConfig());
   useEffect(() => { setCfg(loadScoringConfig()); }, [contentVersion]);
   const [showSettings, setShowSettings] = useState(false);
+  const settingsTriggerRef = useRef<HTMLButtonElement>(null);
   const [view, setView] = useState<"cards" | "spreadsheet">("spreadsheet");
   const update = (next: PlannerProject[]) => { setProjects(next); savePlannerProjects(next); };
   const updateCfg = (next: ScoringConfig) => {
@@ -238,17 +327,17 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2 flex-wrap">
             <div className="inline-flex rounded-full p-1" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)" }} role="group" aria-label="Planner view">
-              <button onClick={() => setView("spreadsheet")} className="flex items-center justify-center gap-1.5 w-[120px] px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: view === "spreadsheet" ? accentPink : "transparent", color: view === "spreadsheet" ? "white" : "rgba(251,246,236,0.7)" }}>
+              <button aria-label="Calendar View" onClick={() => setView("spreadsheet")} aria-pressed={view === "spreadsheet"} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white flex items-center justify-center gap-1.5 w-[120px] px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: view === "spreadsheet" ? accentPink : "transparent", color: view === "spreadsheet" ? "white" : "rgba(251,246,236,0.7)" }}>
                 <Calendar size={12} /> Calendar View
               </button>
-              <button onClick={() => setView("cards")} className="flex items-center justify-center gap-1.5 w-[120px] px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: view === "cards" ? accentPink : "transparent", color: view === "cards" ? "white" : "rgba(251,246,236,0.7)" }}>
+              <button aria-label="List View" onClick={() => setView("cards")} aria-pressed={view === "cards"} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white flex items-center justify-center gap-1.5 w-[120px] px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: view === "cards" ? accentPink : "transparent", color: view === "cards" ? "white" : "rgba(251,246,236,0.7)" }}>
                 <ListIcon size={12} /> List View
               </button>
             </div>
-            <button onClick={() => setShowMethodology(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: "rgba(255,255,255,0.08)", color: paper, border: "1px solid rgba(255,255,255,0.18)" }} title="Scoring methodology">
+            <button ref={methodologyTriggerRef} aria-label="Open scoring methodology" onClick={() => setShowMethodology(true)} aria-haspopup="dialog" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: "rgba(255,255,255,0.08)", color: paper, border: "1px solid rgba(255,255,255,0.18)" }} title="Scoring methodology">
               <HelpCircle size={13} /> Methodology
             </button>
-            <button onClick={() => setShowSettings(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: "rgba(255,255,255,0.08)", color: paper, border: "1px solid rgba(255,255,255,0.18)" }} title="Score settings">
+            <button ref={settingsTriggerRef} aria-label="Open score settings" onClick={() => setShowSettings(true)} aria-haspopup="dialog" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: "rgba(255,255,255,0.08)", color: paper, border: "1px solid rgba(255,255,255,0.18)" }} title="Score settings">
               <Shield size={13} /> Score Settings
             </button>
           </div>
@@ -344,8 +433,9 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                 />
               </label>
               <button
+                aria-label="Reset date range to default"
                 onClick={resetRange}
-                className="text-[11px] font-semibold uppercase tracking-[0.12em] px-3 py-1.5 rounded-full transition-opacity hover:opacity-70"
+                className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[11px] font-semibold uppercase tracking-[0.12em] px-3 py-1.5 rounded-full transition-opacity hover:opacity-70"
                 style={{ color: accentPink, background: accentSoft, border: `1px solid ${accentPink}40` }}
               >
                 Reset to default
@@ -371,7 +461,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                 <button
                   onClick={() => calendarScrollRef.current?.scrollBy({ left: -360, behavior: "smooth" })}
                   disabled={!calendarScrollState.canLeft}
-                  className="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full transition-all disabled:opacity-30 disabled:cursor-default hover:scale-110"
+                  className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full transition-all disabled:opacity-30 disabled:cursor-default hover:scale-110"
                   style={{ background: vars.navy, color: "white" }}
                   aria-label="Scroll calendar left"
                   title="Scroll left"
@@ -388,7 +478,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                 <button
                   onClick={() => calendarScrollRef.current?.scrollBy({ left: 360, behavior: "smooth" })}
                   disabled={!calendarScrollState.canRight}
-                  className="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full transition-all disabled:opacity-30 disabled:cursor-default hover:scale-110"
+                  className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full transition-all disabled:opacity-30 disabled:cursor-default hover:scale-110"
                   style={{ background: vars.navy, color: "white" }}
                   aria-label="Scroll calendar right"
                   title="Scroll right"
@@ -401,7 +491,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                   <div className="hidden sm:flex absolute inset-y-0 left-0 items-start pointer-events-none" style={{ zIndex: 20 }}>
                     <button
                       onClick={() => calendarScrollRef.current?.scrollBy({ left: -360, behavior: "smooth" })}
-                      className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full shadow-lg transition-transform hover:scale-110"
+                       className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full shadow-lg transition-transform hover:scale-110"
                       style={{ position: "sticky", top: 160, marginLeft: 8, background: "rgba(10,22,40,0.9)", color: "white" }}
                       aria-label="Scroll calendar left"
                       title="Scroll left"
@@ -414,7 +504,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                   <div className="hidden sm:flex absolute inset-y-0 right-0 items-start pointer-events-none" style={{ zIndex: 20 }}>
                     <button
                       onClick={() => calendarScrollRef.current?.scrollBy({ left: 360, behavior: "smooth" })}
-                      className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full shadow-lg transition-transform hover:scale-110"
+                       className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full shadow-lg transition-transform hover:scale-110"
                       style={{ position: "sticky", top: 160, marginRight: 8, background: "rgba(10,22,40,0.9)", color: "white" }}
                       aria-label="Scroll calendar right"
                       title="Scroll right"
@@ -452,30 +542,43 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                             )}
                             {p ? (
                               <>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, whiteSpace: "nowrap" }}>{p.contentType || ""}</td>
+                                <td className="px-3 py-2 border hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, whiteSpace: "nowrap" }}>
+                                  <button aria-label={`Open ${p.title} content type in Content Optimiser`} onClick={() => sendToOptimiser(p.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left w-full">{p.contentType || ""}</button>
+                                </td>
                                 <td className="px-3 py-2 border hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy }}>
                                   <div className="flex items-center gap-1">
-                                    <span onClick={() => sendToOptimiser(p.id)} className="cursor-pointer hover:underline flex-1 min-w-0 truncate text-[12px]" style={{ color: vars.navy, fontWeight: 600 }} title="Open in Content Optimiser">{p.title}</span>
-                                    <button onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete "${p.title}" from the Comms Planner?`)) deleteProject(p.id); }} className="flex-shrink-0 w-6 h-6 rounded flex items-center justify-center text-[12px] font-bold opacity-40 hover:opacity-100 transition-opacity hover:bg-red-50" style={{ color: vars.red }} title="Delete from Comms Planner">✕</button>
+                                    <button aria-label={`Open ${p.title} in Content Optimiser`} onClick={() => sendToOptimiser(p.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left hover:underline flex-1 min-w-0 truncate text-[12px]" style={{ color: vars.navy, fontWeight: 600 }} title="Open in Content Optimiser">{p.title}</button>
+                                    <button aria-label={`Delete ${p.title} from Comms Planner`} onClick={() => { if (window.confirm(`Delete "${p.title}" from the Comms Planner?`)) deleteProject(p.id); }} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 flex-shrink-0 w-6 h-6 rounded flex items-center justify-center text-[12px] font-bold opacity-40 hover:opacity-100 transition-opacity hover:bg-red-50" style={{ color: vars.red }} title="Delete from Comms Planner">✕</button>
                                   </div>
                                 </td>
-                                <td onClick={(e) => { e.stopPropagation(); setEditing(p); }} className="px-3 py-2 border cursor-pointer text-center hover:brightness-95 transition-all" style={{ background: cs!.bg, borderColor: vars.navy, color: cs!.fg, fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }} title="Click to change status">{p.status}</td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, maxWidth: 220 }}>{p.keyMessage || ""}</td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600 }}>{p.spokesperson || ""}</td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, whiteSpace: "nowrap" }}>{p.releaseDate || ""}</td>
-                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer text-right font-bold hover:bg-slate-100 transition-colors text-[12px]" style={{ background: slotBg, borderColor: vars.navy, color: vars.teal }}>{Math.round(s!.visibility + s!.authority)}<span style={{ color: vars.g500, fontWeight: 400 }}> pts</span></td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, maxWidth: 240 }}>{p.notes || ""}</td>
+                                <td className="px-3 py-2 border text-center hover:brightness-95 transition-all" style={{ background: cs!.bg, borderColor: vars.navy, color: cs!.fg, fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                                  <button onClick={() => setEditing(p)} aria-label={`Change status for ${p.title}; currently ${p.status}`} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-pink-500 w-full" title="Change status">{p.status}</button>
+                                </td>
+                                <td className="px-3 py-2 border hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, maxWidth: 220 }}>
+                                  <button aria-label={`Open ${p.title} key message in Content Optimiser`} onClick={() => sendToOptimiser(p.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left w-full">{p.keyMessage || ""}</button>
+                                </td>
+                                <td className="px-3 py-2 border hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600 }}>
+                                  <button aria-label={`Open ${p.title} spokesperson in Content Optimiser`} onClick={() => sendToOptimiser(p.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left w-full">{p.spokesperson || ""}</button>
+                                </td>
+                                <td className="px-3 py-2 border hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, whiteSpace: "nowrap" }}>
+                                  <button aria-label={`Open ${p.title} release date in Content Optimiser`} onClick={() => sendToOptimiser(p.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left w-full">{p.releaseDate || ""}</button>
+                                </td>
+                                <td className="px-3 py-2 border text-right font-bold hover:bg-slate-100 transition-colors text-[12px]" style={{ background: slotBg, borderColor: vars.navy, color: vars.teal }}>
+                                  <button aria-label={`Open ${p.title} score in Content Optimiser`} onClick={() => sendToOptimiser(p.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-right w-full">{Math.round(s!.visibility + s!.authority)}<span style={{ color: vars.g500, fontWeight: 400 }}> pts</span></button>
+                                </td>
+                                <td className="px-3 py-2 border hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, maxWidth: 240 }}>
+                                  <button aria-label={`Open ${p.title} action notes in Content Optimiser`} onClick={() => sendToOptimiser(p.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left w-full">{p.notes || ""}</button>
+                                </td>
                               </>
                             ) : (
                               Array.from({ length: 8 }).map((__, c) => (
                                 <td
                                   key={c}
-                                  onClick={c === 0 ? () => { addProject(); setTimeout(() => { const last = loadPlannerProjects()[0]; if (last) setEditing({ ...last, week: w }); }, 0); } : undefined}
-                                  className={`px-3 py-2 border ${c === 0 ? "cursor-pointer hover:bg-slate-100 transition-colors" : ""}`}
+                                   className={`px-3 py-2 border ${c === 0 ? "hover:bg-slate-100 transition-colors" : ""}`}
                                   style={{ background: slotBg, borderColor: vars.navy, color: vars.g300, minHeight: 28 }}
                                   title={c === 0 ? `Add project to ${label}` : undefined}
                                 >
-                                  {c === 0 && i === wkProjects.length ? <button className="text-[13px] font-bold px-3 py-1.5 rounded-lg" style={{ color: vars.teal, background: "rgba(79,143,255,0.12)", border: `1.5px solid rgba(79,143,255,0.35)` }}>+ Add project</button> : ""}
+                                   {c === 0 && i === wkProjects.length ? <button onClick={() => { addProject(); setTimeout(() => { const last = loadPlannerProjects()[0]; if (last) setEditing({ ...last, week: w }); }, 0); }} aria-label={`Add project to ${label}`} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 text-[13px] font-bold px-3 py-1.5 rounded-lg" style={{ color: vars.teal, background: "rgba(79,143,255,0.12)", border: `1.5px solid rgba(79,143,255,0.35)` }}>+ Add project</button> : ""}
                                 </td>
                               ))
                             )}
@@ -549,7 +652,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                     </td>
                     <td className="px-3 py-3">
                       {wkProjects.length === 0 ? (
-                        <button onClick={() => sendToOptimiser()} className="text-[13px] font-bold px-4 py-2 rounded-lg border-2" style={{ color: vars.teal, borderColor: "rgba(79,143,255,0.4)", background: "rgba(79,143,255,0.06)" }}>+ Add to w/c {wcLabel}</button>
+                         <button aria-label={`Add content for week commencing ${wcLabel}`} onClick={() => sendToOptimiser()} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 text-[13px] font-bold px-4 py-2 rounded-lg border-2" style={{ color: vars.teal, borderColor: "rgba(79,143,255,0.4)", background: "rgba(79,143,255,0.06)" }}>+ Add to w/c {wcLabel}</button>
                       ) : (
                         <div className="flex flex-wrap gap-2">
                           {wkProjects.map((p) => {
@@ -558,7 +661,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                             const canResearch = RESEARCH_TYPES.includes(p.contentType);
                             return (
                               <div key={p.id} className="rounded-lg border p-3 transition-all min-w-[240px] max-w-[300px] bg-white" style={{ borderColor: vars.g200 }}>
-                                <button onClick={() => sendToOptimiser(p.id)} className="text-left w-full">
+                                 <button onClick={() => sendToOptimiser(p.id)} aria-label={`Open ${p.title} in Content Optimiser`} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-left w-full">
                                   <div className="flex items-start justify-between gap-2 mb-1">
                                     <p className="text-[13px] font-semibold leading-tight" style={{ color: vars.navy }}>{p.title}</p>
                                     <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0" style={{ background: cs.bg, color: cs.fg }}>{p.status}</span>
@@ -570,9 +673,9 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                                   </div>
                                 </button>
                                 <div className="flex items-center gap-1 pt-2 border-t" style={{ borderColor: vars.g100 }}>
-                                  <button onClick={() => setEditing(p)} className="text-[10px] font-semibold px-2 py-1 rounded" style={{ background: vars.g100, color: vars.g500 }} title="Quick edit">Edit</button>
+                                   <button aria-label={`Edit ${p.title}`} onClick={() => setEditing(p)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[10px] font-semibold px-2 py-1 rounded" style={{ background: vars.g100, color: vars.g500 }} title="Quick edit">Edit</button>
                                   {canResearch && (
-                                    <button onClick={() => sendToMediaResearch(p.id)} className="text-[10px] font-semibold px-2 py-1 rounded ml-auto" style={{ background: "rgba(201,160,78,0.15)", color: "#7A5E25" }} title="Send to Media Research">
+                                     <button aria-label={`Send ${p.title} to Media Research`} onClick={() => sendToMediaResearch(p.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-700 text-[10px] font-semibold px-2 py-1 rounded ml-auto" style={{ background: "rgba(201,160,78,0.15)", color: "#7A5E25" }} title="Send to Media Research">
                                       <Target size={10} className="inline mr-1" /> Media Research
                                     </button>
                                   )}
@@ -598,10 +701,10 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] font-bold uppercase tracking-[0.2em] mr-1" style={{ color: "rgba(251,246,236,0.6)" }}>View</span>
           <div className="inline-flex rounded-full p-1" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)" }} role="group" aria-label="Planner view (footer)">
-            <button onClick={() => setView("spreadsheet")} className="flex items-center justify-center gap-1.5 w-[120px] px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: view === "spreadsheet" ? accentPink : "transparent", color: view === "spreadsheet" ? "white" : "rgba(251,246,236,0.7)" }}>
+            <button aria-label="Calendar View" onClick={() => setView("spreadsheet")} aria-pressed={view === "spreadsheet"} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white flex items-center justify-center gap-1.5 w-[120px] px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: view === "spreadsheet" ? accentPink : "transparent", color: view === "spreadsheet" ? "white" : "rgba(251,246,236,0.7)" }}>
               <Calendar size={12} /> Calendar View
             </button>
-            <button onClick={() => setView("cards")} className="flex items-center justify-center gap-1.5 w-[120px] px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: view === "cards" ? accentPink : "transparent", color: view === "cards" ? "white" : "rgba(251,246,236,0.7)" }}>
+            <button aria-label="List View" onClick={() => setView("cards")} aria-pressed={view === "cards"} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white flex items-center justify-center gap-1.5 w-[120px] px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: view === "cards" ? accentPink : "transparent", color: view === "cards" ? "white" : "rgba(251,246,236,0.7)" }}>
               <ListIcon size={12} /> List View
             </button>
           </div>
@@ -610,13 +713,12 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
 
       {/* Methodology modal */}
       {showMethodology && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowMethodology(false)}>
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <PlannerDialog titleId="planner-methodology-title" initialFocusRef={methodologyCloseRef} onClose={() => { setShowMethodology(false); methodologyTriggerRef.current?.focus(); }} className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
             <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-              <h2 className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+              <h2 id="planner-methodology-title" className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
                 <HelpCircle size={16} color={vars.accent} /> Comms Planner methodology
               </h2>
-              <button onClick={() => setShowMethodology(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
+              <button ref={methodologyCloseRef} aria-label="Close methodology dialog" onClick={() => { setShowMethodology(false); methodologyTriggerRef.current?.focus(); }} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
             </div>
             <div className="p-6 text-[13px] font-light leading-relaxed space-y-4" style={{ color: vars.g600 }}>
               <p>The Comms Planner ranks your communications schedule. Each item is scored on two dimensions based <strong style={{ color: vars.navy }}>only on content type, configured channel count, and workflow status</strong>:</p>
@@ -675,21 +777,19 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
               </div>
             </div>
             <div className="px-6 py-3 border-t flex justify-end" style={{ borderColor: vars.g200 }}>
-              <button onClick={() => setShowMethodology(false)} className="text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.accent }}>Got it</button>
+               <button onClick={() => { setShowMethodology(false); methodologyTriggerRef.current?.focus(); }} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.accent }}>Got it</button>
             </div>
-          </div>
-        </div>
+        </PlannerDialog>
       )}
 
       {/* Archive picker */}
       {showArchivePicker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowArchivePicker(false)}>
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <PlannerDialog titleId="planner-archive-picker-title" initialFocusRef={archivePickerCloseRef} onClose={() => { setShowArchivePicker(false); archivePickerTriggerRef.current?.focus(); }} className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] flex flex-col">
             <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-              <h2 className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+              <h2 id="planner-archive-picker-title" className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
                 <Archive size={16} color={vars.accent} /> Select archived content
               </h2>
-              <button onClick={() => setShowArchivePicker(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
+              <button ref={archivePickerCloseRef} aria-label="Close archived content dialog" onClick={() => { setShowArchivePicker(false); archivePickerTriggerRef.current?.focus(); }} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
               {archive.length === 0 ? (
@@ -699,7 +799,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
               ) : (
                 <div className="space-y-2">
                   {archive.map((a) => (
-                    <button key={a.id} onClick={() => { sendToOptimiser(a.id); setShowArchivePicker(false); }} className="w-full text-left rounded-lg border p-3 hover:shadow-sm transition-all" style={{ borderColor: vars.g200 }}>
+                      <button key={a.id} onClick={() => { sendToOptimiser(a.id); setShowArchivePicker(false); }} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full text-left rounded-lg border p-3 hover:shadow-sm transition-all" style={{ borderColor: vars.g200 }}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
                           <p className="text-[13px] font-semibold" style={{ color: vars.navy }}>{a.title}</p>
@@ -712,32 +812,30 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                 </div>
               )}
             </div>
-          </div>
-        </div>
+        </PlannerDialog>
       )}
 
       {editing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setEditing(null)}>
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <PlannerDialog titleId="planner-edit-title" initialFocusRef={editTitleRef} onClose={() => { setEditing(null); }} className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-              <h2 className="text-[16px] font-semibold" style={{ color: vars.navy }}>Edit project</h2>
-              <button onClick={() => setEditing(null)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
+              <h2 id="planner-edit-title" className="text-[16px] font-semibold" style={{ color: vars.navy }}>Edit project</h2>
+              <button aria-label="Close edit project dialog" onClick={() => setEditing(null)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
             </div>
             <div className="p-6 space-y-4">
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider mb-1.5 block" style={{ color: vars.g500 }}>Project title</label>
-                <input type="text" value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} className="w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+                 <input ref={editTitleRef} aria-label="Project title" type="text" value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] font-semibold uppercase tracking-wider mb-1.5 block" style={{ color: vars.g500 }}>Content type</label>
-                  <select value={editing.contentType} onChange={(e) => setEditing({ ...editing, contentType: e.target.value })} className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
+                  <select aria-label="Content type" value={editing.contentType} onChange={(e) => setEditing({ ...editing, contentType: e.target.value })} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full px-3 py-2 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
                     {Object.keys(cfg.typeWeights).map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="text-[11px] font-semibold uppercase tracking-wider mb-1.5 block" style={{ color: vars.g500 }}>Status</label>
-                  <select value={editing.status} onChange={(e) => setEditing({ ...editing, status: e.target.value as PlannerStatus })} className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
+                  <select aria-label="Status" value={editing.status} onChange={(e) => setEditing({ ...editing, status: e.target.value as PlannerStatus })} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full px-3 py-2 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
                     {(["Planned", "Drafting", "Review", "Approved"] as PlannerStatus[]).map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
@@ -745,11 +843,11 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] font-semibold uppercase tracking-wider mb-1.5 block" style={{ color: vars.g500 }}>Spokesperson</label>
-                  <input type="text" value={editing.spokesperson} onChange={(e) => setEditing({ ...editing, spokesperson: e.target.value })} className="w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+                  <input aria-label="Spokesperson" type="text" value={editing.spokesperson} onChange={(e) => setEditing({ ...editing, spokesperson: e.target.value })} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
                 </div>
                 <div>
                   <label className="text-[11px] font-semibold uppercase tracking-wider mb-1.5 block" style={{ color: vars.g500 }}>Audience</label>
-                  <input type="text" value={editing.audience} onChange={(e) => setEditing({ ...editing, audience: e.target.value })} className="w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+                  <input aria-label="Audience" type="text" value={editing.audience} onChange={(e) => setEditing({ ...editing, audience: e.target.value })} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
                 </div>
               </div>
               <div>
@@ -762,7 +860,8 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                   <select
                     value={editing.keyMessage}
                     onChange={(e) => setEditing({ ...editing, keyMessage: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white"
+                    aria-label="Key message"
+                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full px-3 py-2 rounded-lg border text-[13px] bg-white"
                     style={{ borderColor: vars.g200, color: vars.navy }}
                   >
                     <option value="">- Choose a key message from Project Data -</option>
@@ -786,7 +885,8 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                       <button
                         key={c}
                         onClick={() => setEditing({ ...editing, channels: on ? editing.channels.filter((x) => x !== c) : [...editing.channels, c] })}
-                        className="text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-all"
+                        aria-pressed={on}
+                        className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-all"
                         style={{ borderColor: on ? vars.accent : vars.g200, background: on ? "rgba(31,116,143,0.1)" : "white", color: on ? vars.accent : vars.g500 }}
                       >
                         {c}
@@ -798,16 +898,16 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] font-semibold uppercase tracking-wider mb-1.5 block" style={{ color: vars.g500 }}>Week (ISO)</label>
-                  <input type="number" value={editing.week} onChange={(e) => setEditing({ ...editing, week: parseInt(e.target.value, 10) || 1 })} className="w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+                  <input aria-label="ISO week" type="number" value={editing.week} onChange={(e) => setEditing({ ...editing, week: parseInt(e.target.value, 10) || 1 })} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
                 </div>
                 <div>
                   <label className="text-[11px] font-semibold uppercase tracking-wider mb-1.5 block" style={{ color: vars.g500 }}>Release date</label>
-                  <input type="date" value={editing.releaseDate} onChange={(e) => setEditing({ ...editing, releaseDate: e.target.value })} className="w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+                  <input aria-label="Release date" type="date" value={editing.releaseDate} onChange={(e) => setEditing({ ...editing, releaseDate: e.target.value })} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
                 </div>
               </div>
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider mb-1.5 block" style={{ color: vars.g500 }}>Notes</label>
-                <textarea value={editing.notes} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} rows={3} className="w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+                <textarea aria-label="Notes" value={editing.notes} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} rows={3} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
               </div>
 
               <div className="p-4 rounded-xl" style={{ background: vars.g50 }}>
@@ -829,18 +929,17 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
               </div>
             </div>
             <div className="px-6 py-4 border-t flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-              <button onClick={() => deleteProject(editing.id)} className="text-[12px] font-semibold px-3 py-2 rounded-lg" style={{ color: vars.red, background: "rgba(201,74,62,0.06)" }}>Delete</button>
+              <button aria-label={`Delete ${editing.title}`} onClick={() => deleteProject(editing.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 text-[12px] font-semibold px-3 py-2 rounded-lg" style={{ color: vars.red, background: "rgba(201,74,62,0.06)" }}>Delete</button>
               <div className="flex gap-2">
-                <button onClick={() => setEditing(null)} className="text-[13px] font-semibold px-4 py-2 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}>Cancel</button>
-                <button onClick={saveEdit} className="text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.accent }}>Save</button>
+                <button onClick={() => setEditing(null)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[13px] font-semibold px-4 py-2 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}>Cancel</button>
+                <button onClick={saveEdit} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.accent }}>Save</button>
               </div>
             </div>
-          </div>
-        </div>
+          </PlannerDialog>
       )}
 
       {showSettings && (
-        <ScoringSettingsModal cfg={cfg} onSave={(c) => { updateCfg(c); setShowSettings(false); }} onClose={() => setShowSettings(false)} />
+        <ScoringSettingsModal cfg={cfg} onSave={(c) => { updateCfg(c); setShowSettings(false); settingsTriggerRef.current?.focus(); }} onClose={() => { setShowSettings(false); settingsTriggerRef.current?.focus(); }} />
       )}
     </div>
   );
@@ -850,6 +949,7 @@ function ScoringSettingsModal({ cfg, onSave, onClose }: { cfg: ScoringConfig; on
   const [draft, setDraft] = useState<ScoringConfig>(JSON.parse(JSON.stringify(cfg)));
   const [newType, setNewType] = useState("");
   const [newChannel, setNewChannel] = useState("");
+  const firstWeightRef = useRef<HTMLInputElement>(null);
   const updateWeight = (t: string, k: "vis" | "auth", v: number) => {
     setDraft({ ...draft, typeWeights: { ...draft.typeWeights, [t]: { ...draft.typeWeights[t], [k]: v } } });
   };
@@ -869,14 +969,13 @@ function ScoringSettingsModal({ cfg, onSave, onClose }: { cfg: ScoringConfig; on
   const updateStatus = (s: PlannerStatus, v: number) => setDraft({ ...draft, statusMultipliers: { ...draft.statusMultipliers, [s]: v } });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={onClose}>
-      <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+    <PlannerDialog titleId="planner-scoring-settings-title" initialFocusRef={firstWeightRef} onClose={onClose} className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
           <div>
-            <h2 className="text-[16px] font-semibold" style={{ color: vars.navy }}>Scoring settings</h2>
+            <h2 id="planner-scoring-settings-title" className="text-[16px] font-semibold" style={{ color: vars.navy }}>Scoring settings</h2>
             <p className="text-[11px]" style={{ color: vars.g500 }}>Tune how Visibility and Authority scores are calculated. Saved per browser.</p>
           </div>
-          <button onClick={onClose} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
+          <button aria-label="Close scoring settings dialog" onClick={onClose} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
         </div>
         <div className="p-6 space-y-6">
 
@@ -899,17 +998,17 @@ function ScoringSettingsModal({ cfg, onSave, onClose }: { cfg: ScoringConfig; on
                   {Object.entries(draft.typeWeights).map(([t, w]) => (
                     <tr key={t} className="border-t" style={{ borderColor: vars.g100 }}>
                       <td className="px-3 py-2" style={{ color: vars.navy }}>{t}</td>
-                      <td className="px-3 py-2"><input type="number" min={0} max={10} step={0.5} value={w.vis} onChange={(e) => updateWeight(t, "vis", parseFloat(e.target.value) || 0)} className="w-20 px-2 py-1 rounded border text-[12px]" style={{ borderColor: vars.g200 }} /></td>
-                      <td className="px-3 py-2"><input type="number" min={0} max={10} step={0.5} value={w.auth} onChange={(e) => updateWeight(t, "auth", parseFloat(e.target.value) || 0)} className="w-20 px-2 py-1 rounded border text-[12px]" style={{ borderColor: vars.g200 }} /></td>
-                      <td className="px-3 py-2 text-right"><button onClick={() => removeType(t)} className="text-[11px]" style={{ color: vars.red }} title="Remove">×</button></td>
+                      <td className="px-3 py-2"><input ref={firstWeightRef} aria-label={`${t} visibility weight`} type="number" min={0} max={10} step={0.5} value={w.vis} onChange={(e) => updateWeight(t, "vis", parseFloat(e.target.value) || 0)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-20 px-2 py-1 rounded border text-[12px]" style={{ borderColor: vars.g200 }} /></td>
+                      <td className="px-3 py-2"><input aria-label={`${t} authority weight`} type="number" min={0} max={10} step={0.5} value={w.auth} onChange={(e) => updateWeight(t, "auth", parseFloat(e.target.value) || 0)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-20 px-2 py-1 rounded border text-[12px]" style={{ borderColor: vars.g200 }} /></td>
+                      <td className="px-3 py-2 text-right"><button aria-label={`Remove ${t} content type`} onClick={() => removeType(t)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 text-[11px]" style={{ color: vars.red }} title="Remove">×</button></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             <div className="flex gap-2 mt-2">
-              <input type="text" value={newType} onChange={(e) => setNewType(e.target.value)} placeholder="Add new content type…" className="flex-1 px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
-              <button onClick={addType} className="px-3 py-2 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Add type</button>
+              <input aria-label="New content type" type="text" value={newType} onChange={(e) => setNewType(e.target.value)} placeholder="Add new content type…" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 flex-1 px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
+              <button onClick={addType} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 px-3 py-2 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Add type</button>
             </div>
           </section>
 
@@ -919,15 +1018,15 @@ function ScoringSettingsModal({ cfg, onSave, onClose }: { cfg: ScoringConfig; on
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider mb-1 block" style={{ color: vars.g500 }}>Base</label>
-                <input type="number" step={0.05} value={draft.channelBase} onChange={(e) => setDraft({ ...draft, channelBase: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
+                <input aria-label="Channel multiplier base" type="number" step={0.05} value={draft.channelBase} onChange={(e) => setDraft({ ...draft, channelBase: parseFloat(e.target.value) || 0 })} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
               </div>
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider mb-1 block" style={{ color: vars.g500 }}>Step (per channel)</label>
-                <input type="number" step={0.05} value={draft.channelStep} onChange={(e) => setDraft({ ...draft, channelStep: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
+                <input aria-label="Channel multiplier step" type="number" step={0.05} value={draft.channelStep} onChange={(e) => setDraft({ ...draft, channelStep: parseFloat(e.target.value) || 0 })} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
               </div>
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider mb-1 block" style={{ color: vars.g500 }}>Max (cap)</label>
-                <input type="number" step={0.05} value={draft.channelCap} onChange={(e) => setDraft({ ...draft, channelCap: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
+                <input aria-label="Channel multiplier maximum" type="number" step={0.05} value={draft.channelCap} onChange={(e) => setDraft({ ...draft, channelCap: parseFloat(e.target.value) || 0 })} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
               </div>
             </div>
             <div className="mt-3">
@@ -936,13 +1035,13 @@ function ScoringSettingsModal({ cfg, onSave, onClose }: { cfg: ScoringConfig; on
                 {draft.channels.map((c) => (
                   <span key={c} className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border" style={{ borderColor: vars.g200, color: vars.navy }}>
                     {c}
-                    <button onClick={() => removeChannel(c)} style={{ color: vars.red }}>×</button>
+                    <button aria-label={`Remove ${c} channel`} onClick={() => removeChannel(c)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500" style={{ color: vars.red }}>×</button>
                   </span>
                 ))}
               </div>
               <div className="flex gap-2">
-                <input type="text" value={newChannel} onChange={(e) => setNewChannel(e.target.value)} placeholder="Add new channel…" className="flex-1 px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
-                <button onClick={addChannel} className="px-3 py-2 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Add channel</button>
+                <input aria-label="New release channel" type="text" value={newChannel} onChange={(e) => setNewChannel(e.target.value)} placeholder="Add new channel…" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 flex-1 px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
+                <button onClick={addChannel} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 px-3 py-2 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Add channel</button>
               </div>
             </div>
           </section>
@@ -954,21 +1053,20 @@ function ScoringSettingsModal({ cfg, onSave, onClose }: { cfg: ScoringConfig; on
               {(Object.keys(draft.statusMultipliers) as PlannerStatus[]).map((s) => (
                 <div key={s}>
                   <label className="text-[11px] font-semibold uppercase tracking-wider mb-1 block" style={{ color: vars.g500 }}>{s}</label>
-                  <input type="number" min={0} max={1} step={0.05} value={draft.statusMultipliers[s]} onChange={(e) => updateStatus(s, parseFloat(e.target.value) || 0)} className="w-full px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
+                  <input aria-label={`${s} status multiplier`} type="number" min={0} max={1} step={0.05} value={draft.statusMultipliers[s]} onChange={(e) => updateStatus(s, parseFloat(e.target.value) || 0)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
                 </div>
               ))}
             </div>
           </section>
         </div>
         <div className="px-6 py-4 border-t flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-          <button onClick={() => setDraft(JSON.parse(JSON.stringify(DEFAULT_SCORING)))} className="text-[12px] font-semibold px-3 py-2 rounded-lg" style={{ color: vars.g500, background: vars.g50 }}>Reset to defaults</button>
+          <button onClick={() => setDraft(JSON.parse(JSON.stringify(DEFAULT_SCORING)))} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[12px] font-semibold px-3 py-2 rounded-lg" style={{ color: vars.g500, background: vars.g50 }}>Reset to defaults</button>
           <div className="flex gap-2">
-            <button onClick={onClose} className="text-[13px] font-semibold px-4 py-2 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}>Cancel</button>
-            <button onClick={() => onSave(draft)} className="text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.accent }}>Save settings</button>
+            <button onClick={onClose} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[13px] font-semibold px-4 py-2 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}>Cancel</button>
+            <button onClick={() => onSave(draft)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.accent }}>Save settings</button>
           </div>
         </div>
-      </div>
-    </div>
+    </PlannerDialog>
   );
 }
 

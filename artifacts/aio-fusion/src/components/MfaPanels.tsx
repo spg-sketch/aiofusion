@@ -48,6 +48,7 @@ function OtpBoxes({ value, onChange, onComplete, disabled }: {
       onChange={onChange}
       onComplete={onComplete}
       disabled={disabled}
+      aria-label="Authenticator code"
       autoFocus
       inputMode="numeric"
       pattern="[0-9]*"
@@ -254,6 +255,8 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
       ) : (
         <input
           type="text"
+          id="mfa-recovery-code"
+          aria-label="Recovery code"
           value={recoveryInput}
           onChange={(e) => setRecoveryInput(e.target.value)}
           placeholder="XXXX-XXXX"
@@ -264,8 +267,9 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
       )}
 
       {!challenge.enroll && (
-        <label className="flex items-center gap-2 mb-4 cursor-pointer select-none">
+        <label htmlFor="mfa-trust-device" className="flex items-center gap-2 mb-4 cursor-pointer select-none">
           <input
+            id="mfa-trust-device"
             type="checkbox"
             checked={trustDevice}
             onChange={(e) => setTrustDevice(e.target.checked)}
@@ -279,7 +283,7 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
         </label>
       )}
 
-      {error && <p className="text-[13px] font-semibold mb-3" style={{ color: vars.red }}>{error}</p>}
+      {error && <p className="text-[13px] font-semibold mb-3" role="alert" aria-live="assertive" style={{ color: vars.red }}>{error}</p>}
 
       <div className="flex flex-wrap items-center gap-3">
         <button

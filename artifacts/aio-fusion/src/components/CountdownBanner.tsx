@@ -22,18 +22,21 @@ export default function CountdownBanner({
 }: CountdownBannerProps) {
   const [remaining, setRemaining] = useState(durationSeconds);
   const [overtime, setOvertime] = useState(0);
+  const [announcement, setAnnouncement] = useState("");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!active) {
       setRemaining(durationSeconds);
       setOvertime(0);
+      setAnnouncement("");
       if (intervalRef.current) clearInterval(intervalRef.current);
       return;
     }
 
     setRemaining(durationSeconds);
     setOvertime(0);
+    setAnnouncement(`${label} started.`);
 
     intervalRef.current = setInterval(() => {
       setRemaining((prev) => {
@@ -48,11 +51,18 @@ export default function CountdownBanner({
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [active, durationSeconds]);
+  }, [active, durationSeconds, label]);
+
+  const finished = remaining === 0;
+
+  useEffect(() => {
+    if (active && finished) {
+      setAnnouncement(`${label} is taking longer than expected and is still in progress.`);
+    }
+  }, [active, finished, label]);
 
   if (!active) return null;
 
-  const finished = remaining === 0;
   const basisNote =
     sampleCount && sampleCount > 0
       ? `Based on your last ${sampleCount} audit${sampleCount === 1 ? "" : "s"}`
@@ -65,8 +75,6 @@ export default function CountdownBanner({
         background: "linear-gradient(135deg, #e0f2f7 0%, #f0f8fb 100%)",
         border: "1px solid rgba(31,116,143,0.25)",
       }}
-      role="status"
-      aria-live="polite"
     >
       <div
         className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center"
@@ -113,6 +121,9 @@ export default function CountdownBanner({
         ) : (
           formatMmSs(remaining)
         )}
+      </div>
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {announcement}
       </div>
     </div>
   );

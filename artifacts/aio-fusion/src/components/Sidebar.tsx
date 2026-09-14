@@ -88,6 +88,25 @@ const ITEM_ICONS: Record<string, typeof BarChart3> = {
   measure: PieChart,
 };
 
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "area[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "iframe",
+  "object",
+  "embed",
+  "[contenteditable]",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+function getFocusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+    .filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+}
+
 function SidebarContent({
   currentPage,
   onNavigate,
@@ -255,7 +274,7 @@ function SidebarContent({
           <span>Project Hub</span>
         </button>
       </div>
-      <nav className="flex-1 pb-6 pt-2 px-4 space-y-4 overflow-y-auto">
+      <nav aria-label="Project navigation" className="flex-1 pb-6 pt-2 px-4 space-y-4 overflow-y-auto">
         {onOpenGeorge && (
           <button
             onClick={() => { onOpenGeorge(); onItemClick?.(); }}
@@ -284,6 +303,7 @@ function SidebarContent({
             onClick={() => { onNavigate("dashboard"); onItemClick?.(); }}
             onMouseEnter={() => onPreloadNavigate?.("dashboard")}
             onFocus={() => onPreloadNavigate?.("dashboard")}
+            aria-current={currentPage === "dashboard" ? "page" : undefined}
             className={`group flex items-center gap-3 w-full rounded-2xl px-3 py-3 text-[14px] font-bold transition-all ${
               currentPage === "dashboard" ? "" : "hover:bg-white/25"
             }`}
@@ -333,6 +353,7 @@ function SidebarContent({
                     onMouseEnter={() => { if (!isLocked) onPreloadNavigate?.(item.id); }}
                     onFocus={() => { if (!isLocked) onPreloadNavigate?.(item.id); }}
                     disabled={isLocked}
+                     aria-current={isActive ? "page" : undefined}
                     aria-disabled={isLocked}
                     title={isLocked ? `${item.label} is coming in V2` : undefined}
                     className={`group flex items-start gap-3 w-full rounded-2xl px-2.5 py-3 text-left transition-all ${
@@ -418,6 +439,7 @@ function SidebarContent({
                             onClick={() => deleteDiagnostic(d.id)}
                             className="opacity-0 group-hover/histitem:opacity-100 p-1 rounded transition-opacity hover:bg-black/5 flex-shrink-0"
                             title="Remove this saved audit"
+                            aria-label="Remove this saved audit"
                             style={{ color: vars.g400 }}
                           >
                             <Trash2 size={11} />
@@ -447,6 +469,7 @@ function SidebarContent({
                             onClick={() => deleteContentGeoItem(s.id)}
                             className="opacity-0 group-hover/histitem:opacity-100 p-1 rounded transition-opacity hover:bg-black/5 flex-shrink-0"
                             title="Remove this saved audit"
+                            aria-label="Remove this saved audit"
                             style={{ color: vars.g400 }}
                           >
                             <Trash2 size={11} />
@@ -476,6 +499,7 @@ function SidebarContent({
                             onClick={() => deleteTechGeoItem(s.id)}
                             className="opacity-0 group-hover/histitem:opacity-100 p-1 rounded transition-opacity hover:bg-black/5 flex-shrink-0"
                             title="Remove this saved audit"
+                            aria-label="Remove this saved audit"
                             style={{ color: vars.g400 }}
                           >
                             <Trash2 size={11} />
@@ -553,6 +577,9 @@ export function Sidebar({
   onOpenAccount?: () => void;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const mobileMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const mobileDialogRef = useRef<HTMLDivElement>(null);
+  const wasMobileOpen = useRef(false);
   const [width, setWidth] = useState<number>(() => {
     const saved = localStorage.getItem("aio:sidebar-width");
     return saved ? Math.max(220, Math.min(520, Number(saved))) : 280;
@@ -594,32 +621,125 @@ export function Sidebar({
     window.removeEventListener("mouseup", onMouseUp);
   }, [onMouseMove, onMouseUp]);
 
+  const closeMobileNavigation = useCallback(() => {
+    setMobileOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (mobileOpen) {
+      const dialog = mobileDialogRef.current;
+      if (dialog) {
+        const [firstFocusable] = getFocusableElements(dialog);
+        (firstFocusable ?? dialog).focus();
+      }
+    } else if (wasMobileOpen.current) {
+      // The trigger stays mounted while the drawer is open so that focus can
+      // return to the exact button that opened it, rather than a replacement.
+      mobileMenuTriggerRef.current?.focus();
+    }
+    wasMobileOpen.current = mobileOpen;
+  }, [mobileOpen]);
+
+  const onMobileDialogKeyDown = useCallback((event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeMobileNavigation();
+      return;
+    }
+    if (event.key !== "Tab") return;
+
+    const dialog = mobileDialogRef.current;
+    if (!dialog) return;
+    const focusable = getFocusableElements(dialog);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+
+    const activeElement = document.activeElement;
+    const firstFocusable = focusable[0];
+    const lastFocusable = focusable[focusable.length - 1];
+    if (event.shiftKey && activeElement === firstFocusable) {
+      event.preventDefault();
+      lastFocusable.focus();
+    } else if (!event.shiftKey && activeElement === lastFocusable) {
+      event.preventDefault();
+      firstFocusable.focus();
+    }
+  }, [closeMobileNavigation]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    document.addEventListener("keydown", onMobileDialogKeyDown);
+    return () => document.removeEventListener("keydown", onMobileDialogKeyDown);
+  }, [mobileOpen, onMobileDialogKeyDown]);
+
   return (
     <>
       <div className="md:hidden fixed left-0 right-0 z-50 flex items-center justify-between px-4 py-3 border-b h-14" style={{ background: "white", borderColor: vars.g200, top: "var(--banner-h, 0px)" }}>
         <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-10" />
-        <button onClick={() => setMobileOpen(!mobileOpen)} className="p-2 rounded-lg" style={{ color: vars.navy }}>
-          {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+         <button
+           type="button"
+           ref={mobileMenuTriggerRef}
+           onClick={() => setMobileOpen((open) => !open)}
+           className="p-2 rounded-lg"
+           style={{ color: vars.navy }}
+           aria-label={mobileOpen ? "Close project navigation" : "Open project navigation"}
+           aria-expanded={mobileOpen}
+           aria-controls="mobile-project-navigation"
+           aria-haspopup="dialog"
+         >
+           {mobileOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
         </button>
       </div>
 
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-40" style={{ paddingTop: "calc(3.5rem + var(--banner-h, 0px))" }} onClick={() => setMobileOpen(false)}>
+        <div className="md:hidden fixed inset-0 z-40" style={{ paddingTop: "calc(3.5rem + var(--banner-h, 0px))" }} onClick={closeMobileNavigation}>
           <div className="absolute inset-0 bg-black/30" />
-          <div className="relative w-[280px] h-full flex flex-col" style={{ background: "white" }} onClick={(e) => e.stopPropagation()}>
+            <div
+              id="mobile-project-navigation"
+              ref={mobileDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="mobile-project-navigation-title"
+              tabIndex={-1}
+              className="relative w-[280px] h-full flex flex-col"
+              style={{ background: "white" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+             <h2 id="mobile-project-navigation-title" className="sr-only">Project navigation</h2>
             <SidebarContent currentPage={currentPage} onNavigate={onNavigate} onPreloadNavigate={onPreloadNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} onOpenGeorge={onOpenGeorge} georgeHasUpdate={georgeHasUpdate} workspaceSwitcher={workspaceSwitcher} onOpenAccount={onOpenAccount} />
           </div>
         </div>
       )}
 
       <aside
+         aria-label="Project navigation"
         className="hidden md:flex flex-col border-r flex-shrink-0 sticky relative"
         style={{ width: `${width}px`, borderColor: vars.g200, background: "white", top: "var(--banner-h, 0px)", height: "calc(100vh - var(--banner-h, 0px))" }}
       >
         <SidebarContent currentPage={currentPage} onNavigate={onNavigate} onPreloadNavigate={onPreloadNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} onOpenGeorge={onOpenGeorge} georgeHasUpdate={georgeHasUpdate} workspaceSwitcher={workspaceSwitcher} onOpenAccount={onOpenAccount} />
         {/* Drag handle */}
         <div
+           role="separator"
+           aria-label="Resize project navigation"
+           aria-orientation="vertical"
+           aria-valuemin={220}
+           aria-valuemax={520}
+           aria-valuenow={width}
+           tabIndex={0}
           onMouseDown={onDragHandleMouseDown}
+           onKeyDown={(event) => {
+             if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+             event.preventDefault();
+             const delta = event.key === "ArrowRight" ? 20 : -20;
+             setWidth((current) => {
+               const next = Math.max(220, Math.min(520, current + delta));
+               localStorage.setItem("aio:sidebar-width", String(next));
+               return next;
+             });
+           }}
           className="absolute top-0 right-0 w-1.5 h-full z-10 cursor-col-resize group"
           title="Drag to resize"
         >

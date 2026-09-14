@@ -136,19 +136,19 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
             <InfoTip text="Filter the archive by free-text keyword, time period, content type, project message and spokesperson. All filters combine." />
           </h2>
           {(query || periodFilter || typeFilter || messageFilter.length > 0 || spokespersonFilter) && (
-            <button onClick={clearFilters} className="text-[11px] font-medium hover:underline" style={{ color: vars.accent }}>Clear filters</button>
+            <button onClick={clearFilters} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[11px] font-medium hover:underline" style={{ color: vars.accent }}>Clear filters</button>
           )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="lg:col-span-2">
-            <label className="text-[12px] font-semibold mb-1 block" style={{ color: vars.g500 }}>Enter keyword</label>
-            <input type="text" placeholder="e.g. agentic, benchmarking, launch…" value={query} onChange={(e) => setQuery(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border text-[14px]" style={{ borderColor: vars.g200 }} />
+            <label htmlFor="archive-keyword" className="text-[12px] font-semibold mb-1 block" style={{ color: vars.g500 }}>Enter keyword</label>
+            <input id="archive-keyword" type="text" placeholder="e.g. agentic, benchmarking, launch…" value={query} onChange={(e) => setQuery(e.target.value)}
+              className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full px-3 py-2 rounded-lg border text-[14px]" style={{ borderColor: vars.g200 }} />
           </div>
           <div>
-            <label className="text-[12px] font-semibold mb-1 block" style={{ color: vars.g500 }}>Time Period</label>
-            <select value={periodFilter} onChange={(e) => setPeriodFilter(e.target.value)} className="w-full px-3 py-2 rounded-lg border text-[14px] bg-white hover:bg-slate-50 cursor-pointer" style={{ borderColor: vars.g200 }}>
+            <label htmlFor="archive-period" className="text-[12px] font-semibold mb-1 block" style={{ color: vars.g500 }}>Time Period</label>
+            <select id="archive-period" aria-label="Filter by time period" value={periodFilter} onChange={(e) => setPeriodFilter(e.target.value)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full px-3 py-2 rounded-lg border text-[14px] bg-white hover:bg-slate-50 cursor-pointer" style={{ borderColor: vars.g200 }}>
               <option value="">All time</option>
               <option value="month">This month</option>
               <option value="quarter">This quarter</option>
@@ -156,15 +156,15 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
             </select>
           </div>
           <div>
-            <label className="text-[12px] font-semibold mb-1 block" style={{ color: vars.g500 }}>Content Type</label>
-            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="w-full px-3 py-2 rounded-lg border text-[14px] bg-white hover:bg-slate-50 cursor-pointer" style={{ borderColor: vars.g200 }}>
+            <label htmlFor="archive-type" className="text-[12px] font-semibold mb-1 block" style={{ color: vars.g500 }}>Content Type</label>
+            <select id="archive-type" aria-label="Filter by content type" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full px-3 py-2 rounded-lg border text-[14px] bg-white hover:bg-slate-50 cursor-pointer" style={{ borderColor: vars.g200 }}>
               <option value="">All types</option>
               {CONTENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-[12px] font-semibold mb-1 block" style={{ color: vars.g500 }}>Spokesperson</label>
-            <select value={spokespersonFilter} onChange={(e) => setSpokespersonFilter(e.target.value)} className="w-full px-3 py-2 rounded-lg border text-[14px] bg-white hover:bg-slate-50 cursor-pointer" style={{ borderColor: vars.g200 }}>
+            <label htmlFor="archive-spokesperson" className="text-[12px] font-semibold mb-1 block" style={{ color: vars.g500 }}>Spokesperson</label>
+            <select id="archive-spokesperson" aria-label="Filter by spokesperson" value={spokespersonFilter} onChange={(e) => setSpokespersonFilter(e.target.value)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full px-3 py-2 rounded-lg border text-[14px] bg-white hover:bg-slate-50 cursor-pointer" style={{ borderColor: vars.g200 }}>
               <option value="">All spokespeople</option>
               {allSpeakers.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
@@ -181,8 +181,8 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
                 const label = m.short || m.long;
                 const on = messageFilter.includes(label);
                 return (
-                  <button key={`${m.tag}-${label}`} onClick={() => setMessageFilter(on ? messageFilter.filter((x) => x !== label) : [...messageFilter, label])}
-                    className="text-[12px] font-semibold px-2 py-1 rounded-full border hover:brightness-95 transition-all"
+                  <button key={`${m.tag}-${label}`} type="button" aria-pressed={on} aria-label={`Filter by project message: ${label}`} onClick={() => setMessageFilter(on ? messageFilter.filter((x) => x !== label) : [...messageFilter, label])}
+                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[12px] font-semibold px-2 py-1 rounded-full border hover:brightness-95 transition-all"
                     style={{ borderColor: on ? vars.accent : vars.g200, background: on ? "rgba(31,116,143,0.1)" : "white", color: on ? vars.accent : vars.g500 }}
                     title={m.long}>
                     [{m.tag}] {label.length > 50 ? `${label.slice(0, 50)}…` : label}
@@ -211,11 +211,11 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
       ) : (
         <div className="space-y-3">
           {filtered.map((item) => (
-            <div key={item.id} className="bg-white border rounded-xl p-5 transition-all hover:shadow-md hover:bg-slate-50 cursor-pointer" style={{ borderColor: vars.g200 }} onClick={() => sendToTool(item.id)}>
+            <article key={item.id} className="bg-white border rounded-xl p-5 transition-all hover:shadow-md hover:bg-slate-50" style={{ borderColor: vars.g200 }}>
               <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
-                <div className="flex-1 min-w-0">
+                <button type="button" onClick={() => sendToTool(item.id)} aria-label={`Open ${item.title} in ${item.source === "creator" ? "Creator" : "Optimiser"}`} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 flex-1 min-w-0 text-left rounded-lg">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <h3 className="text-[16px] font-semibold" style={{ color: vars.navy }}>{item.title}</h3>
+                    <span role="heading" aria-level={3} className="text-[16px] font-semibold" style={{ color: vars.navy }}>{item.title}</span>
                     <span className="text-[12px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded" style={{ background: item.status === "Final" ? "rgba(61,155,107,0.15)" : "rgba(212,146,42,0.15)", color: item.status === "Final" ? vars.green : vars.amber }}>{item.status}</span>
                   </div>
                   <p className="text-[13px] font-light" style={{ color: vars.g500 }}>
@@ -228,21 +228,23 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
                       ))}
                     </div>
                   )}
-                </div>
+                </button>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <button onClick={(e) => { e.stopPropagation(); sendToTool(item.id); }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg hover:brightness-95 transition-all" style={{ background: "rgba(31,116,143,0.08)", color: vars.teal }}>
+                  <button type="button" onClick={() => sendToTool(item.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 text-[13px] font-medium px-3 py-1.5 rounded-lg hover:brightness-95 transition-all" style={{ background: "rgba(31,116,143,0.08)", color: vars.teal }}>
                     {item.source === "creator" ? "Open in Creator" : "Open in Optimiser"}
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); pushArchiveToPlanner(item); }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg hover:brightness-95 transition-all" style={{ background: "rgba(91,168,181,0.12)", color: vars.teal }} title="Add a planner row populated from this content library item">
+                  <button type="button" onClick={() => pushArchiveToPlanner(item)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 text-[13px] font-medium px-3 py-1.5 rounded-lg hover:brightness-95 transition-all" style={{ background: "rgba(91,168,181,0.12)", color: vars.teal }} title="Add a planner row populated from this content library item">
                     Push to Comms Planner
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg hover:brightness-95 transition-all" style={{ color: vars.red, background: "rgba(201,74,62,0.06)" }}>Delete</button>
+                  <button type="button" onClick={() => handleDelete(item.id)} aria-label={`Delete ${item.title}`} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 text-[13px] font-medium px-3 py-1.5 rounded-lg hover:brightness-95 transition-all" style={{ color: vars.red, background: "rgba(201,74,62,0.06)" }}>Delete</button>
                 </div>
               </div>
-              <p className="text-[14px] font-light leading-relaxed line-clamp-3 mt-3" style={{ color: vars.g500 }}>
-                {item.body.slice(0, 240)}{item.body.length > 240 ? "..." : ""}
-              </p>
-            </div>
+              <button type="button" onClick={() => sendToTool(item.id)} aria-label={`Open ${item.title} content`} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-left w-full rounded-lg">
+                <p className="text-[14px] font-light leading-relaxed line-clamp-3 mt-3" style={{ color: vars.g500 }}>
+                  {item.body.slice(0, 240)}{item.body.length > 240 ? "..." : ""}
+                </p>
+              </button>
+            </article>
           ))}
         </div>
       )}

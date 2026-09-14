@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Zap, AlertTriangle, Info, Loader2 } from "lucide-react";
 import CountdownBanner from "./CountdownBanner";
 import type { GenerateStep } from "../types";
@@ -30,11 +30,52 @@ export function GenerateFromUrlModal({
   const [stepLabel, setStepLabel] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState("");
   const startRef = useRef<number>(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const firstFocusRef = useRef<HTMLInputElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const runningRef = useRef(false);
 
   const isRunning = step !== "idle" && step !== "done" && step !== "error";
   const canSubmit = url.trim().length > 0 && !isRunning;
+  runningRef.current = isRunning;
+
+  useEffect(() => {
+    returnFocusRef.current = document.activeElement as HTMLElement | null;
+    firstFocusRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !runningRef.current) {
+        event.preventDefault();
+        onCancel();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), [href], select:not([disabled]), textarea:not([disabled])',
+      ));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      returnFocusRef.current?.focus();
+    };
+  }, [onCancel]);
 
   function stopTimer() {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
@@ -45,6 +86,7 @@ export function GenerateFromUrlModal({
     setErrorMsg(null);
     setStep("scraping");
     setStepLabel("Scraping site");
+    setAnnouncement("Generation started. Scraping site.");
     setElapsed(0);
     startRef.current = Date.now();
     timerRef.current = setInterval(() => setElapsed(Math.floor((Date.now() - startRef.current) / 1000)), 250);
@@ -96,6 +138,7 @@ export function GenerateFromUrlModal({
           if (event === "step") {
             const label = typeof parsed.label === "string" ? parsed.label : "";
             setStepLabel(label);
+             if (label) setAnnouncement(`Generation stage: ${label}.`);
             if (label.toLowerCase().includes("scraping")) setStep("scraping");
             else if (label.toLowerCase().includes("generating")) setStep("generating");
             else if (label.toLowerCase().includes("saving")) setStep("saving");
@@ -104,6 +147,7 @@ export function GenerateFromUrlModal({
             resultProjectId = typeof parsed.projectId === "string" ? parsed.projectId : null;
             resultProjectName = typeof parsed.projectName === "string" ? parsed.projectName : "New Project";
             setStep("done");
+             setAnnouncement("Project generation complete.");
           } else if (event === "error") {
             throw new Error(typeof parsed.error === "string" ? parsed.error : "Something went wrong. Please try again.");
           }
@@ -115,11 +159,11 @@ export function GenerateFromUrlModal({
       onComplete(resultProjectId, resultProjectName!);
     } catch (err: unknown) {
       stopTimer();
-      if (err instanceof DOMException && err.name === "AbortError") {
-        setErrorMsg("This is taking longer than expected and timed out. Please try again.");
-      } else {
-        setErrorMsg(err instanceof Error ? err.message : "Something went wrong. Please try again.");
-      }
+      const message = err instanceof DOMException && err.name === "AbortError"
+        ? "This is taking longer than expected and timed out. Please try again."
+        : err instanceof Error ? err.message : "Something went wrong. Please try again.";
+      setErrorMsg(message);
+      setAnnouncement(`Generation error: ${message}`);
       setStep("error");
     } finally {
       clearTimeout(timeout);
@@ -134,9 +178,14 @@ export function GenerateFromUrlModal({
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-4 font-['Inter',sans-serif]"
       style={{ background: "rgba(16,43,54,0.45)" }}
-      onClick={() => { if (!isRunning) onCancel(); }}
+      onClick={() => { if (!runningRef.current) onCancel(); }}
+      role="presentation"
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="generate-project-title"
         className="w-full max-w-lg rounded-2xl p-7 sm:p-8"
         style={{ background: "white", border: `1px solid #E4DDD0` }}
         onClick={(e) => e.stopPropagation()}
@@ -147,18 +196,19 @@ export function GenerateFromUrlModal({
         >
           <Zap size={12} /> Admin Tool
         </div>
-        <h2 className="text-2xl mb-2" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+        <h2 id="generate-project-title" className="text-2xl mb-2" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
           Generate project from URL
         </h2>
         <p className="text-[14px] font-light mb-5 leading-relaxed" style={{ color: "#6B7280" }}>
           Enter a company website URL. AIO Fusion will scrape the site, populate all Set-Up fields using Claude, and run an initial GEO score - all in one step.
         </p>
 
-        <label className="block text-[11px] font-bold uppercase tracking-[0.15em] mb-1.5" style={{ color: "#6B7280" }}>
+        <label htmlFor="generate-project-url" className="block text-[11px] font-bold uppercase tracking-[0.15em] mb-1.5" style={{ color: "#6B7280" }}>
           Website URL <span style={{ color: accent }}>*</span>
         </label>
         <input
-          autoFocus
+          ref={firstFocusRef}
+          id="generate-project-url"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && canSubmit) void handleGenerate(); }}
@@ -168,10 +218,11 @@ export function GenerateFromUrlModal({
           style={{ border: `1px solid #E4DDD0`, color: ink, background: isRunning ? "#F9F5EF" : "white" }}
         />
 
-        <label className="block text-[11px] font-bold uppercase tracking-[0.15em] mb-1.5" style={{ color: "#6B7280" }}>
+        <label htmlFor="generate-project-company" className="block text-[11px] font-bold uppercase tracking-[0.15em] mb-1.5" style={{ color: "#6B7280" }}>
           Company name <span className="font-medium normal-case tracking-normal" style={{ color: "#9CA3AF" }}>(optional hint)</span>
         </label>
         <input
+          id="generate-project-company"
           value={companyName}
           onChange={(e) => setCompanyName(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && canSubmit) void handleGenerate(); }}
@@ -181,6 +232,7 @@ export function GenerateFromUrlModal({
           style={{ border: `1px solid #E4DDD0`, color: ink, background: isRunning ? "#F9F5EF" : "white" }}
         />
 
+        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</div>
         {isRunning && (
           <>
           <div className="mb-5 rounded-xl border p-4" style={{ borderColor: `${accent}40`, background: `${accent}08` }}>
@@ -219,13 +271,14 @@ export function GenerateFromUrlModal({
         {errorMsg && (
           <div className="mb-5 rounded-xl border p-4 flex items-start gap-3" style={{ borderColor: "#F87171", background: "#FEF2F2" }}>
             <AlertTriangle size={15} className="flex-shrink-0 mt-0.5 text-red-500" />
-            <p className="text-[13px]" style={{ color: "#B91C1C" }}>{errorMsg}</p>
+            <p className="text-[13px]" role="alert" style={{ color: "#B91C1C" }}>{errorMsg}</p>
           </div>
         )}
 
         <div className="flex items-center justify-end gap-3">
           <button
             onClick={onCancel}
+            type="button"
             disabled={isRunning}
             className="px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.15em] transition-colors"
             style={{ color: "#9CA3AF", cursor: isRunning ? "not-allowed" : "pointer" }}

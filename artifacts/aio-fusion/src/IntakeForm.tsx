@@ -981,6 +981,9 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
   const [autoFillNotice, setAutoFillNotice] = useState("");
   const [pickerTarget, setPickerTarget] = useState<null | "business" | "audience">(null);
   const [categorySearch, setCategorySearch] = useState("");
+  const pickerDialogRef = useRef<HTMLDivElement>(null);
+  const pickerSearchRef = useRef<HTMLInputElement>(null);
+  const pickerReturnFocusRef = useRef<HTMLElement | null>(null);
   const [fieldLimitErrors, setFieldLimitErrors] = useState<Record<string, string>>({});
   const [highlightedFieldId, setHighlightedFieldId] = useState<string | null>(null);
   const [pendingJump, setPendingJump] = useState<{
@@ -1008,6 +1011,49 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
   });
   const [optimisingField, setOptimisingField] = useState<string | null>(null);
   const [optimiseError, setOptimiseError] = useState<string>("");
+  const [optimiseNotice, setOptimiseNotice] = useState("");
+
+  // CategoryPicker is a modal rather than a popover: put focus in its search
+  // field when it opens, keep keyboard focus inside it, and return focus to
+  // the button that opened it when it closes.
+  useEffect(() => {
+    if (pickerTarget === null) {
+      const trigger = pickerReturnFocusRef.current;
+      if (trigger && trigger.isConnected) trigger.focus();
+      pickerReturnFocusRef.current = null;
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => pickerSearchRef.current?.focus());
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setPickerTarget(null);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const dialog = pickerDialogRef.current;
+      if (!dialog) return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [pickerTarget]);
 
   useEffect(() => {
     try {
@@ -1252,6 +1298,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
           type="button"
           onClick={() => askAiForField(fieldId)}
           disabled={aiLoadingField !== null}
+          aria-busy={aiLoadingField === fieldId}
           className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-colors"
           style={{
             borderColor: "rgba(200,73,122,0.4)",
@@ -1404,6 +1451,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
   const optimiseField = async (id: string) => {
     if (!(OPTIMISED_FIELD_IDS as readonly string[]).includes(id) || optimisedFields.has(id) || optimisingField) return;
     setOptimiseError("");
+    setOptimiseNotice("");
     if (!fieldHasContent(id)) {
       setOptimiseError("Write your own answer first, then Optimise will improve it.");
       return;
@@ -1456,6 +1504,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
       }
       setOptimisedFields((prev) => new Set(prev).add(id));
       if (intakeStatus !== "Accepted") setIntakeStatus("Optimised");
+      setOptimiseNotice("Answer optimised. Review the suggested wording before saving.");
     } catch (err: any) {
       setOptimiseError(err.message || "Could not optimise this answer. Please try again.");
     } finally {
@@ -1799,18 +1848,30 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
   };
 
   const [justSaved, setJustSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const saveDraft = () => {
+    let failed = false;
+    setSaveError("");
     const blob = { formData, duals, dualLists, spokespeople, products, productQueries, llmQueries, stringLists, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite, confirmedEntity };
     try {
       localStorage.setItem(currentIntakeKey(), JSON.stringify(blob));
-    } catch { /* noop */ }
+    } catch {
+      failed = true;
+    }
     // Mirror the save to the shared server store so it is visible on other
     // devices and to colleagues on the same login.
     try {
       const id = getActiveProjectId() || "default";
       const name = typeof formData["4.1"] === "string" ? (formData["4.1"] as string) : "";
       markIntakeSaved(id, blob, name);
-    } catch { /* noop */ }
+    } catch {
+      failed = true;
+    }
+    if (failed) {
+      setJustSaved(false);
+      setSaveError("We could not save your progress. Please try again.");
+      return;
+    }
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 2500);
   };
@@ -1873,9 +1934,9 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
         <div className="rounded-2xl border-2 p-4 sm:p-5 mb-6 sm:mb-8" style={{ background: "#FBF1F0", borderColor: "rgba(200,73,122,0.45)" }}>
           <div className="flex items-start gap-2.5 mb-3">
             <Sparkles size={18} style={{ color: "#C8497A", marginTop: 2, flexShrink: 0 }} />
-            <p className="text-[13px] font-bold" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
+                         <label htmlFor="intake-ai-website" className="text-[13px] font-bold" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
               Add your company website
-            </p>
+                         </label>
           </div>
           <div className="flex items-start gap-2.5">
             <div className="flex-1">
@@ -1886,6 +1947,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                   <>
                     <div className="relative w-full sm:max-w-md">
                       <input
+                        id="intake-ai-website"
                         value={aiWebsite}
                         onChange={(e) => { setAiWebsite(e.target.value); setUrlTouched(false); setAutoFillError(""); }}
                         onBlur={() => {
@@ -1913,8 +1975,8 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                         </span>
                       )}
                     </div>
-                    {showUrlError && (
-                      <p className="text-[12px] font-medium mt-2 flex items-center gap-1.5" style={{ color: "#DC2626" }}>
+                     {showUrlError && (
+                       <p role="alert" aria-live="assertive" className="text-[12px] font-medium mt-2 flex items-center gap-1.5" style={{ color: "#DC2626" }}>
                         <AlertCircle size={13} strokeWidth={2.5} />
                         That doesn&apos;t look like a valid URL - try something like yourcompany.com or https://yourcompany.com
                       </p>
@@ -1951,10 +2013,12 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                   </>
                 );
               })()}
-              {autoFillError && <p className="text-[12px] font-medium mt-2" style={{ color: "#DC2626" }}>{autoFillError}</p>}
-              {autoFillNotice && <p className="text-[12px] font-medium mt-2" style={{ color: "#15803D" }}>{autoFillNotice}</p>}
-              {aiError && <p className="text-[12px] font-medium mt-2" style={{ color: "#DC2626" }}>{aiError}</p>}
-              {aiNotice && <p className="text-[12px] font-medium mt-2" style={{ color: "#1F748F" }}>{aiNotice}</p>}
+               {autoFillLoading && <span className="sr-only" role="status" aria-live="polite">Filling all fields from your website. Please wait.</span>}
+               {aiLoadingField !== null && <span className="sr-only" role="status" aria-live="polite">Drafting an answer from your website. Please wait.</span>}
+               {autoFillError && <p role="alert" aria-live="assertive" className="text-[12px] font-medium mt-2" style={{ color: "#DC2626" }}>{autoFillError}</p>}
+               {autoFillNotice && <p role="status" aria-live="polite" className="text-[12px] font-medium mt-2" style={{ color: "#15803D" }}>{autoFillNotice}</p>}
+               {aiError && <p role="alert" aria-live="assertive" className="text-[12px] font-medium mt-2" style={{ color: "#DC2626" }}>{aiError}</p>}
+               {aiNotice && <p role="status" aria-live="polite" className="text-[12px] font-medium mt-2" style={{ color: "#1F748F" }}>{aiNotice}</p>}
               <div className="mt-3">
                 <CountdownBanner
                   active={autoFillLoading}
@@ -1986,7 +2050,9 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
               return (
                 <div key={t.key} className="flex-1 flex flex-col gap-3">
                   <button
+                    type="button"
                     onClick={() => setTrack(t.key)}
+                    aria-pressed={track === t.key}
                     className="group px-5 py-3 rounded-xl text-left transition-all duration-300 border-2 w-full hover:-translate-y-1 hover:shadow-lg"
                     style={{
                       background: "#FBF1F0",
@@ -2010,7 +2076,16 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                       <span className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: "#102B36" }}>{t.label}</span>
                       <span className="text-[14px] font-bold" style={{ color: "#C8497A", fontFamily: "'Alice', Georgia, serif" }}>{t.pct}%</span>
                     </div>
-                    <div className="w-full h-3 rounded-full overflow-hidden" style={{ background: "rgba(16,43,54,0.08)" }}>
+                     <div
+                       className="w-full h-3 rounded-full overflow-hidden"
+                       role="progressbar"
+                       aria-label={t.label}
+                       aria-valuemin={0}
+                       aria-valuemax={100}
+                       aria-valuenow={t.pct}
+                       aria-valuetext={`${t.pct}% complete`}
+                       style={{ background: "rgba(16,43,54,0.08)" }}
+                     >
                       <div className="h-full rounded-full transition-all duration-500" style={{ width: `${t.pct}%`, background: "linear-gradient(90deg, #C8497A 0%, #E07856 100%)" }} />
                     </div>
                   </div>
@@ -2197,34 +2272,36 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                             <div key={i} className="rounded-xl border p-4" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", borderLeft: "3px solid #C8497A" }}>
                               <div className="flex items-center justify-between mb-3">
                                 <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#C8497A" }}>Spokesperson {i + 1}</span>
-                                <button onClick={() => setSpokespeople(spokespeople.filter((_, j) => j !== i))} className="text-[11px]" style={{ color: vars.g400 }} title="Remove spokesperson"><X size={14} /></button>
+                                 <button type="button" onClick={() => setSpokespeople(spokespeople.filter((_, j) => j !== i))} className="text-[11px]" style={{ color: vars.g400 }} title="Remove spokesperson" aria-label={`Remove spokesperson ${i + 1}`}><X size={14} /></button>
                               </div>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                                 <div>
-                                  <label className="block text-[11px] font-semibold mb-1" style={{ color: vars.g500 }}>Name</label>
-                                  <input value={sp.name} onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, name: e.target.value } : s))} placeholder="e.g. Jane Smith" className="w-full px-3 py-2.5 rounded-lg border text-[14px] bg-white" style={{ borderColor: vars.g200 }} />
+                                    <label htmlFor={i === 0 ? `intake-control-${field.id}` : `spokesperson-${i}-name`} className="block text-[11px] font-semibold mb-1" style={{ color: vars.g500 }}>Name</label>
+                                   <input id={i === 0 ? `intake-control-${field.id}` : `spokesperson-${i}-name`} value={sp.name} onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, name: e.target.value } : s))} placeholder="e.g. Jane Smith" className="w-full px-3 py-2.5 rounded-lg border text-[14px] bg-white" style={{ borderColor: vars.g200 }} />
                                 </div>
                                 <div>
-                                  <label className="block text-[11px] font-semibold mb-1" style={{ color: vars.g500 }}>Title</label>
-                                  <input value={sp.title} onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, title: e.target.value } : s))} placeholder="e.g. Chief Executive" className="w-full px-3 py-2.5 rounded-lg border text-[14px] bg-white" style={{ borderColor: vars.g200 }} />
+                                   <label htmlFor={`spokesperson-${i}-title`} className="block text-[11px] font-semibold mb-1" style={{ color: vars.g500 }}>Title</label>
+                                   <input id={`spokesperson-${i}-title`} value={sp.title} onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, title: e.target.value } : s))} placeholder="e.g. Chief Executive" className="w-full px-3 py-2.5 rounded-lg border text-[14px] bg-white" style={{ borderColor: vars.g200 }} />
                                 </div>
                               </div>
                               <div className="mb-3">
-                                <label className="block text-[11px] font-semibold mb-1" style={{ color: vars.g500 }}>Areas of expertise</label>
+                                 <span className="block text-[11px] font-semibold mb-1" style={{ color: vars.g500 }}>Areas of expertise</span>
                                 <div className="space-y-2">
                                   {sp.expertise.length === 0 && (
                                     <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No areas yet. Add one below.</p>
                                   )}
                                   {sp.expertise.map((area, k) => (
                                     <div key={k} className="flex items-center gap-2">
-                                      <input
+                                       <input
+                                         id={`spokesperson-${i}-expertise-${k}`}
+                                         aria-label={`Spokesperson ${i + 1} expertise area ${k + 1}`}
                                         value={area}
                                         onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, expertise: s.expertise.map((a, m) => m === k ? e.target.value : a) } : s))}
                                         placeholder="e.g. B2B marketing strategy"
                                         className="flex-1 px-3 py-2.5 rounded-lg border text-[14px] bg-white"
                                         style={{ borderColor: vars.g200 }}
                                       />
-                                      <button onClick={() => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, expertise: s.expertise.filter((_, m) => m !== k) } : s))} className="text-[11px]" style={{ color: vars.g400 }} title="Remove area"><X size={14} /></button>
+                                       <button type="button" onClick={() => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, expertise: s.expertise.filter((_, m) => m !== k) } : s))} className="text-[11px]" style={{ color: vars.g400 }} title="Remove area" aria-label={`Remove expertise area ${k + 1}`}><X size={14} /></button>
                                     </div>
                                   ))}
                                 </div>
@@ -2235,10 +2312,11 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                                 >+ Add area</button>
                               </div>
                               <div>
-                                <label className="block text-[11px] font-semibold mb-1" style={{ color: vars.g500 }}>LinkedIn</label>
+                                   <label htmlFor={`spokesperson-${i}-linkedin`} className="block text-[11px] font-semibold mb-1" style={{ color: vars.g500 }}>LinkedIn</label>
                                 <div className="flex items-center gap-2">
                                   <Linkedin size={14} style={{ color: "#0A66C2", flexShrink: 0 }} />
                                   <input
+                                    id={`spokesperson-${i}-linkedin`}
                                     value={sp.linkedin}
                                     onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, linkedin: e.target.value } : s))}
                                     placeholder="LinkedIn URL - e.g. https://www.linkedin.com/in/yourname"
@@ -2252,6 +2330,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <button
+                            id={spokespeople.length === 0 ? `intake-control-${field.id}` : undefined}
                             onClick={() => setSpokespeople([...spokespeople, { name: "", title: "", expertise: [], linkedin: "" }])}
                             disabled={spokespeople.length >= MAX_SPOKESPEOPLE}
                             className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
@@ -2275,7 +2354,11 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                     const selected = isAudience ? audienceCategories : businessCategories;
                     const setSelected = isAudience ? setAudienceCategories : setBusinessCategories;
                     const target: "business" | "audience" = isAudience ? "audience" : "business";
-                    const openPicker = () => { setCategorySearch(""); setPickerTarget(target); };
+                     const openPicker = (event: { currentTarget: HTMLButtonElement }) => {
+                       pickerReturnFocusRef.current = event.currentTarget;
+                       setCategorySearch("");
+                       setPickerTarget(target);
+                     };
                     return (
                       <div key={field.id}>
                         <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} highlighted={highlightedFieldId === field.id} />
@@ -2289,7 +2372,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                               {selected.map((cat) => (
                                 <span key={cat} className="text-[11px] font-medium px-2.5 py-1 rounded-full inline-flex items-center gap-1.5" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>
                                   {cat}
-                                  <button onClick={() => setSelected(selected.filter((c) => c !== cat))} className="hover:text-red-500" title="Remove">
+                                   <button type="button" onClick={() => setSelected(selected.filter((c) => c !== cat))} className="hover:text-red-500" title={`Remove ${cat}`} aria-label={`Remove ${cat}`}>
                                     <X size={11} />
                                   </button>
                                 </span>
@@ -2298,14 +2381,17 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                           )}
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <button
+                           <button
+                            type="button"
+                            id={`intake-control-${field.id}`}
                             onClick={openPicker}
                             className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border"
                             style={{ borderColor: vars.g200, color: vars.accent }}
                           >
                             + Choose from {TRADE_MEDIA_CATEGORIES.length} categories
                           </button>
-                          <button
+                           <button
+                            type="button"
                             onClick={openPicker}
                             className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-dashed inline-flex items-center gap-1.5"
                             style={{ borderColor: vars.accent, color: vars.accent, background: "rgba(200,73,122,0.06)" }}
@@ -2334,8 +2420,9 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                         <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} highlighted={highlightedFieldId === field.id} />
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div>
-                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: "#C8497A" }}>(a) ≤6-word summary</p>
+                             <label htmlFor={`intake-control-${field.id}`} className="block text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: "#C8497A" }}>(a) ≤6-word summary</label>
                             <input
+                               id={`intake-control-${field.id}`}
                               value={v.short}
                               onChange={(e) => setDual(field.id, "short", e.target.value)}
                               placeholder={field.shortPlaceholder}
@@ -2347,8 +2434,9 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                             </p>
                           </div>
                           <div>
-                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: "#C8497A" }}>(b) ≤25-word longer version</p>
+                             <label htmlFor={`intake-${field.id}-long`} className="block text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: "#C8497A" }}>(b) ≤25-word longer version</label>
                             <textarea
+                               id={`intake-${field.id}-long`}
                               value={v.long}
                               onChange={(e) => setDual(field.id, "long", e.target.value)}
                               placeholder={field.longPlaceholder}
@@ -2384,11 +2472,13 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                             <div key={i} className="rounded-xl border p-3" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", borderLeft: "3px solid #C8497A" }}>
                               <div className="flex items-center justify-between mb-2">
                                 <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#C8497A" }}>{nounCap} {i + 1}</span>
-                                <button onClick={() => removeDualListItem(field.id, i)} title="Remove" className="text-[11px]" style={{ color: vars.g400 }}><X size={14} /></button>
+                                 <button type="button" onClick={() => removeDualListItem(field.id, i)} title={`Remove ${noun} ${i + 1}`} aria-label={`Remove ${noun} ${i + 1}`} className="text-[11px]" style={{ color: vars.g400 }}><X size={14} /></button>
                               </div>
                               <div className={field.singleField ? "" : "grid grid-cols-1 md:grid-cols-2 gap-2"}>
                                 {!field.singleField && (
                                   <input
+                                  id={!field.singleField && i === 0 ? `intake-control-${field.id}` : `intake-${field.id}-${i}-short`}
+                                    aria-label={`${nounCap} ${i + 1} short summary`}
                                     value={item.short}
                                     onChange={(e) => updateDualListItem(field.id, i, "short", e.target.value)}
                                     placeholder={field.shortPlaceholder || "≤6 words"}
@@ -2397,6 +2487,8 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                                   />
                                 )}
                                 <textarea
+                                  id={field.singleField && i === 0 ? `intake-control-${field.id}` : `intake-${field.id}-${i}-long`}
+                                  aria-label={`${nounCap} ${i + 1} longer version`}
                                   value={item.long}
                                   onChange={(e) => updateDualListItem(field.id, i, "long", e.target.value)}
                                   placeholder={field.longPlaceholder || "≤25 words"}
@@ -2410,6 +2502,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <button
+                            id={list.length === 0 ? `intake-control-${field.id}` : undefined}
                             onClick={() => addDualListItem(field.id)}
                             disabled={list.length >= maxForDualList(field.id)}
                             className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
@@ -2445,17 +2538,20 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                           {list.map((val, i) => (
                             <div key={i} className="flex items-center gap-2">
                               <input
+                                id={i === 0 ? `intake-control-${field.id}` : `intake-${field.id}-${i}`}
+                                aria-label={`${field.label} entry ${i + 1}`}
                                 value={val}
                                 onChange={(e) => updateItem(i, e.target.value)}
                                 className="flex-1 px-3 py-2.5 rounded-lg border text-[14px] bg-white"
                                 style={{ borderColor: vars.g200, color: vars.navy }}
                               />
-                              <button onClick={() => removeItem(i)} title="Remove" style={{ color: vars.g400 }}><X size={14} /></button>
+                               <button type="button" onClick={() => removeItem(i)} title={`Remove entry ${i + 1}`} aria-label={`Remove ${field.label} entry ${i + 1}`} style={{ color: vars.g400 }}><X size={14} /></button>
                             </div>
                           ))}
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <button
+                            id={list.length === 0 ? `intake-control-${field.id}` : undefined}
                             onClick={addItem}
                             disabled={list.length >= MAX_STRING_LIST}
                             className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
@@ -2481,10 +2577,12 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                             <div key={i} className="rounded-xl border p-3" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", borderLeft: "3px solid #C8497A" }}>
                               <div className="flex items-center justify-between mb-2">
                                 <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#C8497A" }}>Product / service {i + 1}</span>
-                                <button onClick={() => setProducts(products.filter((_, j) => j !== i))} title="Remove" className="text-[11px]" style={{ color: vars.g400 }}><X size={14} /></button>
+                                 <button type="button" onClick={() => setProducts(products.filter((_, j) => j !== i))} title={`Remove product or service ${i + 1}`} aria-label={`Remove product or service ${i + 1}`} className="text-[11px]" style={{ color: vars.g400 }}><X size={14} /></button>
                               </div>
                               <div className="space-y-2">
                                 <input
+                                   id={i === 0 ? `intake-control-${field.id}` : `product-${i}-name`}
+                                   aria-label={`Product or service ${i + 1} name`}
                                   value={p.name}
                                   onChange={(e) => setProducts(products.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
                                   placeholder="Core product or service"
@@ -2492,6 +2590,8 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                                   style={{ borderColor: vars.g200 }}
                                 />
                                 <textarea
+                                   id={`product-${i}-description`}
+                                   aria-label={`Product or service ${i + 1} description`}
                                   value={p.description}
                                   onChange={(e) => setProducts(products.map((x, j) => j === i ? { ...x, description: e.target.value } : x))}
                                   placeholder="One-sentence description"
@@ -2500,6 +2600,8 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                                   style={{ borderColor: vars.g200 }}
                                 />
                                 <input
+                                   id={`product-${i}-audience`}
+                                   aria-label={`Product or service ${i + 1} primary audience`}
                                   value={p.audience}
                                   onChange={(e) => setProducts(products.map((x, j) => j === i ? { ...x, audience: e.target.value } : x))}
                                   placeholder="Primary audience"
@@ -2512,6 +2614,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <button
+                            id={products.length === 0 ? `intake-control-${field.id}` : undefined}
                             onClick={() => setProducts([...products, { name: "", description: "", audience: "" }])}
                             disabled={products.length >= MAX_PRODUCTS}
                             className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
@@ -2540,10 +2643,12 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                             <div key={i} className="rounded-xl border p-3" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", borderLeft: "3px solid #C8497A" }}>
                               <div className="flex items-center justify-between mb-2">
                                 <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#C8497A" }}>Product / service area {i + 1}</span>
-                                <button onClick={() => setProductQueries(productQueries.filter((_, j) => j !== i))} title="Remove" className="text-[11px]" style={{ color: vars.g400 }}><X size={14} /></button>
+                                <button type="button" onClick={() => setProductQueries(productQueries.filter((_, j) => j !== i))} title={`Remove product or service area ${i + 1}`} aria-label={`Remove product or service area ${i + 1}`} className="text-[11px]" style={{ color: vars.g400 }}><X size={14} /></button>
                               </div>
                               <div className="space-y-2">
                                 <input
+                                  id={i === 0 ? `intake-control-${field.id}` : `product-query-${i}-area`}
+                                  aria-label={`Product or service area ${i + 1}`}
                                   value={q.area}
                                   onChange={(e) => setProductQueries(productQueries.map((x, j) => j === i ? { ...x, area: e.target.value } : x))}
                                   placeholder="Product or service area"
@@ -2551,6 +2656,8 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                                   style={{ borderColor: vars.g200 }}
                                 />
                                 <textarea
+                                  id={`product-query-${i}-phrases`}
+                                  aria-label={`Search phrases for product or service area ${i + 1}`}
                                   value={q.phrases}
                                   onChange={(e) => setProductQueries(productQueries.map((x, j) => j === i ? { ...x, phrases: e.target.value } : x))}
                                   placeholder="Search phrases and questions (think in questions as well as keywords)"
@@ -2564,6 +2671,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <button
+                            id={productQueries.length === 0 ? `intake-control-${field.id}` : undefined}
                             onClick={() => setProductQueries([...productQueries, { area: "", phrases: "" }])}
                             disabled={productQueries.length >= MAX_PRODUCTS}
                             className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
@@ -2588,6 +2696,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                       { key: "comparison", label: "Comparison and trust", sublabel: "They are evaluating you against alternatives" },
                     ];
                     const hasQueries = llmQueries.discovery.length > 0 || llmQueries.shortlist.length > 0 || llmQueries.comparison.length > 0;
+                    const firstQueryKey = groups.find((group) => llmQueries[group.key].length > 0)?.key;
                     const legacyText = typeof formData[field.id] === "string" ? (formData[field.id] as string).trim() : "";
                     return (
                       <div key={field.id}>
@@ -2596,16 +2705,19 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                         <div className="mb-4 flex flex-col gap-2">
                           <button
                             type="button"
+                            id={!hasQueries ? `intake-control-${field.id}` : undefined}
                             onClick={() => void generateLlmQueries()}
                             disabled={llmQueriesGenerating}
+                            aria-busy={llmQueriesGenerating}
                             className="self-start flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-all hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
                             style={{ background: vars.accent }}
                           >
                             {llmQueriesGenerating ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
                             {llmQueriesGenerating ? "Generating..." : hasQueries ? "Regenerate queries" : "Generate top 12 queries"}
                           </button>
+                          {llmQueriesGenerating && <span className="sr-only" role="status" aria-live="polite">Generating search queries. Please wait.</span>}
                           {llmQueriesError && (
-                            <p className="text-[12px]" style={{ color: "#DC2626" }}>{llmQueriesError}</p>
+                            <p role="alert" aria-live="assertive" className="text-[12px]" style={{ color: "#DC2626" }}>{llmQueriesError}</p>
                           )}
                           {!hasQueries && !llmQueriesGenerating && (
                             <p className="text-[12px] font-light" style={{ color: vars.g500 }}>
@@ -2636,6 +2748,8 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                                   {items.map((q, i) => (
                                     <div key={i} className="flex items-center gap-2">
                                       <input
+                                        id={key === firstQueryKey && i === 0 ? `intake-control-${field.id}` : `llm-query-${key}-${i}`}
+                                        aria-label={`${label} query ${i + 1}`}
                                         value={q}
                                         onChange={(e) => {
                                           const next = items.map((x, j) => (j === i ? e.target.value : x));
@@ -2654,6 +2768,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                                         className="flex-shrink-0 p-1 rounded transition-opacity hover:opacity-70"
                                         style={{ color: vars.g400 }}
                                         title="Remove query"
+                                        aria-label={`Remove ${label} query ${i + 1}`}
                                       >
                                         <X size={14} />
                                       </button>
@@ -2682,24 +2797,32 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                       <div key={field.id}>
                         <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} highlighted={highlightedFieldId === field.id} />
                         <div className="space-y-2 rounded-xl border-2 p-4" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white" }}>
-                          {field.options.map((opt) => {
+                          {field.options.map((opt, optionIndex) => {
                             const isOn = selected.includes(opt);
                             const onPick = () => (field.single ? selectSingle(field.id, opt) : toggleCheckbox(field.id, opt));
                             return (
                               <label key={opt} className="flex items-start gap-3 cursor-pointer group p-2 rounded-lg transition-colors hover:bg-[#FBF1F0]">
-                                <div
+                                <input
+                                  type={field.single ? "radio" : "checkbox"}
+                                  name={field.single ? `intake-${field.id}` : undefined}
+                                  id={optionIndex === 0 ? `intake-control-${field.id}` : `intake-${field.id}-${optionIndex}`}
+                                  checked={isOn}
+                                  onChange={onPick}
+                                  className="sr-only"
+                                  aria-label={opt}
+                                />
+                              <div
                                   className={`w-5 h-5 border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${field.single ? "rounded-full" : "rounded"}`}
                                   style={{
                                     borderColor: isOn ? "#C8497A" : "rgba(16,43,54,0.25)",
                                     background: isOn && !field.single ? "#C8497A" : "transparent",
                                   }}
-                                  onClick={onPick}
                                 >
                                   {isOn && (field.single
                                     ? <span className="w-2.5 h-2.5 rounded-full" style={{ background: "#C8497A" }} />
                                     : <Check size={12} color="white" />)}
                                 </div>
-                                <span className="text-[13px] leading-relaxed" style={{ color: isOn ? "#102B36" : "#374151", fontWeight: isOn ? 600 : 400 }} onClick={onPick}>
+                                <span className="text-[13px] leading-relaxed" style={{ color: isOn ? "#102B36" : "#374151", fontWeight: isOn ? 600 : 400 }}>
                                   {opt}
                                 </span>
                               </label>
@@ -2723,6 +2846,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                       {field.type === "textarea" ? (
                         <>
                           <textarea
+                            id={`intake-control-${field.id}`}
                             value={textValue}
                             onKeyDown={(e) => {
                               if (field.itemLimit && e.key === "Enter" && itemCount >= field.itemLimit) {
@@ -2765,7 +2889,6 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                             className="w-full px-4 py-3 rounded-xl border-2 text-[14px] font-light outline-none transition-colors focus:border-[#C8497A] resize-y"
                             style={{ borderColor: (field.wordLimit && wordCount(textValue) > field.wordLimit) || itemLimitMessage ? "#DC2626" : "rgba(16,43,54,0.15)", background: "white", color: baseColor }}
                             placeholder="Type your answer here..."
-                            aria-label={field.label}
                             aria-invalid={itemLimitMessage ? "true" : undefined}
                             aria-describedby={field.itemLimit ? `intake-field-limit-${field.id}` : undefined}
                           />
@@ -2783,7 +2906,8 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                               id={`intake-field-limit-${field.id}`}
                               className="mt-1 flex items-start justify-between gap-3 text-[11px] font-semibold"
                               style={{ color: itemLimitMessage ? "#DC2626" : "rgba(16,43,54,0.52)" }}
-                              aria-live="polite"
+                              role={itemLimitMessage ? "alert" : "status"}
+                              aria-live={itemLimitMessage ? "assertive" : "polite"}
                             >
                               <span>{itemLimitMessage || (itemCount === field.itemLimit ? "Limit reached. Remove or edit a question before adding another." : "Enter one question per line.")}</span>
                               <span className="whitespace-nowrap">{itemCount} of {field.itemLimit}</span>
@@ -2792,13 +2916,13 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                         </>
                       ) : (
                         <input
+                          id={`intake-control-${field.id}`}
                           type="text"
                           value={(formData[field.id] as string) || ""}
                           onChange={(e) => updateField(field.id, e.target.value)}
                           className="w-full px-4 py-3 rounded-xl border-2 text-[14px] font-light outline-none transition-colors focus:border-[#C8497A]"
                           style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: baseColor }}
                           placeholder="Type your answer here..."
-                          aria-label={field.label}
                         />
                       )}
                       {field.id === "1.1" && <AiAssistButton fieldId="1.1" />}
@@ -2812,9 +2936,17 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
             <div className="px-4 sm:px-8 py-4 border-t no-print" style={{ borderColor: vars.g100, background: "#FBF9F6" }}>
               <div className="flex flex-wrap items-center gap-3">
                 {optimiseError && (
-                  <div className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl w-full" style={{ background: "rgba(201,74,62,0.1)", color: "#C94A3E" }}>
+                  <div role="alert" aria-live="assertive" className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl w-full" style={{ background: "rgba(201,74,62,0.1)", color: "#C94A3E" }}>
                     <Info size={12} className="flex-shrink-0 mt-0.5" />
                     <span>{optimiseError}</span>
+                  </div>
+                )}
+                {optimisingField !== null && <span className="sr-only" role="status" aria-live="polite">Optimising your answer. Please wait.</span>}
+                {optimiseNotice && <div role="status" aria-live="polite" className="sr-only">{optimiseNotice}</div>}
+                {saveError && (
+                  <div role="alert" aria-live="assertive" className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl w-full" style={{ background: "rgba(201,74,62,0.1)", color: "#C94A3E" }}>
+                    <Info size={12} className="flex-shrink-0 mt-0.5" />
+                    <span>{saveError}</span>
                   </div>
                 )}
                 <button
@@ -2829,6 +2961,11 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                 >
                   {justSaved ? <><Check size={13} /> Saved</> : <><Save size={13} /> Save for later</>}
                 </button>
+                {justSaved && (
+                  <span className="sr-only" role="status" aria-live="polite">
+                    Project Set-Up saved for later.
+                  </span>
+                )}
                 <button
                   onClick={acceptProjectData}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md hover:brightness-110"
@@ -2927,14 +3064,23 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
         const displayCategories = [...customMatches, ...filteredCategories];
         return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setPickerTarget(null)}>
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div
+            ref={pickerDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="category-picker-title"
+            className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-              <h2 className="text-[16px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{pickerTitle} - trade media (alpha)</h2>
-              <button onClick={() => setPickerTarget(null)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
+              <h2 id="category-picker-title" className="text-[16px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{pickerTitle} - trade media (alpha)</h2>
+              <button type="button" onClick={() => setPickerTarget(null)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }} aria-label="Close category picker">&times;</button>
             </div>
             <div className="px-6 py-3 border-b" style={{ borderColor: vars.g100 }}>
               <input
-                autoFocus
+                ref={pickerSearchRef}
+                id="category-picker-search"
+                aria-label="Filter or add a sector"
                 value={categorySearch}
                 onChange={(e) => setCategorySearch(e.target.value)}
                 onKeyDown={(e) => {
@@ -2950,6 +3096,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
               />
               {canAddCustom && (
                 <button
+                  type="button"
                   onClick={() => { pickerSet([...pickerSelected, customLabel]); setCategorySearch(""); }}
                   className="mt-2 w-full text-left text-[12px] font-semibold px-3 py-2 rounded-lg border border-dashed flex items-center gap-2"
                   style={{ borderColor: vars.accent, color: vars.accent, background: "rgba(200,73,122,0.06)" }}
@@ -2967,7 +3114,10 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                   const on = pickerSelected.includes(cat);
                   return (
                     <button
+                      type="button"
                       key={cat}
+                      aria-pressed={on}
+                      aria-label={`${on ? "Remove" : "Select"} ${cat}`}
                       onClick={() => pickerSet(on ? pickerSelected.filter((c) => c !== cat) : [...pickerSelected, cat])}
                       className="text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors"
                       style={{ background: on ? "rgba(31,116,143,0.08)" : "transparent" }}
@@ -2985,8 +3135,8 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
               </div>
             </div>
             <div className="px-6 py-3 border-t flex justify-end gap-2" style={{ borderColor: vars.g200 }}>
-              <button onClick={() => pickerSet([])} className="text-[12px] font-semibold px-3 py-2 rounded-lg" style={{ color: vars.g500 }}>Clear all</button>
-              <button onClick={() => setPickerTarget(null)} className="text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.accent }}>Done</button>
+              <button type="button" onClick={() => pickerSet([])} className="text-[12px] font-semibold px-3 py-2 rounded-lg" style={{ color: vars.g500 }}>Clear all</button>
+              <button type="button" onClick={() => setPickerTarget(null)} className="text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.accent }}>Done</button>
             </div>
           </div>
         </div>
@@ -3044,14 +3194,15 @@ function FieldLabel({ id, label, hint, website = "", companyName = "", optimisab
         boxShadow: highlighted ? "0 0 0 4px rgba(200,73,122,0.45)" : undefined,
       }}
     >
-      <label className="flex items-baseline gap-2.5 text-[15px] font-bold leading-snug" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
+      <div className="flex items-baseline gap-2.5 text-[15px] font-bold leading-snug" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
         {id.match(/^\d/) && (
           <span className="inline-flex items-center justify-center text-[10px] font-bold uppercase tracking-[0.1em] px-2 py-0.5 rounded-md flex-shrink-0" style={{ background: "#FBE3ED", color: "#C8497A", fontFamily: "Inter, sans-serif" }}>{id}</span>
         )}
-        <span>{label}</span>
+         <label htmlFor={`intake-control-${id}`} className="cursor-pointer">{label}</label>
         <button
           type="button"
           onClick={copyQuestion}
+           aria-label={copied ? `Copied prompt for ${label}` : `Copy prompt for ${label}`}
           title="Copy a ready-to-paste prompt (with your company website built in) for your own AI assistant to draft this answer"
           className="inline-flex items-center gap-1 text-[10px] font-semibold flex-shrink-0 px-1.5 py-0.5 rounded-md transition-colors self-center"
           style={{ color: copied ? "#3D9B6B" : "#C8497A", fontFamily: "Inter, sans-serif", background: copied ? "rgba(61,155,107,0.1)" : "transparent" }}
@@ -3089,7 +3240,7 @@ function FieldLabel({ id, label, hint, website = "", companyName = "", optimisab
             Complete this answer
           </span>
         )}
-      </label>
+      </div>
       {hint && <p className="text-[12px] font-light leading-relaxed mt-1.5 pl-0.5" style={{ color: "#374151" }}>{hint}</p>}
     </div>
   );

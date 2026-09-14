@@ -294,7 +294,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
       <p className="text-[12px] font-light mb-3 leading-relaxed" style={{ color: vars.g600 }}>
         You've been invited to join these workspaces.
       </p>
-      {myInvitesLoading && <p className="mb-3 flex items-center gap-2 text-[12px]" data-testid="status-invites-loading" style={{ color: vars.g600 }}><Loader2 size={12} className="animate-spin" /> Loading invitations...</p>}
+      {myInvitesLoading && <p className="mb-3 flex items-center gap-2 text-[12px]" role="status" aria-live="polite" data-testid="status-invites-loading" style={{ color: vars.g600 }}><Loader2 size={12} className="animate-spin" /> Loading invitations...</p>}
       {myInvitesLoadError && (
         <div className="mb-3 flex items-center gap-2" role="alert" data-testid="status-invites-load-error">
           <p className="text-[12px] font-semibold" style={{ color: accent }}>{myInvitesLoadError}</p>
@@ -302,7 +302,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
         </div>
       )}
       {myInviteError && (
-        <p className="mb-3 text-[12px] font-semibold" style={{ color: accent }}>{myInviteError}</p>
+        <p className="mb-3 text-[12px] font-semibold" role="alert" aria-live="assertive" style={{ color: accent }}>{myInviteError}</p>
       )}
       <div className="space-y-2">
         {myInvites.filter((i) => !myInvitesAccepted[i.token]).map((i) => {
@@ -403,7 +403,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
 
   return (
     <>
-    <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+    <section aria-labelledby="team-members-heading" className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
       {roleViolations.length > 0 && (
         <div className="mb-5 rounded-xl p-4" style={{ background: "#FFFBEB", border: "1px solid #FDE68A" }}>
           <div className="flex flex-col sm:flex-row sm:items-start gap-3">
@@ -437,7 +437,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
         </div>
       )}
       <div className="flex items-center justify-between mb-1">
-        <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Team members</h2>
+        <h2 id="team-members-heading" className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Team members</h2>
         <span className="text-[11px] font-bold uppercase tracking-[0.14em] px-3 py-1 rounded-full" style={{ background: seatsFull ? "#FDECEC" : accentSoft, color: seatsFull ? "#B3261E" : accent }}>
           {isMaster ? "Unlimited team members" : `${team.seatsUsed} / ${team.seatLimit} ${isAgency ? "account seats" : "seats"}`}
         </span>
@@ -456,8 +456,9 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
       <form onSubmit={handleInvite} className="mb-6">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3">
           <div className="md:col-span-6">
-            <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Full name</label>
+            <label htmlFor="team-invite-full-name" className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Full name</label>
             <input
+              id="team-invite-full-name"
               type="text"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
@@ -468,8 +469,9 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
             />
           </div>
           <div className="md:col-span-6">
-            <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Position</label>
+            <label htmlFor="team-invite-position" className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Position</label>
             <input
+              id="team-invite-position"
               type="text"
               value={position}
               onChange={(e) => setPosition(e.target.value)}
@@ -482,8 +484,9 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
         </div>
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3 md:items-end">
           <div className="md:col-span-5">
-            <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Email address</label>
+            <label htmlFor="team-invite-email" className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Email address</label>
             <input
+              id="team-invite-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -494,13 +497,14 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
             />
           </div>
           <div className="md:col-span-4">
-            <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Role</label>
+            <label htmlFor="team-invite-role" className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Role</label>
             {isClient || (isAgency && restrict) ? (
               <div className="w-full px-3 py-2.5 rounded-lg border text-[14px]" style={{ borderColor: vars.g200, background: "#f8fafc", color: ink }}>
                 Content Team Member
               </div>
             ) : (
               <select
+                id="team-invite-role"
                 value={role}
                 onChange={(e) => setRole(e.target.value as MembershipRole)}
                 className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 bg-white"
@@ -527,8 +531,8 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
 
         {projectScoped && (
           <div className="mt-3">
-            <label className="flex items-center gap-2 text-[13px]" style={{ color: ink }}>
-              <input type="checkbox" checked={restrict} onChange={(e) => setRestrict(e.target.checked)} style={{ accentColor: accent }} />
+            <label htmlFor="team-invite-restrict" className="flex items-center gap-2 text-[13px]" style={{ color: ink }}>
+              <input id="team-invite-restrict" type="checkbox" checked={restrict} onChange={(e) => setRestrict(e.target.checked)} style={{ accentColor: accent }} />
               {isAgency ? "Assign to specific projects (project seat - Content Team Member)" : "Limit to specific projects"}
             </label>
             {restrict && (
@@ -554,6 +558,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
                       title={full ? `This project's ${projectSeatLimit} seats are taken.` : undefined}
                     >
                       <input
+                        aria-label={`Assign ${p.name || p.id} to this invite`}
                         type="checkbox"
                         className="hidden"
                         checked={checked}
@@ -579,9 +584,9 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
               : `You've reached your seat limit (${team.seatLimit}). Contact info@aiofusion.ai to add more seats.`}
           </p>
         )}
-        {inviteError && <p className="mt-3 text-[12px] font-semibold" style={{ color: accent }}>{inviteError}</p>}
+        {inviteError && <p className="mt-3 text-[12px] font-semibold" role="alert" aria-live="assertive" style={{ color: accent }}>{inviteError}</p>}
         {inviteSuccess && (
-          <p className="mt-3 text-[12px] font-semibold flex items-center gap-1.5" style={{ color: "#1B7A3E" }}>
+          <p className="mt-3 text-[12px] font-semibold flex items-center gap-1.5" role="status" aria-live="polite" style={{ color: "#1B7A3E" }}>
             <CheckCircle2 size={13} /> {inviteSuccess}
           </p>
         )}
@@ -631,6 +636,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
                     <select
                       value={m.role}
                       disabled={busy === m.userId}
+                      aria-label={`Role for ${m.name || m.email || m.userId}`}
                       onChange={(e) => handleRoleChange(m.userId, e.target.value as MembershipRole)}
                       className="px-2 py-1.5 rounded-lg border text-[12px] bg-white"
                       style={{ borderColor: vars.g200 }}
@@ -657,8 +663,10 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
                     </button>
                   )}
                   <button
+                    type="button"
                     onClick={() => handleRemove(m.userId, m.name || m.email || "this member")}
                     disabled={busy === m.userId}
+                    aria-label={`Remove ${m.name || m.email || "this member"} from team`}
                     className="p-2 rounded-lg transition-colors hover:bg-red-50"
                     title="Remove from team"
                     style={{ color: "#B3261E" }}
@@ -671,8 +679,9 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
           </div>
           {accessEditor?.userId === m.userId && (
             <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${vars.g200}` }}>
-              <label className="flex items-center gap-2 text-[13px]" style={{ color: ink }}>
+              <label htmlFor={`team-access-restrict-${m.userId}`} className="flex items-center gap-2 text-[13px]" style={{ color: ink }}>
                 <input
+                  id={`team-access-restrict-${m.userId}`}
                   type="checkbox"
                   checked={accessEditor.restrict}
                   onChange={(e) => setAccessEditor((prev) => prev && { ...prev, restrict: e.target.checked })}
@@ -699,6 +708,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
                         style={{ borderColor: checked ? accent : vars.g300, background: checked ? accentSoft : "white", color: checked ? accent : ink }}
                       >
                         <input
+                          aria-label={`Allow ${p.name || p.id} for this member`}
                           type="checkbox"
                           className="hidden"
                           checked={checked}
@@ -860,7 +870,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
         </div>
       )}
 
-    </div>
+    </section>
     {invitationsBlock}
     </>
   );

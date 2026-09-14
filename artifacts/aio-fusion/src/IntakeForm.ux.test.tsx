@@ -101,4 +101,43 @@ describe("Project Set-Up completion guidance", () => {
     expect(screen.getByText(/Review and edit any pre-filled content/i)).toBeInTheDocument();
     expect(screen.getByText(/equivalent registry in your country/i)).toBeInTheDocument();
   });
+
+  it("manages CategoryPicker focus on open, Escape, and return", () => {
+    render(<IntakePage />);
+
+    const trigger = screen.getByLabelText("Media categories your business operates in");
+    fireEvent.click(trigger);
+
+    const dialog = screen.getByRole("dialog", { name: /your business categories/i });
+    const search = screen.getByRole("textbox", { name: /filter or add a sector/i });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(document.activeElement).toBe(search);
+
+    const done = screen.getByRole("button", { name: "Done" });
+    const close = screen.getByRole("button", { name: "Close category picker" });
+    done.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(close);
+    close.focus();
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(done);
+    search.focus();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("exposes selected tracks and progress semantics", () => {
+    render(<IntakePage />);
+
+    const prTrack = screen.getByRole("button", { name: /PR Set-Up Business Messaging/i });
+    const aioTrack = screen.getByRole("button", { name: /AIO Set-Up Business Profile/i });
+    expect(prTrack).toHaveAttribute("aria-pressed", "true");
+    expect(aioTrack).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getAllByRole("progressbar")).toHaveLength(2);
+    expect(screen.getAllByRole("progressbar")[0]).toHaveAttribute("aria-valuemin", "0");
+    expect(screen.getAllByRole("progressbar")[0]).toHaveAttribute("aria-valuemax", "100");
+  });
 });

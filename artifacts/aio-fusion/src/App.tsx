@@ -1607,7 +1607,7 @@ function App() {
         onClose={() => setGeorgeOpen(false)}
         userName={session?.username}
       />
-      <main ref={mainRef} className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: "#1A647B" }}>
+      <main ref={mainRef} aria-label="AIO Fusion workspace" className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: "#1A647B" }}>
         <Suspense fallback={<RouteLoading />}>
           {currentPage === "dashboard" && (
             <DashboardPage onNavigate={transitionToPage} activeClient={activeClient} />

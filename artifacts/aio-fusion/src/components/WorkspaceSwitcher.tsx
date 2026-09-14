@@ -17,6 +17,7 @@ interface Props {
  */
 export function WorkspaceSwitcher({ workspaces, className = "" }: Props) {
   const [switching, setSwitching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (workspaces.length <= 1) return null;
 
@@ -25,20 +26,23 @@ export function WorkspaceSwitcher({ workspaces, className = "" }: Props) {
   const handleChange = async (companyId: string) => {
     if (companyId === active?.companyId) return;
     setSwitching(true);
-    await serverSwitchWorkspace(companyId);
+    setError(null);
+    const result = await serverSwitchWorkspace(companyId);
     // serverSwitchWorkspace reloads on success; only reached on error.
     setSwitching(false);
+    if (!result.ok) setError(result.error ?? "Could not switch workspace.");
   };
 
   return (
     <div
       className={`flex items-center gap-2 ${className}`}
       title="Switch workspace"
+      aria-live="polite"
     >
       <Building2 size={13} color="#1F748F" />
       {switching ? (
         <span className="flex items-center gap-1.5 text-[12px] font-medium" style={{ color: "#1F748F" }}>
-          <Loader2 size={12} className="animate-spin" /> Switching…
+          <Loader2 size={12} className="animate-spin" aria-hidden="true" /> Switching…
         </span>
       ) : (
         <select
@@ -47,6 +51,7 @@ export function WorkspaceSwitcher({ workspaces, className = "" }: Props) {
           className="text-[12px] font-semibold bg-transparent border-none outline-none cursor-pointer pr-1"
           style={{ color: "#1F748F" }}
           aria-label="Switch workspace"
+          aria-describedby={error ? "workspace-switch-error" : undefined}
         >
           {workspaces.map((w) => (
             <option key={w.companyId} value={w.companyId}>
@@ -55,6 +60,7 @@ export function WorkspaceSwitcher({ workspaces, className = "" }: Props) {
           ))}
         </select>
       )}
+      {error && <span id="workspace-switch-error" role="alert" className="sr-only">{error}</span>}
     </div>
   );
 }

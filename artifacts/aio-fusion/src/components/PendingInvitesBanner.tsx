@@ -119,6 +119,8 @@ export function PendingInvitesBanner({ invites, loading, loadError, onRetry, acc
   return (
     <div
       ref={bannerRef}
+      role="region"
+      aria-labelledby="pending-invites-heading"
       className="fixed top-0 left-0 right-0 z-50 font-['Inter',sans-serif]"
       style={{ background: "#FFFBEB", borderBottom: "1px solid #FDE68A" }}
     >
@@ -127,7 +129,7 @@ export function PendingInvitesBanner({ invites, loading, loadError, onRetry, acc
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2 pt-0.5">
             <Bell size={14} color="#92400E" />
-            <span className="text-[13px] font-semibold" style={{ color: "#92400E" }}>
+             <span id="pending-invites-heading" className="text-[13px] font-semibold" role="status" aria-live="polite" style={{ color: "#92400E" }}>
               {pending.length > 0
                 ? `You have ${pending.length} pending team invitation${pending.length === 1 ? "" : "s"}`
                 : loading ? "Loading team invitations" : loadError ? "Could not load team invitations" : "Invitations accepted"}
@@ -136,7 +138,7 @@ export function PendingInvitesBanner({ invites, loading, loadError, onRetry, acc
           <button
             onClick={onDismiss}
             className="p-1 rounded hover:bg-yellow-100 flex-shrink-0 transition-colors"
-            aria-label="Dismiss"
+             aria-label="Dismiss team invitations"
           >
             <X size={14} color="#92400E" />
           </button>

@@ -12,6 +12,30 @@
     padding: 0;
   }
 
+  /*
+   * Keep the keyboard focus indicator independent of component colour themes.
+   * The two outlines provide enough contrast against both the light content
+   * cards and the dark navigation surfaces used by authenticated routes.
+   */
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 3px solid #f59e0b !important;
+    outline-offset: 3px !important;
+    box-shadow: 0 0 0 6px rgba(15, 23, 42, 0.9) !important;
+  }
+
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus:not(:focus-visible) {
+    outline: none !important;
+  }
+
+  /* Never let a reset or utility class remove the browser's keyboard cue. */
+  @media (forced-colors: active) {
+    :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+      outline: 3px solid Highlight !important;
+      outline-offset: 3px !important;
+      box-shadow: none !important;
+    }
+  }
+
   body {
     @apply font-sans antialiased;
     background: #f8fafc;
@@ -140,4 +164,26 @@
 }
 .marketing-nav-link:hover::after {
   transform: scaleX(1);
+}
+
+/*
+ * Respect a user's reduced-motion preference without hiding state changes.
+ * A very short single iteration lets transitions settle on their final value,
+ * while the indeterminate loader is held at its visible starting position.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .aio-indeterminate-bar {
+    animation: none !important;
+    left: 0 !important;
+  }
 }

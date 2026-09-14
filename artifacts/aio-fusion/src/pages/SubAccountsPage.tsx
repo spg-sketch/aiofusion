@@ -861,8 +861,8 @@ function SubAccountsPage({
     <div className="aio-account-settings min-h-screen font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
       <header className="settings-header px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: paper, borderBottom: `1px solid ${vars.g200}` }}>
         <div className="settings-header-brand flex items-center gap-5">
-          <button onClick={onBack} className="settings-logo flex items-center gap-3.5">
-            <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
+          <button type="button" onClick={onBack} aria-label="Return to AIO Fusion home" className="settings-logo flex items-center gap-3.5">
+            <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion home" className="h-16 sm:h-24" />
           </button>
         </div>
         <div className="flex items-center gap-4 sm:gap-6">
@@ -906,6 +906,7 @@ function SubAccountsPage({
                         <button
                           type="button"
                           onClick={() => selectSection(item.id)}
+                          aria-current={active ? "page" : undefined}
                           className={`settings-nav-button w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-[13px] transition-all ${active ? "settings-nav-button-active" : ""}`}
                           style={{
                             background: active ? accentSoft : "transparent",
@@ -946,6 +947,7 @@ function SubAccountsPage({
                     key={item.id}
                     type="button"
                     onClick={() => selectSection(item.id)}
+                    aria-current={active ? "page" : undefined}
                     className={`settings-mobile-nav-button flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[12px] font-bold whitespace-nowrap transition-all ${active ? "settings-mobile-nav-button-active" : ""}`}
                     style={{
                       background: active ? accent : "white",
@@ -1156,6 +1158,7 @@ function SubAccountsPage({
                 </span>
                 <input
                   type="file"
+                  aria-label="Upload profile photo"
                   accept="image/png,image/jpeg,image/webp"
                   className="hidden"
                   disabled={uploadingImage !== null}
@@ -1250,6 +1253,7 @@ function SubAccountsPage({
                 </span>
                 <input
                   type="file"
+                  aria-label="Upload workspace logo"
                   accept="image/png,image/jpeg,image/webp"
                   className="hidden"
                   disabled={uploadingImage !== null}
@@ -1416,6 +1420,7 @@ function SubAccountsPage({
                 <span className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: vars.g500 }}>Zoom</span>
                 <input
                   type="range"
+                  aria-label="Logo zoom"
                   min={0.4}
                   max={3}
                   step={0.01}
@@ -1482,8 +1487,9 @@ function SubAccountsPage({
           <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{isAgencyPartner ? "Add a Client Project" : "Create a client account"}</h2>
           <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-12 gap-3">
             <div className="md:col-span-6">
-              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Company name</label>
+              <label htmlFor="new-client-company-name" className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Company name</label>
               <input
+                id="new-client-company-name"
                 type="text"
                 value={newCompanyName}
                 onChange={(e) => { setNewCompanyName(e.target.value); setAddSuccess(null); }}
@@ -1494,8 +1500,9 @@ function SubAccountsPage({
               />
             </div>
             <div className="md:col-span-6">
-              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Company website</label>
+              <label htmlFor="new-client-company-website" className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Company website</label>
               <input
+                id="new-client-company-website"
                 type="text"
                 inputMode="url"
                 value={newWebsite}
@@ -1507,8 +1514,9 @@ function SubAccountsPage({
               />
             </div>
             <div className="md:col-span-6">
-              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Key contact full name <span className="font-medium normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
+              <label htmlFor="new-client-contact-name" className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Key contact full name <span className="font-medium normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
               <input
+                id="new-client-contact-name"
                 type="text"
                 value={newContactName}
                 onChange={(e) => { setNewContactName(e.target.value); setAddSuccess(null); }}
@@ -1518,8 +1526,9 @@ function SubAccountsPage({
               />
             </div>
             <div className="md:col-span-6">
-              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Key contact email <span className="font-medium normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
+              <label htmlFor="new-client-contact-email" className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Key contact email <span className="font-medium normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
               <input
+                id="new-client-contact-email"
                 type="text"
                 inputMode="email"
                 value={newContactEmail}
@@ -1530,8 +1539,9 @@ function SubAccountsPage({
               />
             </div>
             {!isAgencyPartner && (
-            <label className="md:col-span-12 flex items-start gap-3 rounded-lg border px-4 py-3 cursor-pointer" style={{ borderColor: vars.g200, background: newManaged ? accentSoft : "white" }}>
+            <label htmlFor="new-client-managed" className="md:col-span-12 flex items-start gap-3 rounded-lg border px-4 py-3 cursor-pointer" style={{ borderColor: vars.g200, background: newManaged ? accentSoft : "white" }}>
               <input
+                id="new-client-managed"
                 type="checkbox"
                 checked={newManaged}
                 onChange={(e) => { setNewManaged(e.target.checked); setAddSuccess(null); }}
@@ -1558,6 +1568,7 @@ function SubAccountsPage({
                 >
                   {logoProcessing ? "Processing..." : newLogoDataUrl ? "Replace logo" : "Upload logo"}
                   <input
+                    aria-label="Upload client logo"
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
                     className="hidden"
