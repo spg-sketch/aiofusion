@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   getStripeCredentials,
   selectStripeConnectionItem,
@@ -11,6 +11,11 @@ const originalStagingWebhookSecret = process.env.STRIPE_STAGING_WEBHOOK_SECRET;
 const originalConnectorsHostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
 const originalReplIdentity = process.env.REPL_IDENTITY;
 const originalWebReplRenewal = process.env.WEB_REPL_RENEWAL;
+
+beforeEach(() => {
+  // Never let a real webhook signing secret enter assertion output.
+  delete process.env.STRIPE_STAGING_WEBHOOK_SECRET;
+});
 
 afterEach(() => {
   if (originalDeploymentEnv === undefined) {
