@@ -1,0 +1,446 @@
+.focused-onboarding {
+  --fo-ink: #0a1628;
+  --fo-navy: #102b36;
+  --fo-pink: #c8497a;
+  --fo-pink-pale: #fff7fa;
+  --fo-line: #d7e5e4;
+  min-height: 100dvh;
+  color: var(--fo-ink);
+  background:
+    radial-gradient(circle at 79% 5%, rgba(215, 239, 235, .8), transparent 27rem),
+    linear-gradient(135deg, #f4faf9 0%, #f8fbfa 58%, #fff7fa 100%);
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+.focused-onboarding *,
+.focused-onboarding *::before,
+.focused-onboarding *::after {
+  box-sizing: border-box;
+}
+
+.focused-onboarding button,
+.focused-onboarding input,
+.focused-onboarding select,
+.focused-onboarding textarea {
+  font: inherit;
+}
+
+.focused-onboarding button:focus-visible,
+.focused-onboarding input:focus-visible,
+.focused-onboarding select:focus-visible,
+.focused-onboarding textarea:focus-visible {
+  outline: 3px solid rgba(200, 73, 122, .4);
+  outline-offset: 2px;
+}
+
+.focused-onboarding .fo-shell {
+  display: flex;
+  min-height: 100dvh;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.focused-onboarding .fo-rail {
+  display: flex;
+  width: 310px;
+  flex: 0 0 310px;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 28px 40px 40px;
+  color: white;
+  background: var(--fo-navy);
+}
+
+.focused-onboarding .fo-rail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.focused-onboarding .fo-wordmark {
+  width: auto;
+  height: 40px;
+}
+
+.focused-onboarding .fo-mobile-signout,
+.focused-onboarding .fo-mobile-progress {
+  display: none;
+}
+
+.focused-onboarding .fo-rail-copy {
+  margin-top: 96px;
+}
+
+.focused-onboarding .fo-serif {
+  font-family: "Alice", Georgia, serif;
+}
+
+.focused-onboarding .fo-rail-copy h1 {
+  margin: 20px 0 0;
+  color: white;
+  font-family: "Alice", Georgia, serif;
+  font-size: 38px;
+  font-weight: 400;
+  line-height: 1.08;
+}
+
+.focused-onboarding .fo-rail-copy p {
+  max-width: 215px;
+  margin: 20px 0 0;
+  color: rgba(255, 255, 255, .7);
+  font-size: 13px;
+  line-height: 1.85;
+}
+
+.focused-onboarding .fo-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #f2a8c4;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .2em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.focused-onboarding .fo-desktop-progress {
+  margin-top: 48px;
+}
+
+.focused-onboarding .fo-progress-title {
+  margin: 0 0 20px;
+  color: rgba(255, 255, 255, .45);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+}
+
+.focused-onboarding .fo-desktop-progress ol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.focused-onboarding .fo-desktop-progress li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+}
+
+.focused-onboarding .fo-step-line {
+  position: absolute;
+  top: 34px;
+  left: 11px;
+  width: 1px;
+  height: 28px;
+  background: rgba(255, 255, 255, .15);
+}
+
+.focused-onboarding .fo-step-line.is-past {
+  background: #f2a8c4;
+}
+
+.focused-onboarding .fo-step-marker {
+  z-index: 1;
+  display: flex;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, .45);
+  background: rgba(255, 255, 255, .1);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.focused-onboarding .fo-step-marker.is-active {
+  color: white;
+  background: var(--fo-pink);
+}
+
+.focused-onboarding .fo-progress-label {
+  color: rgba(255, 255, 255, .4);
+  font-size: 12px;
+}
+
+.focused-onboarding .fo-progress-label.is-current {
+  color: white;
+  font-weight: 700;
+}
+
+.focused-onboarding .fo-progress-label.is-past {
+  color: rgba(255, 255, 255, .75);
+}
+
+.focused-onboarding .fo-desktop-signout {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  color: rgba(255, 255, 255, .6);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+}
+
+.focused-onboarding .fo-desktop-signout:hover {
+  color: white;
+}
+
+.focused-onboarding .fo-content {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  padding: 56px 64px;
+}
+
+.focused-onboarding .fo-content-inner {
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+.focused-onboarding .fo-content-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 40px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--fo-line);
+}
+
+.focused-onboarding .fo-content-progress {
+  display: flex;
+  gap: 8px;
+  color: #9db1b0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .17em;
+  text-transform: uppercase;
+}
+
+.focused-onboarding .fo-content-progress span:first-child {
+  color: var(--fo-pink);
+}
+
+.focused-onboarding .fo-time-note {
+  color: #26313d;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.focused-onboarding .fo-content .fo-page-heading {
+  color: var(--fo-navy);
+  font-family: "Alice", Georgia, serif;
+  font-size: 46px;
+  font-weight: 400;
+  line-height: 1.15;
+}
+
+.focused-onboarding .fo-content .fo-page-copy {
+  color: #17212b;
+}
+
+.focused-onboarding .fo-fade {
+  animation: fo-rise .55s ease both;
+}
+
+.focused-onboarding .fo-delay {
+  animation-delay: .08s;
+}
+
+.focused-onboarding .fo-choice {
+  border-color: var(--fo-line);
+  background: rgba(251, 253, 252, .9);
+  color: var(--fo-ink);
+  cursor: pointer;
+  transition: transform .2s ease, border-color .2s ease, background-color .2s ease, box-shadow .2s ease;
+}
+
+.focused-onboarding .fo-choice:hover:not(:disabled) {
+  transform: translateY(-3px);
+  border-color: #dfa0b8;
+  box-shadow: 0 18px 30px -24px rgba(16, 43, 54, .55);
+}
+
+.focused-onboarding .fo-choice[aria-pressed="true"] {
+  border-color: var(--fo-pink);
+  background: var(--fo-pink-pale);
+  box-shadow: 0 0 0 1px var(--fo-pink), 0 18px 32px -25px rgba(200, 73, 122, .52);
+}
+
+.focused-onboarding .fo-choice:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+.focused-onboarding .fo-icon-block {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: white;
+}
+
+.focused-onboarding .fo-icon-block-navy {
+  background: var(--fo-navy);
+}
+
+.focused-onboarding .fo-icon-block-pink {
+  background: var(--fo-pink);
+}
+
+.focused-onboarding .fo-icon-block.is-selected {
+  box-shadow: 0 0 0 3px rgba(200, 73, 122, .18);
+}
+
+.focused-onboarding .fo-primary {
+  border: 0;
+  background: var(--fo-pink);
+  cursor: pointer;
+  transition: transform .2s ease, background-color .2s ease, opacity .2s ease;
+}
+
+.focused-onboarding .fo-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  background: #a83b67;
+}
+
+.focused-onboarding .fo-primary:disabled {
+  cursor: not-allowed;
+  opacity: .42;
+}
+
+.focused-onboarding .fo-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--fo-line);
+}
+
+.focused-onboarding .fo-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #fee2e2;
+  border-radius: 12px;
+  color: #b91c1c;
+  background: #fef2f2;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.focused-onboarding .fo-error svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: #ef4444;
+}
+
+@keyframes fo-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 900px) {
+  .focused-onboarding .fo-content {
+    padding: 48px 36px;
+  }
+}
+
+@media (max-width: 760px) {
+  .focused-onboarding .fo-shell {
+    display: block;
+  }
+
+  .focused-onboarding .fo-rail {
+    width: 100%;
+    min-height: auto;
+    padding: 20px;
+  }
+
+  .focused-onboarding .fo-wordmark {
+    height: 34px;
+  }
+
+  .focused-onboarding .fo-mobile-signout {
+    display: inline-flex;
+    padding: 8px;
+    border: 0;
+    color: rgba(255, 255, 255, .6);
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .focused-onboarding .fo-rail-copy,
+  .focused-onboarding .fo-desktop-progress,
+  .focused-onboarding .fo-desktop-signout {
+    display: none;
+  }
+
+  .focused-onboarding .fo-mobile-progress {
+    display: block;
+    margin-top: 20px;
+    color: rgba(255, 255, 255, .9);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .focused-onboarding .fo-mobile-progress-track {
+    width: 100%;
+    height: 5px;
+    margin-top: 10px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .1);
+  }
+
+  .focused-onboarding .fo-mobile-progress-track span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--fo-pink);
+    transition: width .3s ease;
+  }
+
+  .focused-onboarding .fo-content {
+    min-height: calc(100dvh - 125px);
+    padding: 34px 20px 42px;
+  }
+
+  .focused-onboarding .fo-content-header {
+    margin-bottom: 32px;
+  }
+
+  .focused-onboarding .fo-time-note {
+    display: none;
+  }
+
+  .focused-onboarding .fo-content .fo-page-heading {
+    font-size: 36px;
+  }
+
+  .focused-onboarding .fo-action-row {
+    margin-top: 32px;
+  }
+}

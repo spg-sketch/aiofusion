@@ -182,4 +182,24 @@ describe("SubAccountsPage left-hand navigation", () => {
     );
     expect(screen.getByText("Account type")).toBeTruthy();
   });
+
+  it("opens GEOrge from the desktop and mobile account-settings entries", () => {
+    const onOpenGeorge = vi.fn();
+    render(
+      <SubAccountsPage
+        {...baseProps}
+        session={agencySession as any}
+        onOpenGeorge={onOpenGeorge}
+      />,
+    );
+
+    const georgeButtons = screen.getAllByRole("button", { name: /ask george/i });
+    expect(georgeButtons).toHaveLength(2);
+    expect(document.querySelector(".settings-george-card")).toBeTruthy();
+    expect(document.querySelector(".settings-george-mobile-button")).toBeTruthy();
+
+    fireEvent.click(georgeButtons[0]);
+    fireEvent.click(georgeButtons[1]);
+    expect(onOpenGeorge).toHaveBeenCalledTimes(2);
+  });
 });

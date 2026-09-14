@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Building2, User, ArrowRight, Loader2, AlertCircle, LogOut } from "lucide-react";
+import { Building2, User, ArrowRight, Loader2, AlertCircle } from "lucide-react";
 import { apiBase } from "../lib/apiHelpers";
-import { vars } from "../marketing/vars";
+import { FocusedOnboardingShell } from "./FocusedOnboardingShell";
 
 interface Props {
   onComplete: (role: "agency" | "client") => void;
@@ -41,121 +41,69 @@ export default function AccountTypeSelectPage({ onComplete, onSignOut }: Props) 
   const clientSelected = selected === "client";
 
   return (
-    <div className="min-h-screen bg-white font-sans text-slate-900 flex flex-col">
-      <header className="px-6 sm:px-10 py-5 flex items-center justify-between" style={{ background: vars.navy }}>
-        <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="h-8 sm:h-10" />
-        <button
-          onClick={onSignOut}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all hover:bg-white/10 text-white border border-white/20"
-        >
-          <LogOut size={16} /> Sign out
-        </button>
-      </header>
-
-      <main className="flex-1 max-w-3xl mx-auto px-6 py-12 sm:py-20 w-full animate-in fade-in duration-700">
-        {/* Step indicator */}
-        <div className="flex items-center gap-3 mb-10">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: vars.accent, color: "white" }}>1</div>
-            <span className="text-sm font-semibold" style={{ color: vars.accent }}>Account type</span>
-          </div>
-          <div className="w-12 h-px" style={{ background: vars.g200 }} />
-          <div className="flex items-center gap-2 opacity-60">
-            <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: vars.g200, color: vars.g600 }}>2</div>
-            <span className="text-sm font-semibold text-slate-500">Workspace details</span>
-          </div>
-        </div>
-
-        <h1 className="text-4xl sm:text-5xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
-          New Customer Onboarding
-        </h1>
-        <p className="text-base sm:text-lg mb-8 leading-relaxed text-slate-600">
-          Welcome to AIO Fusion. For faster customer onboarding, please complete the following steps.
-        </p>
-        <h2 className="text-2xl sm:text-3xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
-          Choose your account type
-        </h2>
-        <p className="text-base sm:text-lg mb-2 leading-relaxed text-slate-600">
-          We offer two types of account: a <strong className="font-semibold text-slate-900">Direct Client</strong> account for managing your own company or brand, and an <strong className="font-semibold text-slate-900">Agency / Partner</strong> account for managing PR and marketing on behalf of multiple clients.
-        </p>
-        <p className="text-base sm:text-lg mb-10 leading-relaxed text-slate-600">
-          Which would suit you best? You can update this in your account settings at a later stage.
+    <FocusedOnboardingShell state={{ step: "account_type" }} onSignOut={onSignOut}>
+      <section className="fo-fade fo-delay">
+        <p className="fo-eyebrow">01 / Workspace identity</p>
+        <h2 className="fo-page-heading mt-4">How will you use AIO Fusion?</h2>
+        <p className="fo-page-copy mt-4 max-w-xl text-[15px] leading-7">
+          Choose the account type that best describes your work. Which would suit you best? You can update this in your account settings at a later stage.
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-10">
-          {/* agency button */}
+        <div className="fo-options mt-9 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <button
             type="button"
             onClick={() => setSelected("agency")}
-            className="text-left p-6 rounded-2xl border-2 transition-all duration-300 relative overflow-hidden group hover:-translate-y-0.5 hover:shadow-lg"
-            style={{
-              borderColor: agencySelected ? vars.accent : "var(--color-slate-200, #e2e8f0)",
-              background: agencySelected ? "#FDF0F5" : "white",
-            }}
+            aria-pressed={agencySelected}
+            className="fo-choice rounded-xl border-2 p-5 text-left"
+            data-testid="button-account-type-agency"
           >
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-5 transition-colors"
-                 style={{ background: agencySelected ? vars.accent : "#F1F5F9", color: agencySelected ? "white" : vars.g500 }}>
-              <Building2 size={24} />
-            </div>
-            <h2 className="text-lg font-bold text-slate-900 mb-2">Agency / Partner</h2>
-            <p className="text-sm text-slate-600 leading-relaxed">
+            <span className={`fo-icon-block fo-icon-block-navy${agencySelected ? " is-selected" : ""}`}>
+              <Building2 size={18} />
+            </span>
+            <strong className="mt-4 block text-[15px]">Agency / Partner</strong>
+            <span className="mt-2 block text-[12px] leading-5">
               For agencies and consultants working on behalf of clients. Add Client Projects, manage their projects, and view every dashboard from one place.
-            </p>
-            {agencySelected && (
-              <div className="absolute top-6 right-6" style={{ color: vars.accent }}>
-                <div className="w-6 h-6 rounded-full flex items-center justify-center bg-white shadow-sm">
-                  <div className="w-3 h-3 rounded-full" style={{ background: vars.accent }} />
-                </div>
-              </div>
-            )}
+            </span>
           </button>
 
-          {/* client button */}
           <button
             type="button"
             onClick={() => setSelected("client")}
-            className="text-left p-6 rounded-2xl border-2 transition-all duration-300 relative overflow-hidden group hover:-translate-y-0.5 hover:shadow-lg"
-            style={{
-              borderColor: clientSelected ? vars.teal : "var(--color-slate-200, #e2e8f0)",
-              background: clientSelected ? "#EDF6F9" : "white",
-            }}
+            aria-pressed={clientSelected}
+            className="fo-choice rounded-xl border-2 p-5 text-left"
+            data-testid="button-account-type-client"
           >
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-5 transition-colors"
-                 style={{ background: clientSelected ? vars.teal : "#F1F5F9", color: clientSelected ? "white" : vars.g500 }}>
-              <User size={24} />
-            </div>
-            <h2 className="text-lg font-bold text-slate-900 mb-2">Direct Client</h2>
-            <p className="text-sm text-slate-600 leading-relaxed">
+            <span className={`fo-icon-block fo-icon-block-pink${clientSelected ? " is-selected" : ""}`}>
+              <User size={18} />
+            </span>
+            <strong className="mt-4 block text-[15px]">Direct Client</strong>
+            <span className="mt-2 block text-[12px] leading-5">
               For businesses managing PR and marketing for their own company or brand. One focused workspace with all your projects in one place.
-            </p>
-            {clientSelected && (
-              <div className="absolute top-6 right-6" style={{ color: vars.teal }}>
-                <div className="w-6 h-6 rounded-full flex items-center justify-center bg-white shadow-sm">
-                  <div className="w-3 h-3 rounded-full" style={{ background: vars.teal }} />
-                </div>
-              </div>
-            )}
+            </span>
           </button>
         </div>
 
         {error && (
-          <div className="mb-8 p-4 rounded-xl bg-red-50 text-red-700 text-sm font-medium border border-red-100 flex items-start gap-3">
-            <AlertCircle size={18} className="shrink-0 mt-0.5 text-red-500" />
+          <div className="fo-error mt-5" role="alert" data-testid="status-account-type-error">
+            <AlertCircle size={18} />
             <p>{error}</p>
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={handleConfirm}
-          disabled={!selected || loading}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl px-10 py-4 text-white text-sm font-bold uppercase tracking-wider transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110"
-          style={{ background: vars.accent }}
-        >
-          {loading ? <Loader2 size={18} className="animate-spin" /> : "Continue"}
-          {!loading && <ArrowRight size={18} />}
-        </button>
-      </main>
-    </div>
+        <div className="fo-action-row">
+          <span />
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={!selected || loading}
+            className="fo-primary inline-flex items-center justify-center gap-3 rounded-md px-6 py-3.5 text-[11px] font-bold uppercase tracking-[.14em] text-white"
+            data-testid="button-continue-account-type"
+          >
+            {loading ? <Loader2 size={18} className="animate-spin" /> : "Continue"}
+            {!loading && <ArrowRight size={15} />}
+          </button>
+        </div>
+      </section>
+    </FocusedOnboardingShell>
   );
 }

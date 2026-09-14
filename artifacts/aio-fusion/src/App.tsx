@@ -1464,6 +1464,7 @@ function App() {
       setSessionState(s ?? { ...session, role: newRole });
     };
     return (
+      <>
       <SubAccountsPage
         backToAgency={agencyImpersonatedBy ? <BackToAgencyLink agencyName={agencyImpersonatedBy} /> : undefined}
         initialSection={accountSection ?? undefined}
@@ -1488,7 +1489,17 @@ function App() {
         }}
         onInvitationAccepted={handleInvitationAccepted}
         onSignOut={handleSignOut}
+        onOpenGeorge={() => {
+          setGeorgeOpen(true);
+          setGeorgeHasUpdate(false);
+        }}
       />
+      <GeorgeSupport
+        open={georgeOpen}
+        onClose={() => setGeorgeOpen(false)}
+        userName={session?.username}
+      />
+      </>
     );
   }
   if (view === "guidance") {

@@ -7,7 +7,7 @@ import {
   Lightbulb, ClipboardPaste, Upload, Calendar, Check, Save, Circle, Zap, Mail, Shield, Eye, Building2,
   ArrowLeft, LogOut, Trash2, KeyRound, Users, Activity, Play, ChevronUp, Menu, X, LogIn,
   Link as LinkIcon, Image as ImageIcon, Repeat, TrendingDown, FolderOpen, List as ListIcon, Clock,
-  Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
+  Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone, MessageCircle,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { apiBase } from "../lib/apiHelpers";
@@ -21,6 +21,7 @@ import type { AcceptedInvitation } from "../components/InvitationResult";
 import { AccountSecurityCard } from "../components/AccountSecurityCard";
 import { BillingDetailsCard } from "../components/BillingDetailsCard";
 import { SubscriptionCard } from "../components/SubscriptionCard";
+import "./SubAccountsPage.css";
 import { type Session as LocalSession, type User as LocalUser, type Role, getSubAccounts as getLocalSubAccounts, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverSetSeatCap, refreshAccountsCache, serverImpersonate, serverSwitchToMaster, serverChangeAccountType, serverSetClientAccess, canCreateSubAccounts } from "../lib/auth";
 /** Section ids for the left-hand settings navigation. */
 type SettingsSection = "profile" | "security" | "billing" | "team" | "clients" | "archived" | "assign";
@@ -39,6 +40,7 @@ function SubAccountsPage({
   onSectionChange,
   backToAgency,
   onOpenProject,
+  onOpenGeorge,
 }: {
   session: LocalSession;
   onBack: () => void;
@@ -61,6 +63,8 @@ function SubAccountsPage({
   onSectionChange?: (section: string) => void;
   /** Opens the current account's project workspace. */
   onOpenProject?: () => void;
+  /** Opens the existing GEOrge support assistant. */
+  onOpenGeorge?: () => void;
 }) {
   const paper = "#f8fafc";
   const ink = "#0a1628";
@@ -854,16 +858,22 @@ function SubAccountsPage({
   };
 
   return (
-    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
-      <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: paper, borderBottom: `1px solid ${vars.g200}` }}>
-        <button onClick={onBack} className="flex items-center gap-3.5">
-          <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
-        </button>
+    <div className="aio-account-settings min-h-screen font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
+      <header className="settings-header px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: paper, borderBottom: `1px solid ${vars.g200}` }}>
+        <div className="settings-header-brand flex items-center gap-5">
+          <button onClick={onBack} className="settings-logo flex items-center gap-3.5">
+            <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
+          </button>
+          <div className="settings-header-context hidden md:flex items-center gap-4">
+            <span className="settings-header-divider" aria-hidden="true" />
+            <span>Workspace settings</span>
+          </div>
+        </div>
         <div className="flex items-center gap-4 sm:gap-6">
           {backToAgency}
           <button
             onClick={onBack}
-            className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80"
+            className="settings-back-button flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80"
             style={{ background: ink, color: paper }}
           >
             <ArrowLeft size={16} /> Back to platform
@@ -871,8 +881,8 @@ function SubAccountsPage({
         </div>
       </header>
 
-      <div className="px-4 sm:px-10 py-10 sm:py-14 max-w-6xl mx-auto">
-        <div className="mb-8">
+      <main className="settings-main px-4 sm:px-10 py-10 sm:py-14 max-w-[1320px] mx-auto">
+        <div className="settings-intro mb-8">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
             {canCreateSubAccounts(session.role) ? <Users size={12} color={accent} /> : <User size={12} color={accent} />}
             <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
@@ -891,9 +901,9 @@ function SubAccountsPage({
           </p>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-6 lg:gap-10 items-start">
+        <div className="settings-layout flex flex-col lg:flex-row gap-6 lg:gap-10 items-start">
           {/* LEFT-HAND NAV (desktop) */}
-          <aside className="hidden lg:block w-56 flex-shrink-0 sticky top-6">
+          <aside className="settings-nav hidden lg:block w-56 flex-shrink-0 sticky top-6">
             {navGroups.map((group) => (
               <div key={group.label} className="mb-6">
                 <p className="text-[10px] font-bold uppercase tracking-[0.22em] mb-2 px-3" style={{ color: vars.g400 }}>{group.label}</p>
@@ -906,14 +916,16 @@ function SubAccountsPage({
                         <button
                           type="button"
                           onClick={() => selectSection(item.id)}
-                          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-[13px] transition-all"
+                          className={`settings-nav-button w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-[13px] transition-all ${active ? "settings-nav-button-active" : ""}`}
                           style={{
                             background: active ? accentSoft : "transparent",
                             color: active ? accent : vars.g600,
                             fontWeight: active ? 700 : 500,
                           }}
                         >
-                          <Icon size={14} className="flex-shrink-0" />
+                          <span className={`settings-nav-icon ${item.id === "security" || item.id === "team" ? "settings-nav-icon-navy" : "settings-nav-icon-pink"}`}>
+                            <Icon size={14} className="flex-shrink-0" />
+                          </span>
                           {item.label}
                         </button>
                       </li>
@@ -922,10 +934,19 @@ function SubAccountsPage({
                 </ul>
               </div>
             ))}
+            {onOpenGeorge && (
+              <div className="settings-george-card">
+                <p className="settings-george-title">Need help?</p>
+                <p>GEOrge is ready to help with your account and platform questions.</p>
+                <button type="button" onClick={onOpenGeorge}>
+                  <MessageCircle size={15} /> Ask GEOrge
+                </button>
+              </div>
+            )}
           </aside>
 
           {/* MOBILE NAV - horizontal pills */}
-          <div className="lg:hidden w-full -mx-1 px-1 overflow-x-auto">
+          <div className="settings-mobile-nav lg:hidden w-full -mx-1 px-1 overflow-x-auto">
             <div className="flex items-center gap-2 pb-1" style={{ minWidth: "max-content" }}>
               {navGroups.flatMap((g) => g.items).map((item) => {
                 const active = section === item.id;
@@ -935,25 +956,32 @@ function SubAccountsPage({
                     key={item.id}
                     type="button"
                     onClick={() => selectSection(item.id)}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[12px] font-bold whitespace-nowrap transition-all"
+                    className={`settings-mobile-nav-button flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[12px] font-bold whitespace-nowrap transition-all ${active ? "settings-mobile-nav-button-active" : ""}`}
                     style={{
                       background: active ? accent : "white",
                       color: active ? "white" : vars.g600,
                       border: `1.5px solid ${active ? accent : vars.g200}`,
                     }}
                   >
-                    <Icon size={13} /> {item.label}
+                    <span className={`settings-nav-icon ${item.id === "security" || item.id === "team" ? "settings-nav-icon-navy" : "settings-nav-icon-pink"}`}>
+                      <Icon size={13} />
+                    </span> {item.label}
                   </button>
                 );
               })}
             </div>
+            {onOpenGeorge && (
+              <button type="button" onClick={onOpenGeorge} className="settings-george-mobile-button">
+                <MessageCircle size={15} /> Ask GEOrge
+              </button>
+            )}
           </div>
 
-          <div className="flex-1 min-w-0 w-full">
+          <div className="settings-content flex-1 min-w-0 w-full">
 
         {section === "profile" && (<>
         {/* ACCOUNT TYPE */}
-        <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+        <div className="settings-card settings-card-account-type rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Account type</h2>
           <p className="text-[13px] font-light mb-5 leading-[1.7]" style={{ color: vars.g600 }}>
             {session.role === "user"
@@ -981,7 +1009,7 @@ function SubAccountsPage({
                 <button
                   type="button"
                   onClick={() => { setSelectedType("agency"); setTypeError(null); setTypeSuccess(null); }}
-                  className="text-left p-5 rounded-xl border-2 transition-all hover:-translate-y-0.5"
+                  className={`settings-account-option text-left p-5 rounded-xl border-2 transition-all hover:-translate-y-0.5 ${(selectedType ?? session.role) === "agency" ? "settings-account-option-selected" : ""}`}
                   style={{
                     borderColor: (selectedType ?? session.role) === "agency" ? accent : vars.g200,
                     background: (selectedType ?? session.role) === "agency" ? "#FDF0F5" : "white",
@@ -989,7 +1017,7 @@ function SubAccountsPage({
                   }}
                 >
                   <div className="flex items-center gap-3 mb-2">
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: (selectedType ?? session.role) === "agency" ? accent : vars.g100 }}>
+                    <div className="settings-account-icon settings-account-icon-agency w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: (selectedType ?? session.role) === "agency" ? accent : vars.g100 }}>
                       <Building2 size={16} color={(selectedType ?? session.role) === "agency" ? "white" : vars.g500} />
                     </div>
                     <div>
@@ -1008,7 +1036,7 @@ function SubAccountsPage({
                 <button
                   type="button"
                   onClick={() => { setSelectedType("client"); setTypeError(null); setTypeSuccess(null); }}
-                  className="text-left p-5 rounded-xl border-2 transition-all hover:-translate-y-0.5"
+                  className={`settings-account-option text-left p-5 rounded-xl border-2 transition-all hover:-translate-y-0.5 ${(selectedType ?? session.role) === "client" ? "settings-account-option-selected" : ""}`}
                   style={{
                     borderColor: (selectedType ?? session.role) === "client" ? "#1A647B" : vars.g200,
                     background: (selectedType ?? session.role) === "client" ? "#EDF6F9" : "white",
@@ -1016,7 +1044,7 @@ function SubAccountsPage({
                   }}
                 >
                   <div className="flex items-center gap-3 mb-2">
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: (selectedType ?? session.role) === "client" ? "#1A647B" : vars.g100 }}>
+                    <div className="settings-account-icon settings-account-icon-client w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: (selectedType ?? session.role) === "client" ? "#1A647B" : vars.g100 }}>
                       <User size={16} color={(selectedType ?? session.role) === "client" ? "white" : vars.g500} />
                     </div>
                     <div>
@@ -1073,7 +1101,7 @@ function SubAccountsPage({
 
         {/* SIGNED-IN PROFILE AND ACTIVE WORKSPACE */}
         {workspaceNameNeedsReview && isOwner && (
-          <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "#FEF9EC", border: "1px solid #F5D57A" }}>
+          <div className="settings-alert rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "#FEF9EC", border: "1px solid #F5D57A" }}>
             <div className="flex items-start gap-3">
               <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" style={{ color: "#A0720A" }} />
               <div className="flex-1 min-w-0">
@@ -1109,7 +1137,7 @@ function SubAccountsPage({
             </div>
           </div>
         )}
-        <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+        <div className="settings-card settings-card-profile rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Your profile</h2>
           <p className="text-[13px] leading-[1.6] mb-4" style={{ color: vars.g500 }}>
             This is the person currently signed in to AIO Fusion.
@@ -1460,7 +1488,7 @@ function SubAccountsPage({
         )}
 
         {/* ADD CLIENT ACCOUNT - agency/admin only */}
-        {section === "clients" && isClientManager && <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+        {section === "clients" && isClientManager && <div className="settings-card rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{isAgencyPartner ? "Add a Client Project" : "Create a client account"}</h2>
           <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-12 gap-3">
             <div className="md:col-span-6">
@@ -1878,7 +1906,7 @@ function SubAccountsPage({
         {/* ARCHIVED ACCOUNTS */}
         {section === "archived" && (
           archivedSubAccounts.length === 0 ? (
-            <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+            <div className="settings-card rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
               <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{isAgencyPartner ? "Archived Client Projects" : "Archived clients"}</h2>
               <p className="text-[13px] font-light italic" style={{ color: vars.g500 }}>{isAgencyPartner ? "No archived Client Projects. When you archive a Client Project, it appears here and can be restored at any time." : "No archived client accounts. When you archive a client, they appear here and can be restored at any time."}</p>
             </div>
@@ -2042,7 +2070,7 @@ function SubAccountsPage({
         </>)}
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

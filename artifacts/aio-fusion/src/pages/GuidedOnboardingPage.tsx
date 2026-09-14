@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowRight, Check, Loader2, LogOut, CreditCard, Play, AlertTriangle, AlertCircle } from "lucide-react";
+import { ArrowRight, Check, Loader2, CreditCard, Play, AlertTriangle, AlertCircle } from "lucide-react";
 import AccountTypeSelectPage from "./AccountTypeSelectPage";
+import { FocusedOnboardingShell } from "./FocusedOnboardingShell";
 import { BillingDetailsCard } from "../components/BillingDetailsCard";
 import {
   daysUntilRenewal,
@@ -14,12 +15,6 @@ import { vars } from "../marketing/vars";
 type Step = "account_type" | "workspace_basics" | "access" | "billing" | "first_project";
 type State = { step: Step; accessChoice?: "beta" | "paid" };
 
-const BASE_STEPS = [
-  ["account_type", "Account type"],
-  ["workspace_basics", "Company"],
-  ["access", "Trial or plan"],
-] as const;
-
 function OnboardingLayout({
   state,
   onSignOut,
@@ -29,83 +24,16 @@ function OnboardingLayout({
   onSignOut: () => void;
   children: React.ReactNode;
 }) {
-  const steps = state.step === "billing" || state.accessChoice === "paid"
-    ? [...BASE_STEPS, ["billing", "Billing"] as const]
-    : BASE_STEPS;
-  const activeIndex = steps.findIndex(([key]) => key === state.step);
+  if (state.step === "first_project") return null;
+  const focusedState = {
+    ...state,
+    step: state.step as Exclude<Step, "first_project">,
+  };
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row font-sans" style={{ background: vars.cream, color: vars.navy }}>
-      <aside className="w-full md:w-[320px] lg:w-[380px] shrink-0 md:h-screen md:sticky md:top-0 flex flex-col justify-between z-10" style={{ background: vars.navy }}>
-        <div className="p-6 md:p-10 lg:p-12 relative">
-          <div className="flex items-center justify-between mb-8 md:mb-16">
-            <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="h-8 md:h-10" />
-            <button onClick={onSignOut} className="md:hidden p-2 text-white/60 hover:text-white transition-colors" aria-label="Sign out">
-              <LogOut size={20} />
-            </button>
-          </div>
-
-          <nav aria-label="Progress" className="hidden md:block">
-            <ol className="space-y-8">
-              {steps.map(([key, label], index) => {
-                const isActive = index === activeIndex;
-                const isPast = index < activeIndex;
-
-                return (
-                  <li key={key} className="flex items-center gap-4 relative">
-                    {index !== steps.length - 1 && (
-                      <div className="absolute top-6 left-[11px] w-px h-8" style={{ background: isPast ? vars.accent : "rgba(255,255,255,0.1)" }} />
-                    )}
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold transition-colors duration-300 ${
-                      isPast ? "" : isActive ? "" : "bg-white/10 text-white/40"
-                    }`} style={{
-                      background: isPast || isActive ? vars.accent : undefined,
-                      color: isPast || isActive ? "white" : undefined,
-                    }}>
-                      {isPast ? <Check size={12} strokeWidth={3} /> : index + 1}
-                    </div>
-                    <span className={`text-sm font-medium transition-colors duration-300 ${
-                      isActive ? "text-white" : isPast ? "text-white/80" : "text-white/40"
-                    }`}>
-                      {label}
-                    </span>
-                  </li>
-                );
-              })}
-            </ol>
-          </nav>
-
-          <nav className="md:hidden">
-            <div className="flex items-center gap-2 text-white/90 text-sm font-medium">
-              Step {activeIndex + 1} of {steps.length}: {steps[activeIndex][1]}
-            </div>
-            <div className="h-1.5 w-full bg-white/10 rounded-full mt-3 overflow-hidden">
-              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${((activeIndex + 1) / steps.length) * 100}%`, background: vars.accent }} />
-            </div>
-          </nav>
-        </div>
-
-        <div className="hidden md:block p-6 md:p-10 lg:p-12">
-          <button onClick={onSignOut} className="flex items-center gap-2 text-white/60 hover:text-white transition-colors text-sm font-medium">
-            <LogOut size={16} /> Sign out
-          </button>
-        </div>
-      </aside>
-
-      <main className="flex-1 flex flex-col min-h-[calc(100vh-140px)] md:min-h-screen relative z-0">
-        <div className="flex-1 w-full max-w-2xl mx-auto p-6 md:p-12 lg:p-20 flex flex-col justify-center">
-          <header className="mb-10 border-b pb-8" style={{ borderColor: vars.g200 }}>
-            <h1 className="text-4xl sm:text-5xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
-              New Customer Onboarding
-            </h1>
-            <p className="text-base sm:text-lg leading-relaxed text-slate-600">
-              Welcome to AIO Fusion. For faster customer onboarding, please complete the following steps.
-            </p>
-          </header>
-          {children}
-        </div>
-      </main>
-    </div>
+    <FocusedOnboardingShell state={focusedState} onSignOut={onSignOut}>
+      {children}
+    </FocusedOnboardingShell>
   );
 }
 
@@ -264,10 +192,10 @@ export function GuidedOnboardingPage({
           <p className="text-xs font-bold uppercase tracking-[0.16em] mb-3" style={{ color: vars.accent }}>
             Payment confirmed
           </p>
-          <h2 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
+          <h2 className="fo-page-heading text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
             Thank you for signing up to AIO Fusion
           </h2>
-          <p className="text-base sm:text-lg leading-relaxed text-slate-600 mb-6">
+          <p className="fo-page-copy text-base sm:text-lg leading-relaxed text-slate-600 mb-6">
             Your payment was successful and your {planLabel} plan is active. You are billed {frequencyLabel}.
           </p>
           {renewalDate && (
@@ -286,7 +214,7 @@ export function GuidedOnboardingPage({
             type="button"
             onClick={() => void complete()}
             disabled={busy}
-            className="inline-flex items-center justify-center gap-2 rounded-xl px-8 py-4 text-white text-sm font-bold uppercase tracking-wider transition-all duration-300 disabled:opacity-50 hover:brightness-110"
+              className="fo-primary inline-flex items-center justify-center gap-2 rounded-md px-8 py-4 text-white text-sm font-bold uppercase tracking-wider transition-all duration-300 disabled:opacity-50 hover:brightness-110"
             style={{ background: vars.accent }}
           >
             {busy ? <Loader2 size={18} className="animate-spin" /> : "Continue to billing"}
@@ -302,10 +230,10 @@ export function GuidedOnboardingPage({
     <OnboardingLayout state={state} onSignOut={onSignOut}>
       {state.step === "workspace_basics" && (
         <div className="animate-in fade-in duration-700">
-          <h2 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
+          <h2 className="fo-page-heading text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
             Set up your company
           </h2>
-          <p className="text-base sm:text-lg mb-10 leading-relaxed text-slate-600">
+          <p className="fo-page-copy text-base sm:text-lg mb-10 leading-relaxed text-slate-600">
             Confirm the company details used throughout your account.
           </p>
 
@@ -344,8 +272,9 @@ export function GuidedOnboardingPage({
           <button 
             disabled={busy || !displayName.trim() || !website.trim()} 
             onClick={() => void post("/api/platform/onboarding/workspace-basics", { displayName, website })} 
-            className="inline-flex items-center justify-center gap-2 rounded-xl px-8 py-4 text-white text-sm font-bold uppercase tracking-wider transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110" 
+              className="fo-primary inline-flex items-center justify-center gap-2 rounded-md px-8 py-4 text-white text-sm font-bold uppercase tracking-wider transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110"
             style={{ background: vars.accent }}
+              data-testid="button-continue-workspace-basics"
           >
             {busy ? <Loader2 size={18} className="animate-spin" /> : "Continue"}
             {!busy && <ArrowRight size={18} />}
@@ -355,10 +284,10 @@ export function GuidedOnboardingPage({
 
       {state.step === "access" && (
         <div className="animate-in fade-in duration-700">
-          <h2 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
+          <h2 className="fo-page-heading text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
             Choose how to start
           </h2>
-          <p className="text-base sm:text-lg mb-10 leading-relaxed text-slate-600">
+          <p className="fo-page-copy text-base sm:text-lg mb-10 leading-relaxed text-slate-600">
             Start the existing 60-day beta without a card, or continue with a paid plan.
           </p>
 
@@ -367,15 +296,16 @@ export function GuidedOnboardingPage({
               disabled={busy} 
               onClick={() => setSelectedAccessChoice("beta")}
               aria-pressed={selectedAccessChoice === "beta"}
-              className={`text-left rounded-2xl bg-white border p-6 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:border-[#C8497A] disabled:opacity-50 group ${
+              className={`fo-choice text-left rounded-xl border-2 p-6 disabled:opacity-50 group ${
                 selectedAccessChoice === "beta"
                   ? "border-[#C8497A] shadow-[0_0_0_1px_#C8497A]"
                   : "border-slate-200"
               }`}
+              data-testid="button-access-choice-beta"
             >
-              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-4 transition-colors" style={{ background: "#F1F5F9" }}>
-                <Play size={18} className="text-slate-600 ml-0.5" />
-              </div>
+              <span className="fo-icon-block fo-icon-block-pink">
+                <Play size={18} className="ml-0.5" />
+              </span>
               <strong className="text-xl block mb-2 text-slate-900 font-bold">60-day beta</strong>
               <span className="text-sm text-slate-600 leading-relaxed block">
                 No card or billing address required. Includes two project workspaces to explore the platform.
@@ -386,15 +316,16 @@ export function GuidedOnboardingPage({
               disabled={busy} 
               onClick={() => setSelectedAccessChoice("paid")}
               aria-pressed={selectedAccessChoice === "paid"}
-              className={`text-left rounded-2xl bg-white border p-6 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:border-[#C8497A] disabled:opacity-50 group ${
+              className={`fo-choice text-left rounded-xl border-2 p-6 disabled:opacity-50 group ${
                 selectedAccessChoice === "paid"
                   ? "border-[#C8497A] shadow-[0_0_0_1px_#C8497A]"
                   : "border-slate-200"
               }`}
+              data-testid="button-access-choice-paid"
             >
-              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-4 transition-colors" style={{ background: vars.accent }}>
-                <CreditCard size={18} className="text-white" />
-              </div>
+              <span className="fo-icon-block fo-icon-block-navy">
+                <CreditCard size={18} />
+              </span>
               <strong className="text-xl block mb-2 text-slate-900 font-bold">Paid plan</strong>
               <span className="text-sm text-slate-600 leading-relaxed block">
                 Save company billing details, then continue to secure Stripe checkout for full access.
@@ -405,8 +336,9 @@ export function GuidedOnboardingPage({
           <button
             disabled={busy || !selectedAccessChoice}
             onClick={() => void continueWithAccessChoice()}
-            className="inline-flex items-center justify-center gap-2 rounded-xl px-8 py-4 text-white text-sm font-bold uppercase tracking-wider transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110"
+            className="fo-primary inline-flex items-center justify-center gap-2 rounded-md px-8 py-4 text-white text-sm font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: vars.accent }}
+            data-testid="button-continue-access-choice"
           >
             {busy ? <Loader2 size={18} className="animate-spin" /> : "Continue"}
             {!busy && <ArrowRight size={18} />}
@@ -423,10 +355,10 @@ export function GuidedOnboardingPage({
 
       {state.step === "billing" && (
         <div className="animate-in fade-in duration-700 w-full max-w-3xl mx-auto">
-          <h2 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
+          <h2 className="fo-page-heading text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
             Billing and payment
           </h2>
-          <p className="text-base sm:text-lg mb-8 leading-relaxed text-slate-600">
+          <p className="fo-page-copy text-base sm:text-lg mb-8 leading-relaxed text-slate-600">
             Save the required billing information before choosing your payment schedule.
           </p>
           

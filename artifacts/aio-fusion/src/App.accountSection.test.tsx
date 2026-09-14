@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, waitFor, cleanup, configure, fireEvent, act } from "@testing-library/react";
+import { render, screen, waitFor, cleanup, configure, fireEvent, act, within } from "@testing-library/react";
 
 // Full-App render spans several async cycles (bootstrapAuth, lazy chunks,
 // Suspense); raise the waitFor budget so slow CI runners don't flake.
@@ -250,5 +250,25 @@ describe("browser Back restores the previous settings section (popstate)", () =>
       expect(screen.getByRole("heading", { name: /sign-in & security/i })).toBeInTheDocument();
     });
     expect(screen.queryByText("Add a client")).toBeNull();
+  });
+});
+
+describe("GEOrge support from account settings", () => {
+  it("opens and closes the existing GEOrge support UI", async () => {
+    await renderAppAt("/?account_section=profile");
+
+    await waitFor(() => {
+      expect(screen.getByText("Account type")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: /ask george/i })[0]);
+    expect(await screen.findByText("GEO Support Assistant")).toBeInTheDocument();
+
+    const georgeHeader = screen.getByText("GEO Support Assistant").parentElement?.parentElement;
+    expect(georgeHeader).toBeTruthy();
+    fireEvent.click(within(georgeHeader as HTMLElement).getAllByRole("button")[0]);
+    await waitFor(() => {
+      expect(screen.queryByText("GEO Support Assistant")).toBeNull();
+    });
   });
 });
