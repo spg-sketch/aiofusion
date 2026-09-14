@@ -89,6 +89,37 @@ export const mediaContactFieldOverridesTable = pgTable("media_contact_field_over
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [uniqueIndex("media_contact_field_overrides_unique").on(table.contactId, table.accountId, table.fieldName)]);
 
+export type MediaSourceCheckOutcome = "current" | "changed" | "unavailable";
+export type MediaSourceDifference = {
+  field: "role" | "email";
+  kind: "changed" | "removed" | "added";
+  storedValue: string;
+  observedValue: string;
+  supported: boolean;
+};
+
+export const mediaContactSourceChecksTable = pgTable("media_contact_source_checks", {
+  id: serial("id").primaryKey(),
+  contactId: integer("contact_id").notNull().references(() => mediaContactsTable.id, { onDelete: "cascade" }),
+  accountId: varchar("account_id").notNull(),
+  sourceUrl: text("source_url").notNull(),
+  outcome: varchar("outcome", { length: 20 }).$type<MediaSourceCheckOutcome>().notNull(),
+  errorCode: varchar("error_code", { length: 40 }),
+  errorMessage: text("error_message").notNull().default(""),
+  observedEvidence: jsonb("observed_evidence").$type<{
+    nameFound: boolean;
+    roleFound: boolean;
+    emailFound: boolean;
+    observedRole: string;
+    observedEmails: string[];
+    excerpt: string;
+  }>().notNull().default({ nameFound: false, roleFound: false, emailFound: false, observedRole: "", observedEmails: [], excerpt: "" }),
+  differences: jsonb("differences").$type<MediaSourceDifference[]>().notNull().default([]),
+  checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [uniqueIndex("media_contact_source_checks_latest").on(table.contactId, table.checkedAt)]);
+
 export const mediaRecommendationSetsTable = pgTable("media_recommendation_sets", {
   id: serial("id").primaryKey(),
   accountId: varchar("account_id").notNull(),
@@ -123,6 +154,7 @@ export const mediaRecommendationDecisionsTable = pgTable("media_recommendation_d
 export type MediaCategoryRow = typeof mediaCategoriesTable.$inferSelect;
 export type MediaOutletRow = typeof mediaOutletsTable.$inferSelect;
 export type MediaContactRow = typeof mediaContactsTable.$inferSelect;
+export type MediaContactSourceCheckRow = typeof mediaContactSourceChecksTable.$inferSelect;
 export const insertMediaContactSchema = createInsertSchema(mediaContactsTable).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });
 export type InsertMediaContact = z.infer<typeof insertMediaContactSchema>;
 export const insertMediaImportBatchSchema = createInsertSchema(mediaImportBatchesTable).omit({ id: true, createdAt: true });

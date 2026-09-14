@@ -154,6 +154,8 @@ function MediaDatabasePage() {
   });
   const [contactSaving, setContactSaving] = useState(false);
   const [deletingContactId, setDeletingContactId] = useState<number | null>(null);
+  const [sourceCheckingId, setSourceCheckingId] = useState<number | null>(null);
+  const [sourceActionError, setSourceActionError] = useState("");
 
   const [showCatPicker, setShowCatPicker] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -364,6 +366,44 @@ function MediaDatabasePage() {
     } catch {}
     setDeletingContactId(null);
   };
+  const recheckSource = async (contact: Contact) => {
+    setSourceCheckingId(contact.id); setSourceActionError("");
+    try {
+      const response = await fetch(`${apiBase()}/api/store/media-db/contacts/${contact.id}/source-check`, { method: "POST", credentials: "include" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not check this source.");
+      await loadData();
+      setShowContactProfile((current) => current?.id === contact.id ? { ...current, sourceCheck: data.sourceCheck, sourceStatus: data.sourceCheck.outcome } : current);
+    } catch (error) { setSourceActionError(error instanceof Error ? error.message : "Could not check this source."); }
+    setSourceCheckingId(null);
+  };
+  const approveSourceUpdates = async (contact: Contact) => {
+    if (!contact.sourceCheck) return;
+    const fields = contact.sourceCheck.differences.filter((difference) => difference.supported && difference.observedValue).map((difference) => difference.field);
+    if (!fields.length) return;
+    setSourceCheckingId(contact.id); setSourceActionError("");
+    try {
+      const response = await fetch(`${apiBase()}/api/store/media-db/contacts/${contact.id}/source-checks/${contact.sourceCheck.id}/approve`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fields }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not apply these updates.");
+      setShowContactProfile(null);
+      await loadData();
+    } catch (error) { setSourceActionError(error instanceof Error ? error.message : "Could not apply these updates."); }
+    setSourceCheckingId(null);
+  };
+
+  const sourceBadge = (contact: Contact) => {
+    const labels = { current: "Current", due: "Due for review", unavailable: "Unavailable", changed: "Changed", unverified: "Unverified" };
+    const colors = {
+      current: { color: "#166534", background: "#DCFCE7" }, due: { color: "#92400E", background: "#FEF3C7" },
+      unavailable: { color: "#991B1B", background: "#FEE2E2" }, changed: { color: "#9D174D", background: "#FCE7F3" },
+      unverified: { color: "#475569", background: "#F1F5F9" },
+    };
+    const status = contact.sourceStatus ?? (contact.sourceUrl ? "due" : "unverified");
+    return <span className="inline-flex mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold" style={colors[status]}>{labels[status]}</span>;
+  };
 
   // Export contacts
   const exportContacts = async (format: "xlsx" | "word") => {
@@ -550,6 +590,7 @@ function MediaDatabasePage() {
                       <td className="px-4 py-3">
                         <p className="font-semibold" style={{ color: vars.navy }}>{`${c.firstName} ${c.lastName}`.trim()}</p>
                         {c.outletCategory && <p className="text-[11px] font-light" style={{ color: vars.g500 }}>{c.outletCategory}</p>}
+                        {sourceBadge(c)}
                          {(c.beats?.length || c.sectors?.length || c.seniority || c.editorialStatus) && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>{[c.beats?.length ? `Beats: ${c.beats.join(", ")}` : "", c.sectors?.length ? `Sectors: ${c.sectors.join(", ")}` : "", c.seniority, c.editorialStatus].filter(Boolean).join(" · ")}</p>}
                          {(c.reach || c.reachBand || c.authority !== undefined || c.authorityScore !== undefined || c.confidence || c.confidenceLevel) && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>{[c.reach || c.reachBand ? `Reach: ${c.reach || c.reachBand}` : "", c.authority ?? c.authorityScore !== undefined ? `Authority: ${c.authority ?? c.authorityScore}` : "", c.confidence || c.confidenceLevel ? `Confidence: ${c.confidence || c.confidenceLevel}` : ""].filter(Boolean).join(" · ")}</p>}
                       </td>
@@ -759,6 +800,33 @@ function MediaDatabasePage() {
               <button onClick={() => setShowContactProfile(null)} className="text-[20px] leading-none px-2 text-slate-400 hover:text-slate-700 transition-colors">&times;</button>
             </div>
             <div className="overflow-y-auto">
+              <div className="px-5 pt-4">
+                <div className="rounded-xl border p-4" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2"><span className="text-[12px] font-bold" style={{ color: vars.navy }}>Public source health</span>{sourceBadge(showContactProfile)}</div>
+                      <p className="text-[11px] mt-1" style={{ color: vars.g500 }}>
+                        {!showContactProfile.sourceUrl ? "No public source is attached to this contact."
+                          : showContactProfile.sourceCheck ? `Last checked ${new Date(showContactProfile.sourceCheck.checkedAt).toLocaleString()}`
+                            : "This source has not been checked yet."}
+                      </p>
+                    </div>
+                    {showContactProfile.sourceUrl && <button onClick={() => void recheckSource(showContactProfile)} disabled={sourceCheckingId === showContactProfile.id} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}><RefreshCw size={13} className={sourceCheckingId === showContactProfile.id ? "animate-spin" : ""} />Check source now</button>}
+                  </div>
+                  {sourceActionError && <p className="text-[11px] mt-3" style={{ color: vars.red }}>{sourceActionError}</p>}
+                  {showContactProfile.sourceCheck?.outcome === "unavailable" && <p className="text-[12px] mt-3 text-red-700">{showContactProfile.sourceCheck.errorCode === "page_missing" ? "The saved page could not be found." : "The saved page could not be reached."} Your contact details have not been changed.</p>}
+                  {!!showContactProfile.sourceCheck?.differences.length && (
+                    <div className="mt-3 space-y-2">
+                      {showContactProfile.sourceCheck.differences.map((difference) => <div key={difference.field} className="text-[12px] rounded-lg bg-white border px-3 py-2" style={{ borderColor: vars.g200 }}>
+                        <span className="font-semibold capitalize">{difference.field}: </span>
+                        {difference.kind === "removed" && !difference.observedValue ? `The saved ${difference.field} is no longer shown on the source.`
+                          : <>{difference.storedValue || "(blank)"} → {difference.observedValue}</>}
+                      </div>)}
+                      {!showContactProfile.sourceCheck.reviewedAt && showContactProfile.sourceCheck.differences.some((difference) => difference.supported && difference.observedValue) && <button onClick={() => void approveSourceUpdates(showContactProfile)} disabled={sourceCheckingId === showContactProfile.id} className="px-3 py-2 rounded-lg text-white text-[12px] font-semibold" style={{ background: vars.accent }}>Accept supported updates</button>}
+                    </div>
+                  )}
+                </div>
+              </div>
               <RecommendationCard
                 item={{
                   rank: 0,

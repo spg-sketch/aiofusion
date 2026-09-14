@@ -137,6 +137,22 @@ export async function ensureMediaSchema(): Promise<void> {
     )
   `);
   await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS media_contact_source_checks (
+      id serial PRIMARY KEY,
+      contact_id integer NOT NULL,
+      account_id varchar NOT NULL,
+      source_url text NOT NULL,
+      outcome varchar(20) NOT NULL,
+      error_code varchar(40),
+      error_message text NOT NULL DEFAULT '',
+      observed_evidence jsonb NOT NULL DEFAULT '{"nameFound":false,"roleFound":false,"emailFound":false,"observedRole":"","observedEmails":[],"excerpt":""}'::jsonb,
+      differences jsonb NOT NULL DEFAULT '[]'::jsonb,
+      checked_at timestamptz NOT NULL DEFAULT now(),
+      reviewed_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS media_recommendation_sets (
       id serial PRIMARY KEY,
       account_id varchar NOT NULL,
@@ -184,6 +200,10 @@ export async function ensureMediaSchema(): Promise<void> {
       ON media_contact_field_overrides (contact_id, account_id, field_name)
   `);
   await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS media_contact_source_checks_latest
+      ON media_contact_source_checks (contact_id, checked_at)
+  `);
+  await db.execute(sql`
     CREATE UNIQUE INDEX IF NOT EXISTS media_recommendation_items_unique
       ON media_recommendation_items (recommendation_set_id, contact_id)
   `);
@@ -208,6 +228,10 @@ export async function ensureMediaSchema(): Promise<void> {
       END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_contact_field_overrides_contact_id_fkey') THEN
         ALTER TABLE media_contact_field_overrides ADD CONSTRAINT media_contact_field_overrides_contact_id_fkey
+          FOREIGN KEY (contact_id) REFERENCES media_contacts(id) ON DELETE CASCADE NOT VALID;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_contact_source_checks_contact_id_fkey') THEN
+        ALTER TABLE media_contact_source_checks ADD CONSTRAINT media_contact_source_checks_contact_id_fkey
           FOREIGN KEY (contact_id) REFERENCES media_contacts(id) ON DELETE CASCADE NOT VALID;
       END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_recommendation_items_recommendation_set_id_fkey') THEN

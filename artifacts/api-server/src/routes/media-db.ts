@@ -1,5 +1,4 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaContactFieldOverridesTable, mediaImportBatchesTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, projectsTable } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { inAssignedScope, memberProjectGate } from "../lib/member-guards";
@@ -18,6 +17,9 @@ import {
 } from "../lib/media-csv-import";
 import type { MediaImportRow } from "../lib/media-csv-import";
 import { verifyMediaDiscoveries } from "../lib/media-discovery-token";
+import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaImportBatchesTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, projectsTable } from "@workspace/db";
+import { fetchMediaSourceEvidence } from "../lib/safe-fetch";
+import { approvedSourceUpdates, evaluateMediaSource, sourceFetchError } from "../lib/media-source-health";
 
 const router: IRouter = Router();
 
@@ -50,11 +52,47 @@ router.get(
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
-      const visible = await visibleAccounts(req);
+  const visible = await visibleAccounts(req);
       const rows = await db
-        .select()
-        .from(mediaCategoriesTable)
-        .orderBy(mediaCategoriesTable.name);
+        .select({
+          id: mediaContactsTable.id,
+          outletId: mediaContactsTable.outletId,
+          firstName: mediaContactsTable.firstName,
+          lastName: mediaContactsTable.lastName,
+          role: mediaContactsTable.role,
+          email: mediaContactsTable.email,
+          phone: mediaContactsTable.phone,
+          notes: mediaContactsTable.notes,
+          mobile: mediaContactsTable.mobile,
+          linkedinUrl: mediaContactsTable.linkedinUrl,
+          twitterHandle: mediaContactsTable.twitterHandle,
+          beats: mediaContactsTable.beats,
+          sectors: mediaContactsTable.sectors,
+          geography: mediaContactsTable.geography,
+          language: mediaContactsTable.language,
+          seniority: mediaContactsTable.seniority,
+          editorialStatus: mediaContactsTable.editorialStatus,
+          sourceUrl: mediaContactsTable.sourceUrl,
+          sourceRef: mediaContactsTable.sourceRef,
+          publicationReach: mediaContactsTable.publicationReach,
+          publicationAuthority: mediaContactsTable.publicationAuthority,
+          journalistAuthority: mediaContactsTable.journalistAuthority,
+          confidence: mediaContactsTable.confidence,
+          reviewNotes: mediaContactsTable.reviewNotes,
+          provenance: mediaContactsTable.provenance,
+          lastVerifiedAt: mediaContactsTable.lastVerifiedAt,
+          accountId: mediaContactsTable.accountId,
+          createdAt: mediaContactsTable.createdAt,
+          outletName: mediaOutletsTable.name,
+          outletCategory: mediaOutletsTable.category,
+          outletWebsite: mediaOutletsTable.website,
+          outletCountry: mediaOutletsTable.country,
+          outletReachBand: mediaOutletsTable.reachBand,
+        })
+        .from(mediaContactsTable)
+        .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
+        .where(isNull(mediaContactsTable.deletedAt))
+        .orderBy(mediaContactsTable.lastName, mediaContactsTable.firstName);
 
       const custom = rows.filter((r) => {
         if (!r.accountId) return true;
@@ -108,7 +146,7 @@ router.post(
             })).filter((row: MediaImportRow) => row.outletName && (row.firstName || row.lastName || row.email)),
             errors: [], headers: [],
           };
-      const accountId = normUsername(req.account!.username);
+  const accountId = normUsername(req.account!.username);
       const loadExisting = async () => {
         const [existingOutlets, existingContacts] = await Promise.all([
           db
@@ -142,7 +180,7 @@ router.post(
         ]);
         return { existingOutlets, existingContacts };
       };
-      const existing = await loadExisting();
+    const existing = await db.select({ id: mediaRecommendationDecisionsTable.id }).from(mediaRecommendationDecisionsTable).where(and(eq(mediaRecommendationDecisionsTable.accountId, accountId), eq(mediaRecommendationDecisionsTable.projectId, projectId), eq(mediaRecommendationDecisionsTable.storyKey, storyKey), eq(mediaRecommendationDecisionsTable.contactId, Number(contactId)))).limit(1);
       const initialPlan = planMediaImport(parsed.rows, existing.existingOutlets, existing.existingContacts);
       const previewOverrides = await db.select({ contactId: mediaContactFieldOverridesTable.contactId, fieldName: mediaContactFieldOverridesTable.fieldName })
         .from(mediaContactFieldOverridesTable).where(eq(mediaContactFieldOverridesTable.accountId, accountId));
@@ -172,127 +210,108 @@ router.post(
       // Imports are always private to the active account, including admin imports.
       // This avoids accidentally publishing a customer's uploaded list globally.
       const selectedCategory = typeof category === "string" ? category.trim() : "";
-      const result = await db.transaction(async (tx) => {
-        // Serialize import commits for this account. The schema intentionally
-        // allows manual duplicates, so a transaction-scoped advisory lock is
-        // safer than adding broad uniqueness constraints.
-        if (process.env.NODE_ENV !== "test") {
-          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`media-import:${accountId}`}))`);
-        }
-        const safeKey = typeof idempotencyKey === "string" ? idempotencyKey.trim().slice(0, 160) : "";
-        if (safeKey) {
-          const prior = await tx.select({ summary: mediaImportBatchesTable.summary })
-            .from(mediaImportBatchesTable)
-            .where(and(eq(mediaImportBatchesTable.accountId, accountId), eq(mediaImportBatchesTable.idempotencyKey, safeKey)))
-            .limit(1);
-          if (prior[0]) return { ...(prior[0].summary as Record<string, number>), replayed: true };
-        }
-        const existingOutlets = await tx
-          .select({
-            id: mediaOutletsTable.id,
-            name: mediaOutletsTable.name,
-            website: mediaOutletsTable.website,
-          })
-          .from(mediaOutletsTable)
-          .where(and(
-            isNull(mediaOutletsTable.deletedAt),
-            or(eq(mediaOutletsTable.accountId, accountId), isNull(mediaOutletsTable.accountId)),
-          ));
-        const existingContacts = await tx
-          .select({
-            id: mediaContactsTable.id,
-            outletId: mediaContactsTable.outletId,
-            firstName: mediaContactsTable.firstName,
-            lastName: mediaContactsTable.lastName,
-            email: mediaContactsTable.email,
-            sectors: mediaContactsTable.sectors,
-          })
-          .from(mediaContactsTable)
-          .where(and(isNull(mediaContactsTable.deletedAt), eq(mediaContactsTable.accountId, accountId)));
-
-        const commitPlan = planMediaImport(parsed.rows, existingOutlets, existingContacts);
-        const outletIdByRef = new Map(existingOutlets.map((outlet) => [`existing:${outlet.id}`, outlet.id]));
-        let outletsCreated = 0;
-        let contactsCreated = 0;
-
-        for (const { row, outletRef } of commitPlan.importRows) {
-          let outletId = outletIdByRef.get(outletRef);
-          if (!outletId) {
-            const [created] = await tx.insert(mediaOutletsTable).values({
-              name: row.outletName,
-              category: selectedCategory || row.sector || "",
-              website: row.website,
-              description: row.description,
-              country: row.country,
-              reachBand: row.reachBand,
-              accountId,
-            }).returning({ id: mediaOutletsTable.id });
-            outletId = created.id;
-            outletIdByRef.set(outletRef, outletId);
-            outletsCreated += 1;
-          }
-
-          await tx.insert(mediaContactsTable).values({
-            outletId,
-            firstName: row.firstName,
-            lastName: row.lastName,
-            role: row.role,
-            email: row.email,
-            phone: "",
-            notes: buildMediaContactNotes(row),
-            beats: row.beat ? row.beat.split(/[;,|]/).map((value) => value.trim()).filter(Boolean) : [],
-            sectors: Array.from(new Set(parsed.rows
-              .filter((candidate: MediaImportRow) => row.email && candidate.email === row.email)
-              .flatMap((candidate: MediaImportRow) => [candidate.sector, selectedCategory])
-              .filter((value: string | undefined): value is string => !!value))),
-            sourceRef: `${row.sheetName ?? "CSV"}:${row.sourceRow}`,
-            linkedinUrl: row.linkedinUrl ?? "",
-            sourceUrl: row.sourceUrl ?? "",
-            publicationReach: row.reachBand,
-            publicationAuthority: row.publicationAuthority ?? "",
-            journalistAuthority: row.journalistAuthority ?? "",
-            confidence: row.confidence,
-            reviewNotes: row.reviewNotes ?? "",
-            lastVerifiedAt: row.verifiedDate && !Number.isNaN(Date.parse(row.verifiedDate)) ? new Date(row.verifiedDate) : null,
-            provenance: { importFilename: typeof filename === "string" ? filename.slice(0, 500) : "", sheet: row.sheetName ?? "", sourceRow: row.sourceRow },
-            accountId,
-          });
-          contactsCreated += 1;
-        }
-        // Reconciliation updates workbook/source-owned metadata for canonical
-        // email matches, but never overwrites an explicitly user-owned field.
-        const matched = existingContacts.filter((contact) => contact.email);
-        const overrides = matched.length ? await tx.select({ contactId: mediaContactFieldOverridesTable.contactId, fieldName: mediaContactFieldOverridesTable.fieldName })
-          .from(mediaContactFieldOverridesTable).where(eq(mediaContactFieldOverridesTable.accountId, accountId)) : [];
-        const overridden = new Set(overrides.map((entry) => `${entry.contactId}:${entry.fieldName}`));
-        for (const row of parsed.rows) {
-          if (!row.email) continue;
-          const contact = matched.find((candidate) => candidate.email.trim().toLowerCase() === row.email);
-          if (!contact) continue;
-          const next: Record<string, unknown> = {
-            role: row.role, linkedinUrl: row.linkedinUrl ?? "", sourceUrl: row.sourceUrl ?? "", sourceRef: `${row.sheetName ?? "CSV"}:${row.sourceRow}`,
-            publicationReach: row.reachBand, publicationAuthority: row.publicationAuthority ?? "", journalistAuthority: row.journalistAuthority ?? "",
-            confidence: row.confidence, reviewNotes: row.reviewNotes ?? "", beats: row.beat ? row.beat.split(/[;,|]/).map((value: string) => value.trim()).filter(Boolean) : [],
-            sectors: Array.from(new Set([...(contact.sectors ?? []), ...(row.sector ? [row.sector] : []), ...(selectedCategory ? [selectedCategory] : [])])),
-          };
-          for (const key of Object.keys(next)) if (overridden.has(`${contact.id}:${key}`)) delete next[key];
-          if (Object.keys(next).length) await tx.update(mediaContactsTable).set(next).where(eq(mediaContactsTable.id, contact.id));
-        }
-        const summary = {
-          outletsCreated,
-          contactsCreated,
-          duplicatesSkipped: commitPlan.duplicatesSkipped,
-        };
-        await tx.insert(mediaImportBatchesTable).values({
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`media-discovery:${accountId}`}))`);
+      const visibleOutlets = (await tx.select().from(mediaOutletsTable).where(isNull(mediaOutletsTable.deletedAt)))
+        .filter((row) => outletVisible(row.accountId, visible));
+      const candidateDomain = normalisedOutletDomain(candidate.outletWebsite);
+      let outlet = visibleOutlets.find((row) =>
+        row.name.trim().toLowerCase() === candidate.outletName.toLowerCase()
+        || (!!candidateDomain && normalisedOutletDomain(row.website) === candidateDomain),
+      );
+      if (!outlet) {
+        [outlet] = await tx.insert(mediaOutletsTable).values({
+          name: candidate.outletName,
+          website: candidate.outletWebsite,
+          category: candidate.sectors?.[0] ?? "",
+          description: "",
+          country: inferredOutletCountry(candidate.geography ?? ""),
           accountId,
-          idempotencyKey: safeKey || null,
-          sourceFilename: typeof filename === "string" ? filename.slice(0, 500) : "",
-          sourceType: typeof xlsxBase64 === "string" ? "xlsx" : Array.isArray(rows) ? "parsed" : "csv",
-          summary,
-          committedAt: new Date(),
-        });
-        return summary;
-      });
+        }).returning();
+      }
+      const ownContacts = await tx.select().from(mediaContactsTable).where(and(eq(mediaContactsTable.accountId, accountId), isNull(mediaContactsTable.deletedAt)));
+      const verifiedEmail = candidate.email.trim().toLowerCase();
+      const existing = ownContacts.find((row) =>
+        row.outletId === outlet.id
+        && row.firstName.trim().toLowerCase() === candidate.firstName.toLowerCase()
+        && row.lastName.trim().toLowerCase() === candidate.lastName.toLowerCase()
+        && (!verifiedEmail || !row.email || row.email.trim().toLowerCase() === verifiedEmail),
+      );
+      const discoveryNotes = [
+        candidate.mediaOpportunity ? `AI-suggested media opportunity: ${candidate.mediaOpportunity}` : "",
+        candidate.evidence ? `Cited source evidence: ${candidate.evidence}` : "",
+      ].filter(Boolean).join("\n\n");
+      if (existing) {
+        const mergedBeats = Array.from(new Set([...existing.beats, ...candidate.beats]));
+        const mergedSectors = Array.from(new Set([...existing.sectors, ...(candidate.sectors ?? [])]));
+        const mergedNotes = discoveryNotes && !existing.notes.includes(discoveryNotes)
+          ? [existing.notes, discoveryNotes].filter(Boolean).join("\n\n")
+          : existing.notes;
+        const [contact] = await tx.update(mediaContactsTable).set({
+          email: existing.email || verifiedEmail,
+          role: existing.role || candidate.role,
+          beats: mergedBeats,
+          sectors: mergedSectors,
+          geography: existing.geography || candidate.geography || "",
+          sourceUrl: existing.sourceUrl || candidate.sourceUrl,
+          sourceRef: existing.sourceRef || "Live public web research",
+          confidence: existing.confidence || candidate.confidence,
+          reviewNotes: existing.reviewNotes || candidate.evidence,
+          notes: mergedNotes,
+          provenance: {
+            ...existing.provenance,
+            latestPublicDiscovery: {
+              provider: "OpenAI web search",
+              sourceUrl: candidate.sourceUrl,
+              evidence: candidate.evidence,
+              discoveredAt: candidate.verifiedAt,
+              modelDerivedFields: ["role", "beats", "sectors", "geography", "mediaOpportunity"],
+            },
+          },
+          updatedAt: new Date(),
+        }).where(eq(mediaContactsTable.id, existing.id)).returning();
+        return { contact, outlet, existing: true };
+      }
+      const verifiedAt = new Date(candidate.verifiedAt);
+      const [contact] = await tx.insert(mediaContactsTable).values({
+        outletId: outlet.id,
+        firstName: candidate.firstName,
+        lastName: candidate.lastName,
+        role: candidate.role,
+        email: verifiedEmail,
+        beats: candidate.beats,
+        sectors: candidate.sectors ?? [],
+        geography: candidate.geography ?? "",
+        sourceUrl: candidate.sourceUrl,
+        sourceRef: "Live public web research",
+        confidence: candidate.confidence,
+        reviewNotes: candidate.evidence,
+        notes: discoveryNotes,
+        provenance: {
+          provider: "OpenAI web search",
+          sourceUrl: candidate.sourceUrl,
+          evidence: candidate.evidence,
+          discoveredAt: candidate.verifiedAt,
+          mediaOpportunity: candidate.mediaOpportunity ?? "",
+          modelDerivedFields: ["role", "beats", "sectors", "geography", "mediaOpportunity"],
+        },
+        lastVerifiedAt: verifiedAt,
+        accountId,
+      }).returning();
+      return { contact, outlet, existing: false };
+    });
+
+      const [sourceCheck] = await db.insert(mediaContactSourceChecksTable).values({
+        contactId: id, accountId: access.owner, sourceUrl: access.row.sourceUrl,
+        outcome: "unavailable", errorCode: failure.errorCode,
+        errorMessage: failure.errorMessage, checkedAt,
+      }).returning();
+
+      const [sourceCheck] = await db.insert(mediaContactSourceChecksTable).values({
+        contactId: id, accountId: access.owner, sourceUrl: access.row.sourceUrl,
+        outcome: "unavailable", errorCode: failure.errorCode,
+        errorMessage: failure.errorMessage, checkedAt,
+      }).returning();
 
       req.log.info({
         accountId,
@@ -321,10 +340,19 @@ router.post(
       }
       // Custom categories are always scoped to the creating account - 
       // there is no global category concept.
-      const accountId = normUsername(req.account!.username);
+  const accountId = normUsername(req.account!.username);
       const [created] = await db
-        .insert(mediaCategoriesTable)
-        .values({ name: name.trim(), accountId })
+        .insert(mediaContactsTable)
+        .values({
+          outletId: resolvedOutletId,
+          firstName: typeof firstName === "string" ? firstName.trim() : "",
+          lastName: typeof lastName === "string" ? lastName.trim() : "",
+          ...stringValues,
+          ...(beats ? { beats } : {}),
+          ...(sectors ? { sectors } : {}),
+          ...(lastVerifiedAt !== undefined ? { lastVerifiedAt } : {}),
+          accountId,
+        })
         .returning();
       res.json({ ok: true, category: created });
     } catch {
@@ -338,21 +366,27 @@ router.delete(
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
-      const id = Number(req.params.id);
+    const id = Number(req.params.id);
+
+    const access = await editableContact(req, id);
+
+    const checkId = Number(req.params.checkId);
+
+    const access = await editableContact(req, id);
       if (!id) {
-        res.status(400).json({ error: "Invalid category id" });
+        res.status(400).json({ error: "Invalid contact id" });
         return;
       }
-      const existing = await db
-        .select()
-        .from(mediaCategoriesTable)
-        .where(eq(mediaCategoriesTable.id, id))
-        .limit(1);
+    const existing = await db.select({ id: mediaRecommendationDecisionsTable.id }).from(mediaRecommendationDecisionsTable).where(and(eq(mediaRecommendationDecisionsTable.accountId, accountId), eq(mediaRecommendationDecisionsTable.projectId, projectId), eq(mediaRecommendationDecisionsTable.storyKey, storyKey), eq(mediaRecommendationDecisionsTable.contactId, Number(contactId)))).limit(1);
       if (!existing[0]) {
         res.status(404).json({ error: "Category not found" });
         return;
       }
       const row = existing[0];
+
+type EditableContactResult =
+  | { ok: true; row: typeof mediaContactsTable.$inferSelect; owner: string }
+  | { ok: false; status: 403 | 404; error: string };
       // Only the account that created the category (or admin) may delete it.
       const requestingAccount = normUsername(req.account!.username);
       if (!isAdmin(req) && row.accountId !== requestingAccount) {
@@ -379,15 +413,63 @@ router.get(
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
-      const visible = await visibleAccounts(req);
+  const visible = await visibleAccounts(req);
       const rows = await db
-        .select()
-        .from(mediaOutletsTable)
-        .orderBy(mediaOutletsTable.name);
+        .select({
+          id: mediaContactsTable.id,
+          outletId: mediaContactsTable.outletId,
+          firstName: mediaContactsTable.firstName,
+          lastName: mediaContactsTable.lastName,
+          role: mediaContactsTable.role,
+          email: mediaContactsTable.email,
+          phone: mediaContactsTable.phone,
+          notes: mediaContactsTable.notes,
+          mobile: mediaContactsTable.mobile,
+          linkedinUrl: mediaContactsTable.linkedinUrl,
+          twitterHandle: mediaContactsTable.twitterHandle,
+          beats: mediaContactsTable.beats,
+          sectors: mediaContactsTable.sectors,
+          geography: mediaContactsTable.geography,
+          language: mediaContactsTable.language,
+          seniority: mediaContactsTable.seniority,
+          editorialStatus: mediaContactsTable.editorialStatus,
+          sourceUrl: mediaContactsTable.sourceUrl,
+          sourceRef: mediaContactsTable.sourceRef,
+          publicationReach: mediaContactsTable.publicationReach,
+          publicationAuthority: mediaContactsTable.publicationAuthority,
+          journalistAuthority: mediaContactsTable.journalistAuthority,
+          confidence: mediaContactsTable.confidence,
+          reviewNotes: mediaContactsTable.reviewNotes,
+          provenance: mediaContactsTable.provenance,
+          lastVerifiedAt: mediaContactsTable.lastVerifiedAt,
+          accountId: mediaContactsTable.accountId,
+          createdAt: mediaContactsTable.createdAt,
+          outletName: mediaOutletsTable.name,
+          outletCategory: mediaOutletsTable.category,
+          outletWebsite: mediaOutletsTable.website,
+          outletCountry: mediaOutletsTable.country,
+          outletReachBand: mediaOutletsTable.reachBand,
+        })
+        .from(mediaContactsTable)
+        .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
+        .where(isNull(mediaContactsTable.deletedAt))
+        .orderBy(mediaContactsTable.lastName, mediaContactsTable.firstName);
 
-      const results = rows.filter(
-        (r) => !r.deletedAt && outletVisible(r.accountId, visible),
-      );
+      // Global contacts (accountId null) are visible to all; otherwise filter by hierarchy.
+      // Mask outlet metadata when the joined outlet belongs to a non-visible account - 
+      // prevents leaking private outlet names through the contacts join.
+      const results = rows
+        .filter((r) => {
+          if (r.accountId === null) return true;
+          if (visible === null) return true;
+          return visible.includes(r.accountId);
+        })
+        .map((r) => {
+          const outletAccountId = r.outletName != null
+            ? (rows.find((x) => x.id === r.id) as { outletAccountId?: string | null } | undefined)?.outletAccountId ?? null
+            : null;
+          return r;
+        });
       res.json({ outlets: results });
     } catch {
       res.status(500).json({ error: "Failed to load outlets" });
@@ -405,38 +487,43 @@ router.post(
         res.status(400).json({ error: "Missing outlet name" });
         return;
       }
-      const accountId = isAdmin(req) ? null : normUsername(req.account!.username);
+  const accountId = normUsername(req.account!.username);
       const [created] = await db
-        .insert(mediaOutletsTable)
+        .insert(mediaContactsTable)
         .values({
-          name: name.trim(),
-          category: typeof category === "string" ? category.trim() : "",
-          website: typeof website === "string" ? website.trim() : "",
-          description: typeof description === "string" ? description.trim() : "",
-          country: typeof country === "string" ? country.trim() : "",
-          reachBand: typeof reachBand === "string" ? reachBand.trim() : "",
+          outletId: resolvedOutletId,
+          firstName: typeof firstName === "string" ? firstName.trim() : "",
+          lastName: typeof lastName === "string" ? lastName.trim() : "",
+          ...stringValues,
+          ...(beats ? { beats } : {}),
+          ...(sectors ? { sectors } : {}),
+          ...(lastVerifiedAt !== undefined ? { lastVerifiedAt } : {}),
           accountId,
         })
         .returning();
-      res.json({ ok: true, outlet: created });
+      res.json({ ok: true, contact: created });
     } catch {
-      res.status(500).json({ error: "Failed to create outlet" });
+      res.status(500).json({ error: "Failed to create contact" });
     }
   },
 );
 
 router.put(
-  "/store/media-db/outlets/:id",
+  "/store/media-db/contacts/:id",
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
       const numId = Number(req.params.id);
       if (!numId) {
-        res.status(400).json({ error: "Invalid outlet id" });
+        res.status(400).json({ error: "Invalid contact id" });
         return;
       }
-      const existing = await db.select().from(mediaOutletsTable).where(eq(mediaOutletsTable.id, numId)).limit(1);
+    const existing = await db.select({ id: mediaRecommendationDecisionsTable.id }).from(mediaRecommendationDecisionsTable).where(and(eq(mediaRecommendationDecisionsTable.accountId, accountId), eq(mediaRecommendationDecisionsTable.projectId, projectId), eq(mediaRecommendationDecisionsTable.storyKey, storyKey), eq(mediaRecommendationDecisionsTable.contactId, Number(contactId)))).limit(1);
       const row = existing[0];
+
+type EditableContactResult =
+  | { ok: true; row: typeof mediaContactsTable.$inferSelect; owner: string }
+  | { ok: false; status: 403 | 404; error: string };
       if (!row || row.deletedAt) {
         res.status(404).json({ error: "Outlet not found" });
         return;
@@ -452,16 +539,16 @@ router.put(
       }
       const { name, category, website, description, country, reachBand } = req.body ?? {};
       const [updated] = await db
-        .update(mediaOutletsTable)
+        .update(mediaContactsTable)
         .set({
-          name: typeof name === "string" && name.trim() ? name.trim() : row.name,
-          category: typeof category === "string" ? category.trim() : row.category,
-          website: typeof website === "string" ? website.trim() : row.website,
-          description: typeof description === "string" ? description.trim() : row.description,
-          country: typeof country === "string" ? country.trim() : row.country,
-          reachBand: typeof reachBand === "string" ? reachBand.trim() : row.reachBand,
+          outletId: resolvedOutletId,
+          ...stringValues,
+          ...(beats ? { beats } : {}),
+          ...(sectors ? { sectors } : {}),
+          ...(lastVerifiedAt !== undefined ? { lastVerifiedAt } : {}),
+          updatedAt: new Date(),
         })
-        .where(eq(mediaOutletsTable.id, numId))
+        .where(eq(mediaContactsTable.id, numId))
         .returning();
       res.json({ ok: true, outlet: updated });
     } catch {
@@ -475,13 +562,23 @@ router.delete(
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
-      const id = Number(req.params.id);
+    const id = Number(req.params.id);
+
+    const access = await editableContact(req, id);
+
+    const checkId = Number(req.params.checkId);
+
+    const access = await editableContact(req, id);
       if (!id) {
-        res.status(400).json({ error: "Invalid outlet id" });
+        res.status(400).json({ error: "Invalid contact id" });
         return;
       }
-      const existing = await db.select().from(mediaOutletsTable).where(eq(mediaOutletsTable.id, id)).limit(1);
+    const existing = await db.select({ id: mediaRecommendationDecisionsTable.id }).from(mediaRecommendationDecisionsTable).where(and(eq(mediaRecommendationDecisionsTable.accountId, accountId), eq(mediaRecommendationDecisionsTable.projectId, projectId), eq(mediaRecommendationDecisionsTable.storyKey, storyKey), eq(mediaRecommendationDecisionsTable.contactId, Number(contactId)))).limit(1);
       const row = existing[0];
+
+type EditableContactResult =
+  | { ok: true; row: typeof mediaContactsTable.$inferSelect; owner: string }
+  | { ok: false; status: 403 | 404; error: string };
       if (!row) {
         res.json({ ok: true });
         return;
@@ -576,12 +673,8 @@ function inferredOutletCountry(geography: string): string {
   return geography.trim();
 }
 
-router.get(
-  "/store/media-db/contacts",
-  requirePlatformAuth,
-  async (req: Request, res: Response) => {
-    try {
-      const visible = await visibleAccounts(req);
+const SOURCE_REVIEW_DAYS = 90;
+  const visible = await visibleAccounts(req);
       const rows = await db
         .select({
           id: mediaContactsTable.id,
@@ -659,8 +752,8 @@ router.get(
         }
         return r;
       });
-      // Server-side pagination/filtering keeps large imported lists usable while
-      // preserving the legacy `contacts` envelope for existing callers.
+
+      const contactIds = safeResults.map((contact) => contact.id);
       const query = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
       const category = typeof req.query.category === "string" ? req.query.category.trim().toLowerCase() : "";
       const country = typeof req.query.country === "string" ? req.query.country.trim().toLowerCase() : "";
@@ -669,7 +762,7 @@ router.get(
       const sort = ["firstName", "lastName", "role", "email", "outletName", "createdAt"].includes(String(req.query.sort))
         ? String(req.query.sort) : "lastName";
       const direction = req.query.direction === "desc" ? -1 : 1;
-      const filtered = safeResults.filter((contact) => {
+      const filtered = withSourceHealth.filter((contact) => {
         const haystack = [contact.firstName, contact.lastName, contact.role, contact.email, contact.outletName, contact.outletCategory, contact.outletCountry, contact.notes, contact.reviewNotes, contact.geography, contact.beats.join(" "), contact.sectors.join(" ")]
           .filter(Boolean).join(" ").toLowerCase();
         const queryGroups = searchTokens(query);
@@ -700,12 +793,12 @@ router.post(
         return;
       }
       // Validate outletId: caller must have visibility over the chosen outlet.
-      let resolvedOutletId: number | null = null;
+      let resolvedOutletId = row.outletId;
       if (outletId) {
         const numOutletId = Number(outletId);
         if (numOutletId) {
-          const visible = await visibleAccounts(req);
-          const outletRow = await db.select({ id: mediaOutletsTable.id, accountId: mediaOutletsTable.accountId, deletedAt: mediaOutletsTable.deletedAt }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, numOutletId)).limit(1);
+  const visible = await visibleAccounts(req);
+            const outletRow = await db.select({ id: mediaOutletsTable.id, accountId: mediaOutletsTable.accountId, deletedAt: mediaOutletsTable.deletedAt }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, numOid)).limit(1);
           if (!outletRow[0] || outletRow[0].deletedAt) {
             res.status(400).json({ error: "Outlet not found" });
             return;
@@ -718,7 +811,7 @@ router.post(
         }
       }
       // Admins can create global contacts (accountId = null)
-      const accountId = isAdmin(req) ? null : normUsername(req.account!.username);
+  const accountId = normUsername(req.account!.username);
       const stringValues = cleanContactStrings(body);
       const beats = cleanContactArray(body.beats);
       const sectors = cleanContactArray(body.sectors);
@@ -753,8 +846,12 @@ router.put(
         res.status(400).json({ error: "Invalid contact id" });
         return;
       }
-      const existing = await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, numId)).limit(1);
+    const existing = await db.select({ id: mediaRecommendationDecisionsTable.id }).from(mediaRecommendationDecisionsTable).where(and(eq(mediaRecommendationDecisionsTable.accountId, accountId), eq(mediaRecommendationDecisionsTable.projectId, projectId), eq(mediaRecommendationDecisionsTable.storyKey, storyKey), eq(mediaRecommendationDecisionsTable.contactId, Number(contactId)))).limit(1);
       const row = existing[0];
+
+type EditableContactResult =
+  | { ok: true; row: typeof mediaContactsTable.$inferSelect; owner: string }
+  | { ok: false; status: 403 | 404; error: string };
       if (!row || row.deletedAt) {
         res.status(404).json({ error: "Contact not found" });
         return;
@@ -778,7 +875,7 @@ router.put(
         } else {
           const numOid = Number(outletId);
           if (numOid) {
-            const visible = await visibleAccounts(req);
+  const visible = await visibleAccounts(req);
             const outletRow = await db.select({ id: mediaOutletsTable.id, accountId: mediaOutletsTable.accountId, deletedAt: mediaOutletsTable.deletedAt }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, numOid)).limit(1);
             if (!outletRow[0] || outletRow[0].deletedAt) {
               res.status(400).json({ error: "Outlet not found" });
@@ -813,7 +910,7 @@ router.put(
       // override would block later workbook refreshes for untouched fields.
       const owner = mediaOverrideOwner(row.accountId);
       for (const fieldName of RICH_CONTACT_STRING_FIELDS) {
-        const value = body[fieldName];
+        const value = cleanContactArray(body[fieldName]);
         if (typeof value !== "string" || value.trim() === row[fieldName]) continue;
         await db.delete(mediaContactFieldOverridesTable).where(and(eq(mediaContactFieldOverridesTable.contactId, numId), eq(mediaContactFieldOverridesTable.accountId, owner), eq(mediaContactFieldOverridesTable.fieldName, fieldName)));
         await db.insert(mediaContactFieldOverridesTable).values({ contactId: numId, accountId: owner, fieldName, value: value.trim() });
@@ -836,33 +933,23 @@ router.delete(
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
-      const id = Number(req.params.id);
+    const id = Number(req.params.id);
+
+    const access = await editableContact(req, id);
+
+    const checkId = Number(req.params.checkId);
+
+    const access = await editableContact(req, id);
       if (!id) {
         res.status(400).json({ error: "Invalid contact id" });
         return;
       }
-      const existing = await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, id)).limit(1);
+    const existing = await db.select({ id: mediaRecommendationDecisionsTable.id }).from(mediaRecommendationDecisionsTable).where(and(eq(mediaRecommendationDecisionsTable.accountId, accountId), eq(mediaRecommendationDecisionsTable.projectId, projectId), eq(mediaRecommendationDecisionsTable.storyKey, storyKey), eq(mediaRecommendationDecisionsTable.contactId, Number(contactId)))).limit(1);
       const row = existing[0];
-      if (!row) {
-        res.json({ ok: true });
-        return;
-      }
-      if (row.accountId === null && !isAdmin(req)) {
-        res.status(403).json({ error: "Only admins may delete global contacts" });
-        return;
-      }
-      if (row.accountId !== null && !isAdmin(req) && row.accountId !== normUsername(req.account!.username)) {
-        res.status(403).json({ error: "You can only delete your own contacts" });
-        return;
-      }
-      await db.update(mediaContactsTable).set({ deletedAt: new Date() }).where(eq(mediaContactsTable.id, id));
-      res.json({ ok: true });
-    } catch {
-      res.status(500).json({ error: "Failed to delete contact" });
-    }
-  },
-);
 
+type EditableContactResult =
+  | { ok: true; row: typeof mediaContactsTable.$inferSelect; owner: string }
+  | { ok: false; status: 403 | 404; error: string };
 async function assertProjectVisible(req: Request, projectId: string): Promise<boolean> {
   if (!inAssignedScope(req, projectId)) return false;
   const visible = await visibleAccounts(req);
@@ -876,12 +963,12 @@ async function assertProjectVisible(req: Request, projectId: string): Promise<bo
 // involved, making a story's shortlist repeatable and auditable.
 router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const projectId = typeof req.body?.projectId === "string" ? req.body.projectId.trim().slice(0, 200) : "";
-    const storyKey = typeof req.body?.storyKey === "string" ? req.body.storyKey.trim().slice(0, 200) : "";
+  const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "";
+  const storyKey = typeof req.query.storyKey === "string" ? req.query.storyKey : "";
     const terms = Array.isArray(req.body?.terms) ? req.body.terms.filter((v: unknown) => typeof v === "string").map((v: string) => v.toLowerCase().trim()).filter(Boolean).slice(0, 30) : [];
     if (!projectId || !storyKey || !(await assertProjectVisible(req, projectId))) { res.status(404).json({ error: "Project not found" }); return; }
-    const accountId = normUsername(req.account!.username);
-    const visible = await visibleAccounts(req);
+  const accountId = normUsername(req.account!.username);
+  const visible = await visibleAccounts(req);
     const contacts = (await db.select().from(mediaContactsTable).where(isNull(mediaContactsTable.deletedAt)))
       .filter((contact) => contact.accountId === null || visible === null || visible.includes(contact.accountId));
     const outlets = await db.select().from(mediaOutletsTable).where(isNull(mediaOutletsTable.deletedAt));
@@ -917,7 +1004,7 @@ router.post("/store/media-db/discoveries", requirePlatformAuth, async (req: Requ
     const token = typeof req.body?.discoveryToken === "string" ? req.body.discoveryToken : "";
     const candidateKey = typeof req.body?.candidateKey === "string" ? req.body.candidateKey : "";
     const trusted = verifyMediaDiscoveries(token);
-    const accountId = normUsername(req.account!.username);
+  const accountId = normUsername(req.account!.username);
     if (!trusted || trusted.accountId !== accountId) {
       res.status(400).json({ error: "This discovery has expired or is not valid for this account. Run the search again." });
       return;
@@ -927,7 +1014,7 @@ router.post("/store/media-db/discoveries", requirePlatformAuth, async (req: Requ
       res.status(400).json({ error: "This discovery is not present in the verified search results." });
       return;
     }
-    const visible = await visibleAccounts(req);
+  const visible = await visibleAccounts(req);
     const result = await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`media-discovery:${accountId}`}))`);
       const visibleOutlets = (await tx.select().from(mediaOutletsTable).where(isNull(mediaOutletsTable.deletedAt)))
@@ -1018,6 +1105,18 @@ router.post("/store/media-db/discoveries", requirePlatformAuth, async (req: Requ
       }).returning();
       return { contact, outlet, existing: false };
     });
+
+      const [sourceCheck] = await db.insert(mediaContactSourceChecksTable).values({
+        contactId: id, accountId: access.owner, sourceUrl: access.row.sourceUrl,
+        outcome: "unavailable", errorCode: failure.errorCode,
+        errorMessage: failure.errorMessage, checkedAt,
+      }).returning();
+
+      const [sourceCheck] = await db.insert(mediaContactSourceChecksTable).values({
+        contactId: id, accountId: access.owner, sourceUrl: access.row.sourceUrl,
+        outcome: "unavailable", errorCode: failure.errorCode,
+        errorMessage: failure.errorMessage, checkedAt,
+      }).returning();
     res.status(result.existing ? 200 : 201).json({ ok: true, ...result });
   } catch (error) {
     req.log.error({ err: error }, "saving live media discovery failed");
@@ -1029,8 +1128,8 @@ router.put("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
   try {
     const { projectId, storyKey, contactId, decision, note } = req.body ?? {};
     if (typeof projectId !== "string" || typeof storyKey !== "string" || !Number(contactId) || !["shortlisted", "rejected", "contacted"].includes(decision) || !(await assertProjectVisible(req, projectId))) { res.status(400).json({ error: "Invalid recommendation decision or project" }); return; }
-    const accountId = normUsername(req.account!.username);
-    const visible = await visibleAccounts(req);
+  const accountId = normUsername(req.account!.username);
+  const visible = await visibleAccounts(req);
     const contact = await db.select({ accountId: mediaContactsTable.accountId }).from(mediaContactsTable).where(and(eq(mediaContactsTable.id, Number(contactId)), isNull(mediaContactsTable.deletedAt))).limit(1);
     if (!contact[0] || (contact[0].accountId !== null && visible !== null && !visible.includes(contact[0].accountId))) { res.status(403).json({ error: "Contact is not available to this account" }); return; }
     const existing = await db.select({ id: mediaRecommendationDecisionsTable.id }).from(mediaRecommendationDecisionsTable).where(and(eq(mediaRecommendationDecisionsTable.accountId, accountId), eq(mediaRecommendationDecisionsTable.projectId, projectId), eq(mediaRecommendationDecisionsTable.storyKey, storyKey), eq(mediaRecommendationDecisionsTable.contactId, Number(contactId)))).limit(1);
@@ -1127,3 +1226,49 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
 });
 
 export default router;
+
+      const failure = sourceFetchError(error);
+
+    const { updates, applied, skipped } = approvedSourceUpdates(check.differences, req.body?.fields, overrides.map((item) => item.fieldName));
+
+async function editableContact(req: Request, id: number): Promise<EditableContactResult> {
+  const rows = await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, id)).limit(1);
+  const row = rows[0];
+  if (!row || row.deletedAt) return { ok: false, status: 404, error: "Contact not found" };
+  if (row.accountId === null && !isAdmin(req)) return { ok: false, status: 403, error: "Only admins may check global contacts" };
+  if (row.accountId !== null && !isAdmin(req) && row.accountId !== normUsername(req.account!.username)) {
+    return { ok: false, status: 403, error: "You can only check your own contacts" };
+  }
+  return { ok: true, row, owner: mediaOverrideOwner(row.accountId) };
+}
+
+      const checkRows = contactIds.length
+        ? await db.select().from(mediaContactSourceChecksTable)
+          .where(inArray(mediaContactSourceChecksTable.contactId, contactIds))
+          .orderBy(desc(mediaContactSourceChecksTable.checkedAt))
+        : [];
+
+      const evidence = await fetchMediaSourceEvidence(access.row.sourceUrl);
+
+    const checkedAt = new Date();
+
+    const checks = await db.select().from(mediaContactSourceChecksTable)
+      .where(and(eq(mediaContactSourceChecksTable.id, checkId), eq(mediaContactSourceChecksTable.contactId, id), eq(mediaContactSourceChecksTable.accountId, access.owner)))
+      .limit(1);
+
+    const overrides = await db.select({ fieldName: mediaContactFieldOverridesTable.fieldName }).from(mediaContactFieldOverridesTable)
+      .where(and(eq(mediaContactFieldOverridesTable.contactId, id), eq(mediaContactFieldOverridesTable.accountId, access.owner)));
+
+      const latestCheckByContact = new Map<number, typeof checkRows[number]>();
+
+    const check = checks[0];
+
+      const withSourceHealth = safeResults.map((contact) => {
+        const sourceCheck = latestCheckByContact.get(contact.id) ?? null;
+        const dueAt = sourceCheck ? new Date(sourceCheck.checkedAt.getTime() + SOURCE_REVIEW_DAYS * 86_400_000) : null;
+        const sourceStatus = !contact.sourceUrl ? "unverified"
+          : !sourceCheck ? "due"
+            : sourceCheck.outcome === "current" && dueAt && dueAt.getTime() <= Date.now() ? "due"
+              : sourceCheck.outcome;
+        return { ...contact, sourceStatus, sourceCheck, sourceReviewDueAt: dueAt };
+      });

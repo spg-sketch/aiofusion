@@ -39,6 +39,18 @@ export type Contact = {
   publicationReach?: string;
   publicationAuthority?: string | number;
   journalistAuthority?: string | number;
+  sourceStatus?: "current" | "due" | "unavailable" | "changed" | "unverified";
+  sourceReviewDueAt?: string | null;
+  sourceCheck?: {
+    id: number;
+    checkedAt: string;
+    outcome: "current" | "changed" | "unavailable";
+    errorCode?: string | null;
+    errorMessage?: string;
+    reviewedAt?: string | null;
+    observedEvidence: { nameFound: boolean; roleFound: boolean; emailFound: boolean; observedRole: string; observedEmails: string[]; excerpt: string };
+    differences: Array<{ field: "role" | "email"; kind: "changed" | "removed" | "added"; storedValue: string; observedValue: string; supported: boolean }>;
+  } | null;
 };
 
 export type Recommendation = {

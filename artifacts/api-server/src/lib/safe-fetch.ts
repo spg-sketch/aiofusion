@@ -178,6 +178,37 @@ export async function fetchSiteContent(url: string, maxChars = 8000): Promise<Si
   return { url: normalized, title, description, text: text.slice(0, maxChars) };
 }
 
+export interface MediaSourceEvidence {
+  url: string;
+  text: string;
+  emails: string[];
+  roleCandidates: string[];
+}
+
+export async function fetchMediaSourceEvidence(url: string): Promise<MediaSourceEvidence> {
+  const normalized = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+  const html = await fetchHtml(normalized);
+  const $ = cheerio.load(html);
+  $("script, style, noscript, svg, nav, footer, form").remove();
+  const emails = new Set<string>();
+  $('a[href^="mailto:"]').each((_, element) => {
+    const value = ($(element).attr("href") || "").slice(7).split("?")[0].trim().toLowerCase();
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) emails.add(value);
+  });
+  const visibleText = $("body").text().replace(/\s+/g, " ").trim();
+  for (const match of visibleText.matchAll(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi)) {
+    emails.add(match[0].toLowerCase());
+    if (emails.size >= 100) break;
+  }
+  const roleCandidates = $("h1, h2, h3, h4, p, li, td, div")
+    .map((_, element) => $(element).clone().children().remove().end().text().replace(/\s+/g, " ").trim())
+    .get()
+    .filter((value) => value.length >= 3 && value.length <= 180)
+    .slice(0, 500);
+  const text = visibleText.slice(0, 20_000);
+  return { url: normalized, text, emails: [...emails].slice(0, 100), roleCandidates };
+}
+
 const SUB_PAGE_PATTERNS = [
   /\babout\b/i,
   /\bservices?\b/i,
