@@ -4,6 +4,7 @@ export const modules: ModuleMap = {
   "./components/mockups/account-settings/Current.tsx": () => import("../components/mockups/account-settings/Current.tsx"),
   "./components/mockups/account-settings/EmbeddedOnboarding.tsx": () => import("../components/mockups/account-settings/EmbeddedOnboarding.tsx"),
   "./components/mockups/account-settings/FocusedOnboarding.tsx": () => import("../components/mockups/account-settings/FocusedOnboarding.tsx"),
+  "./components/mockups/account-settings/UnifiedSiteSystem.tsx": () => import("../components/mockups/account-settings/UnifiedSiteSystem.tsx"),
   "./components/mockups/account-settings/WiderReadable.tsx": () => import("../components/mockups/account-settings/WiderReadable.tsx"),
   "./components/mockups/aio-fusion/AuthorityPlanner.tsx": () => import("../components/mockups/aio-fusion/AuthorityPlanner.tsx"),
   "./components/mockups/aio-fusion/ContentOptimiser.tsx": () => import("../components/mockups/aio-fusion/ContentOptimiser.tsx"),
