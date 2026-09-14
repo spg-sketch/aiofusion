@@ -78,6 +78,9 @@ describe("AccountSecurityCard sign-in methods", () => {
     await screen.findByText("Google");
     const deleteButton = screen.getByRole("button", { name: /permanently delete/i });
     expect(screen.queryByText("Confirm your password")).toBeNull();
+    expect(deleteButton).toBeDisabled();
+    fireEvent.click(screen.getByLabelText(/deletes all workspace-owned projects/i));
+    fireEvent.click(screen.getByLabelText(/cannot be undone/i));
     fireEvent.submit(deleteButton.closest("form")!);
     await waitFor(() => expect(serverSelfDeleteAccount).toHaveBeenCalledWith({ sso: true }));
     expect(onSignOut).toHaveBeenCalledOnce();
@@ -103,5 +106,37 @@ describe("AccountSecurityCard sign-in methods", () => {
     fireEvent.click(screen.getByRole("button", { name: /delete my account and data/i }));
     expect(screen.getByText("Confirm your password")).toBeTruthy();
     expect(screen.queryByRole("link", { name: /confirm with google/i })).toBeNull();
+  });
+
+  it("requires both deletion warnings before a password account can submit", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      hasPassword: true,
+      account: { googleLinked: false, microsoftLinked: false },
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })));
+    serverSelfDeleteAccount.mockResolvedValue({ ok: true });
+
+    render(
+      <AccountSecurityCard
+        session={{ username: "careful-user", role: "client" }}
+        onSignOut={() => {}}
+      />,
+    );
+
+    await screen.findByText("Email & password");
+    fireEvent.click(screen.getByRole("button", { name: /delete my account and data/i }));
+    fireEvent.change(screen.getByLabelText("Confirm your password"), { target: { value: "correct-password" } });
+    const deleteButton = screen.getByRole("button", { name: /permanently delete/i });
+
+    expect(deleteButton).toBeDisabled();
+    fireEvent.click(screen.getByLabelText(/deletes all workspace-owned projects/i));
+    expect(deleteButton).toBeDisabled();
+    fireEvent.click(screen.getByLabelText(/cannot be undone/i));
+    expect(deleteButton).not.toBeDisabled();
+    fireEvent.click(deleteButton);
+
+    await waitFor(() => expect(serverSelfDeleteAccount).toHaveBeenCalledWith({ password: "correct-password" }));
   });
 });

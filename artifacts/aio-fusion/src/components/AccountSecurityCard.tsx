@@ -128,7 +128,10 @@ export function AccountSecurityCard({
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deleteDataAcknowledged, setDeleteDataAcknowledged] = useState(false);
+  const [deleteIrreversibleAcknowledged, setDeleteIrreversibleAcknowledged] = useState(false);
   const ssoDeleteReady = deleteReauthResult === "ok";
+  const deleteWarningsAcknowledged = deleteDataAcknowledged && deleteIrreversibleAcknowledged;
 
   useEffect(() => {
     const status = deleteReauthResult;
@@ -144,6 +147,10 @@ export function AccountSecurityCard({
   const handleDeleteAccount = (e: React.FormEvent) => {
     e.preventDefault();
     setDeleteError(null);
+    if (!deleteWarningsAcknowledged) {
+      setDeleteError("Confirm both warnings before permanently deleting your account.");
+      return;
+    }
     if (hasPassword !== false && !deletePassword) { setDeleteError("Enter your password to confirm."); return; }
     setDeleting(true);
     void serverSelfDeleteAccount(hasPassword === false ? { sso: true } : { password: deletePassword })
@@ -421,7 +428,13 @@ export function AccountSecurityCard({
       {/* DANGER ZONE - self-serve account deletion (GDPR right to erasure) */}
       <div className="mt-4 pt-5" style={{ borderTop: `1px solid ${vars.g200}` }}>
         <button
-          onClick={() => { setShowDeleteAccount((v) => !v); setDeleteError(null); setDeletePassword(""); }}
+          onClick={() => {
+            setShowDeleteAccount((v) => !v);
+            setDeleteError(null);
+            setDeletePassword("");
+            setDeleteDataAcknowledged(false);
+            setDeleteIrreversibleAcknowledged(false);
+          }}
           className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity"
           style={{ color: vars.g500 }}
         >
@@ -438,17 +451,51 @@ export function AccountSecurityCard({
                   : "If you have client accounts, remove them first."
                 : ""}
             </p>
+            <div className="mb-4 space-y-3 rounded-xl border p-4" style={{ borderColor: "#F2B8B5", background: "#FFF7F6" }}>
+              <label className="flex items-start gap-3 text-[13px] font-medium leading-[1.6] cursor-pointer" style={{ color: ink }}>
+                <input
+                  type="checkbox"
+                  checked={deleteDataAcknowledged}
+                  onChange={(e) => setDeleteDataAcknowledged(e.target.checked)}
+                  className="mt-1 h-4 w-4 shrink-0"
+                />
+                <span>
+                  I understand this deletes all workspace-owned projects, media research, recommendations, imports, overrides, audits and GEO reports.
+                </span>
+              </label>
+              <label className="flex items-start gap-3 text-[13px] font-medium leading-[1.6] cursor-pointer" style={{ color: ink }}>
+                <input
+                  type="checkbox"
+                  checked={deleteIrreversibleAcknowledged}
+                  onChange={(e) => setDeleteIrreversibleAcknowledged(e.target.checked)}
+                  className="mt-1 h-4 w-4 shrink-0"
+                />
+                <span>
+                  I understand this action cannot be undone and the deleted data cannot be recovered.
+                </span>
+              </label>
+            </div>
             {hasPassword === false ? (
               <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
                 {!ssoDeleteReady ? (
                   <>
                     {googleLinked && (
-                      <a href={`${apiBase()}/api/platform/auth/google/delete-confirmation`} className="px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white text-center" style={{ background: accent }}>
+                      <a
+                        href={deleteWarningsAcknowledged ? `${apiBase()}/api/platform/auth/google/delete-confirmation` : undefined}
+                        aria-disabled={!deleteWarningsAcknowledged}
+                        className="px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white text-center"
+                        style={{ background: accent, opacity: deleteWarningsAcknowledged ? 1 : 0.5, pointerEvents: deleteWarningsAcknowledged ? "auto" : "none" }}
+                      >
                         Confirm with Google
                       </a>
                     )}
                     {microsoftLinked && (
-                      <a href={`${apiBase()}/api/platform/auth/microsoft/delete-confirmation`} className="px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white text-center" style={{ background: accent }}>
+                      <a
+                        href={deleteWarningsAcknowledged ? `${apiBase()}/api/platform/auth/microsoft/delete-confirmation` : undefined}
+                        aria-disabled={!deleteWarningsAcknowledged}
+                        className="px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white text-center"
+                        style={{ background: accent, opacity: deleteWarningsAcknowledged ? 1 : 0.5, pointerEvents: deleteWarningsAcknowledged ? "auto" : "none" }}
+                      >
                         Confirm with Microsoft
                       </a>
                     )}
@@ -456,7 +503,7 @@ export function AccountSecurityCard({
                 ) : (
                   <button
                     type="submit"
-                    disabled={deleting}
+                     disabled={deleting || !deleteWarningsAcknowledged}
                     className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white disabled:opacity-50"
                     style={{ background: vars.red }}
                   >
@@ -468,8 +515,9 @@ export function AccountSecurityCard({
             ) : (
               <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
                 <div className="flex-1">
-                <label className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: vars.g500 }}>Confirm your password</label>
+                <label htmlFor="delete-account-password" className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: vars.g500 }}>Confirm your password</label>
                 <input
+                  id="delete-account-password"
                   type="password"
                   value={deletePassword}
                   onChange={(e) => setDeletePassword(e.target.value)}
@@ -479,7 +527,7 @@ export function AccountSecurityCard({
               </div>
               <button
                 type="submit"
-                disabled={deleting}
+                disabled={deleting || !deleteWarningsAcknowledged}
                 className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90 disabled:opacity-50"
                 style={{ background: vars.red }}
               >

@@ -6260,33 +6260,111 @@ router.post(
         return;
       }
 
-      // Hard-delete everything scoped to this account. Order does not matter
-      // (no foreign keys tie these tables together), but we log the event
-      // before removing the account row so the actor/target are still valid.
+      await db.transaction(async (tx) => {
+        const contacts = await tx
+          .select({ id: mediaContactsTable.id })
+          .from(mediaContactsTable)
+          .where(eq(mediaContactsTable.accountId, username));
+        const contactIds = contacts.map((row) => row.id);
+        const outlets = await tx
+          .select({ id: mediaOutletsTable.id })
+          .from(mediaOutletsTable)
+          .where(eq(mediaOutletsTable.accountId, username));
+        const outletIds = outlets.map((row) => row.id);
+        const categories = await tx
+          .select({ id: mediaCategoriesTable.id })
+          .from(mediaCategoriesTable)
+          .where(eq(mediaCategoriesTable.accountId, username));
+        const categoryIds = categories.map((row) => row.id);
+        const recommendationSets = await tx
+          .select({ id: mediaRecommendationSetsTable.id })
+          .from(mediaRecommendationSetsTable)
+          .where(eq(mediaRecommendationSetsTable.accountId, username));
+        const recommendationSetIds = recommendationSets.map((row) => row.id);
+
+        // Private contacts can appear in another visible workspace's saved
+        // recommendation history. Remove only those references, not the other
+        // workspace's set or unrelated contacts.
+        if (contactIds.length > 0) {
+          await tx.delete(mediaRecommendationItemsTable)
+            .where(inArray(mediaRecommendationItemsTable.contactId, contactIds));
+          await tx.delete(mediaRecommendationDecisionsTable)
+            .where(inArray(mediaRecommendationDecisionsTable.contactId, contactIds));
+          await tx.delete(mediaContactCategoriesTable)
+            .where(inArray(mediaContactCategoriesTable.contactId, contactIds));
+          await tx.delete(mediaContactFieldOverridesTable)
+            .where(inArray(mediaContactFieldOverridesTable.contactId, contactIds));
+        }
+        if (recommendationSetIds.length > 0) {
+          await tx.delete(mediaRecommendationItemsTable)
+            .where(inArray(mediaRecommendationItemsTable.recommendationSetId, recommendationSetIds));
+        }
+        await tx.delete(mediaRecommendationDecisionsTable)
+          .where(eq(mediaRecommendationDecisionsTable.accountId, username));
+        await tx.delete(mediaRecommendationSetsTable)
+          .where(eq(mediaRecommendationSetsTable.accountId, username));
+        await tx.delete(mediaContactCategoriesTable)
+          .where(eq(mediaContactCategoriesTable.accountId, username));
+        if (categoryIds.length > 0) {
+          await tx.delete(mediaContactCategoriesTable)
+            .where(inArray(mediaContactCategoriesTable.categoryId, categoryIds));
+        }
+        await tx.delete(mediaContactFieldOverridesTable)
+          .where(eq(mediaContactFieldOverridesTable.accountId, username));
+        await tx.delete(mediaImportBatchesTable)
+          .where(eq(mediaImportBatchesTable.accountId, username));
+        await tx.delete(mediaContactsTable).where(eq(mediaContactsTable.accountId, username));
+        if (outletIds.length > 0) {
+          await tx.update(mediaContactsTable)
+            .set({ outletId: null })
+            .where(inArray(mediaContactsTable.outletId, outletIds));
+        }
+        await tx.delete(mediaOutletsTable).where(eq(mediaOutletsTable.accountId, username));
+        await tx.delete(mediaCategoriesTable).where(eq(mediaCategoriesTable.accountId, username));
+
+        await tx.delete(archiveItemsTable).where(eq(archiveItemsTable.owner, username));
+        await tx.delete(plannerItemsTable).where(eq(plannerItemsTable.owner, username));
+        await tx.delete(scoringConfigsTable).where(eq(scoringConfigsTable.owner, username));
+        await tx.delete(auditLocksTable).where(eq(auditLocksTable.owner, username));
+        await tx.delete(savedAuditsTable).where(eq(savedAuditsTable.owner, username));
+        await tx.delete(savedDiagnosticsTable).where(eq(savedDiagnosticsTable.owner, username));
+        await tx.delete(savedContentGeoTable).where(eq(savedContentGeoTable.owner, username));
+        await tx.delete(savedTechGeoTable).where(eq(savedTechGeoTable.owner, username));
+        await tx.delete(projectSnapshotsTable).where(eq(projectSnapshotsTable.owner, username));
+        await tx.delete(projectsTable).where(eq(projectsTable.owner, username));
+        await tx.delete(tokenUsageTable).where(eq(tokenUsageTable.accountId, username));
+        await tx.delete(platformSessionsTable).where(eq(platformSessionsTable.username, username));
+        await tx.delete(platformMetaTable).where(inArray(
+          platformMetaTable.key,
+          [
+            `account:last-sign-in:${username}`,
+            `account:onboarding:v1:${username}`,
+            `account:profile:${username}`,
+            `account:archived:${username}`,
+            `account:master-owner:${username}`,
+            `account:managed:${username}`,
+            `account:mfa:${username}`,
+            `account:mfa-trusted:${username}`,
+            `account:team-seats:${username}`,
+            `account:image:logo:${username}`,
+            `account:image:avatar:${username}`,
+            `account-discount:${username}`,
+            `projectAddons:${username}`,
+            `checkout:pending:${username}`,
+            `billing:last-payment:${username}`,
+            `fairUsage:multiplier:${username}`,
+            `spendLimit:monthly:gbp:${username}`,
+            `suspended-via:${username}`,
+          ],
+        ));
+        await tx.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, username));
+        await tx.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, username));
+        await tx.delete(platformAccountsTable).where(eq(platformAccountsTable.username, username));
+      });
+
       void logAdminEvent({ username: actor.username, id: actor.userId }, "account_self_delete", username, "account", {
         role: account.role,
       });
-      await db.delete(archiveItemsTable).where(eq(archiveItemsTable.owner, username));
-      await db.delete(plannerItemsTable).where(eq(plannerItemsTable.owner, username));
-      await db.delete(scoringConfigsTable).where(eq(scoringConfigsTable.owner, username));
-      await db.delete(auditLocksTable).where(eq(auditLocksTable.owner, username));
-      await db.delete(projectSnapshotsTable).where(eq(projectSnapshotsTable.owner, username));
-      await db.delete(projectsTable).where(eq(projectsTable.owner, username));
-      await db.delete(mediaOutletsTable).where(eq(mediaOutletsTable.accountId, username));
-      await db.delete(mediaContactsTable).where(eq(mediaContactsTable.accountId, username));
-      await db.delete(mediaCategoriesTable).where(eq(mediaCategoriesTable.accountId, username));
-      await db.delete(tokenUsageTable).where(eq(tokenUsageTable.accountId, username));
-      await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, username));
-      await deleteWorkspaceMetadata(username);
-      // Clean up membership and company rows so no orphaned references remain
-      // in the new user/company layer after the legacy account row is deleted.
-      await db
-        .delete(platformMembershipsTable)
-        .where(eq(platformMembershipsTable.companySlug, username));
-      await db
-        .delete(platformCompaniesTable)
-        .where(eq(platformCompaniesTable.slug, username));
-      await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, username));
 
       clearPlatformCookie(res);
       res.json({ ok: true });

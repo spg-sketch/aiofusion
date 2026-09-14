@@ -50,6 +50,8 @@ vi.mock("@workspace/db", async () => {
       billing_frequency varchar(16),
       subscription_status varchar(16),
       current_period_end timestamptz,
+      cancel_at_period_end boolean,
+      renewal_reminder_period_end timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS platform_memberships (
@@ -126,22 +128,126 @@ vi.mock("@workspace/db", async () => {
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS media_categories (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      id serial PRIMARY KEY,
       name varchar NOT NULL,
       account_id varchar,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS media_outlets (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      id serial PRIMARY KEY,
       name varchar NOT NULL,
       account_id varchar,
+      category text NOT NULL DEFAULT '',
+      website text NOT NULL DEFAULT '',
+      description text NOT NULL DEFAULT '',
+      country text NOT NULL DEFAULT '',
+      reach_band text NOT NULL DEFAULT '',
+      deleted_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS media_contacts (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      name varchar NOT NULL,
+      id serial PRIMARY KEY,
+      outlet_id integer REFERENCES media_outlets(id),
+      first_name text NOT NULL DEFAULT '',
+      last_name text NOT NULL DEFAULT '',
+      role text NOT NULL DEFAULT '',
+      email text NOT NULL DEFAULT '',
+      phone text NOT NULL DEFAULT '',
+      notes text NOT NULL DEFAULT '',
+      mobile text NOT NULL DEFAULT '',
+      linkedin_url text NOT NULL DEFAULT '',
+      twitter_handle text NOT NULL DEFAULT '',
+      beats text[] NOT NULL DEFAULT '{}',
+      sectors text[] NOT NULL DEFAULT '{}',
+      geography text NOT NULL DEFAULT '',
+      language text NOT NULL DEFAULT '',
+      seniority text NOT NULL DEFAULT '',
+      editorial_status text NOT NULL DEFAULT '',
+      source_url text NOT NULL DEFAULT '',
+      source_ref text NOT NULL DEFAULT '',
+      publication_reach text NOT NULL DEFAULT '',
+      publication_authority text NOT NULL DEFAULT '',
+      journalist_authority text NOT NULL DEFAULT '',
+      confidence text NOT NULL DEFAULT '',
+      review_notes text NOT NULL DEFAULT '',
+      provenance jsonb NOT NULL DEFAULT '{}',
+      last_verified_at timestamptz,
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      account_id varchar,
+      deleted_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_contact_categories (
+      id serial PRIMARY KEY,
+      contact_id integer NOT NULL REFERENCES media_contacts(id) ON DELETE CASCADE,
+      category_id integer REFERENCES media_categories(id) ON DELETE CASCADE,
+      category_name text NOT NULL DEFAULT '',
       account_id varchar,
       created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_import_batches (
+      id serial PRIMARY KEY,
+      account_id varchar NOT NULL,
+      idempotency_key varchar(160),
+      source_filename text NOT NULL DEFAULT '',
+      source_hash varchar(64) NOT NULL DEFAULT '',
+      source_type varchar(20) NOT NULL DEFAULT 'csv',
+      summary jsonb NOT NULL DEFAULT '{}',
+      committed_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_contact_field_overrides (
+      id serial PRIMARY KEY,
+      contact_id integer NOT NULL REFERENCES media_contacts(id) ON DELETE CASCADE,
+      account_id varchar NOT NULL,
+      field_name varchar(80) NOT NULL,
+      value text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_recommendation_sets (
+      id serial PRIMARY KEY,
+      account_id varchar NOT NULL,
+      project_id varchar NOT NULL,
+      story_key varchar(200) NOT NULL,
+      criteria jsonb NOT NULL DEFAULT '{}',
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_recommendation_items (
+      id serial PRIMARY KEY,
+      recommendation_set_id integer NOT NULL REFERENCES media_recommendation_sets(id) ON DELETE CASCADE,
+      contact_id integer NOT NULL REFERENCES media_contacts(id),
+      score integer NOT NULL,
+      reasons jsonb NOT NULL DEFAULT '[]',
+      rank integer NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_recommendation_decisions (
+      id serial PRIMARY KEY,
+      account_id varchar NOT NULL,
+      project_id varchar NOT NULL,
+      story_key varchar(200) NOT NULL,
+      contact_id integer NOT NULL REFERENCES media_contacts(id),
+      decision varchar(20) NOT NULL,
+      note text NOT NULL DEFAULT '',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS saved_audits (
+      id varchar PRIMARY KEY, project_id varchar NOT NULL, owner varchar NOT NULL,
+      saved_at varchar NOT NULL, result jsonb NOT NULL, deleted_at timestamptz
+    );
+    CREATE TABLE IF NOT EXISTS saved_diagnostics (
+      id varchar PRIMARY KEY, project_id varchar NOT NULL, owner varchar NOT NULL,
+      saved_at varchar NOT NULL, result jsonb NOT NULL, deleted_at timestamptz
+    );
+    CREATE TABLE IF NOT EXISTS saved_content_geo (
+      id varchar PRIMARY KEY, project_id varchar NOT NULL, owner varchar NOT NULL,
+      saved_at varchar NOT NULL, result jsonb NOT NULL, deleted_at timestamptz
+    );
+    CREATE TABLE IF NOT EXISTS saved_tech_geo (
+      id varchar PRIMARY KEY, project_id varchar NOT NULL, owner varchar NOT NULL,
+      saved_at varchar NOT NULL, result jsonb NOT NULL, deleted_at timestamptz
     );
     CREATE TABLE IF NOT EXISTS token_usage (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -212,6 +318,16 @@ vi.mock("@workspace/db", async () => {
     mediaOutletsTable: schema.mediaOutletsTable,
     mediaContactsTable: schema.mediaContactsTable,
     mediaCategoriesTable: schema.mediaCategoriesTable,
+    mediaContactCategoriesTable: schema.mediaContactCategoriesTable,
+    mediaImportBatchesTable: schema.mediaImportBatchesTable,
+    mediaContactFieldOverridesTable: schema.mediaContactFieldOverridesTable,
+    mediaRecommendationSetsTable: schema.mediaRecommendationSetsTable,
+    mediaRecommendationItemsTable: schema.mediaRecommendationItemsTable,
+    mediaRecommendationDecisionsTable: schema.mediaRecommendationDecisionsTable,
+    savedAuditsTable: schema.savedAuditsTable,
+    savedDiagnosticsTable: schema.savedDiagnosticsTable,
+    savedContentGeoTable: schema.savedContentGeoTable,
+    savedTechGeoTable: schema.savedTechGeoTable,
     tokenUsageTable: schema.tokenUsageTable,
     auditLocksTable: schema.auditLocksTable,
     adminEventsTable: schema.adminEventsTable,
@@ -279,6 +395,19 @@ import {
   platformMetaTable,
   platformSessionsTable,
   platformUsersTable,
+  mediaCategoriesTable,
+  mediaOutletsTable,
+  mediaContactsTable,
+  mediaContactCategoriesTable,
+  mediaImportBatchesTable,
+  mediaContactFieldOverridesTable,
+  mediaRecommendationSetsTable,
+  mediaRecommendationItemsTable,
+  mediaRecommendationDecisionsTable,
+  savedAuditsTable,
+  savedDiagnosticsTable,
+  savedContentGeoTable,
+  savedTechGeoTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../lib/platform-auth";
@@ -334,6 +463,19 @@ async function seedAccount(username: string, opts: { role?: string; parent?: str
 }
 
 beforeEach(async () => {
+  await db.delete(mediaRecommendationItemsTable);
+  await db.delete(mediaRecommendationDecisionsTable);
+  await db.delete(mediaRecommendationSetsTable);
+  await db.delete(mediaContactFieldOverridesTable);
+  await db.delete(mediaContactCategoriesTable);
+  await db.delete(mediaImportBatchesTable);
+  await db.delete(mediaContactsTable);
+  await db.delete(mediaOutletsTable);
+  await db.delete(mediaCategoriesTable);
+  await db.delete(savedAuditsTable);
+  await db.delete(savedDiagnosticsTable);
+  await db.delete(savedContentGeoTable);
+  await db.delete(savedTechGeoTable);
   await db.delete(platformSessionsTable);
   await db.delete(platformMetaTable);
   await db.delete(platformAccountsTable);
@@ -545,6 +687,212 @@ describe("workspace metadata deletion", () => {
     });
 
     await expectOnlySimilarWorkspaceMetadataRemains("vibe-studio", "vibe-studio-uk");
+  });
+});
+
+describe("self-delete complete workspace erasure", () => {
+  it("removes owned media and saved reports plus foreign references to private contacts", async () => {
+    const password = await seedAccount("erase-me", { role: "client" });
+    await seedAccount("erase-me-too", { role: "client" });
+    await seedAccount("other-workspace", { role: "client" });
+
+    const [targetOutlet] = await db.insert(mediaOutletsTable)
+      .values({ name: "Private Outlet", accountId: "erase-me" }).returning();
+    const [globalOutlet] = await db.insert(mediaOutletsTable)
+      .values({ name: "Global Outlet", accountId: null }).returning();
+    const [otherOutlet] = await db.insert(mediaOutletsTable)
+      .values({ name: "Other Outlet", accountId: "other-workspace" }).returning();
+    const [targetContact] = await db.insert(mediaContactsTable)
+      .values({ firstName: "Private", accountId: "erase-me", outletId: targetOutlet.id }).returning();
+    const [globalContact] = await db.insert(mediaContactsTable)
+      .values({ firstName: "Global", accountId: null, outletId: globalOutlet.id }).returning();
+    const [otherContact] = await db.insert(mediaContactsTable)
+      .values({ firstName: "Other", accountId: "other-workspace", outletId: targetOutlet.id }).returning();
+    const [targetCategory] = await db.insert(mediaCategoriesTable)
+      .values({ name: "Private category", accountId: "erase-me" }).returning();
+    const [globalCategory] = await db.insert(mediaCategoriesTable)
+      .values({ name: "Global category", accountId: null }).returning();
+
+    await db.insert(mediaContactCategoriesTable).values([
+      { contactId: targetContact.id, categoryId: globalCategory.id, categoryName: "Global category", accountId: "erase-me" },
+      { contactId: otherContact.id, categoryId: targetCategory.id, categoryName: "Private category", accountId: "other-workspace" },
+      { contactId: otherContact.id, categoryId: globalCategory.id, categoryName: "Global category", accountId: "other-workspace" },
+    ]);
+    await db.insert(mediaContactFieldOverridesTable).values([
+      { contactId: targetContact.id, accountId: "other-workspace", fieldName: "role", value: "Reporter" },
+      { contactId: otherContact.id, accountId: "erase-me", fieldName: "role", value: "Editor" },
+      { contactId: otherContact.id, accountId: "other-workspace", fieldName: "role", value: "Journalist" },
+    ]);
+    await db.insert(mediaImportBatchesTable).values([
+      { accountId: "erase-me", sourceFilename: "target.csv", sourceHash: "target" },
+      { accountId: "erase-me-too", sourceFilename: "similar.csv", sourceHash: "similar" },
+      { accountId: "other-workspace", sourceFilename: "other.csv", sourceHash: "other" },
+    ]);
+    const [targetSet] = await db.insert(mediaRecommendationSetsTable)
+      .values({ accountId: "erase-me", projectId: "target-project", storyKey: "target-story" }).returning();
+    const [otherSet] = await db.insert(mediaRecommendationSetsTable)
+      .values({ accountId: "other-workspace", projectId: "other-project", storyKey: "other-story" }).returning();
+    await db.insert(mediaRecommendationItemsTable).values([
+      { recommendationSetId: targetSet.id, contactId: globalContact.id, score: 90, rank: 1 },
+      { recommendationSetId: otherSet.id, contactId: targetContact.id, score: 80, rank: 1 },
+      { recommendationSetId: otherSet.id, contactId: otherContact.id, score: 70, rank: 2 },
+    ]);
+    await db.insert(mediaRecommendationDecisionsTable).values([
+      { accountId: "erase-me", projectId: "target-project", storyKey: "target-story", contactId: globalContact.id, decision: "shortlisted" },
+      { accountId: "other-workspace", projectId: "other-project", storyKey: "private-contact", contactId: targetContact.id, decision: "contacted" },
+      { accountId: "other-workspace", projectId: "other-project", storyKey: "other-contact", contactId: otherContact.id, decision: "shortlisted" },
+    ]);
+
+    for (const [table, prefix] of [
+      [savedAuditsTable, "audit"],
+      [savedDiagnosticsTable, "diagnostic"],
+      [savedContentGeoTable, "content"],
+      [savedTechGeoTable, "tech"],
+    ] as const) {
+      await db.insert(table).values([
+        { id: `${prefix}-target`, projectId: "target-project", owner: "erase-me", savedAt: "now", result: {} },
+        { id: `${prefix}-similar`, projectId: "similar-project", owner: "erase-me-too", savedAt: "now", result: {} },
+        { id: `${prefix}-other`, projectId: "other-project", owner: "other-workspace", savedAt: "now", result: {} },
+      ]);
+    }
+
+    await withServer(async (base) => {
+      const res = await fetch(`${base}/api/platform/account/self-delete`, {
+        method: "POST",
+        headers: acctHeader({ username: "erase-me", role: "client" }),
+        body: JSON.stringify({ password }),
+      });
+      expect(res.status).toBe(200);
+    });
+
+    expect(await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.accountId, "erase-me"))).toHaveLength(0);
+    expect(await db.select().from(mediaOutletsTable).where(eq(mediaOutletsTable.accountId, "erase-me"))).toHaveLength(0);
+    expect(await db.select().from(mediaCategoriesTable).where(eq(mediaCategoriesTable.accountId, "erase-me"))).toHaveLength(0);
+    expect(await db.select().from(mediaImportBatchesTable).where(eq(mediaImportBatchesTable.accountId, "erase-me"))).toHaveLength(0);
+    expect(await db.select().from(mediaRecommendationSetsTable).where(eq(mediaRecommendationSetsTable.accountId, "erase-me"))).toHaveLength(0);
+    expect(await db.select().from(mediaRecommendationDecisionsTable).where(eq(mediaRecommendationDecisionsTable.accountId, "erase-me"))).toHaveLength(0);
+    expect(await db.select().from(mediaRecommendationItemsTable).where(eq(mediaRecommendationItemsTable.contactId, targetContact.id))).toHaveLength(0);
+    expect(await db.select().from(mediaRecommendationDecisionsTable).where(eq(mediaRecommendationDecisionsTable.contactId, targetContact.id))).toHaveLength(0);
+    expect(await db.select().from(mediaContactFieldOverridesTable).where(eq(mediaContactFieldOverridesTable.contactId, targetContact.id))).toHaveLength(0);
+    expect(await db.select().from(mediaContactCategoriesTable).where(eq(mediaContactCategoriesTable.categoryId, targetCategory.id))).toHaveLength(0);
+
+    expect(await db.select().from(mediaRecommendationSetsTable).where(eq(mediaRecommendationSetsTable.accountId, "other-workspace"))).toHaveLength(1);
+    expect(await db.select().from(mediaRecommendationItemsTable).where(eq(mediaRecommendationItemsTable.contactId, otherContact.id))).toHaveLength(1);
+    expect(await db.select().from(mediaRecommendationDecisionsTable).where(eq(mediaRecommendationDecisionsTable.contactId, otherContact.id))).toHaveLength(1);
+    expect((await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, otherContact.id)))[0]?.outletId).toBeNull();
+    expect(await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, globalContact.id))).toHaveLength(1);
+    expect(await db.select().from(mediaOutletsTable).where(eq(mediaOutletsTable.id, globalOutlet.id))).toHaveLength(1);
+    expect(await db.select().from(mediaOutletsTable).where(eq(mediaOutletsTable.id, otherOutlet.id))).toHaveLength(1);
+    expect(await db.select().from(mediaCategoriesTable).where(eq(mediaCategoriesTable.id, globalCategory.id))).toHaveLength(1);
+    expect(await db.select().from(mediaContactFieldOverridesTable)
+      .where(eq(mediaContactFieldOverridesTable.accountId, "other-workspace"))).toHaveLength(1);
+    expect(await db.select().from(mediaContactCategoriesTable)
+      .where(eq(mediaContactCategoriesTable.categoryId, globalCategory.id))).toHaveLength(1);
+    expect(await db.select().from(mediaImportBatchesTable).where(eq(mediaImportBatchesTable.accountId, "erase-me-too"))).toHaveLength(1);
+    expect(await db.select().from(mediaImportBatchesTable).where(eq(mediaImportBatchesTable.accountId, "other-workspace"))).toHaveLength(1);
+
+    for (const [table, prefix] of [
+      [savedAuditsTable, "audit"],
+      [savedDiagnosticsTable, "diagnostic"],
+      [savedContentGeoTable, "content"],
+      [savedTechGeoTable, "tech"],
+    ] as const) {
+      expect(await db.select().from(table).where(eq(table.owner, "erase-me"))).toHaveLength(0);
+      expect((await db.select().from(table)).map((row) => row.id).sort())
+        .toEqual([`${prefix}-other`, `${prefix}-similar`]);
+    }
+  });
+
+  it("rolls back all erased data when the final account removal fails", async () => {
+    const password = await seedAccount("rollback-me", { role: "client" });
+    await seedAccount("rollback-other", { role: "client" });
+    const [targetOutlet] = await db.insert(mediaOutletsTable)
+      .values({ name: "Rollback private outlet", accountId: "rollback-me" }).returning();
+    const [targetContact] = await db.insert(mediaContactsTable)
+      .values({ firstName: "Rollback private", accountId: "rollback-me", outletId: targetOutlet.id }).returning();
+    const [otherContact] = await db.insert(mediaContactsTable)
+      .values({ firstName: "Rollback other", accountId: "rollback-other", outletId: targetOutlet.id }).returning();
+    const [targetCategory] = await db.insert(mediaCategoriesTable)
+      .values({ name: "Rollback private category", accountId: "rollback-me" }).returning();
+    const [otherCategory] = await db.insert(mediaCategoriesTable)
+      .values({ name: "Rollback other category", accountId: "rollback-other" }).returning();
+    await db.insert(mediaContactCategoriesTable).values([
+      { contactId: targetContact.id, categoryId: otherCategory.id, categoryName: "Other", accountId: "rollback-me" },
+      { contactId: otherContact.id, categoryId: targetCategory.id, categoryName: "Private", accountId: "rollback-other" },
+    ]);
+    await db.insert(mediaContactFieldOverridesTable).values([
+      { contactId: targetContact.id, accountId: "rollback-other", fieldName: "role", value: "Cross reference" },
+      { contactId: otherContact.id, accountId: "rollback-me", fieldName: "role", value: "Owned override" },
+    ]);
+    await db.insert(mediaImportBatchesTable)
+      .values({ accountId: "rollback-me", sourceFilename: "keep.csv", sourceHash: "keep" });
+    const [targetSet] = await db.insert(mediaRecommendationSetsTable)
+      .values({ accountId: "rollback-me", projectId: "rollback-project", storyKey: "owned" }).returning();
+    const [otherSet] = await db.insert(mediaRecommendationSetsTable)
+      .values({ accountId: "rollback-other", projectId: "other-project", storyKey: "cross" }).returning();
+    await db.insert(mediaRecommendationItemsTable).values([
+      { recommendationSetId: targetSet.id, contactId: otherContact.id, score: 90, rank: 1 },
+      { recommendationSetId: otherSet.id, contactId: targetContact.id, score: 80, rank: 1 },
+    ]);
+    await db.insert(mediaRecommendationDecisionsTable).values([
+      { accountId: "rollback-me", projectId: "rollback-project", storyKey: "owned", contactId: otherContact.id, decision: "shortlisted" },
+      { accountId: "rollback-other", projectId: "other-project", storyKey: "cross", contactId: targetContact.id, decision: "contacted" },
+    ]);
+    await db.insert(savedAuditsTable).values({
+      id: "keep-audit",
+      projectId: "keep-project",
+      owner: "rollback-me",
+      savedAt: "now",
+      result: {},
+    });
+
+    const originalTransaction = db.transaction.bind(db);
+    const transactionSpy = vi.spyOn(db, "transaction").mockImplementationOnce(async (callback: any) =>
+      originalTransaction(async (tx: any) => callback(new Proxy(tx, {
+        get(target, property, receiver) {
+          if (property !== "delete") return Reflect.get(target, property, receiver);
+          return (table: unknown) => {
+            if (table === platformAccountsTable) {
+              return { where: async () => { throw new Error("forced final delete failure"); } };
+            }
+            return target.delete(table);
+          };
+        },
+      }))),
+    );
+
+    try {
+      await withServer(async (base) => {
+        const res = await fetch(`${base}/api/platform/account/self-delete`, {
+          method: "POST",
+          headers: acctHeader({ username: "rollback-me", role: "client" }),
+          body: JSON.stringify({ password }),
+        });
+        expect(res.status).toBe(500);
+      });
+    } finally {
+      transactionSpy.mockRestore();
+    }
+
+    expect(await db.select().from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, "rollback-me"))).toHaveLength(1);
+    expect(await db.select().from(mediaImportBatchesTable)
+      .where(eq(mediaImportBatchesTable.accountId, "rollback-me"))).toHaveLength(1);
+    expect(await db.select().from(savedAuditsTable)
+      .where(eq(savedAuditsTable.owner, "rollback-me"))).toHaveLength(1);
+    expect(await db.select().from(mediaContactsTable)
+      .where(eq(mediaContactsTable.id, targetContact.id))).toHaveLength(1);
+    expect((await db.select().from(mediaContactsTable)
+      .where(eq(mediaContactsTable.id, otherContact.id)))[0]?.outletId).toBe(targetOutlet.id);
+    expect(await db.select().from(mediaOutletsTable)
+      .where(eq(mediaOutletsTable.id, targetOutlet.id))).toHaveLength(1);
+    expect(await db.select().from(mediaCategoriesTable)
+      .where(eq(mediaCategoriesTable.id, targetCategory.id))).toHaveLength(1);
+    expect(await db.select().from(mediaContactCategoriesTable)).toHaveLength(2);
+    expect(await db.select().from(mediaContactFieldOverridesTable)).toHaveLength(2);
+    expect(await db.select().from(mediaRecommendationSetsTable)).toHaveLength(2);
+    expect(await db.select().from(mediaRecommendationItemsTable)).toHaveLength(2);
+    expect(await db.select().from(mediaRecommendationDecisionsTable)).toHaveLength(2);
   });
 });
 
