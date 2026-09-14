@@ -1724,3 +1724,68 @@ export async function sendSubscriptionCancelledEmail(opts: {
     logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send cancellation email (non-fatal)");
   }
 }
+
+/**
+ * Send the courtesy notice seven days before the next subscription renewal.
+ *
+ * This follows the invite-reminder contract: false means the provider is not
+ * configured or rejected the message, while provider exceptions are allowed to
+ * propagate so the caller can roll back its database claim and retry.
+ */
+export async function sendSubscriptionRenewalReminderEmail(opts: {
+  toEmail: string;
+  companyName: string;
+  renewalAt: Date;
+}): Promise<boolean> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - renewal reminder not sent");
+    return false;
+  }
+
+  const renewalLabel = opts.renewalAt.toUTCString().replace(" GMT", " UTC");
+  const subject = `Your AIO Fusion subscription renews in 7 days`;
+  const text = [
+    `Hi,`,
+    ``,
+    `A reminder that your AIO Fusion subscription for ${opts.companyName} renews in approximately 7 days.`,
+    ``,
+    `Renewal date: ${renewalLabel}`,
+    ``,
+    `To review your plan or payment details, open your billing settings:`,
+    `${getAppBaseUrl()}/?account_section=billing`,
+    ``,
+    `The AIO Fusion team`,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "Renewal Reminder",
+    bodyHtml: `
+      <p style="margin: 0 0 12px 0;">Hi,</p>
+      <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
+        Your AIO Fusion subscription for <strong>${escHtml(opts.companyName)}</strong> renews in approximately 7 days.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        Renewal date: <strong>${escHtml(renewalLabel)}</strong>
+      </p>
+      <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
+        Review your plan or payment details from your billing settings.
+      </p>
+    `,
+    cta: { text: "Manage Billing", href: `${getAppBaseUrl()}/?account_section=billing` },
+  });
+
+  const result = await resend.emails.send({
+    from: fromAddress(),
+    to: [opts.toEmail],
+    subject,
+    text,
+    html,
+  });
+  if (result.error) {
+    logger.warn({ error: result.error, toEmail: opts.toEmail }, "notify-email: renewal reminder rejected by provider");
+    return false;
+  }
+  logger.info({ toEmail: opts.toEmail }, "notify-email: subscription renewal reminder sent");
+  return true;
+}

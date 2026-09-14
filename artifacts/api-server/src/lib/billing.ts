@@ -921,6 +921,8 @@ export async function handleCheckoutCompleted(event: Stripe.Event): Promise<void
       plan: isPlanKey(plan) ? plan : null,
       billingFrequency: isBillingFrequency(frequency) ? frequency : null,
       subscriptionStatus: "active",
+      cancelAtPeriodEnd: false,
+      renewalReminderPeriodEnd: null,
     })
     .where(
       and(
@@ -1140,14 +1142,67 @@ export async function handleInvoicePaymentSucceeded(event: Stripe.Event): Promis
   }
   if (!(await invoiceMatchesStoredSubscription(slug, invoice))) return;
   const periodEndUnix = invoice.lines?.data?.[0]?.period?.end;
+  const state = await getBillingState(slug);
+  if (state?.stripeSubscriptionId && invSub && state.stripeSubscriptionId !== invSub) return;
+  const nextPeriodEnd = periodEndUnix ? new Date(periodEndUnix * 1000) : null;
+  const periodChanged =
+    !!nextPeriodEnd &&
+    state?.currentPeriodEnd?.getTime() !== nextPeriodEnd.getTime();
   await db
     .update(platformCompaniesTable)
     .set({
       subscriptionStatus: "active",
-      ...(periodEndUnix ? { currentPeriodEnd: new Date(periodEndUnix * 1000) } : {}),
+      ...(nextPeriodEnd ? { currentPeriodEnd: nextPeriodEnd } : {}),
+      ...(periodChanged ? { renewalReminderPeriodEnd: null } : {}),
     })
     .where(eq(platformCompaniesTable.slug, slug));
   logger.info({ slug, periodEndUnix }, "billing: invoice payment succeeded");
+}
+
+// customer.subscription.updated: persist Stripe's scheduled-cancellation flag
+// and period changes. Webhooks can arrive out of order, so a superseded
+// subscription must never mutate the currently active one.
+export async function handleSubscriptionUpdated(event: Stripe.Event): Promise<void> {
+  const subscription = event.data.object as Stripe.Subscription;
+  const customerId = customerIdOf(subscription.customer as string | { id: string } | null);
+  if (!customerId) return;
+  const slug = await findSlugByCustomerId(customerId);
+  if (!slug) return;
+  const state = await getBillingState(slug);
+  if (state?.stripeSubscriptionId && state.stripeSubscriptionId !== subscription.id) {
+    logger.info(
+      { slug, eventSubscription: subscription.id, storedSubscription: state.stripeSubscriptionId },
+      "billing: subscription.updated for a superseded subscription - ignored",
+    );
+    return;
+  }
+  const subscriptionPeriodEnd = (subscription as unknown as { current_period_end?: number }).current_period_end;
+  const nextPeriodEnd = subscriptionPeriodEnd
+    ? new Date(subscriptionPeriodEnd * 1000)
+    : null;
+  const status =
+    subscription.status === "canceled"
+      ? "cancelled"
+      : subscription.status === "past_due"
+        ? "past_due"
+        : subscription.status === "active" || subscription.status === "trialing"
+          ? "active"
+          : null;
+  await db
+    .update(platformCompaniesTable)
+    .set({
+      cancelAtPeriodEnd: subscription.cancel_at_period_end === true,
+      ...(status ? { subscriptionStatus: status } : {}),
+      ...(nextPeriodEnd ? { currentPeriodEnd: nextPeriodEnd } : {}),
+      ...(nextPeriodEnd && state?.currentPeriodEnd?.getTime() !== nextPeriodEnd.getTime()
+        ? { renewalReminderPeriodEnd: null }
+        : {}),
+    })
+    .where(eq(platformCompaniesTable.slug, slug));
+  logger.info(
+    { slug, cancelAtPeriodEnd: subscription.cancel_at_period_end, periodEnd: nextPeriodEnd },
+    "billing: subscription state updated from Stripe",
+  );
 }
 
 // invoice.payment_failed: mark past_due and email the billing contact.
@@ -1237,7 +1292,7 @@ export async function handleSubscriptionDeleted(event: Stripe.Event): Promise<vo
   }
   await db
     .update(platformCompaniesTable)
-    .set({ subscriptionStatus: "cancelled" })
+    .set({ subscriptionStatus: "cancelled", cancelAtPeriodEnd: false })
     .where(eq(platformCompaniesTable.slug, slug));
 
   const contact = await getBillingContact(slug);
@@ -1258,6 +1313,7 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
     event.type === "checkout.session.expired" ||
     event.type === "invoice.payment_succeeded" ||
     event.type === "invoice.payment_failed" ||
+    event.type === "customer.subscription.updated" ||
     event.type === "customer.subscription.deleted";
   if (!relevant) return;
 
@@ -1293,6 +1349,9 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
         break;
       case "invoice.payment_failed":
         await handleInvoicePaymentFailed(event);
+        break;
+      case "customer.subscription.updated":
+        await handleSubscriptionUpdated(event);
         break;
       case "customer.subscription.deleted":
         await handleSubscriptionDeleted(event);

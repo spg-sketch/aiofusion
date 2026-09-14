@@ -23,10 +23,12 @@ import { ensurePlatformSchemaV7 } from "./lib/ensure-platform-schema-v7";
 import { ensurePlatformSchemaV8 } from "./lib/ensure-platform-schema-v8";
 import { initStripe } from "./lib/stripe-init";
 import { sendInviteReminders } from "./lib/invite-reminders";
+import { sendSubscriptionRenewalReminders } from "./lib/subscription-reminders";
 import { checkMicrosoftOAuthCredentials } from "./lib/microsoft-oauth-health";
 import { ensurePlatformSchemaV9 } from "./lib/ensure-platform-schema-v9";
 import { ensurePlatformSchemaV10 } from "./lib/ensure-platform-schema-v10";
 import { ensurePlatformSchemaV11 } from "./lib/ensure-platform-schema-v11";
+import { ensurePlatformSchemaV12 } from "./lib/ensure-platform-schema-v12";
 import { repairKnownWorkspaceNames } from "./lib/repair-known-workspace-names";
 import { assertCanonicalDomainIsSafeForDeployment } from "./lib/app-url";
 import { ensureInsightsSchema } from "./lib/ensure-insights-schema";
@@ -130,6 +132,7 @@ async function runStartupMigrations(): Promise<void> {
     ["platform schema v9 additions", ensurePlatformSchemaV9],
     ["platform schema v10 additions", ensurePlatformSchemaV10],
     ["platform schema v11 additions", ensurePlatformSchemaV11],
+    ["platform schema v12 additions", ensurePlatformSchemaV12],
     ["platform_password_resets table", ensurePasswordResetsTable],
     ["known workspace names", repairKnownWorkspaceNames],
     ["Insights editorial schema", ensureInsightsSchema],
@@ -265,6 +268,18 @@ app.listen(port, (err) => {
   setInterval(() => {
     sendInviteReminders().catch((err) => {
       logger.error({ err }, "Failed to run invite reminder sweep (scheduled)");
+    });
+  }, REMINDER_INTERVAL_MS).unref();
+
+  // Renewal reminders are intentionally fail-soft: a provider or database
+  // outage must not affect request handling, and the next hourly sweep retries
+  // any claim whose email was not delivered.
+  sendSubscriptionRenewalReminders().catch((err) => {
+    logger.error({ err }, "Failed to run subscription renewal reminder sweep on startup");
+  });
+  setInterval(() => {
+    sendSubscriptionRenewalReminders().catch((err) => {
+      logger.error({ err }, "Failed to run subscription renewal reminder sweep (scheduled)");
     });
   }, REMINDER_INTERVAL_MS).unref();
 

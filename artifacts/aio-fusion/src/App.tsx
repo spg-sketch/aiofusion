@@ -419,7 +419,10 @@ function App() {
   }, []);
   const transitionToPage = useCallback((nextPage: string) => {
     warmRoute(PAGE_PRELOADERS[nextPage]);
-    startTransition(() => setCurrentPage(nextPage));
+    // Commit the destination immediately so a cold lazy chunk shows the
+    // shell-preserving page loader instead of leaving the previous page on
+    // screen while React waits for the transition to finish.
+    setCurrentPage(nextPage);
   }, []);
   const [pendingAuditId, setPendingAuditId] = useState<string | null>(null);
   const [pendingDiagnosticId, setPendingDiagnosticId] = useState<string | null>(null);
@@ -1594,27 +1597,29 @@ function App() {
         userName={session?.username}
       />
       <main ref={mainRef} className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: "#1A647B" }}>
-        {currentPage === "dashboard" && (
-          <DashboardPage onNavigate={transitionToPage} activeClient={activeClient} />
-        )}
-        {currentPage === "intake" && <IntakePage accountProfile={accountProfile} role={session?.role ?? null} />}
-        {currentPage === "diagnostic" && (
-          <DiagnosticPage activeClient={activeClient} pendingDiagnosticId={pendingDiagnosticId} onConsumePendingDiagnostic={() => setPendingDiagnosticId(null)} />
-        )}
-        {currentPage === "llm-check" && <LlmCheckPage activeClient={activeClient} onNavigate={transitionToPage} pendingAuditId={pendingAuditId} onConsumePending={() => setPendingAuditId(null)} />}
-        {currentPage === "optimiser" && (
-          <OptimiserPage onNavigate={transitionToPage} />
-        )}
-        {currentPage === "seo-audit" && <SeoAuditPage activeClient={activeClient} pendingTechGeoId={pendingTechGeoId} onConsumePendingTechGeo={() => setPendingTechGeoId(null)} />}
-        {currentPage === "geo-content" && <GeoContentPage activeClient={activeClient} pendingContentGeoId={pendingContentGeoId} onConsumePendingContentGeo={() => setPendingContentGeoId(null)} />}
-        {currentPage === "planner" && <PlannerPage onNavigate={transitionToPage} />}
-        {currentPage === "creator" && <ContentCreatorPage onNavigate={transitionToPage} />}
-        {currentPage === "media-research" && <MediaResearchPage />}
-        {currentPage === "marketing-intel" && <MarketingIntelligencePage />}
-        {currentPage === "gateway" && <ReleaseGatewayPage />}
-        {currentPage === "archive" && <ArchivePage onNavigate={transitionToPage} />}
-        {currentPage === "measure" && <ReportPage activeClient={activeClient} onNavigate={transitionToPage} />}
-        {currentPage === "media-database" && <MediaDatabasePage />}
+        <Suspense fallback={<RouteLoading />}>
+          {currentPage === "dashboard" && (
+            <DashboardPage onNavigate={transitionToPage} activeClient={activeClient} />
+          )}
+          {currentPage === "intake" && <IntakePage accountProfile={accountProfile} role={session?.role ?? null} />}
+          {currentPage === "diagnostic" && (
+            <DiagnosticPage activeClient={activeClient} pendingDiagnosticId={pendingDiagnosticId} onConsumePendingDiagnostic={() => setPendingDiagnosticId(null)} />
+          )}
+          {currentPage === "llm-check" && <LlmCheckPage activeClient={activeClient} onNavigate={transitionToPage} pendingAuditId={pendingAuditId} onConsumePending={() => setPendingAuditId(null)} />}
+          {currentPage === "optimiser" && (
+            <OptimiserPage onNavigate={transitionToPage} />
+          )}
+          {currentPage === "seo-audit" && <SeoAuditPage activeClient={activeClient} pendingTechGeoId={pendingTechGeoId} onConsumePendingTechGeo={() => setPendingTechGeoId(null)} />}
+          {currentPage === "geo-content" && <GeoContentPage activeClient={activeClient} pendingContentGeoId={pendingContentGeoId} onConsumePendingContentGeo={() => setPendingContentGeoId(null)} />}
+          {currentPage === "planner" && <PlannerPage onNavigate={transitionToPage} />}
+          {currentPage === "creator" && <ContentCreatorPage onNavigate={transitionToPage} />}
+          {currentPage === "media-research" && <MediaResearchPage />}
+          {currentPage === "marketing-intel" && <MarketingIntelligencePage />}
+          {currentPage === "gateway" && <ReleaseGatewayPage />}
+          {currentPage === "archive" && <ArchivePage onNavigate={transitionToPage} />}
+          {currentPage === "measure" && <ReportPage activeClient={activeClient} onNavigate={transitionToPage} />}
+          {currentPage === "media-database" && <MediaDatabasePage />}
+        </Suspense>
       </main>
     </div>
     </>

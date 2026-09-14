@@ -2,7 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, Check, Loader2, LogOut, CreditCard, Play, AlertTriangle, AlertCircle } from "lucide-react";
 import AccountTypeSelectPage from "./AccountTypeSelectPage";
 import { BillingDetailsCard } from "../components/BillingDetailsCard";
-import { SubscriptionCard } from "../components/SubscriptionCard";
+import {
+  daysUntilRenewal,
+  formatSubscriptionEnd,
+  SubscriptionCard,
+  type SubscriptionActivationSummary,
+} from "../components/SubscriptionCard";
 import { apiBase } from "../lib/apiHelpers";
 import { vars } from "../marketing/vars";
 
@@ -122,6 +127,7 @@ export function GuidedOnboardingPage({
   const [selectedAccessChoice, setSelectedAccessChoice] = useState<"beta" | "paid" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activationSummary, setActivationSummary] = useState<SubscriptionActivationSummary | null>(null);
 
   const complete = useCallback(async () => {
     setBusy(true);
@@ -160,6 +166,14 @@ export function GuidedOnboardingPage({
   }, [complete]);
 
   useEffect(() => { void load(); }, [load]);
+
+  const handleAccessActivated = useCallback((summary: SubscriptionActivationSummary) => {
+    if (checkoutResult === "success") {
+      setActivationSummary((current) => current ?? summary);
+      return;
+    }
+    void load();
+  }, [checkoutResult, load]);
 
   async function post(path: string, body: unknown): Promise<State | null> {
     setBusy(true);
@@ -229,6 +243,58 @@ export function GuidedOnboardingPage({
           void load();
         }}
       />
+    );
+  }
+
+  if (state.step === "billing" && checkoutResult === "success" && activationSummary) {
+    const renewalDate = formatSubscriptionEnd(activationSummary.currentPeriodEnd);
+    const renewalDays = daysUntilRenewal(activationSummary.currentPeriodEnd);
+    const frequencyLabel = activationSummary.frequency === "quarterly" ? "quarterly" : "annual";
+    const planLabel = activationSummary.plan === "agency" ? "Agency/Partner" : "In-House";
+
+    return (
+      <OnboardingLayout state={state} onSignOut={onSignOut}>
+        <div className="animate-in fade-in duration-500 w-full max-w-xl" data-testid="payment-success-page">
+          <div
+            className="w-16 h-16 rounded-full flex items-center justify-center mb-7"
+            style={{ background: "#DCFCE7", color: "#166534" }}
+          >
+            <Check size={34} strokeWidth={2.5} />
+          </div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] mb-3" style={{ color: vars.accent }}>
+            Payment confirmed
+          </p>
+          <h2 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
+            Thank you for signing up to AIO Fusion
+          </h2>
+          <p className="text-base sm:text-lg leading-relaxed text-slate-600 mb-6">
+            Your payment was successful and your {planLabel} plan is active. You are billed {frequencyLabel}.
+          </p>
+          {renewalDate && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 mb-8">
+              <p className="text-sm text-emerald-900">
+                You are paid until <strong>{renewalDate}</strong>.
+              </p>
+              {renewalDays !== null && (
+                <p className="text-sm text-emerald-800 mt-1">
+                  Your next renewal is in <strong>{renewalDays} {renewalDays === 1 ? "day" : "days"}</strong>.
+                </p>
+              )}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => void complete()}
+            disabled={busy}
+            className="inline-flex items-center justify-center gap-2 rounded-xl px-8 py-4 text-white text-sm font-bold uppercase tracking-wider transition-all duration-300 disabled:opacity-50 hover:brightness-110"
+            style={{ background: vars.accent }}
+          >
+            {busy ? <Loader2 size={18} className="animate-spin" /> : "Continue to billing"}
+            {!busy && <ArrowRight size={18} />}
+          </button>
+          {error && <p className="mt-4 text-sm font-medium text-red-700">{error}</p>}
+        </div>
+      </OnboardingLayout>
     );
   }
 
@@ -373,7 +439,7 @@ export function GuidedOnboardingPage({
 
           <div className="space-y-8">
             <BillingDetailsCard />
-            <SubscriptionCard checkoutResult={checkoutResult} onboarding onAccessActivated={load} />
+            <SubscriptionCard checkoutResult={checkoutResult} onboarding onAccessActivated={handleAccessActivated} />
           </div>
           
           {error && (

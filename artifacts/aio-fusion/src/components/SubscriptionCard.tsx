@@ -53,6 +53,12 @@ type SubscriptionInfo = {
   };
 };
 
+export type SubscriptionActivationSummary = {
+  plan: SubscriptionInfo["plan"];
+  frequency: SubscriptionInfo["frequency"];
+  currentPeriodEnd: string | null;
+};
+
 type Invoice = {
   id: string;
   number: string | null;
@@ -81,12 +87,114 @@ const TIER_LABELS: Record<ProjectTier, string> = {
 };
 
 const TIER_ORDER: ProjectTier[] = ["standard", "premium", "max"];
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 const STATUS_LABELS: Record<string, { text: string; color: string; bg: string }> = {
   active: { text: "Active", color: "#166534", bg: "#DCFCE7" },
   past_due: { text: "Payment overdue", color: "#92400E", bg: "#FEF3C7" },
   cancelled: { text: "Cancelled", color: "#991B1B", bg: "#FEE2E2" },
 };
+
+/**
+ * Returns a stable, user-facing date for Stripe's current period end.
+ *
+ * Stripe normally sends an ISO timestamp, but this value is account data and
+ * can be null (or malformed while an older record is being migrated). Keep
+ * those cases out of the render rather than displaying "Invalid Date".
+ */
+export function formatSubscriptionEnd(currentPeriodEnd: string | null | undefined): string | null {
+  if (!currentPeriodEnd) return null;
+  const date = new Date(currentPeriodEnd);
+  if (!Number.isFinite(date.getTime())) return null;
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+}
+
+/**
+ * Counts the remaining billing time in whole days.
+ *
+ * A partial day still counts as a day (the same convention used by Stripe's
+ * customer-facing dates), while the exact renewal boundary and past dates are
+ * zero. Keeping this calculation timestamp-based avoids the off-by-one error
+ * caused by comparing local calendar dates around DST changes.
+ */
+export function daysUntilRenewal(
+  currentPeriodEnd: string | null | undefined,
+  now: Date = new Date(),
+): number | null {
+  if (!currentPeriodEnd) return null;
+  const end = new Date(currentPeriodEnd);
+  const nowTime = now.getTime();
+  const endTime = end.getTime();
+  if (!Number.isFinite(endTime) || !Number.isFinite(nowTime)) return null;
+  return Math.max(0, Math.ceil((endTime - nowTime) / DAY_IN_MS));
+}
+
+function RenewalDetails({
+  status,
+  currentPeriodEnd,
+}: {
+  status: SubscriptionInfo["status"];
+  currentPeriodEnd: string | null;
+}) {
+  // A cancelled subscription remains paid through its current period end, but
+  // it has no upcoming renewal. Do not suggest that it will renew.
+  const subscribed = status === "active" || status === "past_due" || status === "cancelled";
+  if (!subscribed) return null;
+
+  const renewal = formatSubscriptionEnd(currentPeriodEnd);
+  if (!renewal) return null;
+
+  const days = daysUntilRenewal(currentPeriodEnd);
+  return (
+    <div className="mt-2 space-y-0.5" data-testid="subscription-renewal-details">
+      <p className="text-[13px]" style={{ color: vars.g500 }}>
+        Paid until <strong style={{ color: ink }}>{renewal}</strong>.
+      </p>
+      {status === "cancelled" ? (
+        <p className="text-[13px]" style={{ color: "#991B1B" }}>
+          Your subscription is cancelled and will not renew.
+        </p>
+      ) : days !== null ? (
+        <p className="text-[13px]" style={{ color: vars.g500 }}>
+          Next renewal in <strong style={{ color: ink }}>{days} {days === 1 ? "day" : "days"}</strong>.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function PaymentSuccessState({
+  info,
+}: {
+  info: SubscriptionInfo;
+}) {
+  const renewal = formatSubscriptionEnd(info.currentPeriodEnd);
+  const confirmed = info.entitled && info.status !== "none" && info.status !== "cancelled";
+
+  return (
+    <div
+      className="mb-5 rounded-xl p-5"
+      data-testid="payment-success-state"
+      role="status"
+      aria-live="polite"
+      style={{ background: "#ECFDF5", border: "1px solid #A7F3D0" }}
+    >
+      <h3 className="text-[16px] font-bold" style={{ color: "#166534" }}>
+        Thank you for signing up to AIO Fusion
+      </h3>
+      <p className="text-[13px] mt-1" style={{ color: "#166534" }}>
+        {confirmed
+          ? "Your payment was successful and your subscription is now active."
+          : "Your payment was received. We are confirming your subscription now - this usually takes a few seconds."}
+      </p>
+      {renewal && confirmed && (
+        <p className="text-[13px] mt-1" style={{ color: "#166534" }}>
+          You are paid until <strong>{renewal}</strong>.
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function SubscriptionCard({
   checkoutResult,
@@ -95,7 +203,7 @@ export function SubscriptionCard({
 }: {
   checkoutResult?: "success" | "cancelled" | null;
   onboarding?: boolean;
-  onAccessActivated?: () => void;
+  onAccessActivated?: (summary: SubscriptionActivationSummary) => void;
 }) {
   const [info, setInfo] = useState<SubscriptionInfo | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -129,8 +237,14 @@ export function SubscriptionCard({
   }, []);
 
   useEffect(() => {
-    if (info?.entitled && onboarding) onAccessActivated?.();
-  }, [info?.entitled, onboarding, onAccessActivated]);
+    if (info?.entitled && onboarding) {
+      onAccessActivated?.({
+        plan: info.plan,
+        frequency: info.frequency,
+        currentPeriodEnd: info.currentPeriodEnd,
+      });
+    }
+  }, [info?.currentPeriodEnd, info?.entitled, info?.frequency, info?.plan, onboarding, onAccessActivated]);
 
   // Checkout can return before Stripe's webhook has applied entitlement. Poll
   // briefly only on that return path, then stop; a later refresh remains the
@@ -199,9 +313,6 @@ export function SubscriptionCard({
   const trial = info.trial ?? { status: "eligible" as const, startedAt: null, endsAt: null, daysRemaining: 0 };
   const subscribed = info.status !== "none";
   const status = STATUS_LABELS[info.status];
-  const renewal = info.currentPeriodEnd
-    ? new Date(info.currentPeriodEnd).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
-    : null;
 
   return (
     <>
@@ -209,9 +320,7 @@ export function SubscriptionCard({
         <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Subscription</h2>
 
         {checkoutResult === "success" && (
-          <p className="text-[13px] mb-3 px-3 py-2 rounded-lg" style={{ background: "#DCFCE7", color: "#166534" }}>
-            Payment received. Activation can take a few seconds - refresh shortly if you don't see the change yet.
-          </p>
+          <PaymentSuccessState info={info} />
         )}
         {checkoutResult === "cancelled" && (
           <p className="text-[13px] mb-3 px-3 py-2 rounded-lg" style={{ background: vars.g50, color: vars.g600 }}>
@@ -273,8 +382,8 @@ export function SubscriptionCard({
             </div>
             <p className="text-[13px]" style={{ color: vars.g500 }}>
               {info.includedProjects} Premium project{info.includedProjects === 1 ? "" : "s"} included.
-              {renewal ? ` Next renewal: ${renewal}.` : ""}
             </p>
+            <RenewalDetails status={info.status} currentPeriodEnd={info.currentPeriodEnd} />
             {info.entitled && (
               <p className="text-[13px] mt-1" style={{ color: vars.g500 }}>
                 Projects: <strong style={{ color: ink }}>{info.projectsUsed} of {info.projectAllowance}</strong> in use
@@ -322,7 +431,7 @@ export function SubscriptionCard({
         )}
       </div>
 
-      {info.entitled && (
+      {info.entitled && TIER_ORDER.every((tier) => Boolean(info.tierPrices?.[tier])) && (
         <>
           <AddProjectCard info={info} />
           <ChangeTierCard info={info} onChanged={() => setRefreshTick((t) => t + 1)} />

@@ -15,6 +15,12 @@ description: Stripe connection quirks, webhook secret location, entitlement/tier
 **Why:** The user confirmed this exact post-checkout Billing details presentation looked great after a successful annual sandbox subscription.
 
 **How to apply:** Future billing or checkout changes should retain this information hierarchy and continue routing successful onboarding payments directly to this screen.
+
+- **Renewal communication**: successful paid onboarding pauses on a dedicated confirmation screen before Billing; Billing derives paid-until and days remaining from Stripe's period end.
+
+**Why:** The user wanted a clear payment acknowledgement and visible time remaining, while keeping the approved Billing details page as the final destination.
+
+**How to apply:** Keep the confirmation as an explicit user step with a Billing CTA. Renewal emails use a database claim tied to the exact period end, exclude non-renewing subscriptions, and reset only when the period changes.
 - **Managed webhook ownership**: local development and published staging can share the same sandbox account and database. `stripe-replit-sync` deletes other managed webhook URLs, so development must never register/manage the webhook; only staging/production deployments may do so.
 - **Why:** a staging deployment received the live record first and created a `cs_live_` session. After correcting credentials, a later development restart replaced the staging webhook URL, so successful sandbox payment events never activated onboarding.
 - **How to apply:** every Stripe client, startup sync, webhook registration, and mode check must obtain credentials through the same environment-aware selector. Never add an order-based or cross-environment fallback. Keep the staging override in Replit Secrets, never source or chat.

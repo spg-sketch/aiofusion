@@ -50,6 +50,8 @@ vi.mock("@workspace/db", async () => {
       billing_frequency varchar(16),
       subscription_status varchar(16),
       current_period_end timestamptz,
+      cancel_at_period_end boolean NOT NULL DEFAULT false,
+      renewal_reminder_period_end timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS platform_memberships (
@@ -384,6 +386,7 @@ import {
   getProjectAllowance,
   assignAddonToNewProject,
   syncStripeBillingDetails,
+  handleSubscriptionUpdated,
   vatNumberToTaxId,
   CheckoutStartError,
   getCheckoutErrorResponse,
@@ -574,6 +577,44 @@ describe("card-free beta trial", () => {
 // Webhook business handlers
 // ---------------------------------------------------------------------------
 describe("stripe webhook handlers", () => {
+  it("persists cancel_at_period_end and resets the renewal marker when Stripe rolls the period", async () => {
+    await seedWorkspace("renewal-state", "owner@renewal-state.test");
+    const oldPeriod = new Date(Date.now() + 6 * 86400000);
+    const newPeriod = new Date(Date.now() + 365 * 86400000);
+    await db
+      .update(platformCompaniesTable)
+      .set({
+        stripeCustomerId: "cus_renewal_state",
+        stripeSubscriptionId: "sub_renewal_state",
+        subscriptionStatus: "active",
+        currentPeriodEnd: oldPeriod,
+        renewalReminderPeriodEnd: oldPeriod,
+      })
+      .where(eq(platformCompaniesTable.slug, "renewal-state"));
+
+    await handleSubscriptionUpdated(
+      fakeEvent("evt_renewal_state", "customer.subscription.updated", {
+        id: "sub_renewal_state",
+        customer: "cus_renewal_state",
+        status: "active",
+        cancel_at_period_end: true,
+        current_period_end: Math.floor(newPeriod.getTime() / 1000),
+      }),
+    );
+
+    const [company] = await db
+      .select({
+        cancelAtPeriodEnd: platformCompaniesTable.cancelAtPeriodEnd,
+        currentPeriodEnd: platformCompaniesTable.currentPeriodEnd,
+        renewalReminderPeriodEnd: platformCompaniesTable.renewalReminderPeriodEnd,
+      })
+      .from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, "renewal-state"));
+    expect(company?.cancelAtPeriodEnd).toBe(true);
+    expect(company?.currentPeriodEnd?.getTime()).toBe(Math.floor(newPeriod.getTime() / 1000) * 1000);
+    expect(company?.renewalReminderPeriodEnd).toBeNull();
+  });
+
   it("claimStripeEvent is idempotent per event id", async () => {
     expect(await claimStripeEvent("evt_claim_1")).toBe(true);
     expect(await claimStripeEvent("evt_claim_1")).toBe(false);

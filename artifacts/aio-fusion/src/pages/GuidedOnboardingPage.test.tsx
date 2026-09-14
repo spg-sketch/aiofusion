@@ -137,4 +137,38 @@ describe("GuidedOnboardingPage", () => {
     expect(screen.getByText("Checkout was cancelled. No payment was taken, and you can continue here when ready.")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("Company and billing information")).toBeInTheDocument());
   });
+
+  it("shows a dedicated thank-you state after paid checkout is confirmed", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(response({ state: { step: "billing", accessChoice: "paid" } }))
+      .mockResolvedValueOnce(response({ accountProfile: {} }))
+      .mockResolvedValue(response({
+        status: "active",
+        plan: "inhouse",
+        frequency: "annual",
+        currentPeriodEnd: "2099-04-11T00:00:00.000Z",
+        entitled: true,
+        applicablePlan: "inhouse",
+        includedProjects: 1,
+        projectAllowance: 1,
+        projectsUsed: 0,
+        checkoutAvailable: true,
+        companyRecordComplete: true,
+        portalAvailable: false,
+        projects: [],
+        unassignedAddons: [],
+        tierPrices: {},
+        prices: { annual: { yearlyTotal: 100 }, quarterly: { perQuarter: 30, yearlyTotal: 120 } },
+        trial: { status: "used", startedAt: null, endsAt: null, daysRemaining: 0 },
+      })));
+
+    const { onComplete } = renderSetup("success");
+
+    expect(await screen.findByTestId("payment-success-page")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /thank you for signing up to AIO Fusion/i })).toBeInTheDocument();
+    expect(screen.getByText("11 April 2099")).toBeInTheDocument();
+    expect(screen.getByText(/your next renewal is in/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /continue to billing/i }));
+    await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
+  });
 });

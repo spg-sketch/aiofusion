@@ -100,6 +100,13 @@ export const platformCompaniesTable = pgTable("platform_companies", {
   //  "none" | "active" | "past_due" | "cancelled"
   subscriptionStatus: varchar("subscription_status", { length: 16 }),
   currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  // Stripe's cancel_at_period_end flag. A scheduled cancellation is not an
+  // active renewal, so reminder sweeps deliberately exclude it.
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  // The period end for which the renewal reminder was sent. Keeping the
+  // period identity (rather than a boolean) prevents duplicate sends after a
+  // renewal.
+  renewalReminderPeriodEnd: timestamp("renewal_reminder_period_end", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

@@ -69,3 +69,4 @@
 - [SSO destructive-action confirmation](aio-fusion-sso-destructive-confirmation.md) — bind fresh SSO proof to a passwordless owner, provider identity, and one-time server token; recheck eligibility on use.
 - [Market Intelligence evidence labels](aio-fusion-market-intelligence-evidence.md) — distinguish page-verified event facts from AI summaries; relevance estimates are never measured authority.
 - [Reusable staging signup accounts](aio-fusion-staging-signup-reset.md) — reset only dedicated password identities; keep cleanup atomic and refuse Stripe-linked or cross-workspace data.
+- [Back-office page transitions](aio-fusion-backoffice-navigation.md) — commit destination pages immediately; keep lazy loading inside the authenticated shell so the previous page never masquerades as the next.
