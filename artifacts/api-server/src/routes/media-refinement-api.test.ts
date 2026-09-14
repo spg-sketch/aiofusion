@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import express from "express";
+import { sql } from "drizzle-orm";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 
@@ -27,30 +28,7 @@ vi.mock("@workspace/db", async () => {
       last_verified_at timestamptz, updated_at timestamptz NOT NULL DEFAULT now(), account_id varchar,
       created_at timestamptz NOT NULL DEFAULT now(), deleted_at timestamptz
     );
-    CREATE TABLE media_recommendation_sets (
-      id serial PRIMARY KEY, account_id varchar NOT NULL, project_id varchar NOT NULL, story_key varchar(200) NOT NULL,
-      criteria jsonb NOT NULL DEFAULT '{}', created_at timestamptz NOT NULL DEFAULT now()
-    );
-    CREATE TABLE media_recommendation_items (
-      id serial PRIMARY KEY, recommendation_set_id integer NOT NULL REFERENCES media_recommendation_sets(id) ON DELETE CASCADE,
-      contact_id integer NOT NULL REFERENCES media_contacts(id), score integer NOT NULL, reasons jsonb NOT NULL DEFAULT '[]',
-      rank integer NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), UNIQUE(recommendation_set_id, contact_id)
-    );
-    CREATE TABLE media_recommendation_decisions (
-      id serial PRIMARY KEY, account_id varchar NOT NULL, project_id varchar NOT NULL, story_key varchar(200) NOT NULL,
-      contact_id integer NOT NULL REFERENCES media_contacts(id), decision varchar(20) NOT NULL, note text NOT NULL DEFAULT '',
-      created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
-      UNIQUE(account_id, project_id, story_key, contact_id)
-    );
-    CREATE TABLE media_recommendation_feedback (
-      id serial PRIMARY KEY, account_id varchar NOT NULL, project_id varchar NOT NULL, story_key varchar(200) NOT NULL,
-      contact_id integer NOT NULL REFERENCES media_contacts(id) ON DELETE CASCADE, signal varchar(12) NOT NULL,
-      created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
-      UNIQUE(account_id, project_id, story_key, contact_id)
-    );
     CREATE TABLE media_categories (id serial PRIMARY KEY, name text NOT NULL, account_id varchar, created_at timestamptz NOT NULL DEFAULT now());
-    CREATE TABLE media_contact_field_overrides (id serial PRIMARY KEY, contact_id integer NOT NULL, account_id varchar NOT NULL, field_name varchar(80) NOT NULL, value text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
-    CREATE TABLE media_import_batches (id serial PRIMARY KEY, account_id varchar NOT NULL, idempotency_key varchar(160), source_filename text NOT NULL DEFAULT '', source_hash varchar(64) NOT NULL DEFAULT '', source_type varchar(20) NOT NULL DEFAULT 'csv', summary jsonb NOT NULL DEFAULT '{}', committed_at timestamptz, created_at timestamptz NOT NULL DEFAULT now());
   `);
   return { ...(await vi.importActual<object>("@workspace/db/schema")), db, pool: { end: () => client.close() } };
 });
@@ -60,12 +38,15 @@ vi.mock("../lib/member-guards", () => ({ memberProjectGate: (_req: unknown, _res
 vi.mock("../lib/platform-auth", () => ({ getVisibleUsernames: async () => null, normUsername: (value: string) => value.toLowerCase() }));
 
 import { db, mediaContactsTable, mediaOutletsTable, projectsTable } from "@workspace/db";
+import { ensureMediaSchema } from "../lib/ensure-media-schema";
 import mediaDbRouter from "./media-db";
 
 let server: Server;
 let baseUrl = "";
 
 beforeAll(async () => {
+  await ensureMediaSchema();
+  await ensureMediaSchema();
   await db.insert(projectsTable).values({ id: "project-1", owner: "workspace-a" });
   const [outlet] = await db.insert(mediaOutletsTable).values({ name: "Energy Daily", category: "Trade press", country: "UK" }).returning();
   await db.insert(mediaContactsTable).values([
@@ -94,6 +75,62 @@ const request = (path: string, workspace = "workspace-a", init?: RequestInit) =>
 });
 
 describe("media recommendation refinement API", () => {
+  it("migrates the complete recommendation storage contract from a legacy media schema", async () => {
+    const tables = await db.execute(sql`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name IN (
+          'media_recommendation_sets',
+          'media_recommendation_items',
+          'media_recommendation_decisions',
+          'media_recommendation_feedback'
+        )
+      ORDER BY table_name
+    `);
+    expect(tables.rows.map((row) => row.table_name)).toEqual([
+      "media_recommendation_decisions",
+      "media_recommendation_feedback",
+      "media_recommendation_items",
+      "media_recommendation_sets",
+    ]);
+
+    const indexes = await db.execute(sql`
+      SELECT indexname
+      FROM pg_indexes
+      WHERE schemaname = 'public'
+        AND indexname IN (
+          'media_recommendation_items_unique',
+          'media_recommendation_decisions_unique',
+          'media_recommendation_feedback_unique'
+        )
+      ORDER BY indexname
+    `);
+    expect(indexes.rows.map((row) => row.indexname)).toEqual([
+      "media_recommendation_decisions_unique",
+      "media_recommendation_feedback_unique",
+      "media_recommendation_items_unique",
+    ]);
+
+    const constraints = await db.execute(sql`
+      SELECT conname
+      FROM pg_constraint
+      WHERE conname IN (
+        'media_recommendation_items_recommendation_set_id_fkey',
+        'media_recommendation_items_contact_id_fkey',
+        'media_recommendation_decisions_contact_id_fkey',
+        'media_recommendation_feedback_contact_id_fkey'
+      )
+      ORDER BY conname
+    `);
+    expect(constraints.rows.map((row) => row.conname)).toEqual([
+      "media_recommendation_decisions_contact_id_fkey",
+      "media_recommendation_feedback_contact_id_fkey",
+      "media_recommendation_items_contact_id_fkey",
+      "media_recommendation_items_recommendation_set_id_fkey",
+    ]);
+  });
+
   it("persists feedback only for its workspace, project and article, while preserving decisions", async () => {
     const generated = await request("/store/media-db/recommendations", "workspace-a", {
       method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "story-1", terms: ["energy", "technology"] }),
