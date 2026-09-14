@@ -62,7 +62,8 @@ vi.mock("@workspace/db", async () => {
       geography text DEFAULT '', language text DEFAULT '', seniority text DEFAULT '', editorial_status text DEFAULT '',
       source_url text DEFAULT '', source_ref text DEFAULT '', publication_reach text DEFAULT '', publication_authority text DEFAULT '',
       journalist_authority text DEFAULT '', confidence text DEFAULT '', review_notes text DEFAULT '', provenance jsonb DEFAULT '{}',
-      last_verified_at timestamptz, updated_at timestamptz DEFAULT now(), account_id varchar, created_at timestamptz DEFAULT now(),
+      last_verified_at timestamptz, source_check_claimed_at timestamptz, source_check_claim_token varchar(80),
+      source_check_failure_count integer NOT NULL DEFAULT 0, updated_at timestamptz DEFAULT now(), account_id varchar, created_at timestamptz DEFAULT now(),
       deleted_at timestamptz);
     CREATE TABLE media_contact_categories (id serial PRIMARY KEY, contact_id integer, category_id integer, account_id varchar);
     CREATE TABLE media_contact_field_overrides (id serial PRIMARY KEY, contact_id integer, account_id varchar);

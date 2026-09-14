@@ -1,5 +1,12 @@
-import type { MediaSourceDifference } from "@workspace/db";
 import type { MediaSourceEvidence } from "./safe-fetch";
+
+export type MediaSourceDifference = {
+  field: "role" | "email";
+  kind: "changed" | "removed" | "added";
+  storedValue: string;
+  observedValue: string;
+  supported: boolean;
+};
 
 export type MediaSourceContact = {
   firstName: string;
@@ -7,6 +14,21 @@ export type MediaSourceContact = {
   role: string;
   email: string;
 };
+
+export const SOURCE_REVIEW_INTERVAL_MS = 90 * 24 * 60 * 60 * 1000;
+export const SOURCE_RETRY_BASE_MS = 6 * 60 * 60 * 1000;
+export const SOURCE_RETRY_MAX_MS = 7 * 24 * 60 * 60 * 1000;
+
+export function mediaSourceNextDueAt(
+  latestCheck: { checkedAt: Date; outcome: "current" | "changed" | "unavailable" } | null,
+  failureCount = 0,
+): Date | null {
+  if (!latestCheck) return null;
+  const delay = latestCheck.outcome === "unavailable"
+    ? Math.min(SOURCE_RETRY_MAX_MS, SOURCE_RETRY_BASE_MS * 2 ** Math.max(0, failureCount - 1))
+    : SOURCE_REVIEW_INTERVAL_MS;
+  return new Date(latestCheck.checkedAt.getTime() + delay);
+}
 
 export function evaluateMediaSource(contact: MediaSourceContact, evidence: MediaSourceEvidence) {
   const lowerText = evidence.text.toLowerCase();

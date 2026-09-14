@@ -24,7 +24,9 @@ vi.mock("@workspace/db", async () => {
       language text NOT NULL DEFAULT '', seniority text NOT NULL DEFAULT '', editorial_status text NOT NULL DEFAULT '',
       source_url text NOT NULL DEFAULT '', source_ref text NOT NULL DEFAULT '', publication_reach text NOT NULL DEFAULT '',
       publication_authority text NOT NULL DEFAULT '', journalist_authority text NOT NULL DEFAULT '', confidence text NOT NULL DEFAULT '',
-      review_notes text NOT NULL DEFAULT '', provenance jsonb NOT NULL DEFAULT '{}', last_verified_at timestamptz,
+       review_notes text NOT NULL DEFAULT '', provenance jsonb NOT NULL DEFAULT '{}', last_verified_at timestamptz,
+       source_check_claimed_at timestamptz, source_check_claim_token varchar(80),
+       source_check_failure_count integer NOT NULL DEFAULT 0,
       updated_at timestamptz NOT NULL DEFAULT now(), account_id varchar, created_at timestamptz NOT NULL DEFAULT now(), deleted_at timestamptz
     );
     CREATE TABLE media_contact_field_overrides (
@@ -36,6 +38,10 @@ vi.mock("@workspace/db", async () => {
       outcome varchar(20) NOT NULL, error_code varchar(40), error_message text NOT NULL DEFAULT '',
       observed_evidence jsonb NOT NULL DEFAULT '{}', differences jsonb NOT NULL DEFAULT '[]',
       checked_at timestamptz NOT NULL DEFAULT now(), reviewed_at timestamptz, created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE media_source_reverification_runs (
+      singleton_id integer PRIMARY KEY,
+      started_at timestamptz NOT NULL
     );
   `);
   return { ...schema, db: drizzle(client, { schema }), __client: client };
@@ -75,6 +81,14 @@ async function post(path: string, account = "account-a", body?: unknown) {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-account": account },
     body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
+async function put(path: string, account = "account-a", body?: unknown) {
+  return fetch(`${baseUrl}/api${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "x-account": account },
+    body: JSON.stringify(body ?? {}),
   });
 }
 
@@ -140,5 +154,23 @@ describe("media source health routes", () => {
     const afterApproval = (await db.select().from(mediaContactsTable))[0];
     expect(afterApproval.role).toBe("Energy Editor");
     expect(afterApproval.email).toBe("new@example.com");
+  });
+
+  it("makes a replacement source immediately checkable with fresh retry state", async () => {
+    const [contact] = await db.insert(mediaContactsTable).values({
+      firstName: "Jane", lastName: "Reporter", sourceUrl: "https://example.com/old",
+      sourceCheckClaimedAt: new Date(), sourceCheckClaimToken: "old-claim",
+      sourceCheckFailureCount: 5, accountId: "account-a",
+    }).returning();
+    expect((await put(`/store/media-db/contacts/${contact.id}`, "account-a", {
+      sourceUrl: "https://example.com/new",
+    })).status).toBe(200);
+    const [updated] = await db.select().from(mediaContactsTable);
+    expect(updated).toEqual(expect.objectContaining({
+      sourceUrl: "https://example.com/new",
+      sourceCheckClaimedAt: null,
+      sourceCheckClaimToken: null,
+      sourceCheckFailureCount: 0,
+    }));
   });
 });

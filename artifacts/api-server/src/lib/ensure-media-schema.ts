@@ -29,6 +29,9 @@ export async function ensureMediaSchema(): Promise<void> {
       ADD COLUMN IF NOT EXISTS review_notes text,
       ADD COLUMN IF NOT EXISTS provenance jsonb,
       ADD COLUMN IF NOT EXISTS last_verified_at timestamptz,
+      ADD COLUMN IF NOT EXISTS source_check_claimed_at timestamptz,
+      ADD COLUMN IF NOT EXISTS source_check_claim_token varchar(80),
+      ADD COLUMN IF NOT EXISTS source_check_failure_count integer,
       ADD COLUMN IF NOT EXISTS updated_at timestamptz
   `);
 
@@ -52,6 +55,7 @@ export async function ensureMediaSchema(): Promise<void> {
       confidence = COALESCE(confidence, ''),
       review_notes = COALESCE(review_notes, ''),
       provenance = COALESCE(provenance, '{}'::jsonb),
+      source_check_failure_count = COALESCE(source_check_failure_count, 0),
       updated_at = COALESCE(updated_at, created_at, now())
     WHERE
       mobile IS NULL OR linkedin_url IS NULL OR twitter_handle IS NULL OR
@@ -59,7 +63,7 @@ export async function ensureMediaSchema(): Promise<void> {
       language IS NULL OR seniority IS NULL OR editorial_status IS NULL OR
       source_url IS NULL OR source_ref IS NULL OR publication_reach IS NULL OR
       publication_authority IS NULL OR journalist_authority IS NULL OR confidence IS NULL OR review_notes IS NULL OR provenance IS NULL OR
-      updated_at IS NULL
+      source_check_failure_count IS NULL OR updated_at IS NULL
   `);
 
   await db.execute(sql`
@@ -98,6 +102,8 @@ export async function ensureMediaSchema(): Promise<void> {
       ALTER COLUMN review_notes SET NOT NULL,
       ALTER COLUMN provenance SET DEFAULT '{}'::jsonb,
       ALTER COLUMN provenance SET NOT NULL,
+      ALTER COLUMN source_check_failure_count SET DEFAULT 0,
+      ALTER COLUMN source_check_failure_count SET NOT NULL,
       ALTER COLUMN updated_at SET DEFAULT now(),
       ALTER COLUMN updated_at SET NOT NULL
   `);
@@ -150,6 +156,12 @@ export async function ensureMediaSchema(): Promise<void> {
       checked_at timestamptz NOT NULL DEFAULT now(),
       reviewed_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS media_source_reverification_runs (
+      singleton_id integer PRIMARY KEY CHECK (singleton_id = 1),
+      started_at timestamptz NOT NULL
     )
   `);
   await db.execute(sql`

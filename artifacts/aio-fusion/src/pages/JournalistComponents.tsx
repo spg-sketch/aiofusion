@@ -41,6 +41,7 @@ export type Contact = {
   journalistAuthority?: string | number;
   sourceStatus?: "current" | "due" | "unavailable" | "changed" | "unverified";
   sourceReviewDueAt?: string | null;
+  sourceCheckQueued?: boolean;
   sourceCheck?: {
     id: number;
     checkedAt: string;

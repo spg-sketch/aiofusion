@@ -30,6 +30,8 @@ vi.mock("@workspace/db", async () => {
       publication_authority text NOT NULL DEFAULT '', journalist_authority text NOT NULL DEFAULT '',
       confidence text NOT NULL DEFAULT '', review_notes text NOT NULL DEFAULT '',
       provenance jsonb NOT NULL DEFAULT '{}', last_verified_at timestamptz,
+      source_check_claimed_at timestamptz, source_check_claim_token varchar(80),
+      source_check_failure_count integer NOT NULL DEFAULT 0,
       updated_at timestamptz NOT NULL DEFAULT now(), account_id varchar,
       created_at timestamptz NOT NULL DEFAULT now(), deleted_at timestamptz
     );

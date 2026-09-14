@@ -402,7 +402,16 @@ function MediaDatabasePage() {
       unverified: { color: "#475569", background: "#F1F5F9" },
     };
     const status = contact.sourceStatus ?? (contact.sourceUrl ? "due" : "unverified");
-    return <span className="inline-flex mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold" style={colors[status]}>{labels[status]}</span>;
+    return <div className="mt-1">
+      <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold" style={colors[status]}>
+        {contact.sourceCheckQueued ? "Check queued" : labels[status]}
+      </span>
+      {contact.sourceUrl && contact.sourceReviewDueAt && (
+        <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>
+          {new Date(contact.sourceReviewDueAt).getTime() <= Date.now() ? "Review overdue" : `Next review ${new Date(contact.sourceReviewDueAt).toLocaleDateString()}`}
+        </p>
+      )}
+    </div>;
   };
 
   // Export contacts

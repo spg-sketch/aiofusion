@@ -34,6 +34,7 @@ import { assertCanonicalDomainIsSafeForDeployment } from "./lib/app-url";
 import { ensureInsightsSchema } from "./lib/ensure-insights-schema";
 import { seedInsights } from "./lib/seed-insights";
 import { ensureMediaSchema } from "./lib/ensure-media-schema";
+import { MEDIA_REVERIFICATION_INTERVAL_MS, runMediaSourceReverification } from "./lib/media-source-reverification";
 
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const MICROSOFT_HEALTH_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -187,6 +188,15 @@ app.listen(port, (err) => {
   seedInsights().catch((err) => {
     logger.error({ err }, "Failed to seed Insights stories (non-fatal)");
   });
+
+  runMediaSourceReverification().catch((err) => {
+    logger.error({ err }, "Automatic media source reverification sweep failed on startup");
+  });
+  setInterval(() => {
+    runMediaSourceReverification().catch((err) => {
+      logger.error({ err }, "Automatic media source reverification sweep failed");
+    });
+  }, MEDIA_REVERIFICATION_INTERVAL_MS).unref();
 
   // Stripe: create the stripe schema, register the managed webhook and
   // backfill data. Fail-soft - the platform must boot even if Stripe is
