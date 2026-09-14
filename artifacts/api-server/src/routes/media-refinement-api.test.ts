@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import express from "express";
-import { sql } from "drizzle-orm";
+import { getTableColumns, sql } from "drizzle-orm";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 
@@ -37,7 +37,16 @@ vi.mock("../middleware/platform-auth", () => ({ requirePlatformAuth: (_req: unkn
 vi.mock("../lib/member-guards", () => ({ memberProjectGate: (_req: unknown, _res: unknown, next: () => void) => next(), inAssignedScope: () => true }));
 vi.mock("../lib/platform-auth", () => ({ getVisibleUsernames: async () => null, normUsername: (value: string) => value.toLowerCase() }));
 
-import { db, mediaContactsTable, mediaOutletsTable, projectsTable } from "@workspace/db";
+import {
+  db,
+  mediaContactsTable,
+  mediaOutletsTable,
+  mediaRecommendationDecisionsTable,
+  mediaRecommendationFeedbackTable,
+  mediaRecommendationItemsTable,
+  mediaRecommendationSetsTable,
+  projectsTable,
+} from "@workspace/db";
 import { ensureMediaSchema } from "../lib/ensure-media-schema";
 import mediaDbRouter from "./media-db";
 
@@ -73,6 +82,71 @@ const request = (path: string, workspace = "workspace-a", init?: RequestInit) =>
   ...init,
   headers: { "Content-Type": "application/json", "x-workspace": workspace, ...(init?.headers || {}) },
 });
+
+type SchemaColumn = ReturnType<typeof getTableColumns>[string];
+
+function expectedDefault(column: SchemaColumn): string | null {
+  if (!column.hasDefault || column.default === undefined) return null;
+  if (typeof column.default === "string") return column.default === "" ? "empty-string" : column.default;
+  if (typeof column.default === "number") return String(column.default);
+  if (Array.isArray(column.default)) return column.default.length === 0 ? "empty-array" : JSON.stringify(column.default);
+  if ("queryChunks" in column.default) return "now()";
+  return Object.keys(column.default).length === 0 ? "empty-object" : JSON.stringify(column.default);
+}
+
+function actualDefault(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value).replace(/\s+/g, "").toLowerCase();
+  if (normalized === "now()") return "now()";
+  if (/^''(?:::text)?$/.test(normalized)) return "empty-string";
+  if (normalized === "array[]::text[]") return "empty-array";
+  if (/^'\{\}'(?:::text\[\])?$/.test(normalized)) return "empty-array";
+  if (normalized === "'[]'::jsonb") return "empty-array";
+  if (/^'\{\}'::jsonb$/.test(normalized)) return "empty-object";
+  if (/^0(?:::integer)?$/.test(normalized)) return "0";
+  return normalized;
+}
+
+async function expectDatabaseColumnsToMatchSchema(
+  tableName: string,
+  table: Parameters<typeof getTableColumns>[0],
+  routeRequiredColumns: string[],
+): Promise<void> {
+  const result = await db.execute(sql`
+    SELECT column_name, is_nullable, column_default
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = ${tableName}
+  `);
+  const actualByName = new Map(result.rows.map((row) => [String(row.column_name), row]));
+  const schemaByName = new Map(
+    Object.values(getTableColumns(table)).map((column) => [column.name, column]),
+  );
+  const mismatches: string[] = [];
+
+  for (const columnName of routeRequiredColumns) {
+    const schemaColumn = schemaByName.get(columnName);
+    const databaseColumn = actualByName.get(columnName);
+    if (!schemaColumn) {
+      mismatches.push(`${tableName}.${columnName}: missing from shared Drizzle schema`);
+      continue;
+    }
+    if (!databaseColumn) {
+      mismatches.push(`${tableName}.${columnName}: ensureMediaSchema did not create the column`);
+      continue;
+    }
+    const databaseNotNull = databaseColumn.is_nullable === "NO";
+    if (databaseNotNull !== schemaColumn.notNull) {
+      mismatches.push(`${tableName}.${columnName}: nullability is ${databaseNotNull ? "NOT NULL" : "nullable"} in the database but ${schemaColumn.notNull ? "NOT NULL" : "nullable"} in Drizzle`);
+    }
+    const databaseDefault = actualDefault(databaseColumn.column_default);
+    const schemaDefault = expectedDefault(schemaColumn);
+    if (databaseDefault !== schemaDefault) {
+      mismatches.push(`${tableName}.${columnName}: default is ${databaseDefault ?? "none"} in the database but ${schemaDefault ?? "none"} in Drizzle`);
+    }
+  }
+
+  expect(mismatches, `Media Research schema drift:\n${mismatches.join("\n")}`).toEqual([]);
+}
 
 describe("media recommendation refinement API", () => {
   it("migrates the complete recommendation storage contract from a legacy media schema", async () => {
@@ -128,6 +202,27 @@ describe("media recommendation refinement API", () => {
       "media_recommendation_feedback_contact_id_fkey",
       "media_recommendation_items_contact_id_fkey",
       "media_recommendation_items_recommendation_set_id_fkey",
+    ]);
+
+    await expectDatabaseColumnsToMatchSchema("media_contacts", mediaContactsTable, [
+      "mobile", "linkedin_url", "twitter_handle", "beats", "sectors", "geography",
+      "language", "seniority", "editorial_status", "source_url", "source_ref",
+      "publication_reach", "publication_authority", "journalist_authority",
+      "confidence", "review_notes", "provenance", "last_verified_at",
+      "source_check_claimed_at", "source_check_claim_token",
+      "source_check_failure_count", "updated_at",
+    ]);
+    await expectDatabaseColumnsToMatchSchema("media_recommendation_sets", mediaRecommendationSetsTable, [
+      "account_id", "project_id", "story_key", "criteria", "created_at",
+    ]);
+    await expectDatabaseColumnsToMatchSchema("media_recommendation_items", mediaRecommendationItemsTable, [
+      "recommendation_set_id", "contact_id", "score", "reasons", "rank", "created_at",
+    ]);
+    await expectDatabaseColumnsToMatchSchema("media_recommendation_decisions", mediaRecommendationDecisionsTable, [
+      "account_id", "project_id", "story_key", "contact_id", "decision", "note", "created_at", "updated_at",
+    ]);
+    await expectDatabaseColumnsToMatchSchema("media_recommendation_feedback", mediaRecommendationFeedbackTable, [
+      "account_id", "project_id", "story_key", "contact_id", "signal", "created_at", "updated_at",
     ]);
   });
 
