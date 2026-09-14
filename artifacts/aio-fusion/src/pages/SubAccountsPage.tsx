@@ -864,10 +864,6 @@ function SubAccountsPage({
           <button onClick={onBack} className="settings-logo flex items-center gap-3.5">
             <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
           </button>
-          <div className="settings-header-context hidden md:flex items-center gap-4">
-            <span className="settings-header-divider" aria-hidden="true" />
-            <span>Workspace settings</span>
-          </div>
         </div>
         <div className="flex items-center gap-4 sm:gap-6">
           {backToAgency}

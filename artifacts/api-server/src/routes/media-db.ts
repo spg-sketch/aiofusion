@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaContactFieldOverridesTable, mediaImportBatchesTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, projectsTable } from "@workspace/db";
-import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { inAssignedScope, memberProjectGate } from "../lib/member-guards";
 import { getVisibleUsernames, normUsername } from "../lib/platform-auth";
@@ -1046,14 +1046,26 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
   if (!projectId || !storyKey || !(await assertProjectVisible(req, projectId))) { res.status(404).json({ error: "Project not found" }); return; }
   const accountId = normUsername(req.account!.username);
   const decisions = await db.select().from(mediaRecommendationDecisionsTable).where(and(eq(mediaRecommendationDecisionsTable.accountId, accountId), eq(mediaRecommendationDecisionsTable.projectId, projectId), eq(mediaRecommendationDecisionsTable.storyKey, storyKey)));
-  const sets = await db.select({ id: mediaRecommendationSetsTable.id }).from(mediaRecommendationSetsTable).where(and(eq(mediaRecommendationSetsTable.accountId, accountId), eq(mediaRecommendationSetsTable.projectId, projectId), eq(mediaRecommendationSetsTable.storyKey, storyKey)));
+  const visible = await visibleAccounts(req);
+  // Re-running an automatic recommendation intentionally leaves the prior set
+  // auditable. Only the newest scoped set is applicable to this view; loading
+  // every historical set would render the same contact repeatedly.
+  const sets = await db.select({ id: mediaRecommendationSetsTable.id })
+    .from(mediaRecommendationSetsTable)
+    .where(and(eq(mediaRecommendationSetsTable.accountId, accountId), eq(mediaRecommendationSetsTable.projectId, projectId), eq(mediaRecommendationSetsTable.storyKey, storyKey)))
+    .orderBy(desc(mediaRecommendationSetsTable.createdAt), desc(mediaRecommendationSetsTable.id))
+    .limit(1);
   const candidateItems = sets.length ? await db.select({ id: mediaRecommendationItemsTable.id, recommendationSetId: mediaRecommendationItemsTable.recommendationSetId, score: mediaRecommendationItemsTable.score, rank: mediaRecommendationItemsTable.rank, reasons: mediaRecommendationItemsTable.reasons, contact: mediaContactsTable, outletName: mediaOutletsTable.name, outletCategory: mediaOutletsTable.category, outletWebsite: mediaOutletsTable.website, outletCountry: mediaOutletsTable.country, outletReachBand: mediaOutletsTable.reachBand, outletAccountId: mediaOutletsTable.accountId, outletDeletedAt: mediaOutletsTable.deletedAt })
     .from(mediaRecommendationItemsTable)
     .innerJoin(mediaContactsTable, eq(mediaRecommendationItemsTable.contactId, mediaContactsTable.id))
     .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
-    .where(and(inArray(mediaRecommendationItemsTable.recommendationSetId, sets.map((set) => set.id)), isNull(mediaContactsTable.deletedAt))) : [];
-  const visible = await visibleAccounts(req);
-  const items = filterVisibleRecommendationItems(candidateItems, visible).map((item) => {
+    .where(and(eq(mediaRecommendationItemsTable.recommendationSetId, sets[0].id), isNull(mediaContactsTable.deletedAt))) : [];
+  const seenContacts = new Set<number>();
+  const items = filterVisibleRecommendationItems(candidateItems, visible).filter((item) => {
+    if (seenContacts.has(item.contact.id)) return false;
+    seenContacts.add(item.contact.id);
+    return true;
+  }).map((item) => {
     const canSeeOutlet = !item.outletDeletedAt && outletVisible(item.outletAccountId, visible);
     const outletFields = canSeeOutlet ? {
       outletName: item.outletName,
@@ -1076,7 +1088,42 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
       contact: { ...item.contact, ...outletFields },
     };
   });
-  res.json({ decisions, items });
+  // A shortlisted decision is durable user state, not a claim that the
+  // contact must remain in every newly generated recommendation set. Return
+  // its currently visible contact details separately so the UI can preserve
+  // the Accepted shortlist without reintroducing stale cards to `items`.
+  const shortlistedIds = decisions.filter((decision) => decision.decision === "shortlisted").map((decision) => decision.contactId);
+  const decisionContactRows = shortlistedIds.length ? await db.select({
+    contact: mediaContactsTable,
+    outletName: mediaOutletsTable.name,
+    outletCategory: mediaOutletsTable.category,
+    outletWebsite: mediaOutletsTable.website,
+    outletCountry: mediaOutletsTable.country,
+    outletReachBand: mediaOutletsTable.reachBand,
+    outletAccountId: mediaOutletsTable.accountId,
+    outletDeletedAt: mediaOutletsTable.deletedAt,
+  }).from(mediaContactsTable)
+    .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
+    .where(and(inArray(mediaContactsTable.id, shortlistedIds), isNull(mediaContactsTable.deletedAt))) : [];
+  const decisionContacts = decisionContactRows.flatMap((row) => {
+    if (row.contact.accountId !== null && visible !== null && !visible.includes(row.contact.accountId)) return [];
+    const canSeeOutlet = !row.outletDeletedAt && outletVisible(row.outletAccountId, visible);
+    const outletFields = canSeeOutlet ? {
+      outletName: row.outletName,
+      outletCategory: row.outletCategory,
+      outletWebsite: row.outletWebsite,
+      outletCountry: row.outletCountry,
+      outletReachBand: row.outletReachBand,
+    } : {
+      outletName: null,
+      outletCategory: null,
+      outletWebsite: null,
+      outletCountry: null,
+      outletReachBand: null,
+    };
+    return [{ contactId: row.contact.id, contact: { ...row.contact, ...outletFields } }];
+  });
+  res.json({ decisions, items, decisionContacts });
 });
 
 export default router;

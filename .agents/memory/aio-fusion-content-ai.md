@@ -5,6 +5,22 @@ description: How the Optimiser/Creator/Media Research LLM features and their Wor
 
 # AIO Fusion content AI features
 
+## Governing LLM-visibility outcome
+
+Media Research, Media Database, content creation, optimisation, outreach, earned-media tracking, and
+LLM audits must work as one phrase-led system. The exact key search phrases identified in Project
+Setup should drive what content is created, which journalists and outlets are recommended, why they
+are authoritative for those phrases, and how later LLM visibility is measured.
+
+**Why:** the goal is not to produce a larger contact database. It is to improve the accuracy,
+prominence, citations, and share of voice of the client's business in LLM answers for commercially
+important searches, with evidence that the content and earned-media work contributed.
+
+**How to apply:** treat structured Project Setup phrases as first-class identifiers rather than
+reducing them only to loose word tokens. Preserve phrase links through content, recommendations,
+outreach, placements, and repeat LLM checks. A Media feature is not complete until it either
+contributes to that chain or clearly supports its data quality and safety.
+
 Content features call a real Anthropic LLM via the api-server, not simulated data:
 - Content Optimiser/Editor -> `POST /api/content/optimise`
 - Content Creator (per-field rewrite) -> `POST /api/content/creator-field`
@@ -108,6 +124,23 @@ When rediscovering a saved contact, preserve populated user-maintained intellige
 new source check in provenance. Do not silently replace manual review notes or upgrade retained
 fields to newly verified. Reuse visible outlets by canonical domain or normalized name, while
 masking inaccessible outlet metadata anywhere recommendation records are returned.
+
+## Media Research search sequence
+
+Media Research automatically prepares and runs the database-recommendation stage from the active
+project's canonically scoped intake data plus the selected article. Global is the default region
+unless project locations clearly indicate UK or US. Users can edit the generated live-search query,
+topic, and region before explicitly choosing to expand beyond their database.
+
+**Why:** users should receive useful first results without translating Project Hub data into another
+prompt, while externally billed public-web discovery still needs an intentional second action.
+Automatic refreshes must not duplicate recommendation history, hide persisted shortlisted contacts,
+or allow an older article request to update the newly selected article.
+
+**How to apply:** never fall back from a non-default project's intake key to the legacy bare key.
+Keep database and live requests guarded by per-invocation identity across article switches. Load the
+newest recommendation set for the main list, but hydrate visible shortlisted contacts independently.
+Invalidate older decision reads when a newer shortlist/reject write starts.
 
 ## Typecheck
 
