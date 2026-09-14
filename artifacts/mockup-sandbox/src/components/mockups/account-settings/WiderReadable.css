@@ -1,0 +1,37 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600&display=swap");
+
+.readable-settings {
+  --ink: #102b36;
+  --muted: #607783;
+  --line: #dce9e9;
+  --mist: #f4f9f8;
+  --teal: #17677a;
+  --teal-deep: #0d4556;
+  --pink: #c8497a;
+  font-family: "DM Sans", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 88% 7%, rgba(215, 239, 235, .72), transparent 25rem),
+    #f5faf9;
+}
+
+.readable-settings * { box-sizing: border-box; }
+.readable-settings button { font: inherit; }
+.readable-settings .serif { font-family: "Playfair Display", Georgia, serif; }
+.readable-settings .lift { transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease, background-color .22s ease; }
+.readable-settings .lift:hover { transform: translateY(-2px); box-shadow: 0 16px 30px -20px rgba(13, 69, 86, .48); }
+.readable-settings .nav-button { transition: color .2s ease, background-color .2s ease, transform .2s ease; }
+.readable-settings .nav-button:hover { transform: translateX(3px); background: #e7f2f1; color: var(--teal-deep); }
+.readable-settings .fade-up { animation: readable-rise .55s ease both; }
+.readable-settings .delay-1 { animation-delay: .08s; }
+.readable-settings .delay-2 { animation-delay: .16s; }
+@keyframes readable-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+@media (max-width: 800px) {
+  .readable-settings .settings-layout { display: block; }
+  .readable-settings .settings-nav { position: static; width: auto; margin-bottom: 22px; }
+  .readable-settings .nav-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .readable-settings .account-options { grid-template-columns: 1fr; }
+  .readable-settings .profile-row { align-items: flex-start; flex-wrap: wrap; }
+  .readable-settings .profile-row .link-button { margin-left: 64px; }
+}
