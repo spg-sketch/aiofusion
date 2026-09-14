@@ -12,7 +12,8 @@
     "demo-run": "tsx scripts/demo-run.ts",
     "george-smoke-test": "tsx scripts/george-smoke-test.ts",
     "cms-smoke-test": "tsx scripts/cms-smoke-test.ts",
-    "seed:media-marketing": "tsx scripts/seed-media-marketing.ts"
+    "seed:media-development": "MEDIA_DEVELOPMENT_SEED=1 tsx scripts/seed-media-development.ts",
+    "seed:media-development:remove": "MEDIA_DEVELOPMENT_SEED=1 tsx scripts/seed-media-development.ts --remove"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.0",

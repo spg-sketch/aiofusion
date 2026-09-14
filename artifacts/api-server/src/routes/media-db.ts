@@ -26,6 +26,7 @@ import {
   stableExactTargetPhraseId,
   type ExactTargetPhrase,
 } from "../lib/exact-target-phrases";
+import { MEDIA_RECOMMENDATION_STOP_WORDS, scoreMediaRecommendation } from "../lib/media-recommendation-ranking";
 
 const router: IRouter = Router();
 
@@ -557,7 +558,7 @@ function cleanVerifiedDate(value: unknown): Date | null | undefined {
   return parsed.getTime() > Date.now() + 60_000 ? undefined : parsed;
 }
 
-const SEARCH_STOP_WORDS = new Set(["a", "an", "and", "at", "cover", "covering", "for", "in", "of", "on", "or", "the", "who", "with", "journalist", "journalists", "reporter", "reporters", "editor", "editors", "writing", "writes"]);
+const SEARCH_STOP_WORDS = MEDIA_RECOMMENDATION_STOP_WORDS;
 const SEARCH_EXPANSIONS: Record<string, string[]> = {
   ai: ["ai", "artificial intelligence"],
   fintech: ["fintech", "financial technology"],
@@ -1148,16 +1149,13 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
     const outlets = await db.select().from(mediaOutletsTable).where(isNull(mediaOutletsTable.deletedAt));
     const outletById = new Map(outlets.filter((outlet) => outletVisible(outlet.accountId, visible)).map((outlet) => [outlet.id, outlet]));
     const ranked = contacts.map((contact) => {
-      const corpus = [contact.role, contact.beats.join(" "), contact.sectors.join(" "), contact.notes].join(" ").toLowerCase();
-      const matches = terms.filter((term: string) => !SEARCH_STOP_WORDS.has(term) && term.length > 3 && corpus.includes(term));
+      const baseRecommendation = scoreMediaRecommendation(contact, terms);
       const phraseMatches = phraseMatchSignals(contact, targetPhrases);
       const reasons = [
         ...phraseMatches.exact.map((phrase) => `Exact target phrase appears in coverage profile: “${phrase.text}”`),
         ...phraseMatches.topic.map((phrase) => `Recorded topic/keyword overlap for target phrase: “${phrase.text}”`),
-        ...matches.map((term: string) => `Coverage profile matches “${term}”`),
+        ...baseRecommendation.reasons,
       ];
-      if (contact.email) reasons.push("Public contact email is available");
-      if (contact.lastVerifiedAt) reasons.push("Contact record has a verification date");
       const outlet = contact.outletId ? outletById.get(contact.outletId) : undefined;
       return {
         contact: {
@@ -1168,7 +1166,7 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
           outletCountry: outlet?.country ?? null,
           outletReachBand: outlet?.reachBand ?? null,
         },
-        score: Math.min(100, phraseMatches.exact.length * 45 + phraseMatches.topic.length * 15 + matches.length * 20 + (contact.email ? 10 : 0) + (contact.lastVerifiedAt ? 5 : 0)),
+        score: Math.min(100, phraseMatches.exact.length * 45 + phraseMatches.topic.length * 15 + baseRecommendation.score),
         reasons,
         phraseAttributions: buildPhraseAttributions({
           role: contact.role,
