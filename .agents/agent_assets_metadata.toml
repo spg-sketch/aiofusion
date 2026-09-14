@@ -240,3 +240,17 @@ mtime_ms = 1789363681837
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/e87433bd-0eb7-48df-b70c-924e04cc9784/ca992105-5ed4-401d-9931-e1ed6dc28153"
 storage_version_token = "1789363698425661"
 content_type = "image/png"
+
+[[outputs]]
+id = "_kQENZv2kje5JFPO_N3cu"
+uri = "file://exports/aio-fusion-stripe-icon-square.png"
+type = "image"
+title = "AIO Fusion Stripe icon"
+description = "Square transparent symbol-only icon for Stripe invoice headers and compact branding placements."
+logical_id = "86c617ee-9c29-4afe-a1ad-2e596ffd7a8c"
+content_hash = "sha256:b8953994b5bb7366bef9bd08c79df5998eb7cc32126bc539ee4d8164b6862a46"
+size = 29061
+mtime_ms = 1789363875234
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/86c617ee-9c29-4afe-a1ad-2e596ffd7a8c/a2b80ab8-bcce-4087-a573-f096197da69f"
+storage_version_token = "1789363889424235"
+content_type = "image/png"
