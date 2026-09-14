@@ -10,6 +10,11 @@ description: Stripe connection quirks, webhook secret location, entitlement/tier
 - **Published staging limitation**: Replit exposes only its live credential slot to a published deployment and rejects sandbox keys in that slot. A staging deployment must use the protected `STRIPE_STAGING_SECRET_KEY` override, validated as `sk_test_`/`rk_test_`; production must ignore it.
 - **Staging override readiness**: any Stripe startup/configured guard must count a valid staging override as configured. Otherwise checkout works but migrations, webhook registration, and backfill silently skip.
 - **Staging webhook independence**: published staging may not have the `stripe` mirror schema. Use the protected signing-secret override and direct Stripe endpoint update; keep business entitlement handling independent of mirror/backfill success.
+- **Approved billing confirmation UI**: preserve the Account and Team Settings billing layout with payment confirmation, plan/frequency, Active status, renewal date, invoice link, and update/cancel actions.
+
+**Why:** The user confirmed this exact post-checkout Billing details presentation looked great after a successful annual sandbox subscription.
+
+**How to apply:** Future billing or checkout changes should retain this information hierarchy and continue routing successful onboarding payments directly to this screen.
 - **Managed webhook ownership**: local development and published staging can share the same sandbox account and database. `stripe-replit-sync` deletes other managed webhook URLs, so development must never register/manage the webhook; only staging/production deployments may do so.
 - **Why:** a staging deployment received the live record first and created a `cs_live_` session. After correcting credentials, a later development restart replaced the staging webhook URL, so successful sandbox payment events never activated onboarding.
 - **How to apply:** every Stripe client, startup sync, webhook registration, and mode check must obtain credentials through the same environment-aware selector. Never add an order-based or cross-environment fallback. Keep the staging override in Replit Secrets, never source or chat.
