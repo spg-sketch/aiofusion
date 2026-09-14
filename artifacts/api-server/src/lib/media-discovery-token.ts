@@ -17,6 +17,14 @@ export type TrustedMediaDiscovery = {
   recentCoverage?: Array<{ title: string; url: string }>;
   confidence: "High" | "Medium" | "Low";
   verifiedAt: string;
+  phraseAttributions?: Array<{
+    phraseId: string;
+    phraseText: string;
+    exactPhraseMatch: string;
+    articleFit: string;
+    publicationAuthorityContext: string;
+    suggestedPlacementAngle: string;
+  }>;
 };
 
 type DiscoveryTokenPayload = {

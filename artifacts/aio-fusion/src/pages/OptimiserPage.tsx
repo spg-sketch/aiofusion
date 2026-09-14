@@ -33,6 +33,8 @@ function OptimiserPage({
   const [spokesperson, setSpokesperson] = useState<string>(spokesList[0]?.name || "NA");
   const [selectedMessages, setSelectedMessages] = useState<string[]>([]);
   const [mediaCats, setMediaCats] = useState<string[]>([]);
+  const [targetPhrases, setTargetPhrases] = useState<NonNullable<ArchiveItem["targetPhrases"]>>([]);
+  const [targetPhraseIds, setTargetPhraseIds] = useState<string[]>([]);
   const [contentStatus, setContentStatus] = useState<"Draft" | "Review" | "Final">("Draft");
   const [pubDate, setPubDate] = useState("");
   const [llmTarget, setLlmTarget] = useState("General (All LLMs)");
@@ -80,6 +82,8 @@ function OptimiserPage({
     if (planner) {
       setProjectTitle(planner.title);
       setContentType(planner.contentType);
+      setTargetPhrases(Array.isArray(planner.targetPhrases) ? planner.targetPhrases : []);
+      setTargetPhraseIds(Array.isArray(planner.targetPhraseIds) ? planner.targetPhraseIds : (planner.targetPhrases ?? []).map((phrase) => phrase.id));
       if (planner.spokesperson) setSpokesperson(planner.spokesperson);
       if (planner.releaseDate) setPubDate(planner.releaseDate);
       if (planner.headline !== undefined || planner.standfirst !== undefined || planner.bodyCopy !== undefined) {
@@ -101,6 +105,8 @@ function OptimiserPage({
       setStandfirst(parts.standfirst);
       setBodyCopy(parts.bodyCopy);
       setActionNotes(typeof arc.actionNotes === "string" ? arc.actionNotes : "");
+      setTargetPhrases(Array.isArray(arc.targetPhrases) ? arc.targetPhrases : []);
+      setTargetPhraseIds(Array.isArray(arc.targetPhraseIds) ? arc.targetPhraseIds : (arc.targetPhrases ?? []).map((phrase) => phrase.id));
       setSelectedMessages(Array.isArray(arc.selectedMessages) ? arc.selectedMessages : []);
       setMediaCats(Array.isArray(arc.mediaCats) ? arc.mediaCats : []);
       setPubDate(typeof arc.pubDate === "string" ? arc.pubDate : "");
@@ -116,6 +122,8 @@ function OptimiserPage({
     setStandfirst(parts.standfirst);
     setBodyCopy(parts.bodyCopy);
     setActionNotes(typeof a.actionNotes === "string" ? a.actionNotes : "");
+    setTargetPhrases(Array.isArray(a.targetPhrases) ? a.targetPhrases : []);
+    setTargetPhraseIds(Array.isArray(a.targetPhraseIds) ? a.targetPhraseIds : (a.targetPhrases ?? []).map((phrase) => phrase.id));
     setSelectedMessages(Array.isArray(a.selectedMessages) ? a.selectedMessages : []);
     setMediaCats(Array.isArray(a.mediaCats) ? a.mediaCats : []);
     setPubDate(typeof a.pubDate === "string" ? a.pubDate : "");
@@ -142,6 +150,8 @@ function OptimiserPage({
       selectedMessages,
       mediaCats,
       pubDate,
+      targetPhrases: targetPhrases.map((phrase) => ({ ...phrase })),
+      targetPhraseIds: targetPhraseIds.length ? [...targetPhraseIds] : targetPhrases.map((phrase) => phrase.id),
       createdAt: new Date().toISOString(),
       source: "optimiser",
     };
@@ -171,6 +181,8 @@ function OptimiserPage({
       status: contentStatus === "Final" ? "Approved" : contentStatus === "Review" ? "Review" : "Drafting",
       releaseDate: pubDate,
       notes: actionNotes.trim() || "Sent from Content Optimiser.",
+      targetPhrases: targetPhrases.map((phrase) => ({ ...phrase })),
+      targetPhraseIds: targetPhraseIds.length ? [...targetPhraseIds] : targetPhrases.map((phrase) => phrase.id),
     };
     try {
       await savePlannerProjects([proj, ...projects]);
@@ -280,6 +292,8 @@ function OptimiserPage({
       headline: articleHeadline,
       standfirst: standfirst,
       bodyCopy: bodyCopy,
+      targetPhrases: targetPhrases.map((phrase) => ({ ...phrase })),
+      targetPhraseIds: targetPhraseIds.length ? [...targetPhraseIds] : targetPhrases.map((phrase) => phrase.id),
       createdAt: new Date().toISOString(),
       }, ...items]);
       try { localStorage.setItem("aio.research.preload", id); } catch { /* noop */ }
@@ -674,6 +688,12 @@ OUTPUT INSTRUCTIONS:
                 </select>
               </div>
             </div>
+            {targetPhrases.length > 0 && (
+              <div className="rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: "rgba(75,93,167,0.25)", background: "rgba(75,93,167,0.05)", color: vars.navy }} data-testid="optimiser-target-phrases">
+                <span className="font-semibold">Target phrases retained: </span>
+                {targetPhrases.map((phrase) => `“${phrase.text}”`).join(", ")}
+              </div>
+            )}
 
             {/* Headline */}
             <Labelled label="Headline" hint="Bold serif headline - up to ~20 words">

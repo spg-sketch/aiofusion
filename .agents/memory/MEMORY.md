@@ -72,3 +72,4 @@
 - [Reusable staging signup accounts](aio-fusion-staging-signup-reset.md) — reset only dedicated password identities; keep cleanup atomic and refuse Stripe-linked or cross-workspace data.
 - [Back-office page transitions](aio-fusion-backoffice-navigation.md) — commit destination pages immediately; keep lazy loading inside the authenticated shell so the previous page never masquerades as the next.
 - [Settings and onboarding visual relationship](aio-fusion-settings-onboarding-visual-system.md) — onboarding stays focused and standalone while sharing the approved Account Settings visual language.
+- [Exact Media target phrases](aio-fusion-exact-media-phrases.md) — preserve immutable phrase snapshots and distinguish exact matches, topic overlap, and AI-suggested fit.

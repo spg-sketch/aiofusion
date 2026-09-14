@@ -25,6 +25,8 @@ export const archiveItemsTable = pgTable("archive_items", {
   body: text("body"),
   selectedMessages: jsonb("selected_messages").$type<string[]>(),
   mediaCats: jsonb("media_cats").$type<string[]>(),
+  targetPhrases: jsonb("target_phrases").$type<Array<Record<string, unknown>>>(),
+  targetPhraseIds: jsonb("target_phrase_ids").$type<string[]>(),
   pubDate: varchar("pub_date"),
   releasedAt: varchar("released_at"),
   releaseChannel: varchar("release_channel"),
@@ -57,6 +59,8 @@ export const plannerItemsTable = pgTable("planner_items", {
   standfirst: text("standfirst"),
   bodyCopy: text("body_copy"),
   actionNotes: text("action_notes"),
+  targetPhrases: jsonb("target_phrases").$type<Array<Record<string, unknown>>>(),
+  targetPhraseIds: jsonb("target_phrase_ids").$type<string[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()

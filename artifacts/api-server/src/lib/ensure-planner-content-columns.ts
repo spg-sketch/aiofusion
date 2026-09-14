@@ -9,10 +9,18 @@ export async function ensurePlannerContentColumns(): Promise<void> {
         ADD COLUMN IF NOT EXISTS headline    text,
         ADD COLUMN IF NOT EXISTS standfirst  text,
         ADD COLUMN IF NOT EXISTS body_copy   text,
-        ADD COLUMN IF NOT EXISTS action_notes text
+        ADD COLUMN IF NOT EXISTS action_notes text,
+        ADD COLUMN IF NOT EXISTS target_phrases jsonb,
+        ADD COLUMN IF NOT EXISTS target_phrase_ids jsonb
+    `);
+    await db.execute(sql`
+      ALTER TABLE archive_items
+        ADD COLUMN IF NOT EXISTS target_phrases jsonb,
+        ADD COLUMN IF NOT EXISTS target_phrase_ids jsonb
     `);
     logger.info("ensurePlannerContentColumns: columns ready");
   } catch (err) {
     logger.error({ err }, "ensurePlannerContentColumns: failed");
+    throw err;
   }
 }

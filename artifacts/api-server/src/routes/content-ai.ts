@@ -17,6 +17,11 @@ import { countWebSearchCalls } from "../lib/media-discovery-usage";
 import { dateAppearsOnPage, deadlineAppearsOnPage, eventNameAppearsOnPage, normaliseEventResults, publishedValueAppearsOnPage, recomputeActionableOpportunities, regionAppearsOnPage } from "../lib/events-search";
 import { TRADE_MEDIA_CATEGORIES } from "../lib/trade-media-categories";
 import { normaliseMediaResearchRegions } from "../lib/media-research-regions";
+import {
+  normaliseExactPhraseText,
+  normaliseSubmittedExactTargetPhrases,
+  type ExactTargetPhrase,
+} from "../lib/exact-target-phrases";
 
 const contentAiRouter = Router();
 
@@ -237,6 +242,38 @@ function asString(v: unknown, cap = MAX_FIELD_CHARS): string {
 function asStringArray(v: unknown, cap = 40): string[] {
   if (!Array.isArray(v)) return [];
   return v.filter((x) => typeof x === "string" && x.trim()).map((x: string) => x.trim()).slice(0, cap);
+}
+
+type PhraseAttribution = {
+  phraseId: string;
+  phraseText: string;
+  exactPhraseMatch: string;
+  articleFit: string;
+  publicationAuthorityContext: string;
+  suggestedPlacementAngle: string;
+};
+
+const normaliseSubmittedPhrases = normaliseSubmittedExactTargetPhrases;
+
+function normaliseReturnedPhraseAttributions(value: unknown, phrases: ExactTargetPhrase[]): PhraseAttribution[] {
+  if (!Array.isArray(value) || !phrases.length) return [];
+  const allowed = new Map(phrases.map((phrase) => [phrase.id, phrase]));
+  const seen = new Set<string>();
+  return value.slice(0, 30).flatMap((raw) => {
+    if (!raw || typeof raw !== "object") return [];
+    const item = raw as Record<string, unknown>;
+    const phrase = allowed.get(typeof item.phraseId === "string" ? item.phraseId : "");
+    if (!phrase || seen.has(phrase.id) || (typeof item.phraseText === "string" && normaliseExactPhraseText(item.phraseText) !== normaliseExactPhraseText(phrase.text))) return [];
+    seen.add(phrase.id);
+    return [{
+      phraseId: phrase.id,
+      phraseText: phrase.text,
+      exactPhraseMatch: `AI-suggested/inferred: ${asString(item.exactPhraseMatch, 800) || "No exact phrase fit was inferred."}`,
+      articleFit: `AI-suggested/inferred: ${asString(item.articleFit, 800) || "No article fit was inferred."}`,
+      publicationAuthorityContext: `AI-suggested/inferred: ${asString(item.publicationAuthorityContext, 800) || "No authority context was inferred. Check the cited publication metadata."}`,
+      suggestedPlacementAngle: `AI-suggested/inferred: ${asString(item.suggestedPlacementAngle, 800) || "No placement angle was inferred."}`,
+    }];
+  });
 }
 
 const CHANGE_KINDS = new Set(["embed", "structure", "flag"]);
@@ -516,7 +553,7 @@ contentAiRouter.post(
     if (pitch.trim() && fieldKey !== "pitch") contextParts.push(`Pitch idea / news hook: ${pitch.trim()}`);
 
     const prompt =
-      `You are an expert PR and GEO (generative engine optimisation) editor helping a client write content that is AI friendly from the start, so it can earn citations the moment it goes live.\n\n` +
+      `You are an expert PR and GEO (generative engine optimisation) editor helping a client structure content for clearer AI understanding and stronger potential visibility over time. Never promise citations or other outcomes.\n\n` +
       `${BRITISH_RULE}\n\n` +
       `Content type: ${contentType}\n` +
       (projectName ? `Project: ${projectName}\n` : "") +
@@ -687,6 +724,7 @@ contentAiRouter.post(
         : null;
     const targetQueryText = rawTargetQuery ? asString(rawTargetQuery.text, 500) : "";
     const targetQueryCategory = rawTargetQuery ? asString(rawTargetQuery.category, 40) : "";
+    const targetPhrases = normaliseSubmittedPhrases(body.targetPhrases);
 
     const rawQueryAudit =
       body.queryAuditData && typeof body.queryAuditData === "object"
@@ -696,7 +734,7 @@ contentAiRouter.post(
     const auditTotalProbes = rawQueryAudit && typeof rawQueryAudit.totalProbes === "number" ? rawQueryAudit.totalProbes : null;
     const auditCompetitors = rawQueryAudit ? asStringArray(rawQueryAudit.competitors, 10) : [];
 
-    if (!headline.trim() && !pitch.trim() && !sourceNotes.trim() && !targetQueryText.trim()) {
+    if (!headline.trim() && !pitch.trim() && !sourceNotes.trim() && !targetQueryText.trim() && !targetPhrases.length) {
       res
         .status(400)
         .json({ error: "Add a headline or subject (and optionally a pitch idea or notes) so the AI knows what to write about." });
@@ -726,7 +764,7 @@ contentAiRouter.post(
 
     // GEO target block: fires only for Prompt 2.1 (article family) when a target query is supplied.
     // Tells the model the exact query to answer, the buying stage, any audit visibility data, and
-    // the structural goal so the article earns a citation for that query.
+    // the structural goal so the article improves its potential to answer that query.
     let geoTargetBlock = "";
     if (targetQueryText.trim() && !isPitch && !isPrompt1) {
       const stageLabel = GEO_STAGE_LABELS[targetQueryCategory] || targetQueryCategory || "unspecified";
@@ -740,7 +778,7 @@ contentAiRouter.post(
         : "";
       geoTargetBlock =
         `\nGEO TARGET QUERY - primary directive for this article:\n` +
-        `The user wants this article to earn a citation from AI engines (ChatGPT, Claude) when someone asks:\n` +
+        `The user wants this article to improve its potential to be understood and cited by AI engines (ChatGPT, Claude) when someone asks:\n` +
         `"${targetQueryText}"\n` +
         `Buying stage: ${stageLabel}\n` +
         (visibilityLine ? `${visibilityLine}\n` : "") +
@@ -753,6 +791,9 @@ contentAiRouter.post(
         `5. Include the query phrase (or a close natural-language variant) in the headline and at least once in the body so it flows naturally.\n` +
         `6. Where the guiding headline field is blank, derive a strong, specific headline from the target query and the company's positioning - do not use the query verbatim as the headline.\n\n`;
     }
+    const exactPhraseBlock = targetPhrases.length
+      ? `\nEXACT TARGET PHRASES - preserve these as distinct targets and address each naturally where relevant:\n${targetPhrases.map((phrase, index) => `${index + 1}. [${phrase.intentGroup}] "${phrase.text}" (id: ${phrase.id})`).join("\n")}\nDo not claim that a phrase earned a citation or outcome. Include each relevant phrase naturally rather than keyword stuffing.\n`
+      : "";
 
     const prompt =
       `You are an expert PR and GEO (generative engine optimisation) writer. You WRITE a brand-new, publication-ready draft from scratch for a client, so that AI search and answer engines (ChatGPT, Claude) can clearly understand, trust and cite it. This is generation, not light editing: compose a complete, well-structured draft of the target length. Never simply echo the brief, the notes or the key messages back as the body.\n\n` +
@@ -768,6 +809,7 @@ contentAiRouter.post(
       (mediaCategories.length ? `Target media categories: ${mediaCategories.join(", ")}\n` : "") +
       `\nTarget length and structure:\n${lengthGuidance}\n\n` +
       geoTargetBlock +
+      exactPhraseBlock +
       `Guiding theme / headline to build the piece around:\n"""\n${headline || (targetQueryText ? "(derive a strong headline from the GEO target query and company positioning above)" : "(none given - derive a strong angle from the pitch idea, notes and Project Data)")}\n"""\n` +
       (pitch ? `\nPitch idea / news hook:\n"""\n${pitch}\n"""\n` : "") +
       `\nSource notes / transcript to draw on (raw material - use it, do not contradict it; do not invent facts beyond it and the Project Data):\n"""\n${sourceNotes || "(none supplied - write from the Project Data and the theme above)"}\n"""\n\n` +
@@ -816,6 +858,7 @@ contentAiRouter.post(
         bodyCopy: outBody,
         changeLog,
         supportingData: normaliseSupportingData(parsed.supportingData),
+        targetPhrases,
         inputTokens,
         outputTokens,
       });
@@ -1082,6 +1125,7 @@ contentAiRouter.post(
     const searchQuery = asString(body.query, 1000);
     const sectorTopic = asString(body.sectorTopic, 500);
     const parsedRegions = normaliseMediaResearchRegions(body.regions);
+    const targetPhrases = normaliseSubmittedPhrases(body.targetPhrases);
     if (!parsedRegions.valid) {
       res.status(400).json({ error: "Regions must contain only Global, UK or US." });
       return;
@@ -1125,13 +1169,16 @@ Standfirst: ${standfirst || "(none)"}
 Body excerpt: ${bodyCopy || "(none)"}
 Media categories: ${mediaCategories.join(", ") || "(not supplied)"}
 Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
+    const phrasePrompt = targetPhrases.length
+      ? `\nExact target phrases submitted by the user. Use only these IDs and exact texts in phraseAttributions:\n${targetPhrases.map((phrase) => `- ${phrase.id}: "${phrase.text}" (${phrase.intentGroup})`).join("\n")}\nFor each attribution, separate exact phrase match, article fit, publication authority context and suggested placement angle. These are AI-suggested/inferred explanations, not source-verified exact matches or authority claims. Publication authority context may label stored authority or reach only. Never claim a placement, citation, reach outcome or journalist endorsement. Keep cited source evidence separate.\n`
+      : "";
 
     try {
       const response = await client.responses.create({
         model: "gpt-5.4-mini",
         tools: [{ type: "web_search" }],
         max_output_tokens: 16384,
-        input: prompt,
+        input: prompt + phrasePrompt,
         text: {
           format: {
             type: "json_schema",
@@ -1160,9 +1207,26 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
                       sectors: { type: "array", items: { type: "string" }, maxItems: 6 },
                       geography: { type: "string" },
                       mediaOpportunity: { type: "string" },
+                      phraseAttributions: {
+                        type: "array",
+                        maxItems: 10,
+                        items: {
+                          type: "object",
+                          additionalProperties: false,
+                          properties: {
+                            phraseId: { type: "string" },
+                            phraseText: { type: "string" },
+                            exactPhraseMatch: { type: "string" },
+                            articleFit: { type: "string" },
+                            publicationAuthorityContext: { type: "string" },
+                            suggestedPlacementAngle: { type: "string" },
+                          },
+                          required: ["phraseId", "phraseText", "exactPhraseMatch", "articleFit", "publicationAuthorityContext", "suggestedPlacementAngle"],
+                        },
+                      },
                       confidence: { type: "string", enum: ["High", "Medium", "Low"] },
                     },
-                    required: ["firstName", "lastName", "role", "email", "outletName", "outletWebsite", "sourceUrl", "evidence", "beats", "sectors", "geography", "mediaOpportunity", "confidence"],
+                    required: ["firstName", "lastName", "role", "email", "outletName", "outletWebsite", "sourceUrl", "evidence", "beats", "sectors", "geography", "mediaOpportunity", "phraseAttributions", "confidence"],
                   },
                 },
               },
@@ -1212,6 +1276,7 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
           mediaOpportunity: asString(item.mediaOpportunity, 2000),
           confidence,
           verifiedAt: now,
+          phraseAttributions: normaliseReturnedPhraseAttributions(item.phraseAttributions, targetPhrases),
         }];
       });
       const checked = await mapWithConcurrency(candidates, 5, async (candidate): Promise<TrustedMediaDiscovery | null> => {

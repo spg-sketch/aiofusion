@@ -13,7 +13,8 @@ import { vars } from "../marketing/vars";
 import { TRADE_MEDIA_CATEGORIES } from "../tradeMediaCategories";
 import { streamContent, buildProjectDataText, CONTENT_AI_TIMEOUT_MS, escapeHtml, textToHtmlParagraphs, downloadWordDocument, GenerationProgress, safeHttpUrl } from "../lib/contentAi";
 import { loadArchive, saveArchive, useContentStore, splitArchiveBody, type ArchiveItem, loadPlannerProjects, savePlannerProjects, getISOWeek, weekDateLabel, type PlannerProject } from "../lib/contentStore";
-import { getKeyMessages, getSpokespeople, loadIntakeData, getActiveProjectId, getProjectMediaCategories, getLlmSearchQueries, getCompetitors, getConfirmedEntity } from "../IntakeForm";
+import { getKeyMessages, getSpokespeople, loadIntakeData, getActiveProjectId, getProjectMediaCategories, getCompetitors, getConfirmedEntity } from "../IntakeForm";
+import { buildExactTargetRequest, getExactTargetPhrases as getCanonicalExactTargetPhrases, type ExactTargetPhrase } from "../lib/exactTargetPhrases";
 import { CategoryPickerModal, CONTENT_TYPES, countWords, Labelled } from "./shared";
 import InfoTip from "../InfoTip";
 import { loadSavedAudits } from "../LlmCheckPage";
@@ -64,9 +65,12 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   const [generated, setGenerated] = useState(false);
   const [draftSnapshot, setDraftSnapshot] = useState<{ articleHeadline: string; standfirst: string; transcript: string } | null>(null);
   const [supportingData, setSupportingData] = useState<{ text: string; url: string }[]>([]);
-  const [targetQuery, setTargetQuery] = useState<{ text: string; category: "discovery" | "shortlist" | "comparison" } | null>(null);
+  const [targetPhrases, setTargetPhrases] = useState<ExactTargetPhrase[]>([]);
 
-  const llmQueries = getLlmSearchQueries();
+  const projectPhrases = getCanonicalExactTargetPhrases((intake as { llmQueries?: { v?: 1; discovery?: string[]; shortlist?: string[]; comparison?: string[] } } | null)?.llmQueries);
+  const targetQuery = targetPhrases[0]
+    ? { text: targetPhrases[0].text, category: targetPhrases[0].intentGroup }
+    : null;
   const projectCompetitors = getCompetitors();
   const confirmedEntity = getConfirmedEntity();
   const geography =
@@ -76,12 +80,6 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     (typeof (intake as { formData?: Record<string, unknown> })?.formData?.["4.5"] === "string"
       ? ((intake as { formData?: Record<string, unknown> }).formData!["4.5"] as string)
       : "");
-  const allLlmQueries: { text: string; category: "discovery" | "shortlist" | "comparison" }[] = [
-    ...llmQueries.discovery.map((q) => ({ text: q, category: "discovery" as const })),
-    ...llmQueries.shortlist.map((q) => ({ text: q, category: "shortlist" as const })),
-    ...llmQueries.comparison.map((q) => ({ text: q, category: "comparison" as const })),
-  ];
-
   const articleHeadlineWords = countWords(articleHeadline);
   const standfirstWords = countWords(standfirst);
   const headlineWords = countWords(headline);
@@ -111,6 +109,11 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       setTranscript(parts.bodyCopy);
       if (arc.contentType) setContentType(arc.contentType);
       if (arc.spokesperson) setSpokesperson(arc.spokesperson);
+      if (Array.isArray(arc.targetPhrases)) {
+        setTargetPhrases(arc.targetPhrases);
+      } else if (Array.isArray(arc.targetPhraseIds)) {
+        setTargetPhrases(projectPhrases.filter((phrase) => arc.targetPhraseIds?.includes(phrase.id)));
+      }
     }
   }, []);
 
@@ -132,6 +135,8 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       pubDate,
       createdAt: new Date().toISOString(),
       source: "creator",
+      targetPhrases: targetPhrases.map((phrase) => ({ ...phrase })),
+      targetPhraseIds: targetPhrases.map((phrase) => phrase.id),
     };
     try {
       await saveArchive([item, ...items]);
@@ -260,7 +265,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   const createDraft = async () => {
     if (generating || optimisingField) return;
     const theme = articleHeadline.trim() || headline.trim() || transcript.trim();
-    if (!theme && !targetQuery) {
+    if (!theme && targetPhrases.length === 0) {
       alert("Add a headline or select a Target LLM Query so the AI knows what to write about.");
       return;
     }
@@ -298,7 +303,9 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           mediaCategories: mediaTarget,
           projectData: buildProjectDataText(),
           projectId: getActiveProjectId(),
-          targetQuery: targetQuery ? { text: targetQuery.text, category: targetQuery.category } : undefined,
+           // targetQuery is retained for v1 API consumers. Structured phrases
+           // are authoritative and the first phrase is the compatibility value.
+           ...buildExactTargetRequest(targetPhrases),
           queryAuditData,
           confirmedCompany: confirmedEntity?.name || "",
           competitors: projectCompetitors.slice(0, 10),
@@ -396,6 +403,8 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       standfirst: standfirst,
       bodyCopy: transcript,
       createdAt: new Date().toISOString(),
+      targetPhrases: targetPhrases.map((phrase) => ({ ...phrase })),
+      targetPhraseIds: targetPhrases.map((phrase) => phrase.id),
       }, ...items]);
       try { localStorage.setItem("aio.research.preload", id); } catch { /* noop */ }
       onNavigate("media-research");
@@ -423,6 +432,8 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       standfirst,
       bodyCopy: transcript,
       actionNotes: actionNotes.trim(),
+      targetPhrases: targetPhrases.map((phrase) => ({ ...phrase })),
+      targetPhraseIds: targetPhrases.map((phrase) => phrase.id),
     };
     try {
       await savePlannerProjects([proj, ...projects]);
@@ -519,7 +530,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
             <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Content Creator</h1>
           </div>
           <p className="text-[16px] font-light leading-relaxed max-w-4xl" style={{ color: "rgba(255,255,255,0.95)" }}>
-            Turn raw notes and transcripts into polished pitches, articles and case studies that are written to be AI friendly from the start. Content built this way is ready to earn citations the moment it goes live, rather than needing fixing later. Your signed-off Project Data is used as the authority brief.
+            Turn raw notes and transcripts into polished pitches, articles and case studies that are structured for clearer AI understanding and stronger citation potential over time. No draft can guarantee visibility or citations. Your signed-off Project Data is used as the authority brief.
           </p>
         </div>
       </div>
@@ -540,36 +551,39 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           </select>
         </div>
 
-        <Labelled label="Target LLM Query" hint="Pick a query from section 1.6 to write a GEO-targeted article. The AI will structure the piece to earn a citation when someone asks this exact question. You can leave this blank for a free-form draft.">
-          {allLlmQueries.length > 0 ? (
-            <select
-              value={targetQuery?.text || ""}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (!val) { setTargetQuery(null); return; }
-                const found = allLlmQueries.find((q) => q.text === val);
-                if (found) setTargetQuery(found);
-              }}
-              className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white"
-              style={{ borderColor: vars.g200 }}
-            >
-              <option value="">- No target query (free-form draft) -</option>
-              {llmQueries.discovery.length > 0 && (
-                <optgroup label="Discovery">
-                  {llmQueries.discovery.map((q) => <option key={q} value={q}>{q}</option>)}
-                </optgroup>
-              )}
-              {llmQueries.shortlist.length > 0 && (
-                <optgroup label="Shortlist">
-                  {llmQueries.shortlist.map((q) => <option key={q} value={q}>{q}</option>)}
-                </optgroup>
-              )}
-              {llmQueries.comparison.length > 0 && (
-                <optgroup label="Comparison &amp; Trust">
-                  {llmQueries.comparison.map((q) => <option key={q} value={q}>{q}</option>)}
-                </optgroup>
-              )}
-            </select>
+        <Labelled label="Exact target phrases" hint="Select one or more exact phrases from section 1.6. The AI will use these phrases as distinct targets, while the first selected phrase remains available to older integrations. You can leave this blank for a free-form draft.">
+          {projectPhrases.length > 0 ? (
+            <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: vars.g200 }}>
+              {(["discovery", "shortlist", "comparison"] as const).map((group) => {
+                const phrases = projectPhrases.filter((phrase) => phrase.intentGroup === group);
+                if (!phrases.length) return null;
+                return (
+                  <fieldset key={group}>
+                    <legend className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: vars.g500 }}>
+                      {group === "comparison" ? "Comparison & Trust" : group}
+                    </legend>
+                    <div className="space-y-1.5">
+                      {phrases.map((phrase) => (
+                        <label key={phrase.id} className="flex items-start gap-2 text-[13px]" style={{ color: vars.g600 }}>
+                          <input
+                            data-testid={`target-phrase-${phrase.id}`}
+                            type="checkbox"
+                            checked={targetPhrases.some((selectedPhrase) => selectedPhrase.id === phrase.id)}
+                            onChange={(event) => {
+                              setTargetPhrases((current) => event.target.checked
+                                ? [...current, phrase]
+                                : current.filter((selectedPhrase) => selectedPhrase.id !== phrase.id));
+                            }}
+                            className="mt-0.5"
+                          />
+                          <span>{phrase.text}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                );
+              })}
+            </div>
           ) : (
             <div className="rounded-lg border px-3 py-2.5 text-[13px]" style={{ borderColor: vars.g200, background: vars.g50, color: vars.g500 }}>
               No queries generated yet -{" "}
@@ -584,13 +598,13 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
               of Project Set-Up first.
             </div>
           )}
-          {targetQuery && (
+          {targetPhrases.length > 0 && (
             <p className="mt-1.5 text-[12px] font-light" style={{ color: vars.g500 }}>
-              <span className="font-semibold" style={{ color: vars.accent }}>GEO goal:</span>{" "}
-              This article aims to get{" "}
+              <span className="font-semibold" style={{ color: vars.accent }}>GEO targets:</span>{" "}
+              This article aims to address{" "}
               <strong style={{ color: vars.navy }}>{confirmedEntity?.name || projectName || "your company"}</strong>{" "}
-              cited when someone asks:{" "}
-              <em>"{targetQuery.text}"</em>
+              when someone asks:{" "}
+              <em>{targetPhrases.map((phrase) => `"${phrase.text}"`).join(", ")}</em>
             </p>
           )}
         </Labelled>

@@ -59,6 +59,17 @@ export type Recommendation = {
   contact: Contact;
   score: number;
   reasons: string[];
+  phraseAttributions?: PhraseAttribution[];
+};
+
+export type PhraseAttribution = {
+  phraseId: string;
+  phraseText: string;
+  matchKind?: "exact" | "topic";
+  exactPhraseMatch: string;
+  articleFit: string;
+  publicationAuthorityContext: string;
+  suggestedPlacementAngle: string;
 };
 
 export type Decision = {
@@ -84,7 +95,32 @@ export type LiveDiscovery = {
   recentCoverage?: Array<{ title: string; url?: string; date?: string; summary?: string }>;
   confidence: "High" | "Medium" | "Low";
   verifiedAt: string;
+  phraseAttributions?: PhraseAttribution[];
 };
+
+function PhraseAttributionSections({ attributions, aiSuggested = false }: { attributions?: PhraseAttribution[]; aiSuggested?: boolean }) {
+  if (!attributions?.length) return null;
+  const hasTopicOverlap = attributions.some((attribution) => attribution.matchKind === "topic");
+  return (
+    <div className="space-y-2 mb-4" data-testid="phrase-attributions">
+      <span className="text-[12px] font-bold text-indigo-900 block">
+        {aiSuggested ? "AI-suggested phrase fit" : hasTopicOverlap ? "Phrase fit and recorded topic overlap" : "Exact phrase fit"}
+      </span>
+      {aiSuggested && <span className="text-[10px] text-indigo-700 block">Inferred guidance only. Cited source evidence is shown separately.</span>}
+      {attributions.map((attribution) => (
+        <div key={attribution.phraseId} className="rounded-lg bg-indigo-50 border border-indigo-100 p-3 text-[12px] text-indigo-900">
+          <p className="font-semibold mb-1">“{attribution.phraseText}”</p>
+          <dl className="space-y-1">
+            <div><dt className="inline font-semibold">{attribution.matchKind === "topic" ? "Recorded topic/keyword overlap: " : "Exact phrase match: "}</dt><dd className="inline">{attribution.exactPhraseMatch}</dd></div>
+            <div><dt className="inline font-semibold">Article fit: </dt><dd className="inline">{attribution.articleFit}</dd></div>
+            <div><dt className="inline font-semibold">Publication authority context: </dt><dd className="inline">{attribution.publicationAuthorityContext}</dd></div>
+            <div><dt className="inline font-semibold">Suggested placement angle: </dt><dd className="inline">{attribution.suggestedPlacementAngle}</dd></div>
+          </dl>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function RecommendationCard({
   item,
@@ -229,6 +265,7 @@ export function RecommendationCard({
               </div>
             </div>
           )}
+          <PhraseAttributionSections attributions={item.phraseAttributions} />
 
           {c.notes && (
             <div className="p-3 rounded-lg bg-amber-50 border border-amber-100 mb-4">
@@ -424,6 +461,7 @@ export function LiveDiscoveryCard({
               <p className="text-[13px] text-emerald-900 leading-relaxed">{candidate.evidence}</p>
             </div>
           )}
+          <PhraseAttributionSections attributions={candidate.phraseAttributions} aiSuggested />
 
           {candidate.mediaOpportunity && (
             <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 mb-4 border-l-4" style={{ borderLeftColor: vars.accent }}>

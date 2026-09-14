@@ -113,8 +113,8 @@ if (Number.isNaN(port) || port <= 0) {
 // Schema migrations that request handlers depend on (membership columns,
 // invitations table, ...) must be complete before the server accepts traffic - 
 // otherwise a request arriving during rollout can hit a missing column/table.
-// Each step is idempotent; a failure is logged and startup continues so a
-// transient DB hiccup can't hard-lock deploys of otherwise-healthy code.
+// Each step is idempotent. Unrelated legacy repairs remain best effort, while
+// request-critical content and media schema failures stop readiness.
 async function runStartupMigrations(): Promise<void> {
   const steps: Array<[string, () => Promise<unknown>]> = [
     ["audit_locks table", ensureAuditLocksTable],
@@ -139,11 +139,16 @@ async function runStartupMigrations(): Promise<void> {
     ["Insights editorial schema", ensureInsightsSchema],
     ["media contacts and recommendations schema", ensureMediaSchema],
   ];
+  const readinessCritical = new Set([
+    "planner content columns",
+    "media contacts and recommendations schema",
+  ]);
   for (const [label, step] of steps) {
     try {
       await step();
     } catch (err) {
       logger.error({ err }, `Failed to ensure ${label}`);
+      if (readinessCritical.has(label)) throw err;
     }
   }
 }

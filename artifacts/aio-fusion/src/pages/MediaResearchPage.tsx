@@ -4,11 +4,33 @@ import { vars } from "../marketing/vars";
 import { escapeHtml, apiBase } from "../lib/contentAi";
 import { loadArchive, useContentStore } from "../lib/contentStore";
 import * as IntakeForm from "../IntakeForm";
+import { getExactTargetPhrases as getCanonicalExactTargetPhrases, normaliseExactTargetPhrases, type ExactTargetPhrase } from "../lib/exactTargetPhrases";
 import { SummaryRow } from "./shared";
 import { RecommendationCard, LiveDiscoveryCard, type Contact, type Recommendation, type Decision, type LiveDiscovery } from "./JournalistComponents";
 
 
-type ResearchArticle = { title: string; headline?: string; standfirst?: string; bodyCopy?: string; body?: string };
+type ResearchArticle = {
+  title: string;
+  headline?: string;
+  standfirst?: string;
+  bodyCopy?: string;
+  body?: string;
+  targetPhrases?: ExactTargetPhrase[];
+  targetPhraseIds?: string[];
+};
+
+export function resolveArticleTargetPhrases(
+  article: Pick<ResearchArticle, "targetPhrases" | "targetPhraseIds"> | null | undefined,
+  projectPhrases: ExactTargetPhrase[],
+): ExactTargetPhrase[] {
+  if (!article || (article.targetPhrases === undefined && article.targetPhraseIds === undefined)) {
+    return projectPhrases;
+  }
+  const snapshots = normaliseExactTargetPhrases(article.targetPhrases);
+  if (snapshots.length > 0) return snapshots;
+  const ids = Array.isArray(article.targetPhraseIds) ? new Set(article.targetPhraseIds) : new Set<string>();
+  return projectPhrases.filter((phrase) => ids.has(phrase.id));
+}
 
 function wordsFrom(values: string[]): string[] {
   return values
@@ -26,11 +48,11 @@ function termsFor(selected: ResearchArticle, categories: string[], messages: str
   return Array.from(new Set([...projectTerms.slice(0, 15), ...articleTerms.slice(0, 20)])).slice(0, 30);
 }
 
-function projectResearchContext(): { sector: string; keywords: string[]; regionalText: string; hasIntakeData: boolean } {
+function projectResearchContext(): { sector: string; keywords: string[]; exactPhrases: ExactTargetPhrase[]; regionalText: string; hasIntakeData: boolean } {
   // Use IntakeForm's canonical scoped loader so one project's research
   // criteria can never fall back to another project's legacy bare-key data.
   const data = IntakeForm.loadIntakeData();
-  if (!data) return { sector: "", keywords: [], regionalText: "", hasIntakeData: false };
+  if (!data) return { sector: "", keywords: [], exactPhrases: [], regionalText: "", hasIntakeData: false };
   const formData = data.formData && typeof data.formData === "object" ? data.formData : {};
   const sector = typeof formData["4.4"] === "string" ? formData["4.4"].trim() : "";
   const stringLocations = Array.isArray(data.stringLists?.["3.3"]) ? data.stringLists["3.3"].join(", ") : "";
@@ -40,22 +62,18 @@ function projectResearchContext(): { sector: string; keywords: string[]; regiona
   ].filter(Boolean).join(", ");
   const primary = data.duals?.["1.2"];
   const additional = Array.isArray(data.dualLists?.["1.3"]) ? data.dualLists["1.3"] : [];
-  const structuredQueries = data.llmQueries && typeof data.llmQueries === "object"
-    ? [...(Array.isArray(data.llmQueries.discovery) ? data.llmQueries.discovery : []), ...(Array.isArray(data.llmQueries.shortlist) ? data.llmQueries.shortlist : []), ...(Array.isArray(data.llmQueries.comparison) ? data.llmQueries.comparison : [])]
-    : [];
   const productQueries = Array.isArray(data.productQueries)
     ? data.productQueries.flatMap((query: Record<string, unknown>) => [query.area, query.phrases])
     : [];
   const projectMessages = [
     primary?.short, primary?.long,
     ...additional.flatMap((message: Record<string, unknown>) => [message.short, message.long]),
-    ...structuredQueries,
-    typeof formData["1.6"] === "string" ? formData["1.6"] : "",
     typeof formData["1.7"] === "string" ? formData["1.7"] : "",
   ];
   return {
     sector,
     keywords: Array.from(new Set([...projectMessages, ...productQueries].filter((value): value is string => typeof value === "string" && Boolean(value.trim())))),
+    exactPhrases: getCanonicalExactTargetPhrases(data.llmQueries as { v?: 1; discovery?: string[]; shortlist?: string[]; comparison?: string[] } | undefined),
     regionalText: locations,
     hasIntakeData: true,
   };
@@ -104,6 +122,7 @@ function dedupeRecommendations(rawItems: unknown[]): Recommendation[] {
       rank: Number(raw.rank) || index + 1,
       score: Number(raw.score) || 0,
       reasons: Array.isArray(raw.reasons) ? raw.reasons.filter((reason): reason is string => typeof reason === "string") : [],
+      phraseAttributions: Array.isArray(raw.phraseAttributions) ? raw.phraseAttributions : [],
       contact,
     };
   }).filter((item) => {
@@ -138,6 +157,7 @@ function MediaResearchPage() {
   const [feedback, setFeedback] = useState<Record<number, "more" | "less">>({});
   const [refining, setRefining] = useState<number | "reset" | null>(null);
   const selected = archive.find((a) => a.id === selectedId);
+  const activeTargetPhrases = resolveArticleTargetPhrases(selected, projectContext.exactPhrases);
   const storyKey = selected?.id || "";
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -225,7 +245,7 @@ function MediaResearchPage() {
       const response = await fetch(`${apiBase()}/api/store/media-db/recommendations`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         signal: request.controller.signal,
-        body: JSON.stringify({ projectId, storyKey, terms }),
+        body: JSON.stringify({ projectId, storyKey, terms, targetPhrases: activeTargetPhrases }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not match database contacts.");
@@ -302,6 +322,7 @@ function MediaResearchPage() {
           query: searchQuery,
           regions,
           sectorTopic,
+            targetPhrases: activeTargetPhrases,
         }),
       });
       const data = await response.json();
@@ -444,7 +465,7 @@ function MediaResearchPage() {
     );
   };
   return <div className="p-6 sm:p-8 max-w-6xl mx-auto"><div className="mb-6"><div className="flex gap-3 items-center"><Target color="#fff" size={28} /><h1 className="text-3xl sm:text-4xl" style={{ color: "#fff", fontFamily: "'Alice', Georgia, serif" }}>Media Research</h1></div><p className="text-[14px] mt-2" style={{ color: "rgba(255,255,255,.85)" }}>Match trusted contacts already in your database or discover current journalists from public web sources. Every live result includes evidence and a source.</p></div>
-    <section className="bg-white rounded-2xl border p-5 mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><label className="block text-[12px] font-bold mb-2" style={{ color: vars.navy }}>Saved article</label><select data-testid="select-research-article" value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setItems([]); setLiveItems([]); setDiscoveryToken(""); setError(""); }} className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400"><option value="">Choose a saved article</option>{archive.map((a) => <option key={a.id} value={a.id}>{a.title} ({a.contentType})</option>)}</select>{selected && <div className="grid sm:grid-cols-2 gap-2 mt-4"><SummaryRow label="Article" value={selected.title} /><SummaryRow label="Categories" value={categories.join(", ") || "No categories selected"} /></div>}
+    <section className="bg-white rounded-2xl border p-5 mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><label className="block text-[12px] font-bold mb-2" style={{ color: vars.navy }}>Saved article</label><select data-testid="select-research-article" value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setItems([]); setLiveItems([]); setDiscoveryToken(""); setError(""); }} className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400"><option value="">Choose a saved article</option>{archive.map((a) => <option key={a.id} value={a.id}>{a.title} ({a.contentType})</option>)}</select>{selected && <><div className="grid sm:grid-cols-2 gap-2 mt-4"><SummaryRow label="Article" value={selected.title} /><SummaryRow label="Categories" value={categories.join(", ") || "No categories selected"} /></div><div className="mt-3 rounded-lg border px-3 py-2" style={{ borderColor: vars.g200 }}><p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: vars.g500 }}>Exact target phrases</p>{activeTargetPhrases.length ? <ul className="mt-1 list-disc pl-4 text-[13px]" style={{ color: vars.g600 }}>{activeTargetPhrases.map((phrase) => <li key={phrase.id}><span className="font-medium">{phrase.text}</span><span className="ml-2 text-[11px] text-slate-400">({phrase.intentGroup})</span></li>)}</ul> : <p className="mt-1 text-[12px] text-slate-500">No exact phrases selected for this article or project.</p>}</div></>}
        <div className="mt-5 pt-5 border-t" style={{ borderColor: vars.g100 }}>
           <h3 className="text-[14px] font-semibold mb-1" style={{ color: vars.navy }}>Live Search Criteria</h3>
           <p className="text-[12px] text-slate-500 mb-3">Generated from your project and selected article. Review or edit before expanding with live search.</p>

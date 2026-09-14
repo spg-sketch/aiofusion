@@ -48,6 +48,7 @@ import {
   projectsTable,
 } from "@workspace/db";
 import { ensureMediaSchema } from "../lib/ensure-media-schema";
+import { stableExactTargetPhraseId } from "../lib/exact-target-phrases";
 import mediaDbRouter from "./media-db";
 
 let server: Server;
@@ -216,7 +217,7 @@ describe("media recommendation refinement API", () => {
       "account_id", "project_id", "story_key", "criteria", "created_at",
     ]);
     await expectDatabaseColumnsToMatchSchema("media_recommendation_items", mediaRecommendationItemsTable, [
-      "recommendation_set_id", "contact_id", "score", "reasons", "rank", "created_at",
+      "recommendation_set_id", "contact_id", "score", "reasons", "phrase_attributions", "rank", "created_at",
     ]);
     await expectDatabaseColumnsToMatchSchema("media_recommendation_decisions", mediaRecommendationDecisionsTable, [
       "account_id", "project_id", "story_key", "contact_id", "decision", "note", "created_at", "updated_at",
@@ -224,6 +225,17 @@ describe("media recommendation refinement API", () => {
     await expectDatabaseColumnsToMatchSchema("media_recommendation_feedback", mediaRecommendationFeedbackTable, [
       "account_id", "project_id", "story_key", "contact_id", "signal", "created_at", "updated_at",
     ]);
+
+    await db.execute(sql`ALTER TABLE media_recommendation_items DROP COLUMN phrase_attributions`);
+    await ensureMediaSchema();
+    const compatibilityColumn = await db.execute(sql`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'media_recommendation_items'
+        AND column_name = 'phrase_attributions'
+    `);
+    expect(compatibilityColumn.rows).toHaveLength(1);
   });
 
   it("persists feedback only for its workspace, project and article, while preserving decisions", async () => {
@@ -249,5 +261,78 @@ describe("media recommendation refinement API", () => {
     const otherWorkspace = await (await request("/store/media-db/recommendations/decisions?projectId=project-1&storyKey=story-1", "workspace-b")).json() as { feedback: unknown[]; items: unknown[] };
     expect(otherWorkspace.feedback).toEqual([]);
     expect(otherWorkspace.items).toEqual([]);
+  });
+
+  it("persists exact phrase attributions and rejects forged phrase identities", async () => {
+    const targetPhrases = [{
+      id: stableExactTargetPhraseId("discovery", "energy correspondent"),
+      text: "energy correspondent",
+      intentGroup: "discovery",
+    }, {
+      id: stableExactTargetPhraseId("discovery", "energy platform"),
+      text: "energy platform",
+      intentGroup: "discovery",
+    }];
+    const generated = await request("/store/media-db/recommendations", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({ projectId: "project-1", storyKey: "phrase-story", terms: [], targetPhrases }),
+    });
+    expect(generated.status).toBe(200);
+    const body = await generated.json() as { items: Array<{ score: number; reasons: string[]; contact: { role: string }; phraseAttributions: Array<{ phraseId: string; phraseText: string; matchKind: string; exactPhraseMatch: string }> }> };
+    expect(body.items.length).toBeGreaterThan(0);
+    expect(body.items[0].contact.role).toBe("Energy correspondent");
+    expect(body.items[0].reasons).toContain("Exact target phrase appears in coverage profile: “energy correspondent”");
+    expect(body.items[0].score).toBeGreaterThan(body.items[1].score);
+    const attributions = body.items.flatMap((item) => item.phraseAttributions);
+    expect(attributions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phraseId: targetPhrases[0].id,
+        phraseText: targetPhrases[0].text,
+        matchKind: "exact",
+        exactPhraseMatch: expect.stringContaining("full normalized exact phrase"),
+      }),
+      expect.objectContaining({
+        phraseId: targetPhrases[1].id,
+        phraseText: targetPhrases[1].text,
+        matchKind: "topic",
+        exactPhraseMatch: expect.stringContaining("No full exact phrase match"),
+      }),
+    ]));
+
+    const reloaded = await (await request("/store/media-db/recommendations/decisions?projectId=project-1&storyKey=phrase-story")).json() as {
+      items: Array<{ phraseAttributions: Array<{ phraseId: string }> }>;
+    };
+    expect(reloaded.items[0].phraseAttributions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ phraseId: targetPhrases[0].id }),
+    ]));
+
+    const forged = await request("/store/media-db/recommendations", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: "project-1",
+        storyKey: "forged-phrase-story",
+        terms: ["energy"],
+        targetPhrases: [{ ...targetPhrases[0], id: "phrase-forged" }],
+      }),
+    });
+    expect(forged.status).toBe(400);
+
+    const longText = "İ".repeat(600);
+    const capped = longText.slice(0, 500);
+    expect(stableExactTargetPhraseId("discovery", longText))
+      .toBe(stableExactTargetPhraseId("discovery", capped));
+    const longPhrase = {
+      id: stableExactTargetPhraseId("discovery", longText),
+      text: longText,
+      intentGroup: "discovery",
+    };
+    const longRequest = await request("/store/media-db/recommendations", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({ projectId: "project-1", storyKey: "long-phrase-story", terms: ["energy"], targetPhrases: [longPhrase] }),
+    });
+    expect(longRequest.status).toBe(200);
+    const longBody = await longRequest.json() as { items: Array<{ phraseAttributions: unknown[] }> };
+    expect(longBody.items).toBeDefined();
+    expect(capped).toHaveLength(500);
   });
 });

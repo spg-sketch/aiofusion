@@ -20,6 +20,12 @@ import type { MediaImportRow } from "../lib/media-csv-import";
 import { verifyMediaDiscoveries } from "../lib/media-discovery-token";
 import { approvedSourceUpdates, mediaSourceNextDueAt } from "../lib/media-source-health";
 import { claimMediaContactForManualReverification, reverifyClaimedMediaContact } from "../lib/media-source-reverification";
+import {
+  normaliseExactPhraseText,
+  normaliseSubmittedExactTargetPhrases,
+  stableExactTargetPhraseId,
+  type ExactTargetPhrase,
+} from "../lib/exact-target-phrases";
 
 const router: IRouter = Router();
 
@@ -974,6 +980,90 @@ type RefinementContact = {
   outletCategory?: string | null;
 };
 
+type PhraseAttribution = {
+  phraseId: string;
+  phraseText: string;
+  matchKind: "exact" | "topic";
+  exactPhraseMatch: string;
+  articleFit: string;
+  publicationAuthorityContext: string;
+  suggestedPlacementAngle: string;
+};
+
+const normaliseSubmittedPhrases = normaliseSubmittedExactTargetPhrases;
+
+function hasForgedPhraseId(value: unknown): boolean {
+  if (!Array.isArray(value)) return false;
+  return value.some((raw) => {
+    if (!raw || typeof raw !== "object") return true;
+    const item = raw as Record<string, unknown>;
+    const group = item.intentGroup;
+    const text = typeof item.text === "string" ? item.text.trim().replace(/\s+/g, " ").slice(0, 500) : "";
+    return (group !== "discovery" && group !== "shortlist" && group !== "comparison")
+      || !text
+      || typeof item.id !== "string"
+      || item.id !== stableExactTargetPhraseId(group as ExactTargetPhrase["intentGroup"], text);
+  });
+}
+
+function normalizedContactCorpus(contact: {
+  role?: string | null;
+  beats?: string[] | null;
+  sectors?: string[] | null;
+  notes?: string | null;
+}): string {
+  return [contact.role, ...(contact.beats ?? []), ...(contact.sectors ?? []), contact.notes]
+    .filter(Boolean)
+    .join(" ")
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function phraseMatchSignals(
+  contact: { role?: string | null; beats?: string[] | null; sectors?: string[] | null; notes?: string | null },
+  phrases: ExactTargetPhrase[],
+): { exact: ExactTargetPhrase[]; topic: ExactTargetPhrase[] } {
+  const corpus = normalizedContactCorpus(contact);
+  const exact: ExactTargetPhrase[] = [];
+  const topic: ExactTargetPhrase[] = [];
+  for (const phrase of phrases) {
+    if (corpus.includes(normaliseExactPhraseText(phrase.text))) {
+      exact.push(phrase);
+    } else if (phrase.text.split(/\s+/).some((word) => word.length > 3 && corpus.includes(normaliseExactPhraseText(word)))) {
+      topic.push(phrase);
+    }
+  }
+  return { exact, topic };
+}
+
+function buildPhraseAttributions(contact: {
+  role?: string | null;
+  beats?: string[] | null;
+  sectors?: string[] | null;
+  publicationAuthority?: string | null;
+  publicationReach?: string | null;
+  outletCategory?: string | null;
+}, phrases: ExactTargetPhrase[]): PhraseAttribution[] {
+  const matches = phraseMatchSignals(contact, phrases);
+  const beat = [...(contact.beats ?? []), ...(contact.sectors ?? [])].find(Boolean) || contact.outletCategory || "this subject";
+  return [...matches.exact, ...matches.topic].map((phrase) => {
+    const isExactPhraseMatch = matches.exact.includes(phrase);
+    return {
+    phraseId: phrase.id,
+    phraseText: phrase.text,
+    matchKind: isExactPhraseMatch ? "exact" : "topic",
+    exactPhraseMatch: isExactPhraseMatch
+      ? "The full normalized exact phrase appears in the contact's recorded coverage profile."
+      : "No full exact phrase match. Recorded topic/keyword overlap supports this as a related subject.",
+    articleFit: `The contact's recorded coverage includes ${beat}.`,
+    publicationAuthorityContext: [contact.publicationAuthority ? `Stored publication authority: ${contact.publicationAuthority}` : "", contact.publicationReach ? `Stored publication reach: ${contact.publicationReach}` : ""].filter(Boolean).join("; ") || "No publication authority or reach label is stored.",
+    suggestedPlacementAngle: `Frame the article around ${phrase.text} for the contact's ${beat} coverage.`,
+    };
+  });
+}
+
 const normaliseSignals = (values: string[]) => new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean));
 
 export function refinementAdjustment(candidate: RefinementContact, example: RefinementContact): { points: number; signals: string[] } {
@@ -1045,6 +1135,11 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
     const projectId = typeof req.body?.projectId === "string" ? req.body.projectId.trim().slice(0, 200) : "";
     const storyKey = typeof req.body?.storyKey === "string" ? req.body.storyKey.trim().slice(0, 200) : "";
     const terms = Array.isArray(req.body?.terms) ? req.body.terms.filter((v: unknown) => typeof v === "string").map((v: string) => v.toLowerCase().trim()).filter(Boolean).slice(0, 30) : [];
+    if (hasForgedPhraseId(req.body?.targetPhrases)) {
+      res.status(400).json({ error: "Target phrase IDs do not match their exact text and intent group." });
+      return;
+    }
+    const targetPhrases = normaliseSubmittedPhrases(req.body?.targetPhrases);
     if (!projectId || !storyKey || !(await assertProjectVisible(req, projectId))) { res.status(404).json({ error: "Project not found" }); return; }
     const accountId = normUsername(req.account!.username);
     const visible = await visibleAccounts(req);
@@ -1055,7 +1150,12 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
     const ranked = contacts.map((contact) => {
       const corpus = [contact.role, contact.beats.join(" "), contact.sectors.join(" "), contact.notes].join(" ").toLowerCase();
       const matches = terms.filter((term: string) => !SEARCH_STOP_WORDS.has(term) && term.length > 3 && corpus.includes(term));
-      const reasons = matches.map((term: string) => `Coverage profile matches “${term}”`);
+      const phraseMatches = phraseMatchSignals(contact, targetPhrases);
+      const reasons = [
+        ...phraseMatches.exact.map((phrase) => `Exact target phrase appears in coverage profile: “${phrase.text}”`),
+        ...phraseMatches.topic.map((phrase) => `Recorded topic/keyword overlap for target phrase: “${phrase.text}”`),
+        ...matches.map((term: string) => `Coverage profile matches “${term}”`),
+      ];
       if (contact.email) reasons.push("Public contact email is available");
       if (contact.lastVerifiedAt) reasons.push("Contact record has a verification date");
       const outlet = contact.outletId ? outletById.get(contact.outletId) : undefined;
@@ -1068,17 +1168,25 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
           outletCountry: outlet?.country ?? null,
           outletReachBand: outlet?.reachBand ?? null,
         },
-        score: Math.min(100, matches.length * 20 + (contact.email ? 10 : 0) + (contact.lastVerifiedAt ? 5 : 0)),
+        score: Math.min(100, phraseMatches.exact.length * 45 + phraseMatches.topic.length * 15 + matches.length * 20 + (contact.email ? 10 : 0) + (contact.lastVerifiedAt ? 5 : 0)),
         reasons,
+        phraseAttributions: buildPhraseAttributions({
+          role: contact.role,
+          beats: contact.beats,
+          sectors: contact.sectors,
+          publicationAuthority: outlet?.category ? contact.publicationAuthority : contact.publicationAuthority,
+          publicationReach: outlet?.reachBand || contact.publicationReach,
+          outletCategory: outlet?.category,
+        }, targetPhrases),
       };
     }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score || a.contact.id - b.contact.id).slice(0, 100);
     const [set] = await db.insert(mediaRecommendationSetsTable).values({
       accountId,
       projectId,
       storyKey,
-      criteria: { terms, baseScores: Object.fromEntries(ranked.map((item) => [String(item.contact.id), item.score])) },
+      criteria: { terms, targetPhrases, baseScores: Object.fromEntries(ranked.map((item) => [String(item.contact.id), item.score])) },
     }).returning();
-    if (ranked.length) await db.insert(mediaRecommendationItemsTable).values(ranked.map((item, index) => ({ recommendationSetId: set.id, contactId: item.contact.id, score: item.score, reasons: item.reasons, rank: index + 1 })));
+    if (ranked.length) await db.insert(mediaRecommendationItemsTable).values(ranked.map((item, index) => ({ recommendationSetId: set.id, contactId: item.contact.id, score: item.score, reasons: item.reasons, phraseAttributions: item.phraseAttributions, rank: index + 1 })));
     const refined = await rerankRecommendationSet(accountId, projectId, storyKey);
     const contactById = new Map(ranked.map((item) => [item.contact.id, item.contact]));
     res.json({
@@ -1089,6 +1197,7 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
         contact: contactById.get(entry.item.contactId),
         score: entry.score,
         reasons: entry.reasons,
+        phraseAttributions: entry.item.phraseAttributions,
       })),
     });
   } catch (error) { req.log.error({ err: error }, "media recommendations failed"); res.status(500).json({ error: "Failed to create recommendations" }); }
@@ -1279,7 +1388,7 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
     .orderBy(desc(mediaRecommendationSetsTable.createdAt), desc(mediaRecommendationSetsTable.id))
     .limit(1);
   const feedback = await db.select().from(mediaRecommendationFeedbackTable).where(and(eq(mediaRecommendationFeedbackTable.accountId, accountId), eq(mediaRecommendationFeedbackTable.projectId, projectId), eq(mediaRecommendationFeedbackTable.storyKey, storyKey)));
-  const candidateItems = sets.length ? await db.select({ id: mediaRecommendationItemsTable.id, recommendationSetId: mediaRecommendationItemsTable.recommendationSetId, score: mediaRecommendationItemsTable.score, rank: mediaRecommendationItemsTable.rank, reasons: mediaRecommendationItemsTable.reasons, contact: mediaContactsTable, outletName: mediaOutletsTable.name, outletCategory: mediaOutletsTable.category, outletWebsite: mediaOutletsTable.website, outletCountry: mediaOutletsTable.country, outletReachBand: mediaOutletsTable.reachBand, outletAccountId: mediaOutletsTable.accountId, outletDeletedAt: mediaOutletsTable.deletedAt })
+  const candidateItems = sets.length ? await db.select({ id: mediaRecommendationItemsTable.id, recommendationSetId: mediaRecommendationItemsTable.recommendationSetId, score: mediaRecommendationItemsTable.score, rank: mediaRecommendationItemsTable.rank, reasons: mediaRecommendationItemsTable.reasons, phraseAttributions: mediaRecommendationItemsTable.phraseAttributions, contact: mediaContactsTable, outletName: mediaOutletsTable.name, outletCategory: mediaOutletsTable.category, outletWebsite: mediaOutletsTable.website, outletCountry: mediaOutletsTable.country, outletReachBand: mediaOutletsTable.reachBand, outletAccountId: mediaOutletsTable.accountId, outletDeletedAt: mediaOutletsTable.deletedAt })
     .from(mediaRecommendationItemsTable)
     .innerJoin(mediaContactsTable, eq(mediaRecommendationItemsTable.contactId, mediaContactsTable.id))
     .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))

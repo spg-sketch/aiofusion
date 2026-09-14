@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { getActiveProjectId } from "../IntakeForm";
 import { apiBase } from "./contentAi";
 import { stripEmDashes, normaliseAddedData } from "./utils";
+import type { ExactTargetPhrase } from "./exactTargetPhrases";
 export type ArchiveItem = {
   id: string;
   title: string;
@@ -22,6 +23,10 @@ export type ArchiveItem = {
   releaseChannel?: string;
   source?: "optimiser" | "creator";
   projectId?: string;
+  /** Snapshot of the exact project phrases selected for this item. */
+  targetPhrases?: ExactTargetPhrase[];
+  /** Kept separately so older consumers can use IDs without parsing snapshots. */
+  targetPhraseIds?: string[];
 };
 
 export function splitArchiveBody(arc: { body?: string; headline?: string; standfirst?: string; bodyCopy?: string }): { headline: string; standfirst: string; bodyCopy: string } {
@@ -339,6 +344,8 @@ export type PlannerProject = {
   standfirst?: string;
   bodyCopy?: string;
   actionNotes?: string;
+  targetPhrases?: ExactTargetPhrase[];
+  targetPhraseIds?: string[];
 };
 
 export function loadPlannerProjects(clientId?: string): PlannerProject[] {

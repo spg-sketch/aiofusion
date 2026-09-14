@@ -56,6 +56,18 @@ async function visibleProjectIds(req: Request): Promise<string[] | null> {
   return rows.map((r) => r.id);
 }
 
+async function canWriteProject(req: Request, projectId: string): Promise<boolean> {
+  if (!inAssignedScope(req, projectId)) return false;
+  const visibleIds = restrictToAssigned(req, await visibleProjectIds(req));
+  if (visibleIds !== null && !visibleIds.includes(projectId)) return false;
+  const [project] = await db
+    .select({ id: projectsTable.id })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, projectId), isNull(projectsTable.deletedAt)))
+    .limit(1);
+  return Boolean(project);
+}
+
 // ---------------------------------------------------------------------------
 // Content Archive  GET    /api/store/archive
 //                  POST   /api/store/archive
@@ -133,6 +145,8 @@ router.post(
         body,
         selectedMessages,
         mediaCats,
+        targetPhrases,
+        targetPhraseIds,
         pubDate,
         releasedAt,
         releaseChannel,
@@ -148,7 +162,7 @@ router.post(
         res.status(400).json({ error: "Missing projectId" });
         return;
       }
-      if (!canSeeOwner(owner, visible) || !inAssignedScope(req, projectId)) {
+      if (!canSeeOwner(owner, visible) || !(await canWriteProject(req, projectId))) {
         res.status(403).json({ error: "Forbidden" });
         return;
       }
@@ -172,6 +186,8 @@ router.post(
             ? selectedMessages
             : null,
           mediaCats: Array.isArray(mediaCats) ? mediaCats : null,
+          targetPhrases: Array.isArray(targetPhrases) ? targetPhrases : null,
+          targetPhraseIds: Array.isArray(targetPhraseIds) ? targetPhraseIds : null,
           pubDate: pubDate ?? null,
           releasedAt: releasedAt ?? null,
           releaseChannel: releaseChannel ?? null,
@@ -212,7 +228,7 @@ router.put(
       }
       if (
         !canSeeOwner(existing[0].owner, visible) ||
-        !inAssignedScope(req, existing[0].projectId)
+        !(await canWriteProject(req, existing[0].projectId))
       ) {
         res.status(403).json({ error: "Forbidden" });
         return;
@@ -230,6 +246,8 @@ router.put(
         body,
         selectedMessages,
         mediaCats,
+        targetPhrases,
+        targetPhraseIds,
         pubDate,
         releasedAt,
         releaseChannel,
@@ -252,6 +270,8 @@ router.put(
             ? selectedMessages
             : null,
           mediaCats: Array.isArray(mediaCats) ? mediaCats : null,
+          targetPhrases: Array.isArray(targetPhrases) ? targetPhrases : null,
+          targetPhraseIds: Array.isArray(targetPhraseIds) ? targetPhraseIds : null,
           pubDate: pubDate ?? null,
           releasedAt: releasedAt ?? null,
           releaseChannel: releaseChannel ?? null,
@@ -304,7 +324,7 @@ router.delete(
       }
       if (
         !canSeeOwner(existing[0].owner, visible) ||
-        !inAssignedScope(req, existing[0].projectId)
+        !(await canWriteProject(req, existing[0].projectId))
       ) {
         res.status(403).json({ error: "Forbidden" });
         return;
@@ -415,6 +435,8 @@ router.post(
         standfirst,
         bodyCopy,
         actionNotes,
+        targetPhrases,
+        targetPhraseIds,
       } = req.body ?? {};
 
       if (!id || typeof id !== "string") {
@@ -425,7 +447,7 @@ router.post(
         res.status(400).json({ error: "Missing projectId" });
         return;
       }
-      if (!canSeeOwner(owner, visible) || !inAssignedScope(req, projectId)) {
+      if (!canSeeOwner(owner, visible) || !(await canWriteProject(req, projectId))) {
         res.status(403).json({ error: "Forbidden" });
         return;
       }
@@ -450,6 +472,8 @@ router.post(
           standfirst: standfirst ?? null,
           bodyCopy: bodyCopy ?? null,
           actionNotes: actionNotes ?? null,
+          targetPhrases: Array.isArray(targetPhrases) ? targetPhrases : null,
+          targetPhraseIds: Array.isArray(targetPhraseIds) ? targetPhraseIds : null,
         })
         .onConflictDoNothing()
         .returning();
@@ -485,7 +509,7 @@ router.put(
       }
       if (
         !canSeeOwner(existing[0].owner, visible) ||
-        !inAssignedScope(req, existing[0].projectId)
+        !(await canWriteProject(req, existing[0].projectId))
       ) {
         res.status(403).json({ error: "Forbidden" });
         return;
@@ -506,6 +530,8 @@ router.put(
         standfirst,
         bodyCopy,
         actionNotes,
+        targetPhrases,
+        targetPhraseIds,
       } = req.body ?? {};
 
       const [updated] = await db
@@ -525,6 +551,8 @@ router.put(
           standfirst: standfirst ?? null,
           bodyCopy: bodyCopy ?? null,
           actionNotes: actionNotes ?? null,
+          targetPhrases: Array.isArray(targetPhrases) ? targetPhrases : null,
+          targetPhraseIds: Array.isArray(targetPhraseIds) ? targetPhraseIds : null,
         })
         // Atomic ownership-scoped write (TOCTOU guard); see archive PUT.
         .where(
@@ -571,7 +599,7 @@ router.delete(
       }
       if (
         !canSeeOwner(existing[0].owner, visible) ||
-        !inAssignedScope(req, existing[0].projectId)
+        !(await canWriteProject(req, existing[0].projectId))
       ) {
         res.status(403).json({ error: "Forbidden" });
         return;

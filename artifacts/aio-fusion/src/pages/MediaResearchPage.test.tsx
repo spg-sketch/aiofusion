@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -39,12 +39,14 @@ vi.mock("../lib/contentStore", () => ({
     contentType: "Press release",
     headline: "A better way to manage renewable power",
     bodyCopy: "The platform helps commercial energy teams manage renewable generation.",
+    targetPhrases: [storyOnePhrase],
   }, {
     id: "story-2",
     title: "New retail energy briefing published",
     contentType: "Article",
     headline: "Retailers cut emissions with cleaner power",
     bodyCopy: "Retail energy teams are changing how they source cleaner power.",
+    targetPhrases: [storyTwoPhrase],
   }],
 }));
 
@@ -60,7 +62,19 @@ vi.mock("../lib/contentAi", () => ({
   escapeHtml: (value: string) => value,
 }));
 
-import { MediaResearchPage } from "./MediaResearchPage";
+import { MediaResearchPage, resolveArticleTargetPhrases } from "./MediaResearchPage";
+import { exactTargetPhraseId } from "../lib/exactTargetPhrases";
+
+const storyOnePhrase = {
+  id: exactTargetPhraseId("discovery", "clean energy platform"),
+  text: "clean energy platform",
+  intentGroup: "discovery" as const,
+};
+const storyTwoPhrase = {
+  id: exactTargetPhraseId("shortlist", "retail energy briefing"),
+  text: "retail energy briefing",
+  intentGroup: "shortlist" as const,
+};
 
 const candidate = {
   candidateKey: "candidate-1",
@@ -78,6 +92,11 @@ const candidate = {
 };
 
 describe("MediaResearchPage live discovery", () => {
+  it("keeps explicit empty phrase snapshots empty while legacy articles inherit project phrases", () => {
+    expect(resolveArticleTargetPhrases({ targetPhrases: [], targetPhraseIds: [] }, [storyOnePhrase])).toEqual([]);
+    expect(resolveArticleTargetPhrases({}, [storyOnePhrase])).toEqual([storyOnePhrase]);
+  });
+
   let requests: { url: string; body?: Record<string, unknown> }[] = [];
   beforeEach(() => {
     requests = [];
@@ -112,6 +131,23 @@ describe("MediaResearchPage live discovery", () => {
             rank: 1,
             score: 80,
             reasons: ["Coverage profile matches energy"],
+            phraseAttributions: [{
+              phraseId: storyOnePhrase.id,
+              phraseText: storyOnePhrase.text,
+              matchKind: "exact" as const,
+              exactPhraseMatch: "Role and beat profile directly match the phrase.",
+              articleFit: "The contact covers the article's clean-energy angle.",
+              publicationAuthorityContext: "Stored authority: specialist energy outlet.",
+              suggestedPlacementAngle: "Offer the contact a practical operator perspective.",
+            }, {
+              phraseId: `${storyOnePhrase.id}-topic`,
+              phraseText: "energy platform",
+              matchKind: "topic" as const,
+              exactPhraseMatch: "No full exact phrase match. Recorded topic overlap supports this related subject.",
+              articleFit: "The contact covers the article's clean-energy angle.",
+              publicationAuthorityContext: "Stored authority: specialist energy outlet.",
+              suggestedPlacementAngle: "Offer the contact a practical operator perspective.",
+            }],
             contact: {
               id: 91,
               firstName: recommendationMarker,
@@ -188,16 +224,20 @@ describe("MediaResearchPage live discovery", () => {
     fireEvent.click(screen.getByTestId("button-discover-live"));
 
     expect(await screen.findByText("Jane Reporter")).toBeTruthy();
+    expect(screen.getByText("Phrase fit and recorded topic overlap")).toBeTruthy();
+    expect(screen.getByText("Recorded topic/keyword overlap:")).toBeTruthy();
     const recommendationRequests = requests.filter((request) => request.url.endsWith("/store/media-db/recommendations"));
     expect(recommendationRequests).toHaveLength(1);
     expect(recommendationRequests[0].body).toMatchObject({ projectId: "project-1", storyKey: "story-1" });
     expect(recommendationRequests[0].body?.terms).toEqual(expect.arrayContaining(["clean", "energy", "platform", "launches"]));
+    expect(recommendationRequests[0].body?.targetPhrases).toEqual([storyOnePhrase]);
     const liveRequest = requests.find((request) => request.url.includes("/content/media-discover"));
     expect(liveRequest?.body).toMatchObject({
       projectId: "project-1",
       query: "London reporters",
       regions: ["US"],
       sectorTopic: "Renewable energy",
+      targetPhrases: [storyOnePhrase],
     });
     expect((liveRequest?.body?.content as Record<string, unknown>).title).toBe("New clean energy platform launches");
     expect(screen.getByText(candidate.evidence)).toBeTruthy();
@@ -355,6 +395,27 @@ describe("MediaResearchPage live discovery", () => {
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-2" } });
     await waitFor(() => expect(screen.getAllByDisplayValue(/New retail energy briefing published/).some((element) => element.tagName === "INPUT")).toBe(true));
     expect(screen.queryByDisplayValue("My carefully edited query")).toBeNull();
+  });
+
+  it("refreshes structured phrase attribution inputs when switching articles", async () => {
+    delayedRequests.recommendations = true;
+    render(<MediaResearchPage />);
+    const selector = screen.getByTestId("select-research-article");
+    fireEvent.change(selector, { target: { value: "story-1" } });
+    await waitFor(() => expect(delayedRequests.recommendationCalls).toHaveLength(1));
+    expect(delayedRequests.recommendationCalls[0].storyKey).toBe("story-1");
+    const firstBody = requests.find((request) => request.url.endsWith("/store/media-db/recommendations") && request.body?.storyKey === "story-1")?.body;
+    expect(firstBody?.targetPhrases).toEqual([storyOnePhrase]);
+
+    fireEvent.change(selector, { target: { value: "story-2" } });
+    await waitFor(() => expect(delayedRequests.recommendationCalls).toHaveLength(2));
+    const secondBody = requests.find((request) => request.url.endsWith("/store/media-db/recommendations") && request.body?.storyKey === "story-2")?.body;
+    expect(secondBody?.targetPhrases).toEqual([storyTwoPhrase]);
+    expect(secondBody?.targetPhrases).not.toEqual(firstBody?.targetPhrases);
+
+    await act(async () => {
+      delayedRequests.recommendationCalls.forEach(({ resolve }) => resolve(new Response(JSON.stringify({ ok: true, items: [] }), { status: 200 })));
+    });
   });
 });
 

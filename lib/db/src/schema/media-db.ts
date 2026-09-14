@@ -138,6 +138,14 @@ export const mediaRecommendationItemsTable = pgTable("media_recommendation_items
   contactId: integer("contact_id").notNull().references(() => mediaContactsTable.id),
   score: integer("score").notNull(),
   reasons: jsonb("reasons").$type<string[]>().notNull().default([]),
+  phraseAttributions: jsonb("phrase_attributions").$type<Array<{
+    phraseId: string;
+    phraseText: string;
+    exactPhraseMatch: string;
+    articleFit: string;
+    publicationAuthorityContext: string;
+    suggestedPlacementAngle: string;
+  }>>().notNull().default([]),
   rank: integer("rank").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [uniqueIndex("media_recommendation_items_unique").on(table.recommendationSetId, table.contactId)]);

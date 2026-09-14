@@ -181,9 +181,17 @@ export async function ensureMediaSchema(): Promise<void> {
       contact_id integer NOT NULL,
       score integer NOT NULL,
       reasons jsonb NOT NULL DEFAULT '[]'::jsonb,
+      phrase_attributions jsonb NOT NULL DEFAULT '[]'::jsonb,
       rank integer NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     )
+  `);
+  // Existing recommendation tables pre-date exact phrase attribution. Keep
+  // this separate from CREATE TABLE so the compatibility path upgrades them
+  // without replacing or rewriting stored recommendation items.
+  await db.execute(sql`
+    ALTER TABLE media_recommendation_items
+      ADD COLUMN IF NOT EXISTS phrase_attributions jsonb NOT NULL DEFAULT '[]'::jsonb
   `);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS media_recommendation_decisions (

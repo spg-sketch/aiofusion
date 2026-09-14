@@ -35,6 +35,8 @@ import { markIntakeSaved, ensureDefaultIntakeMigrated, assertActiveProjectConsis
 import { stripEmDashes, normaliseAddedData } from "./lib/utils";
 import CountdownBanner from "./components/CountdownBanner";
 import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "./lib/auditTiming";
+import { getExactTargetPhrases as getCanonicalExactTargetPhrases, type ExactTargetPhrase } from "./lib/exactTargetPhrases";
+export type { ExactTargetPhrase } from "./lib/exactTargetPhrases";
 
 const vars = {
   navy: "#0a1628",
@@ -3650,6 +3652,13 @@ export function getLlmSearchQueries(): LlmQueries {
     return { v: 1, discovery: q.discovery, shortlist: q.shortlist || [], comparison: q.comparison || [] };
   }
   return { v: 1, discovery: [], shortlist: [], comparison: [] };
+}
+
+// Canonical phrase objects for downstream features. The persisted llmQueries
+// v1 shape remains arrays of strings for compatibility with existing intake
+// records and audit payloads.
+export function getExactTargetPhrases(): ExactTargetPhrase[] {
+  return getCanonicalExactTargetPhrases(getLlmSearchQueries());
 }
 
 // Topics where the brand has specialist expertise or data (5.7) - scoring context.

@@ -11,7 +11,8 @@ import {
 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { loadPlannerProjects, savePlannerProjects, useContentStore, getContentStoreState, initContentStore, loadArchive, getISOWeek, weekDateLabel, DEFAULT_SCORING, STATUS_COLOURS, scoreProject, aggregatePlanScore, loadScoringConfig, saveScoringConfig, type PlannerProject, type PlannerStatus, type ScoringConfig } from "../lib/contentStore";
-import { getKeyMessages, getSpokespeople, getActiveProjectId } from "../IntakeForm";
+import { getKeyMessages, getSpokespeople, getActiveProjectId, loadIntakeData } from "../IntakeForm";
+import { getExactTargetPhrases as getCanonicalExactTargetPhrases } from "../lib/exactTargetPhrases";
 import { CONTENT_TYPES } from "./shared";
 import InfoTip from "../InfoTip";
 
@@ -103,6 +104,10 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
   useEffect(() => { setProjects(loadPlannerProjects()); }, [contentVersion]);
   const [editing, setEditing] = useState<PlannerProject | null>(null);
   const plannerKeyMessages = useMemo(() => getKeyMessages(), [editing?.id]);
+  const projectPhrases = useMemo(() => {
+    const data = loadIntakeData();
+    return getCanonicalExactTargetPhrases(data?.llmQueries as { v?: 1; discovery?: string[]; shortlist?: string[]; comparison?: string[] } | undefined);
+  }, [contentVersion, editing?.id]);
   const [showArchivePicker, setShowArchivePicker] = useState(false);
   const [showMethodology, setShowMethodology] = useState(false);
   const methodologyTriggerRef = useRef<HTMLButtonElement>(null);
@@ -167,6 +172,33 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
       notes: "",
     };
     void update([np, ...projects]).then((saved) => { setEditing(np); if (!saved) setSaveError("The new project was not saved. Its draft is still open so you can retry."); });
+  };
+  const addProjectFromArchive = (item: (typeof archive)[number]) => {
+    const w = getISOWeek(new Date());
+    const defaultType = Object.keys(cfg.typeWeights)[0] || item.contentType || "Press release";
+    const np: PlannerProject = {
+      id: `proj-${Date.now()}`,
+      title: item.title,
+      contentType: item.contentType || defaultType,
+      spokesperson: item.spokesperson || "",
+      keyMessage: item.selectedMessages?.[0] || "",
+      audience: "",
+      channels: cfg.channels[0] ? [cfg.channels[0]] : [],
+      week: w,
+      status: "Planned",
+      releaseDate: "",
+      notes: "",
+      headline: item.headline,
+      standfirst: item.standfirst,
+      bodyCopy: item.bodyCopy,
+      targetPhrases: item.targetPhrases?.map((phrase) => ({ ...phrase })),
+      targetPhraseIds: item.targetPhraseIds ? [...item.targetPhraseIds] : item.targetPhrases?.map((phrase) => phrase.id),
+    };
+    void update([np, ...projects]).then((saved) => {
+      setEditing(np);
+      setShowArchivePicker(false);
+      if (!saved) setSaveError("The archived content was not added. Its draft is still open so you can retry.");
+    });
   };
   const saveEdit = async () => {
     if (!editing) return;
@@ -354,6 +386,9 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
             </button>
             <button ref={settingsTriggerRef} aria-label="Open score settings" onClick={() => setShowSettings(true)} aria-haspopup="dialog" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: "rgba(255,255,255,0.08)", color: paper, border: "1px solid rgba(255,255,255,0.18)" }} title="Score settings">
               <Shield size={13} /> Score Settings
+            </button>
+            <button ref={archivePickerTriggerRef} aria-label="Add from archive" onClick={() => setShowArchivePicker(true)} aria-haspopup="dialog" className="focus-visible:outline-none focus-visible:ring-2 focus:ring-white flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: "rgba(255,255,255,0.08)", color: paper, border: "1px solid rgba(255,255,255,0.18)" }} title="Add from archive">
+              <Archive size={13} /> Add from Archive
             </button>
           </div>
         </div>
@@ -562,7 +597,10 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                                 </td>
                                 <td className="px-3 py-2 border hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy }}>
                                   <div className="flex items-center gap-1">
-                                    <button aria-label={`Open ${p.title} in Content Optimiser`} onClick={() => sendToOptimiser(p.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left hover:underline flex-1 min-w-0 truncate text-[12px]" style={{ color: vars.navy, fontWeight: 600 }} title="Open in Content Optimiser">{p.title}</button>
+                                    <button aria-label={`Open ${p.title} in Content Optimiser`} onClick={() => sendToOptimiser(p.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left hover:underline flex-1 min-w-0 truncate text-[12px]" style={{ color: vars.navy, fontWeight: 600 }} title="Open in Content Optimiser">
+                                      {p.title}
+                                      {p.targetPhrases?.length ? <span className="ml-1 text-[10px] font-normal" style={{ color: vars.accent }} title={p.targetPhrases.map((phrase) => phrase.text).join(", ")}>· {p.targetPhrases.length} target{p.targetPhrases.length === 1 ? "" : "s"}</span> : null}
+                                    </button>
                                     <button aria-label={`Delete ${p.title} from Comms Planner`} onClick={() => { if (window.confirm(`Delete "${p.title}" from the Comms Planner?`)) deleteProject(p.id); }} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 flex-shrink-0 w-6 h-6 rounded flex items-center justify-center text-[12px] font-bold opacity-40 hover:opacity-100 transition-opacity hover:bg-red-50" style={{ color: vars.red }} title="Delete from Comms Planner">✕</button>
                                   </div>
                                 </td>
@@ -682,6 +720,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                                     <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0" style={{ background: cs.bg, color: cs.fg }}>{p.status}</span>
                                   </div>
                                   <p className="text-[11px] font-light mb-2" style={{ color: vars.g500 }}>{p.contentType}{p.spokesperson ? ` · ${p.spokesperson}` : ""}</p>
+                                  {p.targetPhrases?.length ? <p className="text-[10px] truncate mb-2" style={{ color: vars.accent }} title={p.targetPhrases.map((phrase) => phrase.text).join(", ")}>Targets: {p.targetPhrases.map((phrase) => phrase.text).join(" · ")}</p> : null}
                                   <div className="flex items-center justify-between text-[11px] mb-2">
                                     <span style={{ color: vars.g400 }}>{p.channels.length} channel{p.channels.length === 1 ? "" : "s"}</span>
                                     <span className="font-bold" style={{ color: vars.accent }}>{Math.round(s.authority)} auth</span>
@@ -814,7 +853,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
               ) : (
                 <div className="space-y-2">
                   {archive.map((a) => (
-                      <button key={a.id} onClick={() => { sendToOptimiser(a.id); setShowArchivePicker(false); }} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full text-left rounded-lg border p-3 hover:shadow-sm transition-all" style={{ borderColor: vars.g200 }}>
+                      <button key={a.id} onClick={() => addProjectFromArchive(a)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 w-full text-left rounded-lg border p-3 hover:shadow-sm transition-all" style={{ borderColor: vars.g200 }}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
                           <p className="text-[13px] font-semibold" style={{ color: vars.navy }}>{a.title}</p>
@@ -890,6 +929,46 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                     )}
                   </select>
                 )}
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-wider mb-1.5 block" style={{ color: vars.g500 }}>Exact target phrases</label>
+                {projectPhrases.length === 0 ? (
+                  <p className="rounded-lg border p-2.5 text-[12px] font-light italic" style={{ borderColor: vars.g200, color: vars.g400, background: "white" }}>
+                    No exact target phrases generated in Project Set-Up yet.
+                  </p>
+                ) : (
+                  <div className="rounded-lg border p-2.5 space-y-1.5" style={{ borderColor: vars.g200, background: "white" }}>
+                    {projectPhrases.map((phrase) => {
+                      const selectedPhraseIds = new Set(editing.targetPhraseIds || editing.targetPhrases?.map((item) => item.id) || []);
+                      return (
+                        <label key={phrase.id} className="flex items-start gap-2 text-[12px]" style={{ color: vars.g600 }}>
+                          <input
+                            type="checkbox"
+                            aria-label={`Target phrase ${phrase.text}`}
+                            checked={selectedPhraseIds.has(phrase.id)}
+                            onChange={(event) => {
+                              const nextPhrases = event.target.checked
+                                ? [...(editing.targetPhrases || []).filter((item) => item.id !== phrase.id), phrase]
+                                : (editing.targetPhrases || []).filter((item) => item.id !== phrase.id);
+                              setEditing({
+                                ...editing,
+                                targetPhrases: nextPhrases,
+                                targetPhraseIds: nextPhrases.map((item) => item.id),
+                              });
+                            }}
+                            className="mt-0.5"
+                          />
+                          <span className="leading-snug">{phrase.text}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                {(editing.targetPhrases?.length || editing.targetPhraseIds?.length) ? (
+                  <p className="mt-1 text-[11px] font-light" style={{ color: vars.g500 }}>
+                    {editing.targetPhrases?.length || editing.targetPhraseIds?.length} phrase{(editing.targetPhrases?.length || editing.targetPhraseIds?.length) === 1 ? "" : "s"} selected
+                  </p>
+                ) : null}
               </div>
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider mb-1.5 block" style={{ color: vars.g500 }}>Release channels (multi-select)</label>
