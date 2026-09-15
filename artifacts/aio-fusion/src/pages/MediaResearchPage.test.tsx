@@ -275,7 +275,7 @@ describe("MediaResearchPage live discovery", () => {
     expect(screen.getByRole("button", { name: "Global" }).className).toContain("bg-slate-800");
   });
 
-  it("infers an unambiguous UK or US default from canonical intake locations", async () => {
+  it("infers an unambiguous UK, Europe or US default from canonical intake locations", async () => {
     intakeState.data = { formData: { "4.5": "Manchester and Leeds, UK" }, duals: {}, dualLists: {}, stringLists: {} };
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
@@ -286,6 +286,13 @@ describe("MediaResearchPage live discovery", () => {
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
     await waitFor(() => expect(screen.getByRole("button", { name: "US" }).className).toContain("bg-slate-800"));
+
+    cleanup();
+    localStorage.clear();
+    intakeState.data = { formData: { "4.5": "France, Germany and the Netherlands" }, duals: {}, dualLists: {}, stringLists: {} };
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Europe" }).className).toContain("bg-slate-800"));
   });
 
   it("keeps a persisted shortlisted contact in Accepted shortlist when newest recommendations omit it", async () => {

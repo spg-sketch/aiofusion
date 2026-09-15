@@ -82,11 +82,12 @@ function projectResearchContext(): { sector: string; keywords: string[]; exactPh
 function regionForProject(regionalText: string): string[] {
   const text = regionalText.toLowerCase();
   const uk = /\b(uk|u\.k\.|gb|g\.b\.|united kingdom|great britain|britain|british|england|scotland|wales|northern ireland|london|manchester|birmingham|liverpool|leeds|glasgow|edinburgh|belfast)\b/.test(text);
+  const europe = /\b(europe|european|eu|e\.u\.|austria|belgium|bulgaria|croatia|cyprus|czechia|czech republic|denmark|estonia|finland|france|germany|greece|hungary|ireland|italy|latvia|lithuania|luxembourg|malta|netherlands|poland|portugal|romania|slovakia|slovenia|spain|sweden|norway|switzerland|iceland|paris|berlin|brussels|amsterdam|madrid|rome|milan|lisbon|vienna|copenhagen|stockholm|helsinki|oslo|zurich|geneva|dublin)\b/.test(text);
   const us = /\b(us|u\.s\.|usa|united states|united states of america|america|american|alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming|chicago|boston|los angeles|san francisco|seattle|austin)\b/.test(text);
   // Global is intentionally the safe default. A regional default is only
   // inferred when the intake has a clear, unambiguous regional focus.
-  if (uk && !us) return ["UK"];
-  if (us && !uk) return ["US"];
+  const inferred = [uk ? "UK" : "", europe ? "Europe" : "", us ? "US" : ""].filter(Boolean);
+  if (inferred.length === 1) return inferred;
   return ["Global"];
 }
 
@@ -432,6 +433,11 @@ function MediaResearchPage() {
       label: "United States",
       items: liveItems.filter((item) => /\b(us|usa|united states|new york|washington|california)\b/i.test(item.geography || "")),
     },
+    {
+      label: "Europe",
+      items: liveItems.filter((item) => !/\b(uk|united kingdom|england|scotland|wales|london)\b/i.test(item.geography || "")
+        && /\b(europe|european|eu|france|germany|italy|spain|ireland|netherlands|belgium|sweden|denmark|norway|finland|switzerland|austria|poland|portugal|paris|berlin|brussels|amsterdam|madrid|rome|milan|dublin)\b/i.test(item.geography || "")),
+    },
   ];
   const groupedKeys = new Set(liveGroups.flatMap((group) => group.items.map((item) => item.candidateKey)));
   liveGroups.push({ label: "Other or global", items: liveItems.filter((item) => !groupedKeys.has(item.candidateKey)) });
@@ -483,7 +489,7 @@ function MediaResearchPage() {
          <div className="mt-4">
            <label className="block text-[12px] font-bold mb-1" style={{ color: vars.navy }}>Regions</label>
            <div className="flex gap-2">
-              {["Global", "UK", "US"].map((region) => <button key={region} onClick={() => toggleRegion(region)} className={`px-4 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors ${regions.includes(region) ? "bg-slate-800 text-white border-slate-800 shadow-sm" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>{region}</button>)}
+              {["Global", "UK", "Europe", "US"].map((region) => <button key={region} onClick={() => toggleRegion(region)} className={`px-4 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors ${regions.includes(region) ? "bg-slate-800 text-white border-slate-800 shadow-sm" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>{region}</button>)}
            </div>
          </div>
        </div>

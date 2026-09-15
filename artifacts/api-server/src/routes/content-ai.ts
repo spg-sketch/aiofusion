@@ -1162,7 +1162,7 @@ contentAiRouter.post(
     const parsedRegions = normaliseMediaResearchRegions(body.regions);
     const targetPhrases = normaliseSubmittedPhrases(body.targetPhrases);
     if (!parsedRegions.valid) {
-      res.status(400).json({ error: "Regions must contain only Global, UK or US." });
+      res.status(400).json({ error: "Regions must contain only Global, UK, Europe or US." });
       return;
     }
     const regions = parsedRegions.regions;
@@ -1185,7 +1185,7 @@ contentAiRouter.post(
     const prompt = `You are a careful media researcher. Search the current public web for journalists and editors who demonstrably cover the supplied story topic.
 
 Rules:
-1. Search these markets: ${regions.join(" and ")}. Global means search internationally rather than restricting results to one country. Seek a broad, useful mix across national, trade and specialist publications.
+1. Search these markets: ${regions.join(" and ")}. Treat UK and Europe as separate markets. Europe excludes the UK for grouping and targeting purposes. Global means search internationally rather than restricting results to one country. Seek a broad, useful mix across national, trade and specialist publications.
 2. Aim for at least 12 distinct relevant publications and up to 3 journalists per publication wherever current evidence supports them. Never add weak or invented results merely to reach a number. Return no more than 30 people, ranked by editorial relevance.
 3. Every person must be supported by a current public author page, staff profile, or recent article byline at sourceUrl.
 4. Never infer or generate an email address. Include an email only when the exact address appears publicly in the searched evidence.
