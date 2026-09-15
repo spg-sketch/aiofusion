@@ -8,6 +8,8 @@ import { generalLimiter } from "./middleware/rate-limit";
 import { authMiddleware } from "./middlewares/authMiddleware";
 import { resolvePlatformAccount } from "./middleware/platform-auth";
 import { cspMiddleware } from "./middleware/csp";
+import { randomUUID } from "node:crypto";
+import { addRequestReference } from "./lib/request-reference";
 
 const app: Express = express();
 
@@ -71,6 +73,11 @@ app.use(cspMiddleware);
 app.use(
   pinoHttp({
     logger,
+    genReqId(_req, res) {
+      const requestId = randomUUID();
+      res.setHeader("X-Request-Id", requestId);
+      return requestId;
+    },
     serializers: {
       req(req) {
         return {
@@ -87,6 +94,13 @@ app.use(
     },
   }),
 );
+app.use((req, res, next) => {
+  const sendJson = res.json.bind(res);
+  res.json = ((body: unknown) => {
+    return sendJson(addRequestReference(body, res.statusCode, String(req.id)));
+  }) as Response["json"];
+  next();
+});
 app.use(cors(corsOptionsDelegate));
 app.use(cookieParser());
 
@@ -152,12 +166,14 @@ app.use(resolvePlatformAccount);
 
 app.use("/api", generalLimiter, router);
 
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   if (err.message?.startsWith("CORS")) {
     res.status(403).json({ error: "Forbidden: origin not allowed" });
     return;
   }
-  res.status(500).json({ error: "Internal server error" });
+  const requestId = String(req.id);
+  req.log.error({ err, requestId }, "Unexpected request error");
+  res.status(500).json({ error: "Internal server error", requestId });
 });
 
 export default app;

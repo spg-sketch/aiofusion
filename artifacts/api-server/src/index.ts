@@ -14,7 +14,7 @@ import { ensurePasswordResetsTable } from "./lib/ensure-password-resets-table";
 import { cleanupExpiredTokens } from "./lib/cleanup-expired-tokens";
 import { pruneExpiredSessions } from "./lib/auth";
 import { seedSupportFaq } from "./lib/seed-support-faq";
-import { db, platformAccountsTable, platformCompaniesTable } from "@workspace/db";
+import { db, pool, platformAccountsTable, platformCompaniesTable } from "@workspace/db";
 import { and, eq, isNull } from "drizzle-orm";
 import { ensurePlatformSchemaV4 } from "./lib/ensure-platform-schema-v4";
 import { ensurePlatformSchemaV5 } from "./lib/ensure-platform-schema-v5";
@@ -35,6 +35,15 @@ import { ensureInsightsSchema } from "./lib/ensure-insights-schema";
 import { seedInsights } from "./lib/seed-insights";
 import { ensureMediaSchema } from "./lib/ensure-media-schema";
 import { MEDIA_REVERIFICATION_INTERVAL_MS, runMediaSourceReverification } from "./lib/media-source-reverification";
+import {
+  markRuntimeReady,
+  markRuntimeDraining,
+  runRequiredPrerequisites,
+  runTrackedJob,
+  scheduleNonOverlappingJob,
+  shutdownRuntime,
+  type ScheduledJob,
+} from "./lib/runtime-lifecycle";
 
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const MICROSOFT_HEALTH_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -113,8 +122,8 @@ if (Number.isNaN(port) || port <= 0) {
 // Schema migrations that request handlers depend on (membership columns,
 // invitations table, ...) must be complete before the server accepts traffic - 
 // otherwise a request arriving during rollout can hit a missing column/table.
-// Each step is idempotent. Unrelated legacy repairs remain best effort, while
-// request-critical content and media schema failures stop readiness.
+// Each step is idempotent. Any failure aborts startup because handlers depend
+// on all of these tables and columns being present.
 async function runStartupMigrations(): Promise<void> {
   const steps: Array<[string, () => Promise<unknown>]> = [
     ["audit_locks table", ensureAuditLocksTable],
@@ -135,28 +144,26 @@ async function runStartupMigrations(): Promise<void> {
     ["platform schema v11 additions", ensurePlatformSchemaV11],
     ["platform schema v12 additions", ensurePlatformSchemaV12],
     ["platform_password_resets table", ensurePasswordResetsTable],
-    ["known workspace names", repairKnownWorkspaceNames],
     ["Insights editorial schema", ensureInsightsSchema],
     ["media contacts and recommendations schema", ensureMediaSchema],
   ];
-  const readinessCritical = new Set([
-    "planner content columns",
-    "media contacts and recommendations schema",
-  ]);
-  for (const [label, step] of steps) {
-    try {
-      await step();
-    } catch (err) {
-      logger.error({ err }, `Failed to ensure ${label}`);
-      if (readinessCritical.has(label)) throw err;
-    }
-  }
+  await runRequiredPrerequisites(steps);
 }
 
 // Block the port until the schema is ready so no request can race the DDL.
-await runStartupMigrations();
+try {
+  await runStartupMigrations();
+} catch (err) {
+  logger.fatal({ err }, "API startup aborted before listening");
+  await pool.end().catch((closeErr) => {
+    logger.error({ err: closeErr }, "Failed to close database pool after startup failure");
+  });
+  process.exitCode = 1;
+  throw err;
+}
 
-app.listen(port, (err) => {
+const jobs: ScheduledJob[] = [];
+const server = app.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
@@ -166,69 +173,47 @@ app.listen(port, (err) => {
     .filter(([, v]) => v === true)
     .map(([k]) => k);
   logger.info({ port, activeFeatureFlags: activeFlags }, "Server listening");
+  markRuntimeReady();
 
   // Make sure the platform is never locked out: seed the default admin login if
   // no admin account exists yet.
-  ensureDefaultAdmin().catch((err) => {
-    logger.error({ err }, "Failed to ensure default admin account");
-  });
+  jobs.push(runTrackedJob("ensure default admin account", ensureDefaultAdmin));
 
   // Backfill platform_users rows for every existing platform_accounts row.
   // Idempotent - gated by a platform_meta flag, safe to call on every restart.
-  backfillPlatformUsers().catch((err) => {
-    logger.error({ err }, "Failed to backfill platform users (non-fatal)");
-  });
-
-  pruneExpiredSessions().catch((err) => {
-    logger.error({ err }, "Failed to prune expired sessions on startup");
-  });
-
-  cleanupExpiredTokens().catch((err) => {
-    logger.error({ err }, "Failed to clean up expired token rows on startup");
-  });
-
-  seedSupportFaq().catch((err) => {
-    logger.error({ err }, "Failed to seed support FAQ (non-fatal)");
-  });
-  seedInsights().catch((err) => {
-    logger.error({ err }, "Failed to seed Insights stories (non-fatal)");
-  });
-
-  runMediaSourceReverification().catch((err) => {
-    logger.error({ err }, "Automatic media source reverification sweep failed on startup");
-  });
-  setInterval(() => {
-    runMediaSourceReverification().catch((err) => {
-      logger.error({ err }, "Automatic media source reverification sweep failed");
-    });
-  }, MEDIA_REVERIFICATION_INTERVAL_MS).unref();
+  jobs.push(runTrackedJob("backfill platform users", backfillPlatformUsers));
+  jobs.push(runTrackedJob("repair known workspace names", repairKnownWorkspaceNames));
+  jobs.push(runTrackedJob("seed support FAQ", seedSupportFaq));
+  jobs.push(runTrackedJob("seed Insights stories", seedInsights));
+  jobs.push(scheduleNonOverlappingJob(
+    "media source reverification sweep",
+    runMediaSourceReverification,
+    MEDIA_REVERIFICATION_INTERVAL_MS,
+  ));
 
   // Stripe: create the stripe schema, register the managed webhook and
   // backfill data. Fail-soft - the platform must boot even if Stripe is
   // temporarily unreachable (Beta accounts don't depend on it).
-  initStripe().catch((err) => {
-    logger.error({ err }, "Failed to initialise Stripe (non-fatal)");
-  });
+  jobs.push(runTrackedJob("initialise Stripe", initStripe));
 
   // One-time data migration: move the 'patrick' demo account under the
   // 'aiodemo' (AIO Demonstration) agency so it can share the demo projects.
   // Safe to run repeatedly - it only fires when the parent is still 'admin'.
-  db.update(platformAccountsTable)
-    .set({ parent: "aiodemo" })
-    .where(and(
-      eq(platformAccountsTable.username, "patrick"),
-      eq(platformAccountsTable.parent, "admin"),
-    ))
-    .catch((err) => {
-      logger.warn({ err }, "Failed to reparent 'patrick' to 'aiodemo' (non-fatal)");
-    });
+  jobs.push(runTrackedJob("repair patrick parent", () =>
+    db.update(platformAccountsTable)
+      .set({ parent: "aiodemo" })
+      .where(and(
+        eq(platformAccountsTable.username, "patrick"),
+        eq(platformAccountsTable.parent, "admin"),
+      )),
+  ));
 
   // One-time repair: 'bluhalo-1' (Abbe Wheeler) was orphaned during the
   // legacy localStorage migration - its parent link was empty, making it
   // invisible to the workspace owner. Restore it to the correct parent
   // 'bluhalo'. Safe to run repeatedly - the WHERE guard means it only
   // fires when the parent is still null.
-  Promise.all([
+  jobs.push(runTrackedJob("repair orphaned bluhalo account", () => Promise.all([
     db.update(platformAccountsTable)
       .set({ parent: "bluhalo" })
       .where(and(
@@ -241,73 +226,82 @@ app.listen(port, (err) => {
         eq(platformCompaniesTable.slug, "bluhalo-1"),
         isNull(platformCompaniesTable.parentSlug),
       )),
-  ]).catch((err) => {
-    logger.warn({ err }, "Failed to repair orphaned 'bluhalo-1' account (non-fatal)");
-  });
+  ])));
 
   // Startup orphan check: log any client-role accounts with no parent so
   // an operator can spot and fix them quickly. Visibility is hierarchy-based,
   // so a parentless client is invisible to every non-admin user.
-  db.select({ username: platformAccountsTable.username })
-    .from(platformAccountsTable)
-    .where(and(
-      eq(platformAccountsTable.role, "client"),
-      isNull(platformAccountsTable.parent),
-    ))
-    .then((rows) => {
-      if (rows.length > 0) {
-        logger.warn(
-          { orphans: rows.map((r) => r.username) },
-          "platform: client accounts with no parent detected - they are invisible to non-admin users. Use the reparent endpoint to fix them.",
-        );
-      }
-    })
-    .catch((err) => {
-      logger.warn({ err }, "Failed to check for orphaned client accounts (non-fatal)");
-    });
+  jobs.push(runTrackedJob("check orphaned client accounts", async () => {
+    const rows = await db.select({ username: platformAccountsTable.username })
+      .from(platformAccountsTable)
+      .where(and(
+        eq(platformAccountsTable.role, "client"),
+        isNull(platformAccountsTable.parent),
+      ));
+    if (rows.length > 0) {
+      logger.warn(
+        { orphans: rows.map((r) => r.username) },
+        "platform: client accounts with no parent detected - they are invisible to non-admin users. Use the reparent endpoint to fix them.",
+      );
+    }
+  }));
 
-  setInterval(() => {
-    pruneExpiredSessions().catch((err) => {
-      logger.error({ err }, "Failed to prune expired sessions (scheduled)");
-    });
-    cleanupExpiredTokens().catch((err) => {
-      logger.error({ err }, "Failed to clean up expired token rows (scheduled)");
-    });
-  }, PRUNE_INTERVAL_MS).unref();
+  jobs.push(scheduleNonOverlappingJob("expired session and token cleanup", async () => {
+    await pruneExpiredSessions();
+    await cleanupExpiredTokens();
+  }, PRUNE_INTERVAL_MS));
 
   // Hourly sweep: send a reminder email to invitees whose invite expires in ~24 h.
   const REMINDER_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
-  sendInviteReminders().catch((err) => {
-    logger.error({ err }, "Failed to run invite reminder sweep on startup");
-  });
-  setInterval(() => {
-    sendInviteReminders().catch((err) => {
-      logger.error({ err }, "Failed to run invite reminder sweep (scheduled)");
-    });
-  }, REMINDER_INTERVAL_MS).unref();
+  jobs.push(scheduleNonOverlappingJob(
+    "invite reminder sweep",
+    sendInviteReminders,
+    REMINDER_INTERVAL_MS,
+  ));
 
   // Renewal reminders are intentionally fail-soft: a provider or database
   // outage must not affect request handling, and the next hourly sweep retries
   // any claim whose email was not delivered.
-  sendSubscriptionRenewalReminders().catch((err) => {
-    logger.error({ err }, "Failed to run subscription renewal reminder sweep on startup");
-  });
-  setInterval(() => {
-    sendSubscriptionRenewalReminders().catch((err) => {
-      logger.error({ err }, "Failed to run subscription renewal reminder sweep (scheduled)");
-    });
-  }, REMINDER_INTERVAL_MS).unref();
+  jobs.push(scheduleNonOverlappingJob(
+    "subscription renewal reminder sweep",
+    sendSubscriptionRenewalReminders,
+    REMINDER_INTERVAL_MS,
+  ));
 
   // Microsoft credentials are external configuration and can expire or be
   // rotated while this process remains online. Check once at startup and
   // periodically so a broken SSO provider is visible in server logs before a
   // user reports a failed sign-in.
-  checkMicrosoftOAuthCredentials().catch((err) => {
-    logger.error({ err }, "Microsoft OAuth credential health check crashed");
-  });
-  setInterval(() => {
-    checkMicrosoftOAuthCredentials().catch((err) => {
-      logger.error({ err }, "Microsoft OAuth credential health check crashed");
-    });
-  }, MICROSOFT_HEALTH_INTERVAL_MS).unref();
+  jobs.push(scheduleNonOverlappingJob(
+    "Microsoft OAuth credential health check",
+    checkMicrosoftOAuthCredentials,
+    MICROSOFT_HEALTH_INTERVAL_MS,
+  ));
 });
+
+const shutdownTimeoutMs = Number(process.env["SHUTDOWN_TIMEOUT_MS"] ?? 10_000);
+let shutdownStarted = false;
+
+async function handleShutdown(signal: NodeJS.Signals): Promise<void> {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  markRuntimeDraining();
+  logger.info({ signal }, "Shutdown started");
+  try {
+    const result = await shutdownRuntime({
+      server,
+      jobs,
+      closeResources: () => pool.end(),
+      timeoutMs: shutdownTimeoutMs,
+    });
+    logger.info({ signal, result }, "Shutdown finished");
+    process.exit(result === "drained" ? 0 : 1);
+  } catch (err) {
+    logger.error({ err, signal }, "Shutdown failed");
+    server.closeAllConnections?.();
+    process.exit(1);
+  }
+}
+
+process.once("SIGTERM", () => void handleShutdown("SIGTERM"));
+process.once("SIGINT", () => void handleShutdown("SIGINT"));
