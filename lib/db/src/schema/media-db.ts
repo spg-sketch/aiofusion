@@ -123,6 +123,15 @@ export const mediaContactSourceChecksTable = pgTable("media_contact_source_check
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [uniqueIndex("media_contact_source_checks_latest").on(table.contactId, table.checkedAt)]);
 
+export const mediaContactStatusEventsTable = pgTable("media_contact_status_events", {
+  id: serial("id").primaryKey(),
+  contactId: integer("contact_id").notNull().references(() => mediaContactsTable.id, { onDelete: "cascade" }),
+  accountId: varchar("account_id").notNull(),
+  status: varchar("status", { length: 20 }).$type<"active" | "departed">().notNull(),
+  note: text("note").notNull().default(""),
+  createdBy: varchar("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 export const mediaRecommendationSetsTable = pgTable("media_recommendation_sets", {
   id: serial("id").primaryKey(),
   accountId: varchar("account_id").notNull(),
@@ -232,9 +241,25 @@ export type MediaCategoryRow = typeof mediaCategoriesTable.$inferSelect;
 export type MediaOutletRow = typeof mediaOutletsTable.$inferSelect;
 export type MediaContactRow = typeof mediaContactsTable.$inferSelect;
 export type MediaContactSourceCheckRow = typeof mediaContactSourceChecksTable.$inferSelect;
+
+export type MediaContactStatusEventRow = typeof mediaContactStatusEventsTable.$inferSelect;
 export type MediaOutreachRow = typeof mediaOutreachTable.$inferSelect;
 export type MediaPlacementRow = typeof mediaPlacementsTable.$inferSelect;
 export const insertMediaContactSchema = createInsertSchema(mediaContactsTable).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });
 export type InsertMediaContact = z.infer<typeof insertMediaContactSchema>;
 export const insertMediaImportBatchSchema = createInsertSchema(mediaImportBatchesTable).omit({ id: true, createdAt: true });
 export type InsertMediaImportBatch = z.infer<typeof insertMediaImportBatchSchema>;
+
+export type MediaContactCorrectionReportRow = typeof mediaContactCorrectionReportsTable.$inferSelect;
+
+export const mediaContactCorrectionReportsTable = pgTable("media_contact_correction_reports", {
+  id: serial("id").primaryKey(),
+  contactId: integer("contact_id").notNull().references(() => mediaContactsTable.id, { onDelete: "cascade" }),
+  accountId: varchar("account_id").notNull(),
+  fields: text("fields").array().notNull().default([]),
+  details: text("details").notNull(),
+  status: varchar("status", { length: 20 }).$type<"pending" | "reviewed">().notNull().default("pending"),
+  reportedBy: varchar("reported_by").notNull(),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

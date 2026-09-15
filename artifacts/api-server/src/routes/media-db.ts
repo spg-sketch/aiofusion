@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaImportBatchesTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, mediaOutreachTable, mediaOutreachActivitiesTable, mediaPlacementsTable, projectsTable, type MediaOutreachStatus } from "@workspace/db";
+import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaContactStatusEventsTable, mediaContactCorrectionReportsTable, mediaImportBatchesTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, mediaOutreachTable, mediaOutreachActivitiesTable, mediaPlacementsTable, projectsTable, type MediaOutreachStatus } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { inAssignedScope, memberProjectGate } from "../lib/member-guards";
@@ -86,6 +86,17 @@ async function editableContact(req: Request, id: number) {
     return { ok: false as const, status: 403, error: "You can only check your own contacts" };
   }
   return { ok: true as const, row, owner: mediaOverrideOwner(row.accountId) };
+}
+
+async function visibleContact(req: Request, id: number) {
+  const rows = await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, id)).limit(1);
+  const row = rows[0];
+  if (!row || row.deletedAt) return { ok: false as const, status: 404, error: "Contact not found" };
+  const visible = await visibleAccounts(req);
+  if (row.accountId !== null && visible !== null && !visible.includes(row.accountId)) {
+    return { ok: false as const, status: 404, error: "Contact not found" };
+  }
+  return { ok: true as const, row };
 }
 
 // ---------------------------------------------------------------------------
@@ -624,6 +635,157 @@ function inferredOutletCountry(geography: string): string {
   if (/\b(uk|united kingdom|britain|british|england|scotland|wales|london)\b/.test(value)) return "United Kingdom";
   return geography.trim();
 }
+
+const SEARCH_FIELDS = ["phrase", "topic", "location", "category"] as const;
+
+function cleanSearchValue(value: unknown): string {
+  return typeof value === "string" ? value.trim().slice(0, 500) : "";
+}
+
+function authorityNumber(value: string | null | undefined): number {
+  const parsed = Number(String(value ?? "").match(/\d+(?:\.\d+)?/)?.[0]);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function matchedTextFields(fields: Record<string, unknown>, terms: string[]): string[] {
+  if (!terms.length) return [];
+  return Object.entries(fields)
+    .filter(([, value]) => terms.some((term) => String(value ?? "").toLowerCase().includes(term)))
+    .map(([field]) => field);
+}
+
+router.get(
+  "/store/media-db/search",
+  requirePlatformAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const visible = await visibleAccounts(req);
+      const workspaceId = normUsername(req.account!.username);
+      const interpretation = Object.fromEntries(SEARCH_FIELDS.map((field) => [field, cleanSearchValue(req.query[field])])) as Record<typeof SEARCH_FIELDS[number], string>;
+      const minimumAuthority = Math.max(0, Math.min(100, Number(req.query.authority) || 0));
+      const page = Math.max(1, Number(req.query.page) || 1);
+      const pageSize = Math.max(1, Math.min(100, Number(req.query.pageSize) || 25));
+      const phraseGroups = searchTokens(interpretation.phrase.toLowerCase());
+      const topicGroups = searchTokens(interpretation.topic.toLowerCase());
+      const queryTerms = [...phraseGroups, ...topicGroups].flat();
+      const phraseTerms = interpretation.phrase ? [interpretation.phrase.toLowerCase()] : [];
+
+      const [contacts, outlets, statusEvents, correctionReports] = await Promise.all([
+        db.select({
+          contact: mediaContactsTable,
+          outletName: mediaOutletsTable.name,
+          outletCategory: mediaOutletsTable.category,
+          outletWebsite: mediaOutletsTable.website,
+          outletCountry: mediaOutletsTable.country,
+          outletReachBand: mediaOutletsTable.reachBand,
+          outletAccountId: mediaOutletsTable.accountId,
+        }).from(mediaContactsTable).leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
+          .where(isNull(mediaContactsTable.deletedAt)),
+        db.select().from(mediaOutletsTable).where(isNull(mediaOutletsTable.deletedAt)),
+        db.select().from(mediaContactStatusEventsTable).where(eq(mediaContactStatusEventsTable.accountId, workspaceId)).orderBy(desc(mediaContactStatusEventsTable.createdAt), desc(mediaContactStatusEventsTable.id)),
+        db.select().from(mediaContactCorrectionReportsTable).where(and(eq(mediaContactCorrectionReportsTable.accountId, workspaceId), eq(mediaContactCorrectionReportsTable.status, "pending"))),
+      ]);
+
+      const latestStatus = new Map<number, typeof statusEvents[number]>();
+      for (const event of statusEvents) if (!latestStatus.has(event.contactId)) latestStatus.set(event.contactId, event);
+      const pendingCorrections = new Set(correctionReports.map((report) => report.contactId));
+      const location = interpretation.location.toLowerCase();
+      const category = interpretation.category.toLowerCase();
+
+      const contactResults = contacts.flatMap(({ contact, outletName, outletCategory, outletWebsite, outletCountry, outletReachBand, outletAccountId }) => {
+        if (contact.accountId !== null && visible !== null && !visible.includes(contact.accountId)) return [];
+        const outletAllowed = outletVisible(outletAccountId ?? null, visible);
+        const safeOutlet = outletAllowed ? { outletName, outletCategory, outletWebsite, outletCountry, outletReachBand } : { outletName: null, outletCategory: null, outletWebsite: null, outletCountry: null, outletReachBand: null };
+        const searchable = {
+          name: `${contact.firstName} ${contact.lastName}`.trim(), role: contact.role, email: contact.email,
+          publication: safeOutlet.outletName, topic: [...contact.beats, ...contact.sectors].join(" "),
+          location: `${contact.geography} ${safeOutlet.outletCountry ?? ""}`, category: safeOutlet.outletCategory, notes: contact.notes,
+        };
+        const topicCorpus = searchable.topic.toLowerCase();
+        const matchedFields = matchedTextFields(searchable, queryTerms);
+        if (phraseGroups.some((alternatives) => !alternatives.some((term) => Object.values(searchable).some((value) => String(value ?? "").toLowerCase().includes(term))))) return [];
+        if (topicGroups.some((alternatives) => !alternatives.some((term) => topicCorpus.includes(term)))) return [];
+        if (location && !countryMatchesFilter(location, safeOutlet.outletCountry ?? "", contact.geography)) return [];
+        if (category && !String(safeOutlet.outletCategory ?? "").toLowerCase().includes(category) && !contact.sectors.some((sector) => sector.toLowerCase().includes(category))) return [];
+        const authority = Math.max(authorityNumber(contact.journalistAuthority), authorityNumber(contact.publicationAuthority));
+        if (authority < minimumAuthority) return [];
+        const phraseMatches = phraseTerms.filter((phrase) => Object.values(searchable).some((value) => String(value ?? "").toLowerCase().includes(phrase)));
+        const status = latestStatus.get(contact.id)?.status ?? "active";
+        const reasons = [
+          matchedFields.length ? `Matched ${matchedFields.slice(0, 3).join(", ")}.` : "Matches the selected filters.",
+          phraseMatches.length ? `Contains the exact phrase "${interpretation.phrase}".` : interpretation.phrase ? "Related topic terms match, but the full phrase was not found." : "",
+          authority ? `Authority ${authority}.` : "",
+        ].filter(Boolean);
+        return [{ type: "contact" as const, id: contact.id, contact: { ...contact, ...safeOutlet, lifecycleStatus: status, hasPendingCorrection: pendingCorrections.has(contact.id) }, matchedFields, matchedPhrases: phraseMatches, reasons, authority }];
+      });
+
+      const outletResults = outlets.flatMap((outlet) => {
+        if (!outletVisible(outlet.accountId, visible)) return [];
+        // Outlets do not currently store a standalone authority score. When an
+        // authority threshold is active, return only contacts with measured
+        // journalist/publication authority instead of implying an outlet score.
+        if (minimumAuthority > 0) return [];
+        const searchable = { publication: outlet.name, topic: outlet.description, location: outlet.country, category: outlet.category, website: outlet.website };
+        const topicCorpus = `${outlet.description} ${outlet.category}`.toLowerCase();
+        const matchedFields = matchedTextFields(searchable, queryTerms);
+        if (phraseGroups.some((alternatives) => !alternatives.some((term) => Object.values(searchable).some((value) => String(value).toLowerCase().includes(term))))) return [];
+        if (topicGroups.some((alternatives) => !alternatives.some((term) => topicCorpus.includes(term)))) return [];
+        if (location && !countryMatchesFilter(location, outlet.country, "")) return [];
+        if (category && !outlet.category.toLowerCase().includes(category)) return [];
+        const phraseMatches = phraseTerms.filter((phrase) => Object.values(searchable).some((value) => String(value).toLowerCase().includes(phrase)));
+        return [{ type: "outlet" as const, id: outlet.id, outlet, matchedFields, matchedPhrases: phraseMatches, reasons: [matchedFields.length ? `Matched ${matchedFields.slice(0, 3).join(", ")}.` : "Matches the selected filters.", phraseMatches.length ? `Contains the exact phrase "${interpretation.phrase}".` : ""].filter(Boolean), authority: 0 }];
+      });
+
+      const results = [...contactResults, ...outletResults].sort((a, b) =>
+        Number(b.matchedPhrases.length > 0) - Number(a.matchedPhrases.length > 0)
+        || b.matchedFields.length - a.matchedFields.length
+        || b.authority - a.authority
+        || a.type.localeCompare(b.type)
+        || a.id - b.id);
+      res.json({
+        interpretation: { ...interpretation, authority: minimumAuthority },
+        results: results.slice((page - 1) * pageSize, page * pageSize),
+        total: results.length, page, pageSize,
+        counts: { contacts: contactResults.length, outlets: outletResults.length },
+      });
+    } catch (error) {
+      req.log.warn({ err: error }, "Media database unified search failed");
+      res.status(500).json({ error: "Failed to search the media database" });
+    }
+  },
+);
+
+router.post("/store/media-db/contacts/:id/status", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const status = req.body?.status;
+  if (!id || (status !== "active" && status !== "departed")) { res.status(400).json({ error: "Choose a valid contact status." }); return; }
+  const access = await visibleContact(req, id);
+  if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+  const note = typeof req.body?.note === "string" ? req.body.note.trim().slice(0, 1000) : "";
+  const workspaceId = normUsername(req.account!.username);
+  const actorId = req.account!.userId ?? req.platformUser?.id ?? workspaceId;
+  const [event] = await db.insert(mediaContactStatusEventsTable).values({
+    contactId: id, accountId: workspaceId, status, note, createdBy: actorId,
+  }).returning();
+  res.json({ ok: true, statusEvent: event });
+});
+
+router.post("/store/media-db/contacts/:id/corrections", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!id) { res.status(400).json({ error: "Invalid contact id." }); return; }
+  const access = await visibleContact(req, id);
+  if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+  const details = typeof req.body?.details === "string" ? req.body.details.trim().slice(0, 4000) : "";
+  const reportableFields = new Set(["firstName", "lastName", "role", "email", "phone", "mobile", "outletId", "linkedinUrl", "twitterHandle", "sourceUrl"]);
+  const fields = cleanContactArray(req.body?.fields)?.filter((field) => reportableFields.has(field)) ?? [];
+  if (!details || fields.length === 0) { res.status(400).json({ error: "Select at least one field and explain what needs review." }); return; }
+  const workspaceId = normUsername(req.account!.username);
+  const actorId = req.account!.userId ?? req.platformUser?.id ?? workspaceId;
+  const [report] = await db.insert(mediaContactCorrectionReportsTable).values({
+    contactId: id, accountId: workspaceId, fields, details, reportedBy: actorId,
+  }).returning();
+  res.json({ ok: true, correction: report });
+});
 
 router.get(
   "/store/media-db/contacts",

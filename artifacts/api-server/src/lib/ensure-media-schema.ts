@@ -159,6 +159,30 @@ export async function ensureMediaSchema(): Promise<void> {
     )
   `);
   await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS media_contact_status_events (
+      id serial PRIMARY KEY,
+      contact_id integer NOT NULL,
+      account_id varchar NOT NULL,
+      status varchar(20) NOT NULL,
+      note text NOT NULL DEFAULT '',
+      created_by varchar NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS media_contact_correction_reports (
+      id serial PRIMARY KEY,
+      contact_id integer NOT NULL,
+      account_id varchar NOT NULL,
+      fields text[] NOT NULL DEFAULT ARRAY[]::text[],
+      details text NOT NULL,
+      status varchar(20) NOT NULL DEFAULT 'pending',
+      reported_by varchar NOT NULL,
+      reviewed_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS media_source_reverification_runs (
       singleton_id integer PRIMARY KEY CHECK (singleton_id = 1),
       started_at timestamptz NOT NULL
@@ -320,6 +344,14 @@ export async function ensureMediaSchema(): Promise<void> {
       ON media_contact_source_checks (contact_id, checked_at)
   `);
   await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS media_contact_status_events_workspace_contact
+      ON media_contact_status_events (account_id, contact_id, created_at DESC)
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS media_contact_corrections_workspace_status
+      ON media_contact_correction_reports (account_id, status, contact_id)
+  `);
+  await db.execute(sql`
     CREATE UNIQUE INDEX IF NOT EXISTS media_recommendation_items_unique
       ON media_recommendation_items (recommendation_set_id, contact_id)
   `);
@@ -354,6 +386,14 @@ export async function ensureMediaSchema(): Promise<void> {
       END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_contact_source_checks_contact_id_fkey') THEN
         ALTER TABLE media_contact_source_checks ADD CONSTRAINT media_contact_source_checks_contact_id_fkey
+          FOREIGN KEY (contact_id) REFERENCES media_contacts(id) ON DELETE CASCADE NOT VALID;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_contact_status_events_contact_id_fkey') THEN
+        ALTER TABLE media_contact_status_events ADD CONSTRAINT media_contact_status_events_contact_id_fkey
+          FOREIGN KEY (contact_id) REFERENCES media_contacts(id) ON DELETE CASCADE NOT VALID;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_contact_correction_reports_contact_id_fkey') THEN
+        ALTER TABLE media_contact_correction_reports ADD CONSTRAINT media_contact_correction_reports_contact_id_fkey
           FOREIGN KEY (contact_id) REFERENCES media_contacts(id) ON DELETE CASCADE NOT VALID;
       END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_recommendation_items_recommendation_set_id_fkey') THEN

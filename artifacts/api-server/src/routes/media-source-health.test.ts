@@ -39,6 +39,16 @@ vi.mock("@workspace/db", async () => {
       observed_evidence jsonb NOT NULL DEFAULT '{}', differences jsonb NOT NULL DEFAULT '[]',
       checked_at timestamptz NOT NULL DEFAULT now(), reviewed_at timestamptz, created_at timestamptz NOT NULL DEFAULT now()
     );
+    CREATE TABLE media_contact_status_events (
+      id serial PRIMARY KEY, contact_id integer NOT NULL, account_id varchar NOT NULL,
+      status varchar(20) NOT NULL, note text NOT NULL DEFAULT '', created_by varchar NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE media_contact_correction_reports (
+      id serial PRIMARY KEY, contact_id integer NOT NULL, account_id varchar NOT NULL,
+      fields text[] NOT NULL DEFAULT '{}', details text NOT NULL, status varchar(20) NOT NULL DEFAULT 'pending',
+      reported_by varchar NOT NULL, reviewed_at timestamptz, created_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE TABLE media_source_reverification_runs (
       singleton_id integer PRIMARY KEY,
       started_at timestamptz NOT NULL
@@ -92,6 +102,10 @@ async function put(path: string, account = "account-a", body?: unknown) {
   });
 }
 
+async function get(path: string, account = "account-a") {
+  return fetch(`${baseUrl}/api${path}`, { headers: { "x-account": account } });
+}
+
 describe("media source health routes", () => {
   beforeAll(async () => {
     const app = express();
@@ -103,7 +117,7 @@ describe("media source health routes", () => {
   });
 
   beforeEach(async () => {
-    await __client.exec("TRUNCATE media_contact_source_checks, media_contact_field_overrides, media_contacts RESTART IDENTITY");
+    await __client.exec("TRUNCATE media_contact_correction_reports, media_contact_status_events, media_contact_source_checks, media_contact_field_overrides, media_contacts, media_outlets RESTART IDENTITY");
     fetchMediaSourceEvidence.mockReset();
   });
 
@@ -172,5 +186,48 @@ describe("media source health routes", () => {
       sourceCheckClaimToken: null,
       sourceCheckFailureCount: 0,
     }));
+  });
+
+  it("combines contacts and publications with match explanations without leaking workspaces", async () => {
+    const [outlet] = await db.insert(workspaceDb.mediaOutletsTable).values({
+      name: "Climate Technology Review", category: "Technology", country: "United Kingdom", accountId: "account-a",
+    }).returning();
+    await db.insert(mediaContactsTable).values({
+      outletId: outlet.id, firstName: "Jane", lastName: "Reporter", role: "Climate Editor",
+      beats: ["climate technology"], geography: "London", journalistAuthority: "82", accountId: "account-a",
+    });
+    await db.insert(mediaContactsTable).values({
+      firstName: "Private", lastName: "Reporter", role: "Climate Editor", accountId: "account-b",
+    });
+
+    const response = await get("/store/media-db/search?phrase=climate%20technology&location=UK&category=Technology&authority=70");
+    expect(response.status).toBe(200);
+    const body = await response.json() as { total: number; counts: { contacts: number; outlets: number }; results: Array<{ type: string; matchedFields: string[]; matchedPhrases: string[]; reasons: string[] }> };
+    expect(body.counts).toEqual({ contacts: 1, outlets: 0 });
+    expect(body.total).toBe(1);
+    expect(body.results[0]).toEqual(expect.objectContaining({
+      type: "contact",
+      matchedFields: expect.arrayContaining(["topic"]),
+      matchedPhrases: ["climate technology"],
+      reasons: expect.arrayContaining([expect.stringContaining("exact phrase")]),
+    }));
+
+    const synonymResponse = await get("/store/media-db/search?phrase=tech");
+    expect((await synonymResponse.json() as { counts: { contacts: number; outlets: number } }).counts).toEqual({ contacts: 1, outlets: 1 });
+    const strictTopicResponse = await get("/store/media-db/search?topic=Jane");
+    expect((await strictTopicResponse.json() as { total: number }).total).toBe(0);
+  });
+
+  it("stores departed status and correction reports per workspace without changing trusted fields", async () => {
+    const [contact] = await db.insert(mediaContactsTable).values({
+      firstName: "Global", lastName: "Reporter", role: "Editor", email: "trusted@example.com", accountId: null,
+    }).returning();
+    expect((await post(`/store/media-db/contacts/${contact.id}/status`, "account-a", { status: "departed" })).status).toBe(200);
+    expect((await post(`/store/media-db/contacts/${contact.id}/corrections`, "account-a", { fields: ["email"], details: "This address bounces." })).status).toBe(200);
+
+    const accountA = await (await get("/store/media-db/search?topic=Editor", "account-a")).json() as { results: Array<{ contact: { lifecycleStatus: string; hasPendingCorrection: boolean; email: string } }> };
+    const accountB = await (await get("/store/media-db/search?topic=Editor", "account-b")).json() as { results: Array<{ contact: { lifecycleStatus: string; hasPendingCorrection: boolean; email: string } }> };
+    expect(accountA.results[0].contact).toEqual(expect.objectContaining({ lifecycleStatus: "departed", hasPendingCorrection: true, email: "trusted@example.com" }));
+    expect(accountB.results[0].contact).toEqual(expect.objectContaining({ lifecycleStatus: "active", hasPendingCorrection: false, email: "trusted@example.com" }));
   });
 });

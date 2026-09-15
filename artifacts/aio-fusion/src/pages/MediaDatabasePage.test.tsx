@@ -37,6 +37,20 @@ describe("MediaDatabasePage source health", () => {
       if (url.includes("/source-check")) {
         return new Response(JSON.stringify({ ok: true, sourceCheck: changedContact.sourceCheck }), { status: 200 });
       }
+      if (url.includes("/media-db/search")) {
+        return new Response(JSON.stringify({
+          interpretation: { phrase: "energy", topic: "", location: "", category: "", authority: 0 },
+          results: [{
+            type: "contact", id: 12, contact: changedContact, authority: 75,
+            matchedFields: ["role"], matchedPhrases: ["energy"],
+            reasons: ["Matched role.", "Contains the exact phrase \"energy\"."],
+          }, {
+            type: "outlet", id: 20, outlet: { id: 20, name: "Energy Weekly", category: "Energy", website: "energy.example", description: "", country: "UK", reachBand: "National", accountId: null },
+            authority: 0, matchedFields: ["publication"], matchedPhrases: [], reasons: ["Matched publication."],
+          }],
+          total: 2, counts: { contacts: 1, outlets: 1 },
+        }), { status: 200 });
+      }
       if (url.includes("/contacts")) {
         return new Response(JSON.stringify({
           contacts: [changedContact, {
@@ -72,5 +86,20 @@ describe("MediaDatabasePage source health", () => {
       expect.stringContaining("/source-checks/44/approve"),
       expect.objectContaining({ method: "POST" }),
     ));
+  });
+
+  it("shows unified explained results and opens a provenance-safe correction report", async () => {
+    render(<MediaDatabasePage />);
+    await screen.findByText("Jane Reporter");
+    fireEvent.change(screen.getByLabelText("Search contacts and publications"), { target: { value: "energy" } });
+    expect(await screen.findByText("Energy Weekly")).toBeTruthy();
+    expect(screen.getByText("1 contacts and 1 publications", { exact: false })).toBeTruthy();
+    expect(screen.getByText("Matched role")).toBeTruthy();
+    expect(screen.getByText("Exact phrase: “energy”")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Flag incorrect details" }));
+    expect(screen.getByText(/does not overwrite the trusted record/i)).toBeTruthy();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole("dialog").parentElement!, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

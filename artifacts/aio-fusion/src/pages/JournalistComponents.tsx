@@ -63,6 +63,8 @@ export type Contact = {
       mediaOpportunity?: string;
     };
   } | null;
+  lifecycleStatus?: "active" | "departed";
+  hasPendingCorrection?: boolean;
 };
 
 export type MediaByline = { title: string; url?: string; date?: string; summary?: string };

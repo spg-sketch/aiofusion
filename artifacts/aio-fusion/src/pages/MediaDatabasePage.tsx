@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
   TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
@@ -102,6 +102,9 @@ import type { Contact } from "./JournalistComponents";
 import { RecommendationCard } from "./JournalistComponents";
 
 type Outlet = { id: number; name: string; category: string; website: string; description: string; country: string; reachBand: string; accountId: string | null };
+type UnifiedResult =
+  | { type: "contact"; id: number; contact: Contact; matchedFields: string[]; matchedPhrases: string[]; reasons: string[]; authority: number }
+  | { type: "outlet"; id: number; outlet: Outlet; matchedFields: string[]; matchedPhrases: string[]; reasons: string[]; authority: number };
 
 type ImportPreview = {
   validRows: number;
@@ -135,6 +138,22 @@ function MediaDatabasePage() {
   const [contactDirection, setContactDirection] = useState<"asc" | "desc">("asc");
   const [contactPage, setContactPage] = useState(1);
   const [contactTotal, setContactTotal] = useState(0);
+  const [searchPhrase, setSearchPhrase] = useState("");
+  const [searchTopic, setSearchTopic] = useState("");
+  const [searchLocation, setSearchLocation] = useState("");
+  const [searchCategory, setSearchCategory] = useState("");
+  const [searchAuthority, setSearchAuthority] = useState("");
+  const [searchResults, setSearchResults] = useState<UnifiedResult[]>([]);
+  const [searchTotal, setSearchTotal] = useState(0);
+  const [searchCounts, setSearchCounts] = useState({ contacts: 0, outlets: 0 });
+  const [searchPage, setSearchPage] = useState(1);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [statusBusyId, setStatusBusyId] = useState<number | null>(null);
+  const [correctionContact, setCorrectionContact] = useState<Contact | null>(null);
+  const [correctionFields, setCorrectionFields] = useState<string[]>([]);
+  const [correctionDetails, setCorrectionDetails] = useState("");
+  const [correctionBusy, setCorrectionBusy] = useState(false);
 
   const [showOutletModal, setShowOutletModal] = useState(false);
   const [editingOutlet, setEditingOutlet] = useState<Outlet | null>(null);
@@ -192,6 +211,30 @@ function MediaDatabasePage() {
   };
 
   useEffect(() => { void loadData(); }, []);
+
+  const searchActive = Boolean(searchPhrase || searchTopic || searchLocation || searchCategory || searchAuthority);
+  useEffect(() => {
+    if (!searchActive) { setSearchResults([]); setSearchTotal(0); return; }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams({ page: String(searchPage), pageSize: "25" });
+      if (searchPhrase.trim()) params.set("phrase", searchPhrase.trim());
+      if (searchTopic.trim()) params.set("topic", searchTopic.trim());
+      if (searchLocation.trim()) params.set("location", searchLocation.trim());
+      if (searchCategory) params.set("category", searchCategory);
+      if (searchAuthority) params.set("authority", searchAuthority);
+      setSearchLoading(true);
+      fetch(`${apiBase()}/api/store/media-db/search?${params}`, { credentials: "include", signal: controller.signal })
+        .then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not search the media database.")))
+        .then((data) => {
+          setSearchResults(data.results ?? []); setSearchTotal(data.total ?? 0);
+          setSearchCounts(data.counts ?? { contacts: 0, outlets: 0 });
+        })
+        .catch((error) => { if (error.name !== "AbortError") console.error(error); })
+        .finally(() => setSearchLoading(false));
+    }, 200);
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [searchActive, searchPhrase, searchTopic, searchLocation, searchCategory, searchAuthority, searchPage]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -394,6 +437,35 @@ function MediaDatabasePage() {
     setSourceCheckingId(null);
   };
 
+  const setContactStatus = async (contact: Contact, status: "active" | "departed") => {
+    setStatusBusyId(contact.id);
+    try {
+      const response = await fetch(`${apiBase()}/api/store/media-db/contacts/${contact.id}/status`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!response.ok) throw new Error("Could not update contact status.");
+      setSearchResults((current) => current.map((result) => result.type === "contact" && result.id === contact.id
+        ? { ...result, contact: { ...result.contact, lifecycleStatus: status } } : result));
+      await loadData();
+    } finally { setStatusBusyId(null); }
+  };
+
+  const submitCorrection = async () => {
+    if (!correctionContact || !correctionFields.length || !correctionDetails.trim()) return;
+    setCorrectionBusy(true);
+    try {
+      const response = await fetch(`${apiBase()}/api/store/media-db/contacts/${correctionContact.id}/corrections`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fields: correctionFields, details: correctionDetails }),
+      });
+      if (!response.ok) throw new Error("Could not submit this report.");
+      setSearchResults((current) => current.map((result) => result.type === "contact" && result.id === correctionContact.id
+        ? { ...result, contact: { ...result.contact, hasPendingCorrection: true } } : result));
+      setCorrectionContact(null); setCorrectionFields([]); setCorrectionDetails("");
+    } finally { setCorrectionBusy(false); }
+  };
+
   const sourceBadge = (contact: Contact) => {
     const labels = { current: "Current", due: "Due for review", unavailable: "Unavailable", changed: "Changed", unverified: "Unverified" };
     const colors = {
@@ -415,8 +487,8 @@ function MediaDatabasePage() {
   };
 
   // Export contacts
-  const exportContacts = async (format: "xlsx" | "word") => {
-    const rows = filteredContacts;
+  const exportContacts = async (format: "xlsx" | "word", selectedRows?: Contact[]) => {
+    const rows = selectedRows ?? filteredContacts;
     if (format === "xlsx") {
       const headers = ["First Name", "Last Name", "Role", "Email", "Phone", "Outlet", "Category", "Notes"];
       const dataRows = rows.map((c) => [c.firstName, c.lastName, c.role, c.email, c.phone, c.outletName ?? "", c.outletCategory ?? "", c.notes]);
@@ -453,6 +525,80 @@ function MediaDatabasePage() {
         <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>Publications, journalists and custom trade media categories for your account.</p>
       </div>
 
+      <section className="mb-5 rounded-2xl border bg-white shadow-sm" style={{ borderColor: vars.g200 }}>
+        <div className="p-4 sm:p-5">
+          <label htmlFor="media-primary-search" className="block text-[12px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: vars.navy }}>Search contacts and publications</label>
+          <div className="flex items-center gap-2 rounded-xl border px-3" style={{ borderColor: vars.g200 }}>
+            <Search size={18} color={vars.g400} />
+            <input id="media-primary-search" value={searchPhrase} onChange={(event) => { setSearchPhrase(event.target.value); setSearchPage(1); }} placeholder="Enter an exact LLM phrase, journalist or publication" className="w-full py-3 text-[14px] outline-none" />
+            {searchPhrase && <button aria-label="Clear search phrase" onClick={() => setSearchPhrase("")}><X size={16} color={vars.g400} /></button>}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button aria-expanded={showFilters} onClick={() => setShowFilters((value) => !value)} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>
+              <Tag size={13} /> Refine interpretation <ChevronDown size={13} className={showFilters ? "rotate-180" : ""} />
+            </button>
+            {[searchTopic && `Topic: ${searchTopic}`, searchLocation && `Location: ${searchLocation}`, searchCategory && `Category: ${searchCategory}`, searchAuthority && `Authority: ${searchAuthority}+`].filter(Boolean).map((label) => <span key={label as string} className="rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ background: vars.g100, color: vars.navy }}>{label}</span>)}
+            {searchActive && <button onClick={() => { setSearchPhrase(""); setSearchTopic(""); setSearchLocation(""); setSearchCategory(""); setSearchAuthority(""); setSearchPage(1); }} className="text-[12px] font-semibold underline" style={{ color: vars.g500 }}>Clear all</button>}
+          </div>
+          {showFilters && <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 rounded-xl p-3" style={{ background: vars.g50 }}>
+            <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Topic<input value={searchTopic} onChange={(e) => { setSearchTopic(e.target.value); setSearchPage(1); }} placeholder="e.g. fintech" className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-[13px] font-normal" style={{ borderColor: vars.g200 }} /></label>
+            <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Location<input value={searchLocation} onChange={(e) => { setSearchLocation(e.target.value); setSearchPage(1); }} placeholder="e.g. London or UK" className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-[13px] font-normal" style={{ borderColor: vars.g200 }} /></label>
+            <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Category<select value={searchCategory} onChange={(e) => { setSearchCategory(e.target.value); setSearchPage(1); }} className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-[13px] font-normal" style={{ borderColor: vars.g200 }}><option value="">Any category</option>{allCategories.map((category) => <option key={category}>{category}</option>)}</select></label>
+            <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Minimum authority<input type="number" min="0" max="100" value={searchAuthority} onChange={(e) => { setSearchAuthority(e.target.value); setSearchPage(1); }} placeholder="0-100" className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-[13px] font-normal" style={{ borderColor: vars.g200 }} /></label>
+          </div>}
+        </div>
+        <div className="border-t px-4 py-3 flex flex-wrap gap-2 justify-between" style={{ borderColor: vars.g100, background: vars.g50 }}>
+          <span className="text-[11px]" style={{ color: vars.g500 }}>Database management</span>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={openAddContact} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.accent }}><Plus size={13} /> Add contact</button>
+            <button onClick={openAddOutlet} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}><Building2 size={13} /> Add publication</button>
+            <button onClick={openImport} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}><Upload size={13} /> Import</button>
+          </div>
+        </div>
+      </section>
+
+      {searchActive && <section className="mb-6">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <p className="text-[13px]" style={{ color: vars.g500 }}>{searchLoading ? "Searching..." : `${searchTotal} results: ${searchCounts.contacts} contacts and ${searchCounts.outlets} publications`}</p>
+          {searchResults.some((result) => result.type === "contact") && <button onClick={() => void exportContacts("xlsx", searchResults.flatMap((result) => result.type === "contact" ? [result.contact] : []))} className="inline-flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: vars.navy }}><Download size={13} /> Export this page</button>}
+        </div>
+        <div className="space-y-3" aria-live="polite">
+          {searchResults.map((result) => {
+            const isContact = result.type === "contact";
+            const contact = isContact ? result.contact : null;
+            const outlet = !isContact ? result.outlet : null;
+            return <article key={`${result.type}-${result.id}`} className="rounded-2xl border bg-white p-4 sm:p-5" style={{ borderColor: contact?.lifecycleStatus === "departed" ? "#F59E0B" : vars.g200 }}>
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide" style={{ background: isContact ? "rgba(31,116,143,0.1)" : "rgba(201,160,78,0.18)", color: isContact ? vars.accent : "#7A5E25" }}>{isContact ? "Contact" : "Publication"}</span>
+                    {contact?.lifecycleStatus === "departed" && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">Departed</span>}
+                    {contact?.hasPendingCorrection && <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-800">Correction pending</span>}
+                  </div>
+                  <h2 className="text-[18px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{contact ? `${contact.firstName} ${contact.lastName}`.trim() : outlet?.name}</h2>
+                  <p className="mt-1 text-[13px]" style={{ color: vars.g600 }}>{contact ? [contact.role || "Editorial contact", contact.outletName].filter(Boolean).join(" at ") : [outlet?.category, outlet?.country].filter(Boolean).join(" · ")}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {result.authority > 0 && <span className="rounded-lg border px-2.5 py-1.5 text-[11px] font-bold" style={{ borderColor: vars.g200, color: vars.navy }}>Authority {result.authority}</span>}
+                  {contact && sourceBadge(contact)}
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">{result.matchedFields.map((field) => <span key={field} className="rounded-md bg-yellow-100 px-2 py-1 text-[11px] font-semibold text-yellow-900">Matched {field}</span>)}{result.matchedPhrases.map((phrase) => <span key={phrase} className="rounded-md bg-indigo-100 px-2 py-1 text-[11px] font-semibold text-indigo-900">Exact phrase: “{phrase}”</span>)}</div>
+              <ul className="mt-3 space-y-1 text-[12px]" style={{ color: vars.g600 }}>{result.reasons.map((reason) => <li key={reason} className="flex gap-2"><Check size={13} className="mt-0.5 shrink-0" color={vars.accent} />{reason}</li>)}</ul>
+              <div className="mt-4 pt-3 border-t flex flex-wrap gap-2" style={{ borderColor: vars.g100 }}>
+                {contact && <><button onClick={() => setShowContactProfile(contact)} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>View profile</button>
+                  <button disabled={statusBusyId === contact.id} onClick={() => void setContactStatus(contact, contact.lifecycleStatus === "departed" ? "active" : "departed")} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.g600 }}>{contact.lifecycleStatus === "departed" ? "Mark active" : "Mark as departed"}</button>
+                  <button onClick={() => { setCorrectionContact(contact); setCorrectionFields([]); setCorrectionDetails(""); }} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.g600 }}>Flag incorrect details</button></>}
+                {outlet?.website && <a href={outlet.website.startsWith("http") ? outlet.website : `https://${outlet.website}`} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Visit publication</a>}
+              </div>
+            </article>;
+          })}
+          {!searchLoading && searchResults.length === 0 && <div className="rounded-2xl border bg-white py-12 text-center" style={{ borderColor: vars.g200 }}><Search size={28} className="mx-auto mb-2" color={vars.g300} /><p className="font-semibold" style={{ color: vars.navy }}>No matching contacts or publications</p><p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Clear a filter or broaden the topic.</p></div>}
+        </div>
+        {searchTotal > 25 && <div className="flex justify-end items-center gap-3 mt-3 text-[12px]" style={{ color: vars.navy }}><button disabled={searchPage === 1} onClick={() => setSearchPage((page) => page - 1)} className="px-3 py-1 border rounded disabled:opacity-40">Previous</button><span>Page {searchPage} of {Math.ceil(searchTotal / 25)}</span><button disabled={searchPage * 25 >= searchTotal} onClick={() => setSearchPage((page) => page + 1)} className="px-3 py-1 border rounded disabled:opacity-40">Next</button></div>}
+      </section>}
+
+      {!searchActive && <>
       {/* Tabs */}
       <div className="flex gap-1 mb-6 p-1 rounded-xl inline-flex" style={{ background: vars.g100 }}>
         {(["outlets", "contacts"] as const).map((t) => (
@@ -632,6 +778,17 @@ function MediaDatabasePage() {
           {contactTotal > 50 && <div className="flex justify-end items-center gap-3 mt-3 text-[12px]" style={{ color: vars.navy }}><button disabled={contactPage === 1} onClick={() => setContactPage((page) => page - 1)} className="px-3 py-1 border rounded disabled:opacity-40">Previous</button><span>Page {contactPage} of {Math.ceil(contactTotal / 50)}</span><button disabled={contactPage * 50 >= contactTotal} onClick={() => setContactPage((page) => page + 1)} className="px-3 py-1 border rounded disabled:opacity-40">Next</button></div>}
         </div>
       )}
+      </>}
+
+      {correctionContact && <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setCorrectionContact(null)} onKeyDown={(event) => { if (event.key === "Escape") setCorrectionContact(null); }}>
+        <div role="dialog" aria-modal="true" aria-labelledby="correction-title" className="bg-white rounded-2xl max-w-lg w-full max-h-[calc(100dvh-1.5rem)] overflow-y-auto p-5" onClick={(event) => event.stopPropagation()}>
+          <div className="flex items-start justify-between gap-3"><h2 id="correction-title" className="text-[17px] font-semibold" style={{ color: vars.navy }}>Flag incorrect contact details</h2><button aria-label="Close correction report" onClick={() => setCorrectionContact(null)} className="p-1"><X size={18} color={vars.g400} /></button></div>
+          <p className="text-[12px] mt-1 mb-4" style={{ color: vars.g500 }}>This sends a review request. It does not overwrite the trusted record.</p>
+          <fieldset><legend className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: vars.g500 }}>Fields to review</legend><div className="grid grid-cols-2 gap-2">{[["firstName", "first name"], ["lastName", "last name"], ["role", "role"], ["email", "email"], ["phone", "phone"], ["outletId", "publication"], ["linkedinUrl", "LinkedIn"], ["sourceUrl", "source"]].map(([field, label]) => <label key={field} className="flex items-center gap-2 text-[12px]"><input type="checkbox" checked={correctionFields.includes(field)} onChange={(event) => setCorrectionFields((current) => event.target.checked ? [...current, field] : current.filter((item) => item !== field))} />{label}</label>)}</div></fieldset>
+          <label className="block mt-4 text-[11px] font-bold uppercase tracking-wide" style={{ color: vars.g500 }}>What is incorrect?<textarea autoFocus rows={4} value={correctionDetails} onChange={(event) => setCorrectionDetails(event.target.value)} className="mt-1 w-full rounded-lg border p-3 text-[13px] font-normal normal-case" style={{ borderColor: vars.g200 }} /></label>
+          <div className="mt-4 flex justify-end gap-2"><button onClick={() => setCorrectionContact(null)} className="px-4 py-2 rounded-lg border text-[13px] font-semibold" style={{ borderColor: vars.g200 }}>Cancel</button><button disabled={correctionBusy || !correctionFields.length || !correctionDetails.trim()} onClick={() => void submitCorrection()} className="px-4 py-2 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50" style={{ background: vars.accent }}>Submit for review</button></div>
+        </div>
+      </div>}
 
       {showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowImportModal(false)}>
