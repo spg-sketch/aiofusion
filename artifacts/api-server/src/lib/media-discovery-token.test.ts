@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { signMediaDiscoveries, verifyMediaDiscoveries, type TrustedMediaDiscovery } from "./media-discovery-token";
+import { mediaDiscoveryNotes, signMediaDiscoveries, verifyMediaDiscoveries, type TrustedMediaDiscovery } from "./media-discovery-token";
 
 const item: TrustedMediaDiscovery = {
   candidateKey: "candidate-1",
@@ -12,6 +12,9 @@ const item: TrustedMediaDiscovery = {
   sourceUrl: "https://energy.example/authors/jane-reporter",
   evidence: "Official author profile.",
   beats: ["energy"],
+  recentBylines: [{ title: "Renewable power outlook", url: "https://energy.example/articles/outlook", date: "2026-08-01", summary: "A recent energy briefing." }],
+  journalistInterests: ["renewable power"],
+  mediaOpportunities: [{ title: "Practical briefing", angle: "Offer a practical operator briefing.", rationale: "Matches the energy beat." }],
   confidence: "High",
   verifiedAt: "2026-09-08T12:00:00.000Z",
 };
@@ -41,6 +44,20 @@ describe("signed media discovery tokens", () => {
       projectId: "project-1",
       items: [item],
     });
+    expect(verifyMediaDiscoveries(token)?.items[0]).toMatchObject({
+      recentBylines: item.recentBylines,
+      journalistInterests: item.journalistInterests,
+      mediaOpportunities: item.mediaOpportunities,
+    });
+  });
+
+  it("formats enrichment deterministically for contact notes", () => {
+    expect(mediaDiscoveryNotes(item)).toBe([
+      "Media opportunities:\n- Practical briefing: Offer a practical operator briefing. (Matches the energy beat.)",
+      "Journalist interests/topics: renewable power",
+      "Recent bylines:\n- Renewable power outlook (2026-08-01) - https://energy.example/articles/outlook: A recent energy briefing.",
+      "Cited source evidence: Official author profile.",
+    ].join("\n\n"));
   });
 
   it("rejects tampering and expired search results", () => {

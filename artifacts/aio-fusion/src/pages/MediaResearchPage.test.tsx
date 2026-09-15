@@ -87,6 +87,17 @@ const candidate = {
   sourceUrl: "https://energy.example/authors/jane-reporter",
   evidence: "The outlet profile identifies Jane as its energy correspondent.",
   beats: ["renewable energy"],
+  journalistInterests: ["Renewable power", "Energy technology"],
+  mediaOpportunities: [{
+    title: "Operator perspective",
+    angle: "Offer a practical view of how commercial teams manage renewable generation.",
+    rationale: "Grounded in the demonstrated energy beat.",
+  }],
+  recentBylines: [{
+    title: "How renewable teams manage power",
+    url: "https://energy.example/bylines/renewable-power",
+    date: "2026-08-01",
+  }],
   confidence: "High",
   verifiedAt: "2026-09-08T12:00:00.000Z",
 };
@@ -242,6 +253,10 @@ describe("MediaResearchPage live discovery", () => {
     expect((liveRequest?.body?.content as Record<string, unknown>).title).toBe("New clean energy platform launches");
     expect(screen.getByText(candidate.evidence)).toBeTruthy();
     expect(screen.getByRole("link", { name: /view cited source/i })).toHaveAttribute("href", candidate.sourceUrl);
+    expect(screen.getByText("Journalist interests/topics")).toBeTruthy();
+    expect(screen.getByText("Renewable power")).toBeTruthy();
+    expect(screen.getByText("Media opportunities")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "How renewable teams manage power" })).toHaveAttribute("href", "https://energy.example/bylines/renewable-power");
 
     fireEvent.click(screen.getByRole("button", { name: /save to media database/i }));
     await waitFor(() => expect(screen.getByRole("button", { name: /saved to media database/i })).toBeDisabled());

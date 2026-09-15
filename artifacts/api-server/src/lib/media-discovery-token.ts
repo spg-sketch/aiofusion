@@ -14,7 +14,9 @@ export type TrustedMediaDiscovery = {
   sectors?: string[];
   geography?: string;
   mediaOpportunity?: string;
-  recentCoverage?: Array<{ title: string; url: string }>;
+  recentBylines?: Array<{ title: string; url: string; date?: string; summary?: string }>;
+  journalistInterests?: string[];
+  mediaOpportunities?: Array<{ title: string; angle: string; rationale?: string }>;
   confidence: "High" | "Medium" | "Low";
   verifiedAt: string;
   phraseAttributions?: Array<{
@@ -26,6 +28,19 @@ export type TrustedMediaDiscovery = {
     suggestedPlacementAngle: string;
   }>;
 };
+
+export function mediaDiscoveryNotes(candidate: Pick<TrustedMediaDiscovery, "mediaOpportunity" | "mediaOpportunities" | "journalistInterests" | "recentBylines" | "evidence">): string {
+  return [
+    candidate.mediaOpportunities?.length
+      ? `Media opportunities:\n${candidate.mediaOpportunities.map((opportunity) => `- ${opportunity.title}: ${opportunity.angle}${opportunity.rationale ? ` (${opportunity.rationale})` : ""}`).join("\n")}`
+      : candidate.mediaOpportunity ? `Media opportunities:\n- ${candidate.mediaOpportunity}` : "",
+    candidate.journalistInterests?.length ? `Journalist interests/topics: ${candidate.journalistInterests.join(", ")}` : "",
+    candidate.recentBylines?.length
+      ? `Recent bylines:\n${candidate.recentBylines.map((byline) => `- ${byline.title}${byline.date ? ` (${byline.date})` : ""} - ${byline.url}${byline.summary ? `: ${byline.summary}` : ""}`).join("\n")}`
+      : "",
+    candidate.evidence ? `Cited source evidence: ${candidate.evidence}` : "",
+  ].filter(Boolean).join("\n\n");
+}
 
 type DiscoveryTokenPayload = {
   accountId: string;

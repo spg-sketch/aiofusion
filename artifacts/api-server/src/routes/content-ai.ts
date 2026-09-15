@@ -244,6 +244,41 @@ function asStringArray(v: unknown, cap = 40): string[] {
   return v.filter((x) => typeof x === "string" && x.trim()).map((x: string) => x.trim()).slice(0, cap);
 }
 
+type MediaByline = { title: string; url: string; date?: string; summary?: string };
+type MediaOpportunity = { title: string; angle: string; rationale?: string };
+
+function normaliseMediaBylines(value: unknown, citations: string[]): MediaByline[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 8).flatMap((raw) => {
+    if (!raw || typeof raw !== "object") return [];
+    const item = raw as Record<string, unknown>;
+    const title = asString(item.title, 500);
+    const url = asString(item.url, 2000);
+    if (!title || !/^https?:\/\//i.test(url) || !isSupportedByCitation(url, citations)) return [];
+    return [{
+      title,
+      url,
+      date: asString(item.date, 80) || undefined,
+      summary: asString(item.summary, 800) || undefined,
+    }];
+  });
+}
+
+function normaliseMediaOpportunities(value: unknown): MediaOpportunity[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 8).flatMap((raw) => {
+    if (!raw || typeof raw !== "object") return [];
+    const item = raw as Record<string, unknown>;
+    const angle = asString(item.angle, 1200);
+    if (!angle) return [];
+    return [{
+      title: asString(item.title, 240) || "Story angle",
+      angle,
+      rationale: asString(item.rationale, 800) || undefined,
+    }];
+  });
+}
+
 type PhraseAttribution = {
   phraseId: string;
   phraseText: string;
@@ -1158,8 +1193,11 @@ Rules:
 6. evidence must briefly state what the cited page proves. Do not claim facts absent from that page.
 7. confidence is "High" only for an official outlet profile or very recent outlet byline, "Medium" for strong current evidence, otherwise "Low".
 8. Classify sectors with concise labels such as National, AI, Technology, Retail, Finance, Marketing, Healthcare or Sustainability.
-9. mediaOpportunity should explain how this specific story could be framed for the journalist, grounded in their demonstrated beat. Do not invent past articles.
-10. Exclude generic newsroom contacts and unverifiable names.
+9. recentBylines may contain up to 8 recent public article bylines that are directly relevant to this story. Each must have a title and the exact public article URL from the searched evidence, plus a date or short summary only when shown by that source. Do not invent articles, dates or summaries.
+10. journalistInterests should contain concise topic labels grounded in the journalist's public profile or bylines. Do not infer personal interests.
+11. mediaOpportunities should contain up to 3 practical story angles for this journalist. Each angle must be grounded in the demonstrated beat and clearly framed as an opportunity, not a guaranteed placement or endorsement. Do not invent past articles.
+12. Keep mediaOpportunity as a concise backwards-compatible summary of the strongest media opportunity.
+13. Exclude generic newsroom contacts and unverifiable names.
 
 Natural-language search: ${searchQuery || "(use the story and project context below)"}
 Requested sector or topic: ${sectorTopic || "(use the project media categories)"}
@@ -1207,6 +1245,36 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
                       sectors: { type: "array", items: { type: "string" }, maxItems: 6 },
                       geography: { type: "string" },
                       mediaOpportunity: { type: "string" },
+                      recentBylines: {
+                        type: "array",
+                        maxItems: 8,
+                        items: {
+                          type: "object",
+                          additionalProperties: false,
+                          properties: {
+                            title: { type: "string" },
+                            url: { type: "string" },
+                            date: { type: "string" },
+                            summary: { type: "string" },
+                          },
+                          required: ["title", "url", "date", "summary"],
+                        },
+                      },
+                      journalistInterests: { type: "array", maxItems: 12, items: { type: "string" } },
+                      mediaOpportunities: {
+                        type: "array",
+                        maxItems: 3,
+                        items: {
+                          type: "object",
+                          additionalProperties: false,
+                          properties: {
+                            title: { type: "string" },
+                            angle: { type: "string" },
+                            rationale: { type: "string" },
+                          },
+                          required: ["title", "angle", "rationale"],
+                        },
+                      },
                       phraseAttributions: {
                         type: "array",
                         maxItems: 10,
@@ -1226,7 +1294,7 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
                       },
                       confidence: { type: "string", enum: ["High", "Medium", "Low"] },
                     },
-                    required: ["firstName", "lastName", "role", "email", "outletName", "outletWebsite", "sourceUrl", "evidence", "beats", "sectors", "geography", "mediaOpportunity", "phraseAttributions", "confidence"],
+                    required: ["firstName", "lastName", "role", "email", "outletName", "outletWebsite", "sourceUrl", "evidence", "beats", "sectors", "geography", "mediaOpportunity", "recentBylines", "journalistInterests", "mediaOpportunities", "phraseAttributions", "confidence"],
                   },
                 },
               },
@@ -1274,6 +1342,9 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
           sectors: asStringArray(item.sectors).slice(0, 6),
           geography: asString(item.geography, 120),
           mediaOpportunity: asString(item.mediaOpportunity, 2000),
+           recentBylines: normaliseMediaBylines(item.recentBylines, citations),
+           journalistInterests: asStringArray(item.journalistInterests, 12),
+           mediaOpportunities: normaliseMediaOpportunities(item.mediaOpportunities),
           confidence,
           verifiedAt: now,
           phraseAttributions: normaliseReturnedPhraseAttributions(item.phraseAttributions, targetPhrases),

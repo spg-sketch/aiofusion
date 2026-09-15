@@ -17,7 +17,7 @@ import {
   planMediaImport,
 } from "../lib/media-csv-import";
 import type { MediaImportRow } from "../lib/media-csv-import";
-import { verifyMediaDiscoveries } from "../lib/media-discovery-token";
+import { mediaDiscoveryNotes, verifyMediaDiscoveries } from "../lib/media-discovery-token";
 import { approvedSourceUpdates, mediaSourceNextDueAt } from "../lib/media-source-health";
 import { claimMediaContactForManualReverification, reverifyClaimedMediaContact } from "../lib/media-source-reverification";
 import {
@@ -1244,10 +1244,7 @@ router.post("/store/media-db/discoveries", requirePlatformAuth, async (req: Requ
         && row.lastName.trim().toLowerCase() === candidate.lastName.toLowerCase()
         && (!verifiedEmail || !row.email || row.email.trim().toLowerCase() === verifiedEmail),
       );
-      const discoveryNotes = [
-        candidate.mediaOpportunity ? `AI-suggested media opportunity: ${candidate.mediaOpportunity}` : "",
-        candidate.evidence ? `Cited source evidence: ${candidate.evidence}` : "",
-      ].filter(Boolean).join("\n\n");
+      const discoveryNotes = mediaDiscoveryNotes(candidate);
       if (existing) {
         const mergedBeats = Array.from(new Set([...existing.beats, ...candidate.beats]));
         const mergedSectors = Array.from(new Set([...existing.sectors, ...(candidate.sectors ?? [])]));
@@ -1272,7 +1269,11 @@ router.post("/store/media-db/discoveries", requirePlatformAuth, async (req: Requ
               sourceUrl: candidate.sourceUrl,
               evidence: candidate.evidence,
               discoveredAt: candidate.verifiedAt,
-              modelDerivedFields: ["role", "beats", "sectors", "geography", "mediaOpportunity"],
+               recentBylines: candidate.recentBylines ?? [],
+               journalistInterests: candidate.journalistInterests ?? [],
+               mediaOpportunities: candidate.mediaOpportunities ?? [],
+               mediaOpportunity: candidate.mediaOpportunity ?? "",
+               modelDerivedFields: ["role", "beats", "sectors", "geography", "recentBylines", "journalistInterests", "mediaOpportunities", "mediaOpportunity"],
             },
           },
           updatedAt: new Date(),
@@ -1299,8 +1300,11 @@ router.post("/store/media-db/discoveries", requirePlatformAuth, async (req: Requ
           sourceUrl: candidate.sourceUrl,
           evidence: candidate.evidence,
           discoveredAt: candidate.verifiedAt,
+          recentBylines: candidate.recentBylines ?? [],
+          journalistInterests: candidate.journalistInterests ?? [],
+          mediaOpportunities: candidate.mediaOpportunities ?? [],
           mediaOpportunity: candidate.mediaOpportunity ?? "",
-          modelDerivedFields: ["role", "beats", "sectors", "geography", "mediaOpportunity"],
+          modelDerivedFields: ["role", "beats", "sectors", "geography", "recentBylines", "journalistInterests", "mediaOpportunities", "mediaOpportunity"],
         },
         lastVerifiedAt: verifiedAt,
         accountId,

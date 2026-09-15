@@ -52,7 +52,21 @@ export type Contact = {
     observedEvidence: { nameFound: boolean; roleFound: boolean; emailFound: boolean; observedRole: string; observedEmails: string[]; excerpt: string };
     differences: Array<{ field: "role" | "email"; kind: "changed" | "removed" | "added"; storedValue: string; observedValue: string; supported: boolean }>;
   } | null;
+  recentBylines?: MediaByline[];
+  journalistInterests?: string[];
+  mediaOpportunities?: MediaOpportunity[];
+  provenance?: {
+    latestPublicDiscovery?: {
+      recentBylines?: MediaByline[];
+      journalistInterests?: string[];
+      mediaOpportunities?: MediaOpportunity[];
+      mediaOpportunity?: string;
+    };
+  } | null;
 };
+
+export type MediaByline = { title: string; url?: string; date?: string; summary?: string };
+export type MediaOpportunity = { title: string; angle: string; rationale?: string };
 
 export type Recommendation = {
   rank: number;
@@ -92,7 +106,10 @@ export type LiveDiscovery = {
   sectors?: string[];
   geography?: string;
   mediaOpportunity?: string;
-  recentCoverage?: Array<{ title: string; url?: string; date?: string; summary?: string }>;
+  recentBylines?: MediaByline[];
+  journalistInterests?: string[];
+  mediaOpportunities?: MediaOpportunity[];
+  recentCoverage?: MediaByline[];
   confidence: "High" | "Medium" | "Low";
   verifiedAt: string;
   phraseAttributions?: PhraseAttribution[];
@@ -114,10 +131,67 @@ function PhraseAttributionSections({ attributions, aiSuggested = false }: { attr
             <div><dt className="inline font-semibold">{attribution.matchKind === "topic" ? "Recorded topic/keyword overlap: " : "Exact phrase match: "}</dt><dd className="inline">{attribution.exactPhraseMatch}</dd></div>
             <div><dt className="inline font-semibold">Article fit: </dt><dd className="inline">{attribution.articleFit}</dd></div>
             <div><dt className="inline font-semibold">Publication authority context: </dt><dd className="inline">{attribution.publicationAuthorityContext}</dd></div>
-            <div><dt className="inline font-semibold">Suggested placement angle: </dt><dd className="inline">{attribution.suggestedPlacementAngle}</dd></div>
+            <div><dt className="inline font-semibold">Media opportunities: </dt><dd className="inline">{attribution.suggestedPlacementAngle}</dd></div>
           </dl>
         </div>
       ))}
+    </div>
+  );
+}
+
+function EnrichmentSections({
+  recentBylines,
+  journalistInterests,
+  mediaOpportunities,
+  legacyMediaOpportunity,
+}: {
+  recentBylines?: MediaByline[];
+  journalistInterests?: string[];
+  mediaOpportunities?: MediaOpportunity[];
+  legacyMediaOpportunity?: string;
+}) {
+  const opportunities = mediaOpportunities?.length
+    ? mediaOpportunities
+    : legacyMediaOpportunity ? [{ title: "Story angle", angle: legacyMediaOpportunity }] : [];
+  if (!recentBylines?.length && !journalistInterests?.length && !opportunities.length) return null;
+  return (
+    <div className="space-y-3 mb-4">
+      {journalistInterests?.length ? (
+        <div>
+          <span className="text-[12px] font-bold text-slate-700 block mb-2">Journalist interests/topics</span>
+          <div className="flex flex-wrap gap-2">
+            {journalistInterests.map((interest) => <span key={interest} className="px-2 py-1 rounded-md text-[11px] font-medium bg-slate-100 text-slate-700">{interest}</span>)}
+          </div>
+        </div>
+      ) : null}
+      {opportunities.length ? (
+        <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 border-l-4" style={{ borderLeftColor: vars.accent }}>
+          <span className="text-[12px] font-bold text-slate-700 block mb-2">Media opportunities</span>
+          <div className="space-y-2 text-[13px] text-slate-700">
+            {opportunities.map((opportunity, index) => (
+              <div key={`${opportunity.title}-${index}`}>
+                <p className="font-semibold">{opportunity.title}</p>
+                <p className="italic">{opportunity.angle}</p>
+                {opportunity.rationale && <p className="text-[12px] text-slate-600 mt-1">{opportunity.rationale}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {recentBylines?.length ? (
+        <div className="p-3 rounded-lg bg-white border border-slate-200">
+          <span className="text-[12px] font-bold text-slate-700 block mb-2">Recent bylines</span>
+          <div className="space-y-2">
+            {recentBylines.map((byline, index) => (
+              <div key={`${byline.url || byline.title}-${index}`} className="text-[12px]">
+                {byline.url ? <a href={byline.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-600 hover:underline">{byline.title}</a> : <span className="font-semibold">{byline.title}</span>}
+                {byline.date && <span className="text-slate-500 ml-2">{byline.date}</span>}
+                {byline.summary && <p className="text-slate-600 mt-1">{byline.summary}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -156,6 +230,7 @@ export function RecommendationCard({
   onRefine?: (signal: "more" | "less" | null) => void;
 }) {
   const c = item.contact;
+  const latestDiscovery = c.provenance?.latestPublicDiscovery;
   return (
     <div className="p-5 border-b last:border-b-0 bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200 }}>
       <div className="flex flex-wrap gap-4 items-start justify-between">
@@ -266,6 +341,13 @@ export function RecommendationCard({
             </div>
           )}
           <PhraseAttributionSections attributions={item.phraseAttributions} />
+
+          <EnrichmentSections
+            recentBylines={c.recentBylines || latestDiscovery?.recentBylines}
+            journalistInterests={c.journalistInterests || latestDiscovery?.journalistInterests}
+            mediaOpportunities={c.mediaOpportunities || latestDiscovery?.mediaOpportunities}
+            legacyMediaOpportunity={latestDiscovery?.mediaOpportunity}
+          />
 
           {c.notes && (
             <div className="p-3 rounded-lg bg-amber-50 border border-amber-100 mb-4">
@@ -463,29 +545,12 @@ export function LiveDiscoveryCard({
           )}
           <PhraseAttributionSections attributions={candidate.phraseAttributions} aiSuggested />
 
-          {candidate.mediaOpportunity && (
-            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 mb-4 border-l-4" style={{ borderLeftColor: vars.accent }}>
-              <span className="text-[12px] font-bold text-slate-700 block mb-1">AI-suggested media opportunity</span>
-              <p className="text-[13px] text-slate-700 leading-relaxed italic">
-                {candidate.mediaOpportunity}
-              </p>
-            </div>
-          )}
-
-          {candidate.recentCoverage && candidate.recentCoverage.length > 0 && (
-            <div className="p-3 rounded-lg bg-white border border-slate-200 mb-4">
-               <span className="text-[12px] font-bold text-slate-700 block mb-2">Recent Coverage</span>
-               <div className="space-y-2">
-                 {candidate.recentCoverage.map((cov, i) => (
-                   <div key={i} className="text-[12px]">
-                     <a href={cov.url || "#"} target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-600 hover:underline">{cov.title}</a>
-                     {cov.date && <span className="text-slate-500 ml-2">{cov.date}</span>}
-                     {cov.summary && <p className="text-slate-600 mt-1">{cov.summary}</p>}
-                   </div>
-                 ))}
-               </div>
-            </div>
-          )}
+          <EnrichmentSections
+            recentBylines={candidate.recentBylines || candidate.recentCoverage}
+            journalistInterests={candidate.journalistInterests}
+            mediaOpportunities={candidate.mediaOpportunities}
+            legacyMediaOpportunity={candidate.mediaOpportunity}
+          />
         </div>
         
         <div className="flex flex-col justify-start items-end min-w-[140px]">
