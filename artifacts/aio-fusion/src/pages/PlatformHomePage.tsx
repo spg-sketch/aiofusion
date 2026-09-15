@@ -335,7 +335,7 @@ function PlatformHomePage({
           {backToAgency}
           <button
             onClick={onBackToLanding}
-            className="flex shrink-0 items-center gap-2 px-4 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:brightness-110 rounded-xl"
+            className="aio-button aio-button--return shrink-0"
             style={{ background: accent, color: "white" }}
           >
             <ArrowLeft size={16} /> <span className="sm:hidden">Website</span><span className="hidden sm:inline">Back to website</span>
@@ -349,10 +349,10 @@ function PlatformHomePage({
             <Sparkles size={12} color="white" />
             <span className="text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: "white" }}>Platform Home</span>
           </div>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+          <h1 className="aio-type-display">
             Welcome to <span style={{ color: accent }}>AIO Fusion</span><span className="text-2xl sm:text-3xl lg:text-4xl font-light ml-2 align-baseline" style={{ color: vars.g500 }}>(beta)</span>
           </h1>
-          <p className="text-[16px] sm:text-[18px] font-light mt-4 leading-[1.7] sm:whitespace-nowrap" style={{ color: vars.g600 }}>
+          <p className="aio-type-body mt-4 sm:whitespace-nowrap" style={{ color: vars.g600 }}>
             {session
               ? "Manage your PR and marketing projects, then move through The AIO Fusion Approach to grow business AI authority."
               : "Sign in to manage your PR and marketing projects, then move through The AIO Fusion Approach to grow business AI authority."}

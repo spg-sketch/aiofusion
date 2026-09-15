@@ -869,7 +869,7 @@ function SubAccountsPage({
           {backToAgency}
           <button
             onClick={onBack}
-            className="settings-back-button flex items-center gap-2 px-4 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all"
+            className="settings-back-button aio-button aio-button--return"
             style={{ background: accent, color: paper }}
           >
             <ArrowLeft size={16} /> Back to platform
@@ -879,10 +879,10 @@ function SubAccountsPage({
 
       <main className="settings-main px-4 sm:px-10 py-10 sm:py-14 max-w-[1320px] mx-auto">
         <div className="settings-intro mb-8">
-          <h1 className="text-3xl sm:text-4xl leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+          <h1 className="aio-type-page-title">
             Account Settings
           </h1>
-          <p className="settings-intro-description text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
+          <p className="settings-intro-description aio-type-body mt-3 max-w-2xl" style={{ color: vars.g600 }}>
             {isAgencyPartner
               ? "Manage your agency account, team and Client Projects in one place. Open managed projects directly without requiring clients to have a separate AIO Fusion login."
               : canCreateSubAccounts(session.role)

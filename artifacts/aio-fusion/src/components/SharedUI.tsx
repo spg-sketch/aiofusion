@@ -15,7 +15,7 @@ export function Labelled({ label, hint, children, action }: { label: string; hin
   return (
     <div>
       <div className="flex items-start justify-between gap-2 mb-1">
-        <label className="block text-[12px] font-semibold" style={{ color: vars.navy }}>
+        <label className="aio-type-label block" style={{ color: vars.navy }}>
           {label}
           {hint && <span className="text-[11px] font-light ml-2" style={{ color: vars.g400 }}>· {hint}</span>}
         </label>
@@ -29,8 +29,8 @@ export function Labelled({ label, hint, children, action }: { label: string; hin
 export function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: vars.g400 }}>{label}</span>
-      <span className="text-[13px]" style={{ color: vars.navy }}>{value}</span>
+      <span className="aio-type-eyebrow" style={{ color: vars.g400 }}>{label}</span>
+      <span className="aio-type-supporting" style={{ color: vars.navy }}>{value}</span>
     </div>
   );
 }
@@ -63,8 +63,8 @@ export function PlaceholderPage({
     <div className="p-6 sm:p-10 max-w-5xl mx-auto">
       <div className="mb-8 flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-3xl sm:text-4xl mb-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{title}</h1>
-          <p className="text-[14px] font-light max-w-3xl" style={{ color: vars.g500 }}>{intro}</p>
+          <h1 className="aio-type-page-title mb-2">{title}</h1>
+          <p className="aio-type-body max-w-3xl" style={{ color: vars.g500 }}>{intro}</p>
         </div>
         {badge && (
           <span className="text-[10px] font-bold uppercase tracking-[0.16em] px-2.5 py-1 rounded-full" style={{ background: `${badgeColor || vars.accent}15`, color: badgeColor || vars.accent }}>
@@ -78,8 +78,8 @@ export function PlaceholderPage({
             <Icon size={20} color={badgeColor || vars.accent} />
           </div>
           <div>
-            <h2 className="text-[18px] font-semibold mb-1" style={{ color: vars.navy }}>What this page will do</h2>
-            <p className="text-[13px] font-light" style={{ color: vars.g500 }}>Designed in the wireframe doc; build scheduled in this iteration.</p>
+            <h2 className="aio-type-card-title mb-1">What this page will do</h2>
+            <p className="aio-type-supporting">Designed in the wireframe doc; build scheduled in this iteration.</p>
           </div>
         </div>
         <div className="grid sm:grid-cols-2 gap-4">

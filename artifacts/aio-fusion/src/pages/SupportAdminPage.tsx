@@ -97,19 +97,19 @@ export function SupportAdminPage({ onBack }: { onBack: () => void }) {
       <div className="sticky top-0 z-10 border-b bg-white px-6 py-4 flex items-center gap-4" style={{ borderColor: vars.g200 }}>
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 text-[13px] font-medium hover:opacity-70 transition-opacity"
+          className="aio-button aio-button--text aio-button--compact"
           style={{ color: vars.g500 }}
         >
-          <ArrowLeft size={15} /> Back
+          <ArrowLeft size={15} /> Back to admin
         </button>
         <div className="h-5 w-px" style={{ background: vars.g200 }} />
-        <h1 className="text-[18px] font-bold" style={{ color: navy }}>Support Management</h1>
+        <h1 className="aio-type-card-title">Support Management</h1>
         <div className="ml-auto flex gap-1 rounded-xl p-1" style={{ background: vars.g100 }}>
           {([["tickets", "Ticket Queue", Ticket], ["invite-failures", "Invite link failures", MailX], ["faq", "FAQ Library", BookOpen]] as const).map(([id, label, Icon]) => (
             <button
               key={id}
               onClick={() => setTab(id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all"
+              className="aio-button aio-button--compact"
               style={
                 tab === id
                   ? { background: "white", color: navy, boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }

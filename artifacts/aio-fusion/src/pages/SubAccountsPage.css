@@ -63,7 +63,6 @@
 .settings-back-button {
   background: var(--settings-pink) !important;
   color: #fff !important;
-  border-radius: 12px;
   transition: filter 0.22s ease, transform 0.22s ease;
 }
 
@@ -88,7 +87,7 @@
 
 .settings-intro h1 {
   flex: 0 0 auto;
-  font-size: 50px !important;
+  font-size: clamp(2rem, 4vw, 3.125rem) !important;
   line-height: 1.12 !important;
   color: var(--settings-ink) !important;
 }
@@ -99,7 +98,7 @@
   margin-top: 0 !important;
   color: var(--settings-muted) !important;
   font-size: 15px !important;
-  line-height: 1.85 !important;
+  line-height: 1.7 !important;
 }
 
 .settings-layout {
@@ -368,11 +367,6 @@
     height: 60px !important;
   }
 
-  .settings-back-button {
-    padding: 11px 14px !important;
-    font-size: 10px !important;
-  }
-
   .settings-main {
     padding: 40px 24px 48px !important;
   }
@@ -381,10 +375,6 @@
     display: block;
     margin-bottom: 28px !important;
     padding-bottom: 28px;
-  }
-
-  .settings-intro h1 {
-    font-size: 38px !important;
   }
 
   .settings-intro-description {
@@ -434,19 +424,9 @@
     height: 52px !important;
   }
 
-  .settings-back-button {
-    padding: 9px 10px !important;
-    font-size: 9px !important;
-    letter-spacing: 0.08em !important;
-  }
-
   .settings-main {
     padding-right: 16px !important;
     padding-left: 16px !important;
-  }
-
-  .settings-intro h1 {
-    font-size: 32px !important;
   }
 
   .settings-card-account-type,

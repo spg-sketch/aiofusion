@@ -146,20 +146,17 @@ export default function ClientSelectorPage({
         <div className="mb-10 sm:mb-12 rounded-2xl p-6 sm:p-10" style={{ background: "white", boxShadow: "0 4px 24px rgba(0,0,0,0.12)" }}>
           <div className="flex items-center gap-2 mb-4">
             <div
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.22em]"
+              className="aio-type-eyebrow inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full"
               style={{ background: accentSoft, border: `1px solid ${accent}40`, color: accent }}
             >
               <Building2 size={12} /> Project Hub
             </div>
           </div>
-          <h1
-            className="text-3xl sm:text-4xl lg:text-5xl leading-[1.05] tracking-tight"
-            style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}
-          >
+          <h1 className="aio-type-page-title">
             {isAdmin ? "Master" : isClient ? null : "Agency"}{isAdmin || !isClient ? " " : null}
             <span style={{ color: accent }}>Project Hub</span>
           </h1>
-          <p className="text-[15px] sm:text-[16px] font-light mt-3 mb-8 max-w-4xl lg:whitespace-nowrap leading-[1.7]" style={{ color: ink }}>
+          <p className="aio-type-body mt-3 mb-8 max-w-4xl lg:whitespace-nowrap" style={{ color: ink }}>
             {displayClients.length === 0
               ? "Set up your first project to start optimising your PR and marketing output for AI discoverability."
               : "Select a project to manage AI optimisation, ongoing PR and marketing output."}

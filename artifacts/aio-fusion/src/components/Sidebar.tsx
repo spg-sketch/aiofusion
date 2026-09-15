@@ -264,7 +264,7 @@ function SidebarContent({
       <div className="px-4 pt-4 pb-2 sticky top-0 z-10" style={{ background: "white" }}>
         <button
           onClick={() => { onBackToClients(); onItemClick?.(); }}
-          className="group flex items-center justify-center gap-2 w-full rounded-full px-4 py-3 text-[14px] font-bold uppercase tracking-wider transition-all hover:brightness-110"
+          className="aio-button aio-button--return aio-button--return-project group"
           style={{
             background: "#C8497A",
             color: "#ffffff",

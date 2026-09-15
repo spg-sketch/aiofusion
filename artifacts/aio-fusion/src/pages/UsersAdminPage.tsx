@@ -1389,7 +1389,7 @@ export function UsersAdminPage({
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] rounded-xl transition-all hover:brightness-110"
+            className="aio-button aio-button--return"
             style={{ background: accent, color: "white" }}
           >
             <ArrowLeft size={16} /> Back to platform

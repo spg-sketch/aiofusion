@@ -377,7 +377,7 @@ export function TokenUsageAdminPage({
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.14em] mb-8 hover:opacity-70 transition-opacity"
+          className="aio-button aio-button--text aio-button--compact mb-8 uppercase tracking-[0.12em]"
           style={{ color: vars.g500 }}
         >
           <ArrowLeft size={14} /> Back to platform home
@@ -385,13 +385,13 @@ export function TokenUsageAdminPage({
 
         <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
           <div>
-            <h1 className="text-[28px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Token Usage</h1>
-            <p className="text-[14px]" style={{ color: vars.g500 }}>Estimated Anthropic / OpenAI API cost by account. Spike badges flag accounts whose last-7-day content AI usage is 3× above the prior 7 days. Monthly spend caps block AI requests when exceeded.</p>
+            <h1 className="aio-type-page-title mb-1">Token Usage</h1>
+            <p className="aio-type-body" style={{ color: vars.g500 }}>Estimated Anthropic / OpenAI API cost by account. Spike badges flag accounts whose last-7-day content AI usage is 3× above the prior 7 days. Monthly spend caps block AI requests when exceeded.</p>
           </div>
           <button
             onClick={onRefresh}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-semibold border transition-all hover:bg-black/5 disabled:opacity-50"
+            className="aio-button aio-button--outline aio-button--compact"
             style={{ color: ink, borderColor: vars.g200 }}
           >
             {loading ? "Loading..." : "Refresh"}
