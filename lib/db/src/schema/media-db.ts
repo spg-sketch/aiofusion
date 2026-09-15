@@ -172,10 +172,68 @@ export const mediaRecommendationFeedbackTable = pgTable("media_recommendation_fe
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [uniqueIndex("media_recommendation_feedback_unique").on(table.accountId, table.projectId, table.storyKey, table.contactId)]);
+
+export type MediaOutreachStatus = "planned" | "pitched" | "responded" | "accepted" | "declined" | "placed";
+export type MediaPlacementVerification = "user_claimed" | "page_verified";
+
+export const mediaOutreachTable = pgTable("media_outreach", {
+  id: serial("id").primaryKey(),
+  accountId: varchar("account_id").notNull(),
+  projectId: varchar("project_id").notNull(),
+  storyKey: varchar("story_key", { length: 200 }).notNull(),
+  contactId: integer("contact_id").references(() => mediaContactsTable.id),
+  outletId: integer("outlet_id").references(() => mediaOutletsTable.id),
+  status: varchar("status", { length: 20 }).$type<MediaOutreachStatus>().notNull().default("planned"),
+  articleSnapshot: jsonb("article_snapshot").$type<{ title: string }>().notNull().default({ title: "" }),
+  contactSnapshot: jsonb("contact_snapshot").$type<{ name: string; role: string; email: string }>().notNull().default({ name: "", role: "", email: "" }),
+  outletSnapshot: jsonb("outlet_snapshot").$type<{ name: string; website: string }>().notNull().default({ name: "", website: "" }),
+  targetPhrases: jsonb("target_phrases").$type<Array<{ id: string; text: string; intentGroup: "discovery" | "shortlist" | "comparison" }>>().notNull().default([]),
+  pitchDate: timestamp("pitch_date", { withTimezone: true }),
+  responseDate: timestamp("response_date", { withTimezone: true }),
+  notes: text("notes").notNull().default(""),
+  responsibleTeamMember: text("responsible_team_member").notNull().default(""),
+  createdBy: varchar("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (table) => [uniqueIndex("media_outreach_story_contact_unique").on(table.accountId, table.projectId, table.storyKey, table.contactId)]);
+
+export const mediaOutreachActivitiesTable = pgTable("media_outreach_activities", {
+  id: serial("id").primaryKey(),
+  outreachId: integer("outreach_id").notNull().references(() => mediaOutreachTable.id, { onDelete: "cascade" }),
+  accountId: varchar("account_id").notNull(),
+  projectId: varchar("project_id").notNull(),
+  fromStatus: varchar("from_status", { length: 20 }).$type<MediaOutreachStatus>(),
+  toStatus: varchar("to_status", { length: 20 }).$type<MediaOutreachStatus>().notNull(),
+  note: text("note").notNull().default(""),
+  actor: varchar("actor").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const mediaPlacementsTable = pgTable("media_placements", {
+  id: serial("id").primaryKey(),
+  outreachId: integer("outreach_id").notNull().references(() => mediaOutreachTable.id, { onDelete: "cascade" }),
+  accountId: varchar("account_id").notNull(),
+  projectId: varchar("project_id").notNull(),
+  canonicalUrl: text("canonical_url").notNull(),
+  canonicalUrlKey: text("canonical_url_key").notNull(),
+  publicationDate: timestamp("publication_date", { withTimezone: true }).notNull(),
+  headline: text("headline").notNull(),
+  supportingEvidence: text("supporting_evidence").notNull(),
+  verification: varchar("verification", { length: 20 }).$type<MediaPlacementVerification>().notNull().default("user_claimed"),
+  verifiedFacts: jsonb("verified_facts").$type<{ canonicalUrl?: string; publicationDate?: string; headline?: string; checkedAt?: string }>().notNull().default({}),
+  verificationHistory: jsonb("verification_history").$type<Array<Record<string, unknown>>>().notNull().default([]),
+  legacySourceRef: text("legacy_source_ref"),
+  createdBy: varchar("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (table) => [uniqueIndex("media_placements_project_url_unique").on(table.accountId, table.projectId, table.canonicalUrlKey)]);
+
 export type MediaCategoryRow = typeof mediaCategoriesTable.$inferSelect;
 export type MediaOutletRow = typeof mediaOutletsTable.$inferSelect;
 export type MediaContactRow = typeof mediaContactsTable.$inferSelect;
 export type MediaContactSourceCheckRow = typeof mediaContactSourceChecksTable.$inferSelect;
+export type MediaOutreachRow = typeof mediaOutreachTable.$inferSelect;
+export type MediaPlacementRow = typeof mediaPlacementsTable.$inferSelect;
 export const insertMediaContactSchema = createInsertSchema(mediaContactsTable).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });
 export type InsertMediaContact = z.infer<typeof insertMediaContactSchema>;
 export const insertMediaImportBatchSchema = createInsertSchema(mediaImportBatchesTable).omit({ id: true, createdAt: true });

@@ -30,6 +30,9 @@ import {
   mediaRecommendationSetsTable,
   mediaRecommendationItemsTable,
   mediaRecommendationDecisionsTable,
+  mediaOutreachTable,
+  mediaOutreachActivitiesTable,
+  mediaPlacementsTable,
   tokenUsageTable,
   auditLocksTable,
   savedAuditsTable,
@@ -5962,6 +5965,7 @@ router.post(
         const recommendationSetIds = recommendationSets.map((row) => row.id);
 
         if (contactIds.length > 0) {
+          await tx.update(mediaOutreachTable).set({ contactId: null }).where(inArray(mediaOutreachTable.contactId, contactIds));
           const [sharedRecommendationItem] = await tx
             .select({ id: mediaRecommendationItemsTable.id })
             .from(mediaRecommendationItemsTable)
@@ -5987,6 +5991,7 @@ router.post(
           }
         }
         if (outletIds.length > 0) {
+          await tx.update(mediaOutreachTable).set({ outletId: null }).where(inArray(mediaOutreachTable.outletId, outletIds));
           const [sharedOutletContact] = await tx
             .select({ id: mediaContactsTable.id })
             .from(mediaContactsTable)
@@ -6009,6 +6014,9 @@ router.post(
           if (sharedCategoryLink) throw new Error("STAGING_TEST_SHARED_MEDIA");
         }
 
+        await tx.delete(mediaPlacementsTable).where(eq(mediaPlacementsTable.accountId, target));
+        await tx.delete(mediaOutreachActivitiesTable).where(eq(mediaOutreachActivitiesTable.accountId, target));
+        await tx.delete(mediaOutreachTable).where(eq(mediaOutreachTable.accountId, target));
         await tx.delete(mediaRecommendationDecisionsTable)
           .where(eq(mediaRecommendationDecisionsTable.accountId, target));
         if (recommendationSetIds.length > 0) {
@@ -6018,6 +6026,7 @@ router.post(
         await tx.delete(mediaRecommendationSetsTable)
           .where(eq(mediaRecommendationSetsTable.accountId, target));
         if (contactIds.length > 0) {
+          await tx.update(mediaOutreachTable).set({ contactId: null }).where(inArray(mediaOutreachTable.contactId, contactIds));
           await tx.delete(mediaContactCategoriesTable)
             .where(inArray(mediaContactCategoriesTable.contactId, contactIds));
           await tx.delete(mediaContactFieldOverridesTable)
@@ -6282,10 +6291,14 @@ router.post(
           .where(eq(mediaRecommendationSetsTable.accountId, username));
         const recommendationSetIds = recommendationSets.map((row) => row.id);
 
+        await tx.delete(mediaPlacementsTable).where(eq(mediaPlacementsTable.accountId, username));
+        await tx.delete(mediaOutreachActivitiesTable).where(eq(mediaOutreachActivitiesTable.accountId, username));
+        await tx.delete(mediaOutreachTable).where(eq(mediaOutreachTable.accountId, username));
         // Private contacts can appear in another visible workspace's saved
         // recommendation history. Remove only those references, not the other
         // workspace's set or unrelated contacts.
         if (contactIds.length > 0) {
+          await tx.update(mediaOutreachTable).set({ contactId: null }).where(inArray(mediaOutreachTable.contactId, contactIds));
           await tx.delete(mediaRecommendationItemsTable)
             .where(inArray(mediaRecommendationItemsTable.contactId, contactIds));
           await tx.delete(mediaRecommendationDecisionsTable)
@@ -6315,6 +6328,7 @@ router.post(
           .where(eq(mediaImportBatchesTable.accountId, username));
         await tx.delete(mediaContactsTable).where(eq(mediaContactsTable.accountId, username));
         if (outletIds.length > 0) {
+          await tx.update(mediaOutreachTable).set({ outletId: null }).where(inArray(mediaOutreachTable.outletId, outletIds));
           await tx.update(mediaContactsTable)
             .set({ outletId: null })
             .where(inArray(mediaContactsTable.outletId, outletIds));

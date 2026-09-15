@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaImportBatchesTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, projectsTable } from "@workspace/db";
+import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaImportBatchesTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, mediaOutreachTable, mediaOutreachActivitiesTable, mediaPlacementsTable, projectsTable, type MediaOutreachStatus } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { inAssignedScope, memberProjectGate } from "../lib/member-guards";
@@ -20,6 +20,7 @@ import type { MediaImportRow } from "../lib/media-csv-import";
 import { mediaDiscoveryNotes, verifyMediaDiscoveries } from "../lib/media-discovery-token";
 import { approvedSourceUpdates, mediaSourceNextDueAt } from "../lib/media-source-health";
 import { claimMediaContactForManualReverification, reverifyClaimedMediaContact } from "../lib/media-source-reverification";
+import { fetchPlacementPageEvidence } from "../lib/safe-fetch";
 import {
   normaliseExactPhraseText,
   normaliseSubmittedExactTargetPhrases,
@@ -29,6 +30,32 @@ import {
 import { MEDIA_RECOMMENDATION_STOP_WORDS, scoreMediaRecommendation } from "../lib/media-recommendation-ranking";
 
 const router: IRouter = Router();
+
+const OUTREACH_TRANSITIONS: Record<MediaOutreachStatus, MediaOutreachStatus[]> = {
+  planned: ["pitched", "declined"],
+  pitched: ["responded", "accepted", "declined"],
+  responded: ["accepted", "declined"],
+  accepted: ["declined"],
+  declined: ["planned"],
+  placed: [],
+};
+
+function parseDate(value: unknown): Date | null | undefined {
+  if (value === null || value === "") return null;
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) return undefined;
+  return new Date(value);
+}
+
+export function canonicalPlacementUrl(value: string): string {
+  const url = new URL(value);
+  if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("Placement URL must use HTTP or HTTPS.");
+  url.hash = "";
+  for (const key of [...url.searchParams.keys()]) if (/^(utm_|fbclid$|gclid$)/i.test(key)) url.searchParams.delete(key);
+  url.hostname = url.hostname.toLowerCase();
+  url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+  return url.toString();
+}
 
 // Membership role gate for the media database: billing members are blocked
 // entirely, viewers may only issue reads.
@@ -972,6 +999,14 @@ async function assertProjectVisible(req: Request, projectId: string): Promise<bo
     && (visible === null || (!!project[0].owner && visible.includes(project[0].owner)));
 }
 
+async function visibleProjectOwner(req: Request, projectId: string): Promise<string | null> {
+  if (!inAssignedScope(req, projectId)) return null;
+  const visible = await visibleAccounts(req);
+  const [project] = await db.select({ owner: projectsTable.owner, deletedAt: projectsTable.deletedAt }).from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project || project.deletedAt || !project.owner || (visible !== null && !visible.includes(project.owner))) return null;
+  return project.owner;
+}
+
 type RefinementContact = {
   id: number;
   beats: string[];
@@ -1459,6 +1494,159 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
     return [{ contactId: row.contact.id, contact: { ...row.contact, ...outletFields } }];
   });
   res.json({ decisions, items, decisionContacts, feedback });
+});
+
+router.get("/store/media-db/outreach", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "";
+  const storyKey = typeof req.query.storyKey === "string" ? req.query.storyKey : "";
+  const accountId = projectId ? await visibleProjectOwner(req, projectId) : null;
+  if (!accountId || !storyKey) { res.status(404).json({ error: "Project not found" }); return; }
+  const outreach = await db.select().from(mediaOutreachTable).where(and(eq(mediaOutreachTable.accountId, accountId), eq(mediaOutreachTable.projectId, projectId), eq(mediaOutreachTable.storyKey, storyKey))).orderBy(desc(mediaOutreachTable.updatedAt));
+  const ids = outreach.map((row) => row.id);
+  let activities: Array<typeof mediaOutreachActivitiesTable.$inferSelect> = [];
+  let placements: Array<typeof mediaPlacementsTable.$inferSelect> = [];
+  if (ids.length) {
+    [activities, placements] = await Promise.all([
+      db.select().from(mediaOutreachActivitiesTable).where(inArray(mediaOutreachActivitiesTable.outreachId, ids)).orderBy(desc(mediaOutreachActivitiesTable.occurredAt)),
+      db.select().from(mediaPlacementsTable).where(inArray(mediaPlacementsTable.outreachId, ids)).orderBy(desc(mediaPlacementsTable.publicationDate)),
+    ]);
+  }
+  res.json({ outreach: outreach.map((row) => ({ ...row, activities: activities.filter((item) => item.outreachId === row.id), placements: placements.filter((item) => item.outreachId === row.id) })) });
+});
+
+router.post("/store/media-db/outreach", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const projectId = typeof req.body?.projectId === "string" ? req.body.projectId.trim() : "";
+    const storyKey = typeof req.body?.storyKey === "string" ? req.body.storyKey.trim().slice(0, 200) : "";
+    const contactId = Number(req.body?.contactId);
+    const accountId = projectId ? await visibleProjectOwner(req, projectId) : null;
+    if (!accountId || !storyKey || !contactId || hasForgedPhraseId(req.body?.targetPhrases)) { res.status(400).json({ error: "Invalid outreach record or project" }); return; }
+    const actorAccountId = normUsername(req.account!.username);
+    const [contact] = await db.select({ contact: mediaContactsTable, outlet: mediaOutletsTable }).from(mediaContactsTable).leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id)).where(eq(mediaContactsTable.id, contactId)).limit(1);
+    if (!contact || (contact.contact.accountId !== null && contact.contact.accountId !== accountId && contact.contact.accountId !== actorAccountId)) { res.status(403).json({ error: "Contact is not available to this project's workspace" }); return; }
+    const existing = await db.select().from(mediaOutreachTable).where(and(eq(mediaOutreachTable.accountId, accountId), eq(mediaOutreachTable.projectId, projectId), eq(mediaOutreachTable.storyKey, storyKey), eq(mediaOutreachTable.contactId, contactId))).limit(1);
+    if (existing[0]) { res.status(200).json({ ok: true, outreach: existing[0], existing: true }); return; }
+    const status: MediaOutreachStatus = "planned";
+    const actor = req.account!.username;
+    const [row] = await db.transaction(async (tx) => {
+      const created = await tx.insert(mediaOutreachTable).values({
+        accountId, projectId, storyKey, contactId, outletId: contact.contact.outletId, status,
+        articleSnapshot: { title: typeof req.body?.articleTitle === "string" ? req.body.articleTitle.slice(0, 500) : "" },
+        contactSnapshot: { name: `${contact.contact.firstName} ${contact.contact.lastName}`.trim(), role: contact.contact.role, email: contact.contact.email },
+        outletSnapshot: { name: contact.outlet?.name ?? "", website: contact.outlet?.website ?? "" },
+        targetPhrases: normaliseSubmittedPhrases(req.body?.targetPhrases), responsibleTeamMember: typeof req.body?.responsibleTeamMember === "string" ? req.body.responsibleTeamMember.slice(0, 200) : "",
+        notes: typeof req.body?.notes === "string" ? req.body.notes.slice(0, 10000) : "", createdBy: actor,
+      }).returning();
+      await tx.insert(mediaOutreachActivitiesTable).values({ outreachId: created[0].id, accountId, projectId, toStatus: status, note: "Outreach planned", actor });
+      return created;
+    });
+    res.status(201).json({ ok: true, outreach: row });
+  } catch (error) { req.log.error({ err: error }, "media outreach create failed"); res.status(500).json({ error: "Failed to create outreach record" }); }
+});
+
+router.put("/store/media-db/outreach/:id", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = Number(req.params.id);
+    const [candidate] = await db.select().from(mediaOutreachTable).where(eq(mediaOutreachTable.id, id)).limit(1);
+    const accountId = candidate ? await visibleProjectOwner(req, candidate.projectId) : null;
+    const current = candidate && accountId === candidate.accountId ? candidate : undefined;
+    if (!current || !accountId) { res.status(404).json({ error: "Outreach record not found" }); return; }
+    const nextStatus = req.body?.status as MediaOutreachStatus | undefined;
+    if (nextStatus === "placed") { res.status(409).json({ error: "A placement can only be recorded with placement evidence." }); return; }
+    if (nextStatus && nextStatus !== current.status && !OUTREACH_TRANSITIONS[current.status].includes(nextStatus)) { res.status(409).json({ error: `Cannot move outreach from ${current.status} to ${nextStatus}.` }); return; }
+    if (nextStatus === "pitched" && !parseDate(req.body?.pitchDate) && !current.pitchDate) { res.status(400).json({ error: "A pitch date is required when marking outreach as pitched." }); return; }
+    if (nextStatus === "responded" && !parseDate(req.body?.responseDate) && !current.responseDate) { res.status(400).json({ error: "A response date is required when recording a response." }); return; }
+    const updates = {
+      status: nextStatus ?? current.status,
+      pitchDate: parseDate(req.body?.pitchDate) ?? current.pitchDate,
+      responseDate: parseDate(req.body?.responseDate) ?? current.responseDate,
+      notes: typeof req.body?.notes === "string" ? req.body.notes.slice(0, 10000) : current.notes,
+      responsibleTeamMember: typeof req.body?.responsibleTeamMember === "string" ? req.body.responsibleTeamMember.slice(0, 200) : current.responsibleTeamMember,
+    };
+    const [row] = await db.transaction(async (tx) => {
+      if (process.env.NODE_ENV !== "test") await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`media-outreach:${id}`}))`);
+      const changed = await tx.update(mediaOutreachTable).set(updates).where(and(eq(mediaOutreachTable.id, id), eq(mediaOutreachTable.status, current.status))).returning();
+      if (!changed[0]) return [];
+      if (nextStatus && nextStatus !== current.status) await tx.insert(mediaOutreachActivitiesTable).values({ outreachId: id, accountId, projectId: current.projectId, fromStatus: current.status, toStatus: nextStatus, note: typeof req.body?.activityNote === "string" ? req.body.activityNote.slice(0, 4000) : "", actor: req.account!.username });
+      return changed;
+    });
+    if (!row) { res.status(409).json({ error: "Outreach changed in another session. Reload and try again." }); return; }
+    res.json({ ok: true, outreach: row });
+  } catch (error) { req.log.error({ err: error }, "media outreach update failed"); res.status(500).json({ error: "Failed to update outreach record" }); }
+});
+
+router.post("/store/media-db/outreach/:id/placements", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = Number(req.params.id);
+    const [candidate] = await db.select().from(mediaOutreachTable).where(eq(mediaOutreachTable.id, id)).limit(1);
+    const accountId = candidate ? await visibleProjectOwner(req, candidate.projectId) : null;
+    const outreach = candidate && accountId === candidate.accountId ? candidate : undefined;
+    if (!outreach || !accountId) { res.status(404).json({ error: "Outreach record not found" }); return; }
+    if (outreach.status !== "accepted" && outreach.status !== "placed") { res.status(409).json({ error: "Accept the outreach before recording a placement." }); return; }
+    const canonicalUrl = canonicalPlacementUrl(typeof req.body?.canonicalUrl === "string" ? req.body.canonicalUrl : "");
+    const publicationDate = parseDate(req.body?.publicationDate);
+    const headline = typeof req.body?.headline === "string" ? req.body.headline.trim().slice(0, 1000) : "";
+    const supportingEvidence = typeof req.body?.supportingEvidence === "string" ? req.body.supportingEvidence.trim().slice(0, 10000) : "";
+    if (!(publicationDate instanceof Date) || !headline || !supportingEvidence) { res.status(400).json({ error: "URL, publication date, headline and supporting evidence are required." }); return; }
+    const values = { canonicalUrl, canonicalUrlKey: canonicalUrl, publicationDate, headline, supportingEvidence, legacySourceRef: typeof req.body?.legacySourceRef === "string" ? req.body.legacySourceRef.slice(0, 500) : null };
+    const actor = req.account!.username;
+    const result = await db.transaction(async (tx) => {
+      if (process.env.NODE_ENV !== "test") await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`media-outreach:${id}`}))`);
+      if (process.env.NODE_ENV !== "test") await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`media-placement:${accountId}:${outreach.projectId}:${canonicalUrl}`}))`);
+      const [lockedOutreach] = await tx.select().from(mediaOutreachTable).where(eq(mediaOutreachTable.id, id)).limit(1);
+      if (!lockedOutreach || (lockedOutreach.status !== "accepted" && lockedOutreach.status !== "placed")) return { invalidStatus: true as const };
+      let [existing] = await tx.select().from(mediaPlacementsTable).where(and(eq(mediaPlacementsTable.accountId, accountId), eq(mediaPlacementsTable.projectId, outreach.projectId), eq(mediaPlacementsTable.canonicalUrlKey, canonicalUrl))).limit(1);
+      if (existing && existing.outreachId !== id) return { conflict: existing };
+      if (existing && process.env.NODE_ENV !== "test") {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`media-placement-id:${existing.id}`}))`);
+        [existing] = await tx.select().from(mediaPlacementsTable).where(eq(mediaPlacementsTable.id, existing.id)).limit(1);
+      }
+      const verificationHistory = existing ? [...existing.verificationHistory, {
+        kind: "claim_revised", recordedAt: new Date().toISOString(), actor,
+        priorClaim: { canonicalUrl: existing.canonicalUrl, publicationDate: existing.publicationDate.toISOString(), headline: existing.headline, supportingEvidence: existing.supportingEvidence },
+        priorVerification: existing.verification, priorVerifiedFacts: existing.verifiedFacts,
+      }] : [];
+      const [row] = existing
+        ? await tx.update(mediaPlacementsTable).set({ ...values, verification: "user_claimed", verifiedFacts: {}, verificationHistory }).where(eq(mediaPlacementsTable.id, existing.id)).returning()
+        : await tx.insert(mediaPlacementsTable).values({ ...values, outreachId: id, accountId, projectId: outreach.projectId, verification: "user_claimed", createdBy: actor }).returning();
+      if (lockedOutreach.status !== "placed") {
+        await tx.update(mediaOutreachTable).set({ status: "placed" }).where(and(eq(mediaOutreachTable.id, id), eq(mediaOutreachTable.status, "accepted")));
+        await tx.insert(mediaOutreachActivitiesTable).values({ outreachId: id, accountId, projectId: outreach.projectId, fromStatus: lockedOutreach.status, toStatus: "placed", note: existing ? "Placement evidence updated" : "Placement recorded", actor });
+      }
+      return { placement: row, updated: !!existing };
+    });
+    if ("invalidStatus" in result) { res.status(409).json({ error: "Accept the outreach before recording a placement." }); return; }
+    if ("conflict" in result) { res.status(409).json({ error: "This placement URL is already linked to another outreach record.", duplicate: result.conflict }); return; }
+    res.status(result.updated ? 200 : 201).json({ ok: true, ...result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to save placement";
+    if (/Placement URL/.test(message) || /Invalid URL/.test(message)) { res.status(400).json({ error: message }); return; }
+    req.log.error({ err: error }, "media placement failed"); res.status(500).json({ error: "Failed to save placement" });
+  }
+});
+
+router.put("/store/media-db/placements/:id/verification", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = Number(req.params.id);
+    const [candidate] = await db.select().from(mediaPlacementsTable).where(eq(mediaPlacementsTable.id, id)).limit(1);
+    const accountId = candidate ? await visibleProjectOwner(req, candidate.projectId) : null;
+    const placement = candidate && accountId === candidate.accountId ? candidate : undefined;
+    if (!placement || !accountId) { res.status(404).json({ error: "Placement not found" }); return; }
+    const [updated] = await db.transaction(async (tx) => {
+      if (process.env.NODE_ENV !== "test") await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`media-placement-id:${id}`}))`);
+      const [current] = await tx.select().from(mediaPlacementsTable).where(eq(mediaPlacementsTable.id, id)).limit(1);
+      if (!current || current.accountId !== accountId) return [];
+      const evidence = await fetchPlacementPageEvidence(current.canonicalUrl);
+      const verifiedFacts = { ...evidence, canonicalUrl: canonicalPlacementUrl(evidence.canonicalUrl), checkedAt: new Date().toISOString() };
+      const verificationHistory = [...current.verificationHistory, { kind: "page_verified", ...verifiedFacts, actor: req.account!.username }];
+      return tx.update(mediaPlacementsTable).set({ verification: "page_verified", verifiedFacts, verificationHistory }).where(eq(mediaPlacementsTable.id, id)).returning();
+    });
+    if (!updated) { res.status(409).json({ error: "The placement changed before verification completed." }); return; }
+    res.json({ ok: true, placement: updated });
+  } catch (error) {
+    req.log.warn({ err: error }, "media placement page verification failed");
+    res.status(422).json({ error: "The placement page could not be verified." });
+  }
 });
 
 export default router;

@@ -218,6 +218,90 @@ export async function ensureMediaSchema(): Promise<void> {
       updated_at timestamptz NOT NULL DEFAULT now()
     )
   `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS media_outreach (
+      id serial PRIMARY KEY, account_id varchar NOT NULL, project_id varchar NOT NULL, story_key varchar(200) NOT NULL,
+      contact_id integer, outlet_id integer, status varchar(20) NOT NULL DEFAULT 'planned',
+      article_snapshot jsonb NOT NULL DEFAULT '{"title":""}'::jsonb,
+      contact_snapshot jsonb NOT NULL DEFAULT '{"name":"","role":"","email":""}'::jsonb,
+      outlet_snapshot jsonb NOT NULL DEFAULT '{"name":"","website":""}'::jsonb,
+      target_phrases jsonb NOT NULL DEFAULT '[]'::jsonb, pitch_date timestamptz, response_date timestamptz,
+      notes text NOT NULL DEFAULT '', responsible_team_member text NOT NULL DEFAULT '', created_by varchar NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS media_outreach_activities (
+      id serial PRIMARY KEY, outreach_id integer NOT NULL, account_id varchar NOT NULL, project_id varchar NOT NULL,
+      from_status varchar(20), to_status varchar(20) NOT NULL, note text NOT NULL DEFAULT '', actor varchar NOT NULL,
+      occurred_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS media_placements (
+      id serial PRIMARY KEY, outreach_id integer NOT NULL, account_id varchar NOT NULL, project_id varchar NOT NULL,
+      canonical_url text NOT NULL, canonical_url_key text NOT NULL, publication_date timestamptz NOT NULL,
+      headline text NOT NULL, supporting_evidence text NOT NULL, verification varchar(20) NOT NULL DEFAULT 'user_claimed',
+      verified_facts jsonb NOT NULL DEFAULT '{}'::jsonb, verification_history jsonb NOT NULL DEFAULT '[]'::jsonb,
+      legacy_source_ref text, created_by varchar NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`ALTER TABLE media_placements ADD COLUMN IF NOT EXISTS verification_history jsonb NOT NULL DEFAULT '[]'::jsonb`);
+  await db.execute(sql`
+    ALTER TABLE media_outreach
+      ADD COLUMN IF NOT EXISTS account_id varchar,
+      ADD COLUMN IF NOT EXISTS project_id varchar,
+      ADD COLUMN IF NOT EXISTS story_key varchar(200),
+      ADD COLUMN IF NOT EXISTS contact_id integer,
+      ADD COLUMN IF NOT EXISTS outlet_id integer,
+      ADD COLUMN IF NOT EXISTS status varchar(20) NOT NULL DEFAULT 'planned',
+      ADD COLUMN IF NOT EXISTS article_snapshot jsonb NOT NULL DEFAULT '{"title":""}'::jsonb,
+      ADD COLUMN IF NOT EXISTS contact_snapshot jsonb NOT NULL DEFAULT '{"name":"","role":"","email":""}'::jsonb,
+      ADD COLUMN IF NOT EXISTS outlet_snapshot jsonb NOT NULL DEFAULT '{"name":"","website":""}'::jsonb,
+      ADD COLUMN IF NOT EXISTS target_phrases jsonb NOT NULL DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS pitch_date timestamptz,
+      ADD COLUMN IF NOT EXISTS response_date timestamptz,
+      ADD COLUMN IF NOT EXISTS notes text NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS responsible_team_member varchar(200) NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS created_by varchar NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now(),
+      ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now()
+  `);
+  await db.execute(sql`
+    ALTER TABLE media_outreach_activities
+      ADD COLUMN IF NOT EXISTS outreach_id integer,
+      ADD COLUMN IF NOT EXISTS account_id varchar,
+      ADD COLUMN IF NOT EXISTS project_id varchar,
+      ADD COLUMN IF NOT EXISTS from_status varchar(20),
+      ADD COLUMN IF NOT EXISTS to_status varchar(20) NOT NULL DEFAULT 'planned',
+      ADD COLUMN IF NOT EXISTS note text NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS actor varchar NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS occurred_at timestamptz NOT NULL DEFAULT now()
+  `);
+  await db.execute(sql`DELETE FROM media_outreach_activities WHERE outreach_id IS NULL OR account_id IS NULL OR project_id IS NULL`);
+  await db.execute(sql`DELETE FROM media_placements WHERE outreach_id IS NULL OR account_id IS NULL OR project_id IS NULL OR canonical_url IS NULL OR canonical_url_key IS NULL OR publication_date IS NULL`);
+  await db.execute(sql`DELETE FROM media_outreach WHERE account_id IS NULL OR project_id IS NULL OR story_key IS NULL`);
+  await db.execute(sql`ALTER TABLE media_outreach ALTER COLUMN account_id SET NOT NULL, ALTER COLUMN project_id SET NOT NULL, ALTER COLUMN story_key SET NOT NULL`);
+  await db.execute(sql`ALTER TABLE media_outreach_activities ALTER COLUMN outreach_id SET NOT NULL, ALTER COLUMN account_id SET NOT NULL, ALTER COLUMN project_id SET NOT NULL`);
+  await db.execute(sql`ALTER TABLE media_placements ALTER COLUMN outreach_id SET NOT NULL, ALTER COLUMN account_id SET NOT NULL, ALTER COLUMN project_id SET NOT NULL, ALTER COLUMN canonical_url SET NOT NULL, ALTER COLUMN canonical_url_key SET NOT NULL, ALTER COLUMN publication_date SET NOT NULL`);
+  await db.execute(sql`
+    ALTER TABLE media_placements
+      ADD COLUMN IF NOT EXISTS outreach_id integer,
+      ADD COLUMN IF NOT EXISTS account_id varchar,
+      ADD COLUMN IF NOT EXISTS project_id varchar,
+      ADD COLUMN IF NOT EXISTS canonical_url text,
+      ADD COLUMN IF NOT EXISTS canonical_url_key text,
+      ADD COLUMN IF NOT EXISTS publication_date timestamptz,
+      ADD COLUMN IF NOT EXISTS headline text NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS supporting_evidence text NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS verification varchar(20) NOT NULL DEFAULT 'user_claimed',
+      ADD COLUMN IF NOT EXISTS verified_facts jsonb NOT NULL DEFAULT '{}'::jsonb,
+      ADD COLUMN IF NOT EXISTS legacy_source_ref text,
+      ADD COLUMN IF NOT EXISTS created_by varchar NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now(),
+      ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now()
+  `);
 
   await db.execute(sql`
     CREATE UNIQUE INDEX IF NOT EXISTS media_contact_categories_unique
@@ -247,6 +331,8 @@ export async function ensureMediaSchema(): Promise<void> {
     CREATE UNIQUE INDEX IF NOT EXISTS media_recommendation_feedback_unique
       ON media_recommendation_feedback (account_id, project_id, story_key, contact_id)
   `);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS media_outreach_story_contact_unique ON media_outreach (account_id, project_id, story_key, contact_id)`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS media_placements_project_url_unique ON media_placements (account_id, project_id, canonical_url_key)`);
 
   // NOT VALID preserves every legacy row if a partially-created table contains
   // an orphan, while enforcing the relationship for all writes after startup.
@@ -285,6 +371,22 @@ export async function ensureMediaSchema(): Promise<void> {
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_recommendation_feedback_contact_id_fkey') THEN
         ALTER TABLE media_recommendation_feedback ADD CONSTRAINT media_recommendation_feedback_contact_id_fkey
           FOREIGN KEY (contact_id) REFERENCES media_contacts(id) ON DELETE CASCADE NOT VALID;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_outreach_contact_id_fkey') THEN
+        ALTER TABLE media_outreach ADD CONSTRAINT media_outreach_contact_id_fkey
+          FOREIGN KEY (contact_id) REFERENCES media_contacts(id) NOT VALID;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_outreach_outlet_id_fkey') THEN
+        ALTER TABLE media_outreach ADD CONSTRAINT media_outreach_outlet_id_fkey
+          FOREIGN KEY (outlet_id) REFERENCES media_outlets(id) NOT VALID;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_outreach_activities_outreach_id_fkey') THEN
+        ALTER TABLE media_outreach_activities ADD CONSTRAINT media_outreach_activities_outreach_id_fkey
+          FOREIGN KEY (outreach_id) REFERENCES media_outreach(id) ON DELETE CASCADE NOT VALID;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_placements_outreach_id_fkey') THEN
+        ALTER TABLE media_placements ADD CONSTRAINT media_placements_outreach_id_fkey
+          FOREIGN KEY (outreach_id) REFERENCES media_outreach(id) ON DELETE CASCADE NOT VALID;
       END IF;
     END
     $$

@@ -35,7 +35,10 @@ vi.mock("@workspace/db", async () => {
 
 vi.mock("../middleware/platform-auth", () => ({ requirePlatformAuth: (_req: unknown, _res: unknown, next: () => void) => next() }));
 vi.mock("../lib/member-guards", () => ({ memberProjectGate: (_req: unknown, _res: unknown, next: () => void) => next(), inAssignedScope: () => true }));
-vi.mock("../lib/platform-auth", () => ({ getVisibleUsernames: async () => null, normUsername: (value: string) => value.toLowerCase() }));
+vi.mock("../lib/platform-auth", () => ({ getVisibleUsernames: async (account: { username: string }) => [account.username.toLowerCase()], normUsername: (value: string) => value.toLowerCase() }));
+vi.mock("../lib/safe-fetch", () => ({
+  fetchPlacementPageEvidence: async (url: string) => ({ canonicalUrl: url, headline: "Verified headline", publicationDate: "2026-09-03" }),
+}));
 
 import {
   db,
@@ -45,6 +48,9 @@ import {
   mediaRecommendationFeedbackTable,
   mediaRecommendationItemsTable,
   mediaRecommendationSetsTable,
+  mediaOutreachTable,
+  mediaOutreachActivitiesTable,
+  mediaPlacementsTable,
   projectsTable,
 } from "@workspace/db";
 import { ensureMediaSchema } from "../lib/ensure-media-schema";
@@ -65,6 +71,7 @@ beforeAll(async () => {
   ]);
   const app = express();
   app.use(express.json());
+  app.get("/verification-page", (_req, res) => res.type("html").send('<!doctype html><html><head><link rel="canonical" href="/verification-page"><meta property="og:title" content="Verified headline"><meta property="article:published_time" content="2026-09-03"></head><body><h1>Verified headline</h1></body></html>'));
   app.use((req, _res, next) => {
     req.account = { username: String(req.headers["x-workspace"] || "workspace-a"), role: "user" } as NonNullable<typeof req.account>;
     req.log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as typeof req.log;
@@ -104,6 +111,12 @@ function actualDefault(value: unknown): string | null {
   if (/^'\{\}'(?:::text\[\])?$/.test(normalized)) return "empty-array";
   if (normalized === "'[]'::jsonb") return "empty-array";
   if (/^'\{\}'::jsonb$/.test(normalized)) return "empty-object";
+  const jsonDefault = normalized.match(/^'(.*)'::jsonb$/);
+  if (jsonDefault) {
+    try { return JSON.stringify(JSON.parse(jsonDefault[1])); } catch { /* compare the normalized database expression below */ }
+  }
+  const textDefault = normalized.match(/^'(.*)'::(?:charactervarying|text)$/);
+  if (textDefault) return textDefault[1];
   if (/^0(?:::integer)?$/.test(normalized)) return "0";
   return normalized;
 }
@@ -159,11 +172,17 @@ describe("media recommendation refinement API", () => {
           'media_recommendation_sets',
           'media_recommendation_items',
           'media_recommendation_decisions',
-          'media_recommendation_feedback'
+          'media_recommendation_feedback',
+          'media_outreach',
+          'media_outreach_activities',
+          'media_placements'
         )
       ORDER BY table_name
     `);
     expect(tables.rows.map((row) => row.table_name)).toEqual([
+      "media_outreach",
+      "media_outreach_activities",
+      "media_placements",
       "media_recommendation_decisions",
       "media_recommendation_feedback",
       "media_recommendation_items",
@@ -225,6 +244,19 @@ describe("media recommendation refinement API", () => {
     await expectDatabaseColumnsToMatchSchema("media_recommendation_feedback", mediaRecommendationFeedbackTable, [
       "account_id", "project_id", "story_key", "contact_id", "signal", "created_at", "updated_at",
     ]);
+    await expectDatabaseColumnsToMatchSchema("media_outreach", mediaOutreachTable, [
+      "account_id", "project_id", "story_key", "contact_id", "outlet_id", "status", "article_snapshot",
+      "contact_snapshot", "outlet_snapshot", "target_phrases", "pitch_date", "response_date", "notes",
+      "responsible_team_member", "created_by", "created_at", "updated_at",
+    ]);
+    await expectDatabaseColumnsToMatchSchema("media_outreach_activities", mediaOutreachActivitiesTable, [
+      "outreach_id", "account_id", "project_id", "from_status", "to_status", "note", "actor", "occurred_at",
+    ]);
+    await expectDatabaseColumnsToMatchSchema("media_placements", mediaPlacementsTable, [
+      "outreach_id", "account_id", "project_id", "canonical_url", "canonical_url_key", "publication_date",
+      "headline", "supporting_evidence", "verification", "verified_facts", "legacy_source_ref",
+      "verification_history", "created_by", "created_at", "updated_at",
+    ]);
 
     await db.execute(sql`ALTER TABLE media_recommendation_items DROP COLUMN phrase_attributions`);
     await ensureMediaSchema();
@@ -258,9 +290,7 @@ describe("media recommendation refinement API", () => {
 
     const otherArticle = await (await request("/store/media-db/recommendations/decisions?projectId=project-1&storyKey=story-2")).json() as { feedback: unknown[] };
     expect(otherArticle.feedback).toEqual([]);
-    const otherWorkspace = await (await request("/store/media-db/recommendations/decisions?projectId=project-1&storyKey=story-1", "workspace-b")).json() as { feedback: unknown[]; items: unknown[] };
-    expect(otherWorkspace.feedback).toEqual([]);
-    expect(otherWorkspace.items).toEqual([]);
+    expect((await request("/store/media-db/recommendations/decisions?projectId=project-1&storyKey=story-1", "workspace-b")).status).toBe(404);
   });
 
   it("persists exact phrase attributions and rejects forged phrase identities", async () => {
@@ -334,5 +364,64 @@ describe("media recommendation refinement API", () => {
     const longBody = await longRequest.json() as { items: Array<{ phraseAttributions: unknown[] }> };
     expect(longBody.items).toBeDefined();
     expect(capped).toHaveLength(500);
+  });
+
+  it("tracks the complete outreach journey, preserves snapshots and updates duplicate placements safely", async () => {
+    const contacts = await db.select().from(mediaContactsTable);
+    const phrase = { id: stableExactTargetPhraseId("discovery", "energy correspondent"), text: "energy correspondent", intentGroup: "discovery" };
+    const created = await request("/store/media-db/outreach", "workspace-a", {
+      method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "placement-story", articleTitle: "Stored article", contactId: contacts[0].id, targetPhrases: [phrase], responsibleTeamMember: "Alex" }),
+    });
+    expect(created.status).toBe(201);
+    const createdBody = await created.json() as { outreach: { id: number; contactSnapshot: { name: string }; targetPhrases: unknown[] } };
+    const outreachId = createdBody.outreach.id;
+    expect(createdBody.outreach.contactSnapshot.name).toContain("Jane");
+    expect(createdBody.outreach.targetPhrases).toEqual([phrase]);
+
+    expect((await request(`/store/media-db/outreach/${outreachId}`, "workspace-a", { method: "PUT", body: JSON.stringify({ status: "pitched" }) })).status).toBe(400);
+    expect((await request(`/store/media-db/outreach/${outreachId}`, "workspace-a", { method: "PUT", body: JSON.stringify({ status: "pitched", pitchDate: "2026-09-01", notes: "Pitch sent" }) })).status).toBe(200);
+    expect((await request(`/store/media-db/outreach/${outreachId}`, "workspace-a", { method: "PUT", body: JSON.stringify({ status: "responded", responseDate: "2026-09-02" }) })).status).toBe(200);
+    expect((await request(`/store/media-db/outreach/${outreachId}`, "workspace-a", { method: "PUT", body: JSON.stringify({ status: "accepted" }) })).status).toBe(200);
+
+    const placementUrl = `${baseUrl.replace(/\/api$/, "")}/verification-page`;
+    const firstPlacement = await request(`/store/media-db/outreach/${outreachId}/placements`, "workspace-a", {
+      method: "POST", body: JSON.stringify({ canonicalUrl: `${placementUrl}?utm_source=email#top`, publicationDate: "2026-09-03", headline: "First headline", supportingEvidence: "The article names the company." }),
+    });
+    expect(firstPlacement.status).toBe(201);
+    const firstPlacementBody = await firstPlacement.json() as { placement: { id: number; canonicalUrl: string; verification: string } };
+    expect(firstPlacementBody.placement.canonicalUrl).toBe(placementUrl);
+    expect(firstPlacementBody.placement.verification).toBe("user_claimed");
+
+    const updatedPlacement = await request(`/store/media-db/outreach/${outreachId}/placements`, "workspace-a", {
+      method: "POST", body: JSON.stringify({ canonicalUrl: placementUrl, publicationDate: "2026-09-04", headline: "Corrected headline", supportingEvidence: "Updated evidence." }),
+    });
+    expect(updatedPlacement.status).toBe(200);
+    expect(await updatedPlacement.json()).toMatchObject({ updated: true, placement: { id: firstPlacementBody.placement.id, headline: "Corrected headline" } });
+
+    const second = await request("/store/media-db/outreach", "workspace-a", {
+      method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "placement-story", articleTitle: "Stored article", contactId: contacts[1].id, targetPhrases: [phrase] }),
+    });
+    const secondId = ((await second.json()) as { outreach: { id: number } }).outreach.id;
+    await request(`/store/media-db/outreach/${secondId}`, "workspace-a", { method: "PUT", body: JSON.stringify({ status: "pitched", pitchDate: "2026-09-01" }) });
+    await request(`/store/media-db/outreach/${secondId}`, "workspace-a", { method: "PUT", body: JSON.stringify({ status: "accepted" }) });
+    expect((await request(`/store/media-db/outreach/${secondId}/placements`, "workspace-a", {
+      method: "POST", body: JSON.stringify({ canonicalUrl: `${placementUrl}?fbclid=duplicate`, publicationDate: "2026-09-04", headline: "Duplicate", supportingEvidence: "Duplicate evidence" }),
+    })).status).toBe(409);
+
+    expect((await request(`/store/media-db/placements/${firstPlacementBody.placement.id}/verification`, "workspace-a", {
+      method: "PUT", body: JSON.stringify({ verification: "page_verified", verifiedFacts: { headline: "Forged client headline" } }),
+    })).status).toBe(200);
+    const revision = await request(`/store/media-db/outreach/${outreachId}/placements`, "workspace-a", {
+      method: "POST", body: JSON.stringify({ canonicalUrl: placementUrl, publicationDate: "2026-09-05", headline: "Revised after verification", supportingEvidence: "A new user claim." }),
+    });
+    expect(await revision.json()).toMatchObject({ placement: { verification: "user_claimed", verifiedFacts: {}, verificationHistory: expect.arrayContaining([expect.objectContaining({ kind: "claim_revised", priorVerification: "page_verified" })]) } });
+    expect((await request(`/store/media-db/placements/${firstPlacementBody.placement.id}/verification`, "workspace-a", { method: "PUT" })).status).toBe(200);
+    await db.update(mediaContactsTable).set({ role: "Departed", deletedAt: new Date() }).where(sql`${mediaContactsTable.id} = ${contacts[0].id}`);
+    const loaded = await (await request("/store/media-db/outreach?projectId=project-1&storyKey=placement-story", "workspace-a")).json() as { outreach: Array<{ contactSnapshot: { role: string }; activities: unknown[]; placements: Array<{ verification: string }> }> };
+    const preserved = loaded.outreach.find((row) => row.contactSnapshot.role === "Energy correspondent");
+    expect(preserved).toBeDefined();
+    expect(preserved!.activities.length).toBeGreaterThanOrEqual(5);
+    expect(preserved!.placements[0].verification).toBe("page_verified");
+    expect((await request("/store/media-db/outreach?projectId=project-1&storyKey=placement-story", "workspace-b")).status).toBe(404);
   });
 });

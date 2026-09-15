@@ -209,6 +209,27 @@ export async function fetchMediaSourceEvidence(url: string): Promise<MediaSource
   return { url: normalized, text, emails: [...emails].slice(0, 100), roleCandidates };
 }
 
+export interface PlacementPageEvidence {
+  canonicalUrl: string;
+  headline: string;
+  publicationDate: string;
+}
+
+export async function fetchPlacementPageEvidence(url: string): Promise<PlacementPageEvidence> {
+  const normalized = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+  const html = await fetchHtml(normalized);
+  const $ = cheerio.load(html);
+  const pageCanonical = $("link[rel='canonical']").attr("href") || normalized;
+  const headline = ($("meta[property='og:title']").attr("content") || $("h1").first().text() || $("title").first().text()).trim();
+  const publicationDate = ($("meta[property='article:published_time']").attr("content") || $("time[datetime]").first().attr("datetime") || "").trim();
+  if (!headline) throw new Error("No page headline was found");
+  return {
+    canonicalUrl: new URL(pageCanonical, normalized).toString(),
+    headline: headline.slice(0, 1000),
+    publicationDate: publicationDate.slice(0, 100),
+  };
+}
+
 const SUB_PAGE_PATTERNS = [
   /\babout\b/i,
   /\bservices?\b/i,
