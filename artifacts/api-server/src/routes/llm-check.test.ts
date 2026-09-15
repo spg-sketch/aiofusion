@@ -107,6 +107,7 @@ import llmCheckRouter, {
   aggregateTopCompetitors,
   groupProbesByQuery,
   computeVisibilityMetrics,
+  buildPhraseMeasurements,
   domainLabel,
   parseEntityList,
   deriveEntityClarity,
@@ -1194,6 +1195,68 @@ describe("computeVisibilityMetrics", () => {
       probe({ mentioned: false, competitors: ["Globex"] }),
     ]);
     expect(m.shareOfVoice).toBe(0);
+  });
+});
+
+describe("buildPhraseMeasurements", () => {
+  const phrase = { id: "phrase-one", text: "best specialist agency", intentGroup: "shortlist" as const };
+  const identity = { name: "Acme" };
+
+  it("records provider-specific mentions, position, citations, domains, share of voice and competitors", () => {
+    const measurements = buildPhraseMeasurements([phrase], [
+      probe({
+        question: phrase.text,
+        response: "1. Rival\n2. Acme https://news.example/acme",
+        mentioned: true,
+        competitors: ["Rival"],
+      }),
+      probe({
+        question: phrase.text,
+        response: "Acme is recommended. Source: https://trade.example/story.",
+        mentioned: true,
+        competitors: ["Rival"],
+      }),
+    ], identity);
+    const chatgpt = measurements.find((item) => item.provider === "chatgpt")!;
+    expect(chatgpt).toMatchObject({
+      status: "complete",
+      methodologyVersion: 1,
+      effectiveQuery: phrase.text,
+      expectedRuns: 2,
+      completedRuns: 2,
+      mentionRuns: 2,
+      mentioned: true,
+      answerPosition: 2,
+      shareOfVoice: 50,
+      failureLabel: null,
+    });
+    expect(chatgpt.citedDomains).toEqual(["news.example", "trade.example"]);
+    expect(chatgpt.competitors).toEqual([{ name: "Rival", mentions: 2 }]);
+  });
+
+  it("stores the effective anchored query used for later comparability checks", () => {
+    const effective = new Map([[phrase.id, `${phrase.text} (acme.example)`]]);
+    const measurements = buildPhraseMeasurements([phrase], [
+      probe({ question: `${phrase.text} (acme.example)` }),
+      probe({ question: `${phrase.text} (acme.example)` }),
+    ], identity, effective);
+    expect(measurements.find((item) => item.provider === "chatgpt")).toMatchObject({
+      status: "complete",
+      effectiveQuery: `${phrase.text} (acme.example)`,
+    });
+  });
+
+  it("labels missing and partial provider probes instead of scoring them as zero", () => {
+    const measurements = buildPhraseMeasurements([phrase], [
+      probe({ question: phrase.text, model: "Claude (Anthropic)", response: "No result" }),
+    ], identity);
+    expect(measurements.find((item) => item.provider === "chatgpt")).toMatchObject({
+      status: "failed", completedRuns: 0, mentioned: null, shareOfVoice: null,
+      failureLabel: "Provider check failed",
+    });
+    expect(measurements.find((item) => item.provider === "claude")).toMatchObject({
+      status: "partial", completedRuns: 1, failureLabel: "1 of 2 runs failed",
+    });
   });
 });
 

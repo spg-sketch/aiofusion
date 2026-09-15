@@ -75,3 +75,4 @@
 - [Exact Media target phrases](aio-fusion-exact-media-phrases.md) — preserve immutable phrase snapshots and distinguish exact matches, topic overlap, and AI-suggested fit.
 - [Media outreach evidence](aio-fusion-media-outreach-evidence.md) — outreach history uses project-owner scope, immutable snapshots, append-only verification provenance, and evidence-gated placed status.
 - [Media contact status and correction provenance](aio-fusion-media-contact-review.md) — departed state and correction reports are workspace-scoped audit records, never silent edits to trusted contact fields.
+- [Media visibility comparison](aio-fusion-media-visibility-comparison.md) — compare phrase checks only when the effective query, provider, model, run count, and methodology version all match.

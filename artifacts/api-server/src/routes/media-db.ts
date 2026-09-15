@@ -1662,8 +1662,11 @@ router.get("/store/media-db/outreach", requirePlatformAuth, async (req: Request,
   const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "";
   const storyKey = typeof req.query.storyKey === "string" ? req.query.storyKey : "";
   const accountId = projectId ? await visibleProjectOwner(req, projectId) : null;
-  if (!accountId || !storyKey) { res.status(404).json({ error: "Project not found" }); return; }
-  const outreach = await db.select().from(mediaOutreachTable).where(and(eq(mediaOutreachTable.accountId, accountId), eq(mediaOutreachTable.projectId, projectId), eq(mediaOutreachTable.storyKey, storyKey))).orderBy(desc(mediaOutreachTable.updatedAt));
+  if (!accountId) { res.status(404).json({ error: "Project not found" }); return; }
+  const outreachScope = storyKey
+    ? and(eq(mediaOutreachTable.accountId, accountId), eq(mediaOutreachTable.projectId, projectId), eq(mediaOutreachTable.storyKey, storyKey))
+    : and(eq(mediaOutreachTable.accountId, accountId), eq(mediaOutreachTable.projectId, projectId));
+  const outreach = await db.select().from(mediaOutreachTable).where(outreachScope).orderBy(desc(mediaOutreachTable.updatedAt));
   const ids = outreach.map((row) => row.id);
   let activities: Array<typeof mediaOutreachActivitiesTable.$inferSelect> = [];
   let placements: Array<typeof mediaPlacementsTable.$inferSelect> = [];

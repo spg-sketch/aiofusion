@@ -4,6 +4,7 @@ import CountdownBanner from "./components/CountdownBanner";
 import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "./lib/auditTiming";
 import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, getLlmSearchQueries, getWebsite, setActiveProjectId, getActiveProjectId, type ConfirmedEntity } from "./IntakeForm";
 import { syncIntakeForProject } from "./lib/projectSync";
+import { getExactTargetPhrases } from "./lib/exactTargetPhrases";
 import { syncAuditsForProject, pushServerAudit, deleteServerAudit } from "./lib/auditSync";
 import { getSession } from "./lib/auth";
 import {
@@ -134,6 +135,8 @@ interface LlmCheckResult {
   assessmentOutcome?: AssessmentOutcome;
   entityClarity?: EntityClarity | null;
   detectionVersion?: number;
+  phraseMeasurements?: import("./lib/mediaVisibilityImpact").PhraseMeasurement[];
+  measurementSettings?: import("./lib/mediaVisibilityImpact").MeasurementSettings;
 }
 
 export type SavedAudit = { id: string; savedAt: string; result: LlmCheckResult };
@@ -943,6 +946,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       const projectData = getProjectAuthorityData();
       projectData.buyerQuestions = buyerQuestions;
       projectData.competitors = competitors;
+      const targetPhrases = getExactTargetPhrases(getLlmSearchQueries());
 
       const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
       const resp = await fetch(`${apiBase}/api/llm-check`, {
@@ -959,6 +963,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           persona: getClientPersona(),
           businessType,
           projectData,
+          targetPhrases,
           projectId: activeClient.id,
           force,
         }),

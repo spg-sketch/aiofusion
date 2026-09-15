@@ -13,6 +13,7 @@ import {
   type AssessmentReasonCategory,
   type AssessmentStatus,
 } from "../lib/assessment-outcome";
+import { stableExactTargetPhraseId } from "../lib/exact-target-phrases";
 import {
   AUTHORITY_DIMENSION_NAMES,
   authorityGradeFor,
@@ -70,9 +71,133 @@ export interface ProbeResult {
   intentTier?: "buyer" | "sector" | "identity";
 }
 
+type ExactTargetPhrase = {
+  id: string;
+  text: string;
+  intentGroup: "discovery" | "shortlist" | "comparison";
+};
+
+export type PhraseProbeMeasurement = {
+  phrase: ExactTargetPhrase;
+  provider: "chatgpt" | "claude";
+  model: string;
+  methodologyVersion: number;
+  effectiveQuery: string;
+  status: "complete" | "partial" | "failed";
+  expectedRuns: number;
+  completedRuns: number;
+  mentionRuns: number;
+  mentioned: boolean | null;
+  answerPosition: number | null;
+  citations: string[];
+  citedDomains: string[];
+  shareOfVoice: number | null;
+  competitors: { name: string; mentions: number }[];
+  failureLabel: string | null;
+};
+
 const RUNS_PER_QUESTION = 2;
 const MAX_QUESTIONS = 8;
+const PHRASE_METHODOLOGY_VERSION = 1;
 const AUDIT_LOCK_DAYS = 21;
+const CHATGPT_MODEL = "gpt-5";
+const CLAUDE_MODEL = "claude-sonnet-4-5";
+
+function normaliseExactPhrases(value: unknown): ExactTargetPhrase[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.flatMap((raw): ExactTargetPhrase[] => {
+    if (!raw || typeof raw !== "object") return [];
+    const item = raw as Record<string, unknown>;
+    const text = typeof item.text === "string" ? item.text.trim().replace(/\s+/g, " ").slice(0, 500) : "";
+    const intentGroup = item.intentGroup;
+    if (!text || !["discovery", "shortlist", "comparison"].includes(String(intentGroup))) return [];
+    const id = stableExactTargetPhraseId(intentGroup as ExactTargetPhrase["intentGroup"], text);
+    if (item.id !== id || seen.has(id)) return [];
+    seen.add(id);
+    return [{ id, text, intentGroup: intentGroup as ExactTargetPhrase["intentGroup"] }];
+  }).slice(0, MAX_QUESTIONS);
+}
+
+function urlsFromAnswer(text: string): string[] {
+  const matches = text.match(/https?:\/\/[^\s<>()\]}",]+/gi) ?? [];
+  return [...new Set(matches.map((raw) => raw.replace(/[.,;:!?]+$/, "")))].slice(0, 20);
+}
+
+function citedDomains(urls: string[]): string[] {
+  return [...new Set(urls.flatMap((value) => {
+    try { return [new URL(value).hostname.toLowerCase().replace(/^www\./, "")]; } catch { return []; }
+  }))];
+}
+
+function firstAnswerPosition(response: string, identity: BrandIdentity, competitors: string[]): number | null {
+  const hits: Array<{ index: number; brand: boolean }> = [];
+  for (const alias of detectionAliases(identity)) {
+    const match = aliasRegex(alias).exec(response);
+    if (match) hits.push({ index: match.index, brand: true });
+  }
+  for (const competitor of competitors) {
+    const normal = normalizeText(competitor);
+    if (!normal) continue;
+    const match = aliasRegex(normal).exec(response);
+    if (match) hits.push({ index: match.index, brand: false });
+  }
+  hits.sort((a, b) => a.index - b.index);
+  const brandIndex = hits.findIndex((hit) => hit.brand);
+  return brandIndex === -1 ? null : brandIndex + 1;
+}
+
+export function buildPhraseMeasurements(
+  phrases: ExactTargetPhrase[],
+  results: ProbeResult[],
+  identity: BrandIdentity,
+  effectiveQuestions: Map<string, string> = new Map(),
+): PhraseProbeMeasurement[] {
+  return phrases.flatMap((phrase) => ([
+    { provider: "chatgpt" as const, model: CHATGPT_MODEL, matches: results.filter((r) => r.question === (effectiveQuestions.get(phrase.id) ?? phrase.text) && r.model.includes("GPT")) },
+    { provider: "claude" as const, model: CLAUDE_MODEL, matches: results.filter((r) => r.question === (effectiveQuestions.get(phrase.id) ?? phrase.text) && r.model.includes("Claude")) },
+  ]).map(({ provider, model, matches }) => {
+    const completedRuns = matches.length;
+    const mentionRuns = matches.filter((r) => r.mentioned).length;
+    const mentioned = completedRuns === 0 ? null : mentionRuns * 2 > completedRuns;
+    const competitorCounts = new Map<string, { name: string; mentions: number }>();
+    for (const run of matches) {
+      for (const name of new Set(run.competitors)) {
+        const key = normalizeCompetitor(name);
+        if (!key) continue;
+        const prior = competitorCounts.get(key);
+        competitorCounts.set(key, { name: prior?.name ?? name, mentions: (prior?.mentions ?? 0) + 1 });
+      }
+    }
+    const competitors = [...competitorCounts.values()].sort((a, b) => b.mentions - a.mentions);
+    const brandMentions = mentionRuns;
+    const competitorMentions = competitors.reduce((sum, item) => sum + item.mentions, 0);
+    const denominator = brandMentions + competitorMentions;
+    const positions = matches.filter((run) => run.mentioned).flatMap((run) => {
+      const position = firstAnswerPosition(run.response, identity, run.competitors);
+      return position === null ? [] : [position];
+    });
+    const citations = [...new Set(matches.flatMap((run) => urlsFromAnswer(run.response)))];
+    return {
+      phrase,
+      provider,
+      model,
+      methodologyVersion: PHRASE_METHODOLOGY_VERSION,
+      effectiveQuery: effectiveQuestions.get(phrase.id) ?? phrase.text,
+      status: completedRuns === 0 ? "failed" as const : completedRuns < RUNS_PER_QUESTION ? "partial" as const : "complete" as const,
+      expectedRuns: RUNS_PER_QUESTION,
+      completedRuns,
+      mentionRuns,
+      mentioned,
+      answerPosition: positions.length ? Math.round(positions.reduce((sum, n) => sum + n, 0) / positions.length) : null,
+      citations,
+      citedDomains: citedDomains(citations),
+      shareOfVoice: completedRuns === 0 || denominator === 0 ? null : Math.round((brandMentions / denominator) * 100),
+      competitors,
+      failureLabel: completedRuns === 0 ? "Provider check failed" : completedRuns < RUNS_PER_QUESTION ? `${RUNS_PER_QUESTION - completedRuns} of ${RUNS_PER_QUESTION} runs failed` : null,
+    };
+  }));
+}
 
 const LEGAL_SUFFIXES = new Set([
   "ltd", "limited", "inc", "incorporated", "llc", "plc", "llp", "co", "company",
@@ -660,7 +785,7 @@ async function probeOpenAI(question: string, identity: BrandIdentity, probeWasAn
     // empty or truncated and silently dropping brand mentions / competitors.
     // Give it a generous budget so thorough answers fit.
     const response = await client.chat.completions.create({
-      model: "gpt-5",
+      model: CHATGPT_MODEL,
       max_completion_tokens: 8000,
       messages: [
         {
@@ -672,6 +797,10 @@ async function probeOpenAI(question: string, identity: BrandIdentity, probeWasAn
     }, { signal });
 
     const text = response.choices[0]?.message?.content || "";
+    if (!text.trim()) {
+      logger.warn({ question, model: CHATGPT_MODEL }, "OpenAI probe returned an empty answer");
+      return null;
+    }
     const _inputTokens  = response.usage?.prompt_tokens     ?? 0;
     const _outputTokens = response.usage?.completion_tokens ?? 0;
     if (accountId) {
@@ -709,7 +838,7 @@ async function probeClaude(question: string, identity: BrandIdentity, probeWasAn
     // Give thorough, comprehensive answers (which can list many competitors)
     // room to finish so the brand mention or competitor list isn't cut off.
     const response = await client.messages.create({
-      model: "claude-sonnet-4-5",
+      model: CLAUDE_MODEL,
       max_tokens: 4000,
       system: "You are a knowledgeable business advisor. Answer questions directly and thoroughly, naming specific companies where relevant. Be factual and comprehensive.",
       messages: [{ role: "user", content: question }],
@@ -717,6 +846,10 @@ async function probeClaude(question: string, identity: BrandIdentity, probeWasAn
 
     const textBlock = response.content.find((b) => b.type === "text");
     const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
+    if (!text.trim()) {
+      logger.warn({ question, model: CLAUDE_MODEL }, "Claude probe returned an empty answer");
+      return null;
+    }
     const _inputTokens  = response.usage?.input_tokens  ?? 0;
     const _outputTokens = response.usage?.output_tokens ?? 0;
     if (accountId) {
@@ -1436,13 +1569,22 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     void detectAndLogSpike(req.account.username);
   }
 
-  const { companyName, sector, sectors, keywords, icp, location, persona, projectData, businessType: rawBusinessType, projectId: rawProjectId, force: rawForce } = req.body;
+  const { companyName, sector, sectors, keywords, icp, location, persona, projectData, targetPhrases: rawTargetPhrases, businessType: rawBusinessType, projectId: rawProjectId, force: rawForce } = req.body;
   const businessType: BusinessType = (rawBusinessType === "service" || rawBusinessType === "product" || rawBusinessType === "consumer") ? rawBusinessType : "";
   const projectId = typeof rawProjectId === "string" ? rawProjectId.trim() : "";
   const force = rawForce === true;
+  const targetPhrases = normaliseExactPhrases(rawTargetPhrases);
 
   if (!companyName || typeof companyName !== "string") {
     res.status(400).json({ error: "companyName is required" });
+    return;
+  }
+  if (rawTargetPhrases !== undefined && (
+    !Array.isArray(rawTargetPhrases)
+    || rawTargetPhrases.length > MAX_QUESTIONS
+    || targetPhrases.length !== rawTargetPhrases.length
+  )) {
+    res.status(400).json({ error: `targetPhrases must contain at most ${MAX_QUESTIONS} unique phrases with canonical IDs.` });
     return;
   }
 
@@ -1551,8 +1693,9 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     // company's website domain so the AI engines answer about the right company.
     // Apply the same anchoring to generated questions so detection is consistent
     // across all probe types for confusable names.
-    const rawBuyerQuestions = (authorityData.buyerQuestions || []).slice(0, 12);
+    const rawBuyerQuestions = (targetPhrases.length ? targetPhrases.map((phrase) => phrase.text) : (authorityData.buyerQuestions || [])).slice(0, 12);
     const buyerQuestions = disambiguateBuyerQuestions(rawBuyerQuestions, identity);
+    const effectivePhraseQuestions = new Map(targetPhrases.map((phrase, index) => [phrase.id, buyerQuestions[index] ?? phrase.text]));
     const anchoredGenerated = disambiguateBuyerQuestions(generated, identity);
     // The identity probe (anchoredGenerated[0]) must always be included so that
     // short/ambiguous names like "SMG" have at least one anchored probe and are
@@ -1561,7 +1704,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     const identityProbe = anchoredGenerated[0];
     const questions = [
       ...new Set([identityProbe, ...buyerQuestions, ...anchoredGenerated.slice(1)]),
-    ].slice(0, MAX_QUESTIONS);
+    ].slice(0, targetPhrases.length ? MAX_QUESTIONS + 1 : MAX_QUESTIONS);
 
     // Tag each question with its intent tier so the weighted Authority Index
     // can give buyer-intent probes more influence than generic sector probes.
@@ -1650,6 +1793,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     const topCompetitors = aggregateTopCompetitors(validResults);
 
     const probes = groupProbesByQuery(validResults);
+    const phraseMeasurements = buildPhraseMeasurements(targetPhrases, validResults, identity, effectivePhraseQuestions);
 
     // Stage two: build one evidence row per unique query (both engines' first
     // representative answer) and ask Claude to score authority against the
@@ -1733,6 +1877,15 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       },
       topCompetitors,
       probes,
+      phraseMeasurements,
+      measurementSettings: {
+        version: 1,
+        runsPerPhrase: RUNS_PER_QUESTION,
+        providers: [
+          { provider: "chatgpt", model: CHATGPT_MODEL },
+          { provider: "claude", model: CLAUDE_MODEL },
+        ],
+      },
       assessment: authorityResult.assessment,
       assessmentStatus: authorityResult.assessmentStatus,
       assessmentOutcome: authorityResult.assessmentOutcome,

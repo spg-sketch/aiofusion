@@ -1,12 +1,13 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import InfoTip from "./InfoTip";
-import { effectiveProjectId, loadPlannerProjects, scoreProject } from "./lib/contentStore";
+import { effectiveProjectId, loadArchive, loadPlannerProjects, scoreProject, useContentStore } from "./lib/contentStore";
 import { getKeyMessages } from "./IntakeForm";
 import { loadSavedAudits, authorityIndexFor, type SavedAudit } from "./LlmCheckPage";
 import { loadSavedDiagnostics, type SavedDiagnostic } from "./lib/diagnosticStore";
 import { syncAuditsForProject, syncDiagnosticsForProject } from "./lib/auditSync";
 import { apiBase } from "./lib/contentAi";
 import { FEATURES } from "./lib/features";
+import { buildMediaVisibilityImpact, mediaVisibilityImpactHtml, type ImpactOutreach } from "./lib/mediaVisibilityImpact";
 import {
   Download,
   Printer,
@@ -194,7 +195,11 @@ function CalloutBrief({ title, children }: { title: string; children: React.Reac
 }
 
 export default function ReportPage({ activeClient, onNavigate }: { activeClient: Client; onNavigate?: (page: string) => void }) {
-  const [activeTab, setActiveTab] = useState<"summary" | "prmkt" | "tracker" | "geo">("summary");
+  const contentStoreVersion = useContentStore();
+  const [activeTab, setActiveTab] = useState<"summary" | "prmkt" | "tracker" | "geo" | "impact">("summary");
+  const [impactOutreach, setImpactOutreach] = useState<ImpactOutreach[]>([]);
+  const [impactOutreachProjectId, setImpactOutreachProjectId] = useState("");
+  const [impactEvidenceError, setImpactEvidenceError] = useState("");
   const todayIso = new Date().toISOString().slice(0, 10);
   // Derive the project start date from the stored createdAt field. For projects
   // created before this field was added, fall back to extracting the epoch
@@ -209,20 +214,46 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
 
   // ── Live audit data - loaded from localStorage, then synced from server ──
   const [savedAudits, setSavedAudits] = useState<SavedAudit[]>(() => loadSavedAudits(activeClient.id));
+  const [savedAuditProjectId, setSavedAuditProjectId] = useState(activeClient.id);
   const [savedDiagnostics, setSavedDiagnostics] = useState<SavedDiagnostic[]>(() => loadSavedDiagnostics(activeClient.id));
 
   useEffect(() => {
+    let cancelled = false;
     // Load from localStorage immediately so the page renders with local data,
     // then pull from the server and refresh with the merged (shared) history.
     setSavedAudits(loadSavedAudits(activeClient.id));
+    setSavedAuditProjectId(activeClient.id);
     setSavedDiagnostics(loadSavedDiagnostics(activeClient.id));
     void Promise.all([
       syncAuditsForProject(activeClient.id),
       syncDiagnosticsForProject(activeClient.id),
     ]).then(([audits, diags]) => {
+      if (cancelled) return;
       setSavedAudits(audits);
+      setSavedAuditProjectId(activeClient.id);
       setSavedDiagnostics(diags);
     });
+    return () => { cancelled = true; };
+  }, [activeClient.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setImpactEvidenceError("");
+    setImpactOutreach([]);
+    setImpactOutreachProjectId("");
+    fetch(`${apiBase()}/api/store/media-db/outreach?projectId=${encodeURIComponent(activeClient.id)}`, { credentials: "include" })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Media evidence could not be loaded.");
+        if (!cancelled) {
+          setImpactOutreach(Array.isArray(data.outreach) ? data.outreach : []);
+          setImpactOutreachProjectId(activeClient.id);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) { setImpactOutreach([]); setImpactEvidenceError(error instanceof Error ? error.message : "Media evidence could not be loaded."); }
+      });
+    return () => { cancelled = true; };
   }, [activeClient.id]);
 
   // Re-read from localStorage whenever an audit or diagnostic is saved/deleted
@@ -427,11 +458,35 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
 
   const prRows = useMemo(() => inRange.filter(r => r.type === "Press Release"), [inRange]);
   const prAvgScore = prRows.length ? Math.round((prRows.reduce((s, r) => s + r.score, 0) / prRows.length) * 10) / 10 : 0;
+  const impactContent = useMemo(() => loadArchive(activeClient.id), [activeClient.id, contentStoreVersion]);
+  const scopedImpactAudits = savedAuditProjectId === activeClient.id ? savedAudits : [];
+  const scopedImpactOutreach = impactOutreachProjectId === activeClient.id ? impactOutreach : [];
+  const impactComparisons = useMemo(
+    () => buildMediaVisibilityImpact(scopedImpactAudits, scopedImpactOutreach, impactContent),
+    [scopedImpactAudits, scopedImpactOutreach, impactContent],
+  );
+
+  function exportImpactReport() {
+    const popup = window.open("", "_blank");
+    if (!popup) return;
+    popup.document.write(mediaVisibilityImpactHtml(activeClient.name, impactComparisons));
+    popup.document.close();
+    popup.focus();
+    popup.print();
+  }
+
+  function openImpactEvidence(event: { navigation?: "content" | "media-research"; storyKey?: string }) {
+    if (event.storyKey) {
+      try { localStorage.setItem(event.navigation === "content" ? "aio.archive.preload" : "aio.research.preload", event.storyKey); } catch { /* navigation still works */ }
+    }
+    onNavigate?.(event.navigation === "content" ? "archive" : "media-research");
+  }
 
   const tabs = [
     { id: "summary" as const, label: "Executive Summary" },
     { id: "prmkt" as const, label: "PR & Marketing" },
     { id: "tracker" as const, label: "Earned Media Tracker" },
+    { id: "impact" as const, label: "Media Visibility Impact" },
     { id: "geo" as const, label: "Website GEO & Technical" },
   ];
 
@@ -685,7 +740,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1.5 rounded-xl mb-6" style={{ background: vars.navy }}>
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 p-1.5 rounded-xl mb-6" style={{ background: vars.navy }}>
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -856,6 +911,101 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {activeTab === "impact" && (
+        <div className="space-y-5">
+          <div className="rounded-2xl border p-5 sm:p-6 bg-white" style={{ borderColor: vars.g200 }}>
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Media Visibility Impact</h2>
+                <p className="text-[13px] mt-2 max-w-3xl leading-relaxed" style={{ color: vars.g500 }}>
+                  Comparable checks use the same exact phrase, provider, model and run count. Activity between checks is supporting evidence of timing and correlation. It is not proof that content, outreach or a placement caused a change.
+                </p>
+              </div>
+              <button onClick={exportImpactReport} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white whitespace-nowrap" style={{ background: vars.accent }}>
+                <Download size={16} /> Export impact report
+              </button>
+            </div>
+            {impactEvidenceError && <p className="mt-4 rounded-lg px-3 py-2 text-[12px]" style={{ background: "#FBEEEC", color: vars.red }}>{impactEvidenceError} Audit measurements are still shown, but linked media evidence is unavailable.</p>}
+          </div>
+
+          {impactComparisons.length === 0 ? (
+            <div className="rounded-2xl border p-8 text-center bg-white" style={{ borderColor: vars.g200 }}>
+              <p className="font-semibold" style={{ color: vars.navy }}>No phrase-level baseline yet</p>
+              <p className="text-[13px] mt-2" style={{ color: vars.g500 }}>Run a new Earned Media Visibility Audit. Existing historical audits remain valid, but they did not record phrase-level provider evidence.</p>
+              <button onClick={() => onNavigate?.("llm-check")} className="mt-4 px-4 py-2 rounded-lg text-sm text-white" style={{ background: vars.accent }}>Run visibility audit</button>
+            </div>
+          ) : impactComparisons.map((comparison) => {
+            const before = comparison.baseline?.measurement;
+            const after = comparison.followUp?.measurement;
+            const providerLabel = comparison.provider === "chatgpt" ? "ChatGPT" : "Claude";
+            return (
+              <div key={`${comparison.phrase.id}-${comparison.provider}`} className="rounded-2xl border p-5 sm:p-6 bg-white" style={{ borderColor: vars.g200 }}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.16em] font-bold" style={{ color: vars.accent }}>{comparison.phrase.intentGroup} · {providerLabel}</p>
+                    <h3 className="text-base font-semibold mt-1" style={{ color: vars.navy }}>{comparison.phrase.text}</h3>
+                    <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>Model: {comparison.model}</p>
+                    {comparison.baseline?.measurement.effectiveQuery && comparison.baseline.measurement.effectiveQuery !== comparison.phrase.text && (
+                      <p className="text-[11px] mt-1" style={{ color: vars.g500 }}>Effective query measured: {comparison.baseline.measurement.effectiveQuery}</p>
+                    )}
+                    {comparison.attemptedFollowUp?.measurement.effectiveQuery && comparison.attemptedFollowUp.measurement.effectiveQuery !== comparison.phrase.text && (
+                      <p className="text-[11px] mt-1" style={{ color: vars.g500 }}>Excluded check query: {comparison.attemptedFollowUp.measurement.effectiveQuery}</p>
+                    )}
+                  </div>
+                  <span className="px-3 py-1.5 rounded-full text-[11px] font-semibold" style={{ background: comparison.status === "comparable" ? "#EFF7F2" : "#FFF8EC", color: comparison.status === "comparable" ? vars.green : vars.amber }}>{comparison.statusLabel}</span>
+                </div>
+                {before && (
+                  <div className="grid md:grid-cols-2 gap-3 mt-5">
+                    {[{ label: "Baseline", sample: before, at: comparison.baseline!.checkedAt }, ...(after ? [{ label: "Follow-up", sample: after, at: comparison.followUp!.checkedAt }] : [])].map(({ label, sample, at }) => (
+                      <div key={label} className="rounded-xl border p-4" style={{ borderColor: vars.g200 }}>
+                        <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: vars.g500 }}>{label} · {new Date(at).toLocaleDateString("en-GB")}</p>
+                        <div className="grid grid-cols-3 gap-3 mt-3 text-[12px]">
+                          <p><strong>Mentions</strong><br />{sample.mentionRuns}/{sample.completedRuns} runs</p>
+                          <p><strong>Position</strong><br />{sample.answerPosition ?? "Not mentioned"}</p>
+                          <p><strong>Citations</strong><br />{sample.citations.length}</p>
+                          <p><strong>Domains</strong><br />{sample.citedDomains.length}</p>
+                          <p><strong>Share of voice</strong><br />{sample.shareOfVoice === null ? "Not measured" : `${sample.shareOfVoice}%`}</p>
+                          <p><strong>Competitors</strong><br />{sample.competitors.reduce((sum, item) => sum + item.mentions, 0)} mentions</p>
+                        </div>
+                        {sample.failureLabel && <p className="text-[11px] mt-3" style={{ color: vars.red }}>{sample.failureLabel}</p>}
+                        <p className="text-[11px] mt-3 break-words" style={{ color: vars.g500 }}>Cited domains: {sample.citedDomains.join(", ") || "None observed"}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {comparison.deltas && (
+                  <div className="mt-4 rounded-xl p-4" style={{ background: vars.g50 }}>
+                    <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: vars.navy }}>Calculated change</p>
+                    <p className="text-[12px] mt-2" style={{ color: vars.g600 }}>
+                      Mentions {comparison.deltas.mentionRuns >= 0 ? "+" : ""}{comparison.deltas.mentionRuns} · Position {comparison.deltas.answerPosition === null ? "not comparable" : `${comparison.deltas.answerPosition >= 0 ? "+" : ""}${comparison.deltas.answerPosition}`} · Citations {comparison.deltas.citations >= 0 ? "+" : ""}{comparison.deltas.citations} · Cited domains {comparison.deltas.citedDomains >= 0 ? "+" : ""}{comparison.deltas.citedDomains} · Share of voice {comparison.deltas.shareOfVoice === null ? "not measured" : `${comparison.deltas.shareOfVoice >= 0 ? "+" : ""}${comparison.deltas.shareOfVoice} points`} · Competitor mentions {comparison.deltas.competitorMentions >= 0 ? "+" : ""}{comparison.deltas.competitorMentions}
+                    </p>
+                  </div>
+                )}
+                {comparison.attemptedFollowUp && (
+                  <p className="mt-4 rounded-lg px-3 py-2 text-[12px]" style={{ background: "#FBEEEC", color: vars.red }}>
+                    Excluded check on {new Date(comparison.attemptedFollowUp.checkedAt).toLocaleDateString("en-GB")}: {comparison.attemptedFollowUp.measurement.failureLabel || "The settings were not comparable, so this check was not used in calculated changes."}
+                  </p>
+                )}
+                <div className="mt-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: vars.navy }}>Evidence between checks</p>
+                    <button onClick={() => onNavigate?.("media-research")} className="text-[11px] font-semibold" style={{ color: vars.accent }}>Open Media Research</button>
+                  </div>
+                  {comparison.timeline.length === 0 ? <p className="text-[12px] mt-2" style={{ color: vars.g400 }}>No linked content, outreach or placement evidence in this interval.</p> : (
+                    <div className="mt-2 space-y-2">{comparison.timeline.map((event) => (
+                      <div key={event.id} className="rounded-lg border px-3 py-2 flex items-start justify-between gap-3" style={{ borderColor: vars.g200 }}>
+                        <div><p className="text-[12px] font-medium" style={{ color: vars.navy }}>{event.href ? <a href={event.href} target="_blank" rel="noreferrer" className="underline">{event.label}</a> : event.label}</p><p className="text-[11px]" style={{ color: vars.g500 }}>{new Date(event.at).toLocaleDateString("en-GB")} · {event.detail}</p></div>
+                        <button onClick={() => openImpactEvidence(event)} className="text-[11px] font-semibold shrink-0" style={{ color: vars.accent }}>Open</button>
+                      </div>
+                    ))}</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

@@ -26,7 +26,15 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
   useEffect(() => { setArchive(loadArchive()); }, [contentVersion]);
   const storeState = getContentStoreState();
   const [actionError, setActionError] = useState("");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => {
+    try {
+      const id = localStorage.getItem("aio.archive.preload");
+      localStorage.removeItem("aio.archive.preload");
+      return archive.find((item) => item.id === id)?.title || "";
+    } catch {
+      return "";
+    }
+  });
   const [periodFilter, setPeriodFilter] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<string>("");
   const [messageFilter, setMessageFilter] = useState<string[]>([]);
