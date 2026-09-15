@@ -131,9 +131,27 @@ function ProjectSetup({ onNotify }: { onNotify: (message: string) => void }) {
   return <div className="intake-page"><div className="intake-heading"><div><h1>Project Set-Up</h1><p>Capture the core information and context that informs your PR, content marketing and AI authority strategy. Your input is used across AIO Fusion.</p></div><span className="intake-status">0% COMPLETE</span></div><div className="intake-project-name"><label>Add your company website</label><input placeholder="company.com" /></div><div className="intake-track"><div><b>PR Set-Up</b><small>Business Messaging (Sections 1–3)</small><strong>0% complete</strong></div><div><b>AIO Set-Up</b><small>Business Profile (Sections 4–7)</small><strong>0% complete</strong></div></div><section className="intake-section"><div className="section-banner"><span>SECTION 1</span><h2>Earned Media: Message Framework</h2><p>Boilerplate, message hierarchy, spokespeople and trade media categories</p><button onClick={() => onNotify("Section guide opened")}>How to guide</button></div><p className="intake-intro">Earned media is one of the highest-authority signals for GEO. AI models are trained on the open web: a well-placed article in a credible outlet is more powerful than any on-site SEO tactic. The fields below feed every other module - Optimiser, Comms Planner, Content Creator, Media Research and Marketing Intelligence.</p><div className="field-heading">Core Boilerplate</div><Field label="250-word company descriptor" hint="Enter or draft the raw ingredients for a new 250-word company descriptor for press use." placeholder="Type your answer here..." tall /><div className="field-heading">Message Hierarchy</div><Field label="Primary Message" hint="Enter a Primary Message providing a short summary (no more than 10 words). And a longer version of no more than 25 words." placeholder="≤10 words - e.g. AI authority for PR" /><div className="dual-fields"><Field label="Longer version" hint="Adds proof and context." placeholder="≤25 words - the longer version" /><Field label="Additional context" hint="Optional supporting detail." placeholder="Add context" /></div><button className="add-message" onClick={() => onNotify("Additional message added")}><Plus size={13} /> Add this message</button><div className="field-heading">Evidence</div><Field label="Online evidence" hint="Cut and paste links to web pages evidencing company statistics, case studies, awards, certificates, third-party validation." placeholder="Paste your evidence links here..." tall /></section></div>;
 }
 
-function Workspace({ onBack, onNotify }: { onBack: () => void; onNotify: (message: string) => void }) {
-  const [page, setPage] = useState("Dashboard");
-  return <Shell active={page} onHub={onBack} onAccount={() => onNotify("Account settings opened")} onNavigate={setPage} projectNav>{page === "Project Set-Up" ? <ProjectSetup onNotify={onNotify} /> : <Dashboard onNotify={onNotify} />}</Shell>;
+function Workspace({ onBack, onNotify, initialPage = "Dashboard" }: { onBack: () => void; onNotify: (message: string) => void; initialPage?: "Dashboard" | "Project Set-Up" }) {
+  const [page, setPage] = useState(initialPage);
+  return <Shell active={page} onHub={onBack} onAccount={() => onNotify("Account settings opened")} onNavigate={(nextPage) => setPage(nextPage === "Project Set-Up" ? "Project Set-Up" : "Dashboard")} projectNav>{page === "Project Set-Up" ? <ProjectSetup onNotify={onNotify} /> : <Dashboard onNotify={onNotify} />}</Shell>;
+}
+
+export function UnifiedDashboardPreview() {
+  const [toast, setToast] = useState("");
+  const notify = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(""), 2400);
+  };
+  return <div className="aio-system"><Workspace initialPage="Dashboard" onBack={() => notify("Project Hub opened")} onNotify={notify} />{toast && <div className="toast"><CircleCheck size={16} />{toast}</div>}</div>;
+}
+
+export function UnifiedProjectSetupPreview() {
+  const [toast, setToast] = useState("");
+  const notify = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(""), 2400);
+  };
+  return <div className="aio-system"><Workspace initialPage="Project Set-Up" onBack={() => notify("Project Hub opened")} onNotify={notify} />{toast && <div className="toast"><CircleCheck size={16} />{toast}</div>}</div>;
 }
 
 function Account({ section, setSection, onBack, onNotify }: { section: string; setSection: (s: string) => void; onBack: () => void; onNotify: (message: string) => void }) {
