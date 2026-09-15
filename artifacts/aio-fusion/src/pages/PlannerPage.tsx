@@ -351,9 +351,9 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
       <div className="mb-6">
         <div className="flex items-center gap-3">
           <CalendarDays size={26} color="#ffffff" />
-          <h1 className="text-3xl sm:text-4xl mb-2 leading-[1.1]" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Comms Planner</h1>
+          <h1 className="aio-type-page-title mb-2" style={{ color: "#ffffff" }}>Comms Planner</h1>
         </div>
-        <p className="text-[15px] font-light max-w-5xl" style={{ color: "rgba(255,255,255,0.85)" }}>Plan your PR and marketing schedule in one place and see a configurable estimate of its visibility and authority potential. The score responds to content type, selected release channels and workflow status. Click any content item to open and edit it in the Content Optimiser.</p>
+        <p className="aio-type-body max-w-5xl" style={{ color: "rgba(255,255,255,0.85)" }}>Plan your PR and marketing schedule in one place and see a configurable estimate of its visibility and authority potential. The score responds to content type, selected release channels and workflow status. Click any content item to open and edit it in the Content Optimiser.</p>
       </div>
 
       {storeState.status === "loading" && (
@@ -365,7 +365,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
       {(storeState.status === "network-error" || storeState.status === "authentication-error" || saveError || storeState.mutationPending) && (
         <div className="rounded-xl px-4 py-3 mb-4 text-[13px] flex items-center justify-between gap-3" style={{ background: "white", color: ink, border: `1px solid ${storeState.mutationPending ? accentPink : "#C94A3E"}` }}>
           <span>{storeState.mutationPending ? "Saving changes…" : saveError || (storeState.status === "authentication-error" ? "Your session expired. Sign in again to load the planner." : "We could not load your planner. Saved content has not been replaced.")}</span>
-          {storeState.status === "network-error" && <button onClick={() => void initContentStore()} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 font-semibold px-3 py-1.5 rounded-lg text-white" style={{ background: accentPink }}><RefreshCw size={13} className="inline mr-1" />Retry</button>}
+          {storeState.status === "network-error" && <button onClick={() => void initContentStore()} className="aio-button aio-button--primary aio-button--compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500" style={{ background: accentPink }}><RefreshCw />Retry</button>}
         </div>
       )}
 
@@ -374,20 +374,20 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2 flex-wrap">
             <div className="inline-flex rounded-full p-1" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)" }} role="group" aria-label="Planner view">
-              <button aria-label="Calendar View" onClick={() => setView("spreadsheet")} aria-pressed={view === "spreadsheet"} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white flex items-center justify-center gap-1.5 w-[120px] px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: view === "spreadsheet" ? accentPink : "transparent", color: view === "spreadsheet" ? "white" : "rgba(251,246,236,0.7)" }}>
+              <button aria-label="Calendar View" onClick={() => setView("spreadsheet")} aria-pressed={view === "spreadsheet"} className="aio-button aio-button--compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white w-[120px] rounded-full uppercase tracking-[0.12em] transition-colors" style={{ background: view === "spreadsheet" ? accentPink : "transparent", color: view === "spreadsheet" ? "white" : "rgba(251,246,236,0.7)" }}>
                 <Calendar size={12} /> Calendar View
               </button>
-              <button aria-label="List View" onClick={() => setView("cards")} aria-pressed={view === "cards"} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white flex items-center justify-center gap-1.5 w-[120px] px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: view === "cards" ? accentPink : "transparent", color: view === "cards" ? "white" : "rgba(251,246,236,0.7)" }}>
+              <button aria-label="List View" onClick={() => setView("cards")} aria-pressed={view === "cards"} className="aio-button aio-button--compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white w-[120px] rounded-full uppercase tracking-[0.12em] transition-colors" style={{ background: view === "cards" ? accentPink : "transparent", color: view === "cards" ? "white" : "rgba(251,246,236,0.7)" }}>
                 <ListIcon size={12} /> List View
               </button>
             </div>
-            <button ref={methodologyTriggerRef} aria-label="Open scoring methodology" onClick={() => setShowMethodology(true)} aria-haspopup="dialog" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: "rgba(255,255,255,0.08)", color: paper, border: "1px solid rgba(255,255,255,0.18)" }} title="Scoring methodology">
+            <button ref={methodologyTriggerRef} aria-label="Open scoring methodology" onClick={() => setShowMethodology(true)} aria-haspopup="dialog" className="aio-button aio-button--compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-full uppercase tracking-[0.12em] transition-colors" style={{ background: "rgba(255,255,255,0.08)", color: paper, border: "1px solid rgba(255,255,255,0.18)" }} title="Scoring methodology">
               <HelpCircle size={13} /> Methodology
             </button>
-            <button ref={settingsTriggerRef} aria-label="Open score settings" onClick={() => setShowSettings(true)} aria-haspopup="dialog" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: "rgba(255,255,255,0.08)", color: paper, border: "1px solid rgba(255,255,255,0.18)" }} title="Score settings">
+            <button ref={settingsTriggerRef} aria-label="Open score settings" onClick={() => setShowSettings(true)} aria-haspopup="dialog" className="aio-button aio-button--compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-full uppercase tracking-[0.12em] transition-colors" style={{ background: "rgba(255,255,255,0.08)", color: paper, border: "1px solid rgba(255,255,255,0.18)" }} title="Score settings">
               <Shield size={13} /> Score Settings
             </button>
-            <button ref={archivePickerTriggerRef} aria-label="Add from archive" onClick={() => setShowArchivePicker(true)} aria-haspopup="dialog" className="focus-visible:outline-none focus-visible:ring-2 focus:ring-white flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: "rgba(255,255,255,0.08)", color: paper, border: "1px solid rgba(255,255,255,0.18)" }} title="Add from archive">
+            <button ref={archivePickerTriggerRef} aria-label="Add from archive" onClick={() => setShowArchivePicker(true)} aria-haspopup="dialog" className="aio-button aio-button--compact focus-visible:outline-none focus:ring-white rounded-full uppercase tracking-[0.12em] transition-colors" style={{ background: "rgba(255,255,255,0.08)", color: paper, border: "1px solid rgba(255,255,255,0.18)" }} title="Add from archive">
               <Archive size={13} /> Add from Archive
             </button>
           </div>
@@ -485,7 +485,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
               <button
                 aria-label="Reset date range to default"
                 onClick={resetRange}
-                className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[11px] font-semibold uppercase tracking-[0.12em] px-3 py-1.5 rounded-full transition-opacity hover:opacity-70"
+                className="aio-button aio-button--text aio-button--compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 rounded-full uppercase tracking-[0.12em] transition-opacity hover:opacity-70"
                 style={{ color: accentPink, background: accentSoft, border: `1px solid ${accentPink}40` }}
               >
                 Reset to default
@@ -504,7 +504,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
             </div>
             <div className="bg-white border rounded-2xl overflow-hidden" style={{ borderColor: vars.g200 }}>
               <div className="px-5 py-3 border-b flex items-center justify-between flex-wrap gap-2" style={{ borderColor: vars.g200 }}>
-                <h3 className="text-[19px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Marketing Calendar</h3>
+                <h3 className="aio-type-section-title" style={{ color: vars.navy }}>Content Marketing Calendar</h3>
                 <span className="text-[13px] font-light" style={{ color: vars.g500 }}>Click any row to open in the Content Optimiser</span>
               </div>
               <div className="hidden sm:flex items-center gap-2 px-5 py-2 border-b" style={{ borderColor: vars.g200, background: vars.g50 }}>
@@ -631,7 +631,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                                   style={{ background: slotBg, borderColor: vars.navy, color: vars.g300, minHeight: 28 }}
                                   title={c === 0 ? `Add project to ${label}` : undefined}
                                 >
-                                   {c === 0 && i === wkProjects.length ? <button onClick={() => { addProject(); setTimeout(() => { const last = loadPlannerProjects()[0]; if (last) setEditing({ ...last, week: w }); }, 0); }} aria-label={`Add project to ${label}`} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 text-[13px] font-bold px-3 py-1.5 rounded-lg" style={{ color: vars.teal, background: "rgba(79,143,255,0.12)", border: `1.5px solid rgba(79,143,255,0.35)` }}>+ Add project</button> : ""}
+                                   {c === 0 && i === wkProjects.length ? <button onClick={() => { addProject(); setTimeout(() => { const last = loadPlannerProjects()[0]; if (last) setEditing({ ...last, week: w }); }, 0); }} aria-label={`Add project to ${label}`} className="aio-button aio-button--outline aio-button--compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600" style={{ color: vars.teal, background: "rgba(79,143,255,0.12)", border: `1.5px solid rgba(79,143,255,0.35)` }}>+ Add project</button> : ""}
                                 </td>
                               ))
                             )}
@@ -675,7 +675,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
           </label>
           <button
             onClick={resetRange}
-            className="text-[11px] font-semibold uppercase tracking-[0.12em] px-3 py-1.5 rounded-full transition-opacity hover:opacity-70"
+            className="aio-button aio-button--text aio-button--compact rounded-full uppercase tracking-[0.12em] transition-opacity hover:opacity-70"
             style={{ color: accentPink, background: accentSoft, border: `1px solid ${accentPink}40` }}
           >
             Reset to default
@@ -705,7 +705,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                     </td>
                     <td className="px-3 py-3">
                       {wkProjects.length === 0 ? (
-                         <button aria-label={`Add content for week commencing ${wcLabel}`} onClick={() => sendToOptimiser()} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 text-[13px] font-bold px-4 py-2 rounded-lg border-2" style={{ color: vars.teal, borderColor: "rgba(79,143,255,0.4)", background: "rgba(79,143,255,0.06)" }}>+ Add to w/c {wcLabel}</button>
+                         <button aria-label={`Add content for week commencing ${wcLabel}`} onClick={() => sendToOptimiser()} className="aio-button aio-button--outline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600" style={{ color: vars.teal, borderColor: "rgba(79,143,255,0.4)", background: "rgba(79,143,255,0.06)" }}>+ Add to w/c {wcLabel}</button>
                       ) : (
                         <div className="flex flex-wrap gap-2">
                           {wkProjects.map((p) => {
@@ -755,10 +755,10 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] font-bold uppercase tracking-[0.2em] mr-1" style={{ color: "rgba(251,246,236,0.6)" }}>View</span>
           <div className="inline-flex rounded-full p-1" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)" }} role="group" aria-label="Planner view (footer)">
-            <button aria-label="Calendar View" onClick={() => setView("spreadsheet")} aria-pressed={view === "spreadsheet"} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white flex items-center justify-center gap-1.5 w-[120px] px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: view === "spreadsheet" ? accentPink : "transparent", color: view === "spreadsheet" ? "white" : "rgba(251,246,236,0.7)" }}>
+            <button aria-label="Calendar View" onClick={() => setView("spreadsheet")} aria-pressed={view === "spreadsheet"} className="aio-button aio-button--compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white w-[120px] rounded-full uppercase tracking-[0.12em] transition-colors" style={{ background: view === "spreadsheet" ? accentPink : "transparent", color: view === "spreadsheet" ? "white" : "rgba(251,246,236,0.7)" }}>
               <Calendar size={12} /> Calendar View
             </button>
-            <button aria-label="List View" onClick={() => setView("cards")} aria-pressed={view === "cards"} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white flex items-center justify-center gap-1.5 w-[120px] px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: view === "cards" ? accentPink : "transparent", color: view === "cards" ? "white" : "rgba(251,246,236,0.7)" }}>
+            <button aria-label="List View" onClick={() => setView("cards")} aria-pressed={view === "cards"} className="aio-button aio-button--compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white w-[120px] rounded-full uppercase tracking-[0.12em] transition-colors" style={{ background: view === "cards" ? accentPink : "transparent", color: view === "cards" ? "white" : "rgba(251,246,236,0.7)" }}>
               <ListIcon size={12} /> List View
             </button>
           </div>
@@ -769,7 +769,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
       {showMethodology && (
         <PlannerDialog titleId="planner-methodology-title" initialFocusRef={methodologyCloseRef} onClose={() => { setShowMethodology(false); methodologyTriggerRef.current?.focus(); }} className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
             <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-              <h2 id="planner-methodology-title" className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+              <h2 id="planner-methodology-title" className="aio-type-card-title flex items-center gap-2" style={{ color: vars.navy }}>
                 <HelpCircle size={16} color={vars.accent} /> Comms Planner methodology
               </h2>
               <button ref={methodologyCloseRef} aria-label="Close methodology dialog" onClick={() => { setShowMethodology(false); methodologyTriggerRef.current?.focus(); }} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
@@ -831,7 +831,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
               </div>
             </div>
             <div className="px-6 py-3 border-t flex justify-end" style={{ borderColor: vars.g200 }}>
-               <button onClick={() => { setShowMethodology(false); methodologyTriggerRef.current?.focus(); }} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.accent }}>Got it</button>
+               <button onClick={() => { setShowMethodology(false); methodologyTriggerRef.current?.focus(); }} className="aio-button aio-button--primary aio-button--compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500" style={{ background: vars.accent }}>Got it</button>
             </div>
         </PlannerDialog>
       )}
@@ -840,7 +840,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
       {showArchivePicker && (
         <PlannerDialog titleId="planner-archive-picker-title" initialFocusRef={archivePickerCloseRef} onClose={() => { setShowArchivePicker(false); archivePickerTriggerRef.current?.focus(); }} className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] flex flex-col">
             <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-              <h2 id="planner-archive-picker-title" className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+              <h2 id="planner-archive-picker-title" className="aio-type-card-title flex items-center gap-2" style={{ color: vars.navy }}>
                 <Archive size={16} color={vars.accent} /> Select archived content
               </h2>
               <button ref={archivePickerCloseRef} aria-label="Close archived content dialog" onClick={() => { setShowArchivePicker(false); archivePickerTriggerRef.current?.focus(); }} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
@@ -872,7 +872,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
       {editing && (
         <PlannerDialog titleId="planner-edit-title" initialFocusRef={editTitleRef} onClose={() => { setEditing(null); }} className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-              <h2 id="planner-edit-title" className="text-[16px] font-semibold" style={{ color: vars.navy }}>Edit project</h2>
+              <h2 id="planner-edit-title" className="aio-type-card-title" style={{ color: vars.navy }}>Edit project</h2>
               <button aria-label="Close edit project dialog" onClick={() => setEditing(null)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
             </div>
             <div className="p-6 space-y-4">
@@ -1023,10 +1023,10 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
               </div>
             </div>
             <div className="px-6 py-4 border-t flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-              <button aria-label={`Delete ${editing.title}`} onClick={() => deleteProject(editing.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 text-[12px] font-semibold px-3 py-2 rounded-lg" style={{ color: vars.red, background: "rgba(201,74,62,0.06)" }}>Delete</button>
+               <button aria-label={`Delete ${editing.title}`} onClick={() => deleteProject(editing.id)} className="aio-button aio-button--destructive aio-button--compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500" style={{ color: vars.red, background: "rgba(201,74,62,0.06)" }}>Delete</button>
               <div className="flex gap-2">
-                <button onClick={() => setEditing(null)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[13px] font-semibold px-4 py-2 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}>Cancel</button>
-                <button onClick={saveEdit} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.accent }}>Save</button>
+                <button onClick={() => setEditing(null)} className="aio-button aio-button--outline aio-button--compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500" style={{ borderColor: vars.g200, color: vars.g500 }}>Cancel</button>
+                <button onClick={saveEdit} className="aio-button aio-button--primary aio-button--compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500" style={{ background: vars.accent }}>Save</button>
               </div>
             </div>
           </PlannerDialog>
@@ -1066,7 +1066,7 @@ function ScoringSettingsModal({ cfg, onSave, onClose }: { cfg: ScoringConfig; on
     <PlannerDialog titleId="planner-scoring-settings-title" initialFocusRef={firstWeightRef} onClose={onClose} className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
           <div>
-            <h2 id="planner-scoring-settings-title" className="text-[16px] font-semibold" style={{ color: vars.navy }}>Scoring settings</h2>
+            <h2 id="planner-scoring-settings-title" className="aio-type-card-title" style={{ color: vars.navy }}>Scoring settings</h2>
             <p className="text-[11px]" style={{ color: vars.g500 }}>Tune how Visibility and Authority scores are calculated. Saved per browser.</p>
           </div>
           <button aria-label="Close scoring settings dialog" onClick={onClose} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
@@ -1075,7 +1075,7 @@ function ScoringSettingsModal({ cfg, onSave, onClose }: { cfg: ScoringConfig; on
 
           <section>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-[13px] font-semibold" style={{ color: vars.navy }}>Content type weights</h3>
+              <h3 className="aio-type-card-title" style={{ color: vars.navy }}>Content type weights</h3>
               <span className="text-[11px]" style={{ color: vars.g500 }}>Each weight 0–10</span>
             </div>
             <div className="rounded-lg border overflow-hidden" style={{ borderColor: vars.g200 }}>
@@ -1102,12 +1102,12 @@ function ScoringSettingsModal({ cfg, onSave, onClose }: { cfg: ScoringConfig; on
             </div>
             <div className="flex gap-2 mt-2">
               <input aria-label="New content type" type="text" value={newType} onChange={(e) => setNewType(e.target.value)} placeholder="Add new content type…" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 flex-1 px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
-              <button onClick={addType} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 px-3 py-2 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Add type</button>
+               <button onClick={addType} className="aio-button aio-button--primary aio-button--compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500" style={{ background: vars.accent }}>Add type</button>
             </div>
           </section>
 
           <section>
-            <h3 className="text-[13px] font-semibold mb-2" style={{ color: vars.navy }}>Channel multiplier (Visibility only)</h3>
+            <h3 className="aio-type-card-title mb-2" style={{ color: vars.navy }}>Channel multiplier (Visibility only)</h3>
             <p className="text-[11px] mb-3" style={{ color: vars.g500 }}>Visibility multiplier = base + (channels × step), capped at max.</p>
             <div className="grid grid-cols-3 gap-3">
               <div>
@@ -1135,13 +1135,13 @@ function ScoringSettingsModal({ cfg, onSave, onClose }: { cfg: ScoringConfig; on
               </div>
               <div className="flex gap-2">
                 <input aria-label="New release channel" type="text" value={newChannel} onChange={(e) => setNewChannel(e.target.value)} placeholder="Add new channel…" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 flex-1 px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
-                <button onClick={addChannel} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 px-3 py-2 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Add channel</button>
+                <button onClick={addChannel} className="aio-button aio-button--primary aio-button--compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500" style={{ background: vars.accent }}>Add channel</button>
               </div>
             </div>
           </section>
 
           <section>
-            <h3 className="text-[13px] font-semibold mb-2" style={{ color: vars.navy }}>Status multipliers</h3>
+            <h3 className="aio-type-card-title mb-2" style={{ color: vars.navy }}>Status multipliers</h3>
             <p className="text-[11px] mb-3" style={{ color: vars.g500 }}>Discounts both Visibility and Authority by delivery confidence.</p>
             <div className="grid grid-cols-4 gap-3">
               {(Object.keys(draft.statusMultipliers) as PlannerStatus[]).map((s) => (
@@ -1154,10 +1154,10 @@ function ScoringSettingsModal({ cfg, onSave, onClose }: { cfg: ScoringConfig; on
           </section>
         </div>
         <div className="px-6 py-4 border-t flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-          <button onClick={() => setDraft(JSON.parse(JSON.stringify(DEFAULT_SCORING)))} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[12px] font-semibold px-3 py-2 rounded-lg" style={{ color: vars.g500, background: vars.g50 }}>Reset to defaults</button>
+           <button onClick={() => setDraft(JSON.parse(JSON.stringify(DEFAULT_SCORING)))} className="aio-button aio-button--text aio-button--compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500" style={{ color: vars.g500, background: vars.g50 }}>Reset to defaults</button>
           <div className="flex gap-2">
-            <button onClick={onClose} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[13px] font-semibold px-4 py-2 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}>Cancel</button>
-            <button onClick={() => onSave(draft)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.accent }}>Save settings</button>
+             <button onClick={onClose} className="aio-button aio-button--outline aio-button--compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500" style={{ borderColor: vars.g200, color: vars.g500 }}>Cancel</button>
+             <button onClick={() => onSave(draft)} className="aio-button aio-button--primary aio-button--compact focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500" style={{ background: vars.accent }}>Save settings</button>
           </div>
         </div>
     </PlannerDialog>

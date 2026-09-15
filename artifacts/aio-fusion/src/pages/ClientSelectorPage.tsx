@@ -125,7 +125,7 @@ export default function ClientSelectorPage({
               {workspaceSwitcher}
             </div>
           )}
-          <button onClick={onBackToPlatformHome} className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:brightness-110 rounded-xl" style={{ background: accent, color: "white" }}>
+          <button onClick={onBackToPlatformHome} className="aio-button aio-button--primary sm:px-7 uppercase tracking-[0.14em] transition-all hover:brightness-110" style={{ background: accent, color: "white" }}>
             <ArrowLeft size={16} /> Platform home
           </button>
           <div
@@ -135,7 +135,7 @@ export default function ClientSelectorPage({
             {session?.username?.slice(0, 2).toUpperCase() ?? "SP"}
           </div>
           <div className="flex flex-col">
-            <span className="text-[13px] font-medium text-white">
+            <span className="aio-type-label text-white">
               {isAdmin ? "Admin" : isClient ? "Client" : "Agency"}
             </span>
           </div>
@@ -146,20 +146,17 @@ export default function ClientSelectorPage({
         <div className="mb-10 sm:mb-12 rounded-2xl p-6 sm:p-10" style={{ background: "white", boxShadow: "0 4px 24px rgba(0,0,0,0.12)" }}>
           <div className="flex items-center gap-2 mb-4">
             <div
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.22em]"
+              className="aio-type-eyebrow inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full"
               style={{ background: accentSoft, border: `1px solid ${accent}40`, color: accent }}
             >
               <Building2 size={12} /> Project Hub
             </div>
           </div>
-          <h1
-            className="text-3xl sm:text-4xl lg:text-5xl leading-[1.05] tracking-tight"
-            style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}
-          >
+          <h1 className="aio-type-page-title">
             {isAdmin ? "Master" : isClient ? null : "Agency"}{isAdmin || !isClient ? " " : null}
             <span style={{ color: accent }}>Project Hub</span>
           </h1>
-          <p className="text-[15px] sm:text-[16px] font-light mt-3 mb-8 max-w-4xl lg:whitespace-nowrap leading-[1.7]" style={{ color: ink }}>
+          <p className="aio-type-body mt-3 mb-8 max-w-4xl lg:whitespace-nowrap" style={{ color: ink }}>
             {displayClients.length === 0
               ? "Set up your first project to start optimising your PR and marketing output for AI discoverability."
               : "Select a project to manage AI optimisation, ongoing PR and marketing output."}
@@ -169,46 +166,46 @@ export default function ClientSelectorPage({
             {(!isClient || displayClients.length < 3) && (
               <button
                 onClick={onCreateProject}
-                className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-white/60 bg-[#C8497A]"
+                className="aio-button aio-button--primary group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-white/60 bg-[#C8497A]"
               >
                 <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 bg-white/20 text-white">
                   <Plus size={20} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/75">Start a new piece of work</p>
-                  <p className="text-[16px] font-semibold mt-0.5 text-white" style={{ fontFamily: "'Alice', Georgia, serif" }}>Create Project</p>
-                  <p className="text-[12px] font-light mt-0.5 text-white/75">Walk through Project Set-Up.</p>
+                  <p className="aio-type-eyebrow text-white/75">Start a new piece of work</p>
+                  <p className="aio-type-card-title mt-0.5 text-white">Create Project</p>
+                  <p className="aio-type-supporting mt-0.5 text-white/75">Walk through Project Set-Up.</p>
                 </div>
                 <ArrowRight size={16} className="transition-all duration-300 group-hover:translate-x-1 text-white/70" />
               </button>
             )}
             <button
               onClick={onArchivedProjects}
-              className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] border border-[#e2e8f0]"
+              className="aio-button aio-button--outline group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] border border-[#e2e8f0]"
               style={{ background: "rgba(201,74,62,0.08)" }}
             >
               <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:ring-2 group-hover:ring-[#C8497A]" style={{ background: "#FBE3ED", color: "#C8497A" }}>
                 <Archive size={18} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#6b7280]">Past work</p>
-                <p className="text-[16px] font-semibold mt-0.5 text-[#0a1628]" style={{ fontFamily: "'Alice', Georgia, serif" }}>Archived Projects</p>
-                <p className="text-[12px] font-light mt-0.5 text-[#6b7280]">Searchable history of completed work.</p>
+                <p className="aio-type-eyebrow text-[#6b7280]">Past work</p>
+                <p className="aio-type-card-title mt-0.5 text-[#0a1628]">Archived Projects</p>
+                <p className="aio-type-supporting mt-0.5 text-[#6b7280]">Searchable history of completed work.</p>
               </div>
               <ArrowRight size={16} className="transition-all duration-300 group-hover:translate-x-1 text-[#9ca3af] group-hover:text-[#C8497A]" />
             </button>
             <button
               onClick={onGuidance}
-              className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] border border-[#e2e8f0]"
+              className="aio-button aio-button--outline group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] border border-[#e2e8f0]"
               style={{ background: "rgba(201,74,62,0.08)" }}
             >
               <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:ring-2 group-hover:ring-[#C8497A]" style={{ background: "#FBE3ED", color: "#C8497A" }}>
                 <BookOpen size={18} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#6b7280]">How-to library</p>
-                <p className="text-[16px] font-semibold mt-0.5 text-[#0a1628]" style={{ fontFamily: "'Alice', Georgia, serif" }}>Guidance</p>
-                <p className="text-[12px] font-light mt-0.5 text-[#6b7280]">Articles &amp; videos on using the platform.</p>
+                <p className="aio-type-eyebrow text-[#6b7280]">How-to library</p>
+                <p className="aio-type-card-title mt-0.5 text-[#0a1628]">Guidance</p>
+                <p className="aio-type-supporting mt-0.5 text-[#6b7280]">Articles &amp; videos on using the platform.</p>
               </div>
               <ArrowRight size={16} className="transition-all duration-300 group-hover:translate-x-1 text-[#9ca3af] group-hover:text-[#C8497A]" />
             </button>
@@ -226,16 +223,16 @@ export default function ClientSelectorPage({
             >
               <Building2 size={28} />
             </div>
-            <h2 className="text-xl mb-2 text-white" style={{ fontFamily: "'Alice', Georgia, serif" }}>
+            <h2 className="aio-type-card-title mb-2 text-white">
               No projects yet
             </h2>
-            <p className="text-[14px] font-light max-w-md mx-auto mb-6" style={{ color: "rgba(255,255,255,0.7)" }}>
+            <p className="aio-type-body max-w-md mx-auto mb-6" style={{ color: "rgba(255,255,255,0.7)" }}>
               A project is a single brand, product or campaign you want to optimise.
             </p>
             {(!isClient || displayClients.length < 3) && (
               <button
                 onClick={onCreateProject}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.15em] text-white transition-all hover:brightness-110"
+                className="aio-button aio-button--primary rounded-full uppercase tracking-[0.15em] transition-all hover:brightness-110"
                 style={{ background: accent }}
               >
                 <Plus size={14} /> Create your first project
@@ -310,19 +307,19 @@ export default function ClientSelectorPage({
                           <Upload size={11} className="text-white" />
                         </button>
                       </div>
-                      <h3 className="text-[17px] font-bold" style={{ color: ink }}>
+                      <h3 className="aio-type-card-title" style={{ color: ink }}>
                         {client.name}
                       </h3>
                     </div>
 
                     <div className="flex flex-col items-center justify-center mb-5 px-4 py-5 rounded-xl" style={{ background: vars.g50 }}>
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: vars.g400 }}>Earned Media Audit Score</span>
+                       <span className="aio-type-eyebrow" style={{ color: vars.g400 }}>Earned Media Audit Score</span>
                       {auditScore.status === "loading" ? (
-                        <p className="text-[13px] font-medium leading-tight mt-1.5" style={{ color: vars.g400 }}>Loading score...</p>
+                         <p className="aio-type-supporting font-medium mt-1.5" style={{ color: vars.g400 }}>Loading score...</p>
                       ) : auditScore.status === "error" ? (
-                        <p className="text-[13px] font-medium leading-tight mt-1.5" style={{ color: vars.g400 }}>Score unavailable</p>
+                         <p className="aio-type-supporting font-medium mt-1.5" style={{ color: vars.g400 }}>Score unavailable</p>
                       ) : auditScore.score === null ? (
-                        <p className="text-[13px] font-medium leading-tight mt-1.5" style={{ color: vars.g400 }}>No audit yet</p>
+                         <p className="aio-type-supporting font-medium mt-1.5" style={{ color: vars.g400 }}>No audit yet</p>
                       ) : (
                         <p className="text-[38px] font-bold leading-tight mt-1" style={{ color: ink }}>{auditScore.score}</p>
                       )}
@@ -336,7 +333,7 @@ export default function ClientSelectorPage({
                             onArchivedProjects();
                           }
                         }}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md hover:bg-[#C8497A] hover:text-white hover:ring-[3px] hover:ring-[#C8497A]"
+                         className="aio-button aio-button--outline aio-button--compact transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md hover:bg-[#C8497A] hover:text-white hover:ring-[3px] hover:ring-[#C8497A]"
                         style={{ background: "#FBE3ED", color: "#C8497A" }}
                         title="Archive project"
                       >
@@ -349,7 +346,7 @@ export default function ClientSelectorPage({
                             onDeleteProject(client.id);
                           }
                         }}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:ring-2 hover:ring-[#C8497A]"
+                         className="aio-button aio-button--destructive aio-button--compact transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:ring-2 hover:ring-[#C8497A]"
                         style={{ background: "rgba(201,74,62,0.08)", color: vars.red }}
                         title="Delete project"
                       >
@@ -357,7 +354,7 @@ export default function ClientSelectorPage({
                       </button>
                       <button
                         onClick={() => onSelectClient(client)}
-                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-200 hover:brightness-110 hover:-translate-y-0.5 hover:shadow-md hover:ring-2 hover:ring-[#C8497A]"
+                         className="aio-button aio-button--primary aio-button--compact flex-1 uppercase tracking-[0.1em] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:ring-2 hover:ring-[#C8497A]"
                         style={{ background: accent }}
                       >
                         <LogIn size={13} /> Enter

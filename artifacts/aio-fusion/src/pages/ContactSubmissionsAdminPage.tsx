@@ -77,17 +77,17 @@ export function ContactSubmissionsAdminPage({ onBack }: { onBack: () => void }) 
           <button
             onClick={load}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] rounded-xl border transition-all hover:brightness-95"
+            className="aio-button aio-button--outline aio-button--compact uppercase tracking-[0.12em]"
             style={{ borderColor: vars.g200, color: ink, background: "white" }}
           >
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
           </button>
           <button
             onClick={onBack}
-            className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] rounded-xl transition-all hover:brightness-110"
+            className="aio-button aio-button--return"
             style={{ background: accent, color: "white" }}
           >
-            <ArrowLeft size={16} /> Back
+            <ArrowLeft size={16} /> Back to admin
           </button>
         </div>
       </header>
@@ -100,10 +100,10 @@ export function ContactSubmissionsAdminPage({ onBack }: { onBack: () => void }) 
               Admin · Contact Submissions
             </span>
           </div>
-          <h1 className="text-3xl sm:text-4xl leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+          <h1 className="aio-type-page-title">
             Contact form submissions
           </h1>
-          <p className="text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
+          <p className="aio-type-body mt-3 max-w-2xl" style={{ color: vars.g600 }}>
             All inbound leads from the Book a Demo and General Enquiry forms, persisted to the database so no submission is lost if email delivery fails.
           </p>
         </div>

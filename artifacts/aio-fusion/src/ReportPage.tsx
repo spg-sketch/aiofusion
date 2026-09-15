@@ -180,7 +180,7 @@ function CalloutBrief({ title, children }: { title: string; children: React.Reac
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-[0.2em] border-2 transition-colors"
+        className="aio-button aio-button--outline aio-button--compact rounded-full uppercase tracking-[0.2em] border-2 transition-colors"
         style={{ borderColor: "#C8497A", color: open ? "white" : "#C8497A", background: open ? "#C8497A" : "white" }}
       >
         <Sparkles size={12} /> {open ? `Hide ${title}` : title}
@@ -690,22 +690,22 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
         <div>
           <div className="flex items-center gap-2 mb-2">
             <PieChart size={24} color="#ffffff" />
-            <h1 className="text-3xl sm:text-4xl tracking-tight flex items-center" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
+            <h1 className="aio-type-page-title flex items-center" style={{ color: "#ffffff" }}>
               Measure &amp; Report
               <InfoTip text="Combines diagnostic scores, earned media authority, planned activity, the Earned Media Tracker and the website GEO audit. Designed to be exported and shared with the client." width={260} />
             </h1>
           </div>
-          <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>
+          <p className="aio-type-supporting" style={{ color: "rgba(255,255,255,0.85)" }}>
             Authority &amp; Activity Report &middot; {activeClient.name} &middot; Generated {reportDate}
           </p>
-          <p className="text-[14px] font-light mt-3 max-w-3xl leading-relaxed" style={{ color: "#ffffff" }}>
+          <p className="aio-type-body mt-3 max-w-3xl" style={{ color: "#ffffff" }}>
             This is your shareable scorecard for the whole project. It pulls your audit scores, earned media and planned activity into one place so you can see how your AI authority is growing over time. Clear measurement shows what is working and proves the impact of your AIO strategy to clients and stakeholders.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white whitespace-nowrap transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-md hover:brightness-110 active:scale-95"
+            className="aio-button aio-button--secondary whitespace-nowrap transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-md hover:brightness-110 active:scale-95"
             style={{ background: vars.navy }}
           >
             <Printer size={16} /> Print
@@ -725,14 +725,14 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                 });
               }
             }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white whitespace-nowrap transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-md hover:brightness-110 active:scale-95"
+            className="aio-button aio-button--secondary whitespace-nowrap transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-md hover:brightness-110 active:scale-95"
             style={{ background: vars.navy }}
           >
             <Share2 size={16} /> Share
           </button>
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white whitespace-nowrap transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-md hover:brightness-110 active:scale-95"
+            className="aio-button aio-button--primary whitespace-nowrap transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-md hover:brightness-110 active:scale-95"
             style={{ background: vars.accent }}
           >
             <Download size={16} /> Export PDF
@@ -780,7 +780,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                   <span className="text-[10px] text-white/60 mt-0.5">Current snapshot · latest audit</span>
                 </div>
                 <div className="flex-1 text-center sm:text-left">
-                  <h2 className="text-lg sm:text-xl font-semibold text-white mb-2" style={{ fontFamily: "'Alice', Georgia, serif" }}>
+                  <h2 className="aio-type-section-title text-white mb-2">
                     {authorityScore >= 70 ? "Strong authority position" : authorityScore >= 40 ? "Moderate authority - room to grow" : "Early stage - significant opportunities"}
                   </h2>
                   <p className="text-sm text-white/75 leading-relaxed mb-4">
@@ -820,7 +820,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                 <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: "#ffffff" }}>Date Range - To</label>
                 <input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm bg-white" style={{ borderColor: vars.g200 }} />
               </div>
-              <button onClick={() => { setRangeFrom(projectStartDate); setRangeTo(todayIso); }} className="whitespace-nowrap px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-[0.12em] self-end transition-opacity hover:opacity-80" style={{ background: vars.accent, color: "#fff", border: "none" }}>
+              <button onClick={() => { setRangeFrom(projectStartDate); setRangeTo(todayIso); }} className="aio-button aio-button--primary aio-button--compact whitespace-nowrap uppercase tracking-[0.12em] self-end transition-opacity hover:opacity-80" style={{ background: vars.accent, color: "#fff", border: "none" }}>
                 Reset to project start
               </button>
               <p className="text-[10px] sm:col-span-full" style={{ color: "rgba(255,255,255,0.55)" }}>Date range filters your Earned Media Tracker stats below. The Authority Score circle reflects the latest audit run and does not change with date selection.</p>
@@ -859,7 +859,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               <StatTile label="Total Reach" value={audienceReach.toLocaleString()} sub="sum of all tracker items in range" color={vars.navy} icon={Eye} />
             </div>
 
-            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Authority trend</h3>
+            <h3 className="aio-type-card-title mb-3" style={{ color: vars.navy }}>Authority trend</h3>
             <div className="rounded-xl border p-4 mb-6" style={{ borderColor: vars.g200 }}>
               {monthlyTrend.length === 0 ? (
                 <p className="text-[13px] font-light py-6 text-center" style={{ color: vars.g500 }}>
@@ -888,7 +888,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               )}
             </div>
 
-            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Website Content and Technical GEO Summary</h3>
+            <h3 className="aio-type-card-title mb-3" style={{ color: vars.navy }}>Website Content and Technical GEO Summary</h3>
             <p className="text-[13px] font-light mb-4" style={{ color: vars.g600 }}>Technical and content scores from your latest Website Visibility audit feed into the Website track of your Total Authority Score.</p>
             {websiteGeoScores.tech.length === 0 && websiteGeoScores.content.length === 0 ? (
               <p className="text-[13px] font-light" style={{ color: vars.g500 }}>Run a Website Visibility audit to see these scores.</p>
@@ -902,7 +902,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           </div>
 
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Score Breakdown by Category</h3>
+            <h3 className="aio-type-card-title mb-3" style={{ color: vars.navy }}>Score Breakdown by Category</h3>
             {categoryScores.length === 0 ? (
               <p className="text-[13px] font-light" style={{ color: vars.g500 }}>Run a Website Visibility audit to see category-level scores.</p>
             ) : (
@@ -919,12 +919,12 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           <div className="rounded-2xl border p-5 sm:p-6 bg-white" style={{ borderColor: vars.g200 }}>
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Media Visibility Impact</h2>
+                <h2 className="aio-type-section-title" style={{ color: vars.navy }}>Media Visibility Impact</h2>
                 <p className="text-[13px] mt-2 max-w-3xl leading-relaxed" style={{ color: vars.g500 }}>
                   Comparable checks use the same exact phrase, provider, model and run count. Activity between checks is supporting evidence of timing and correlation. It is not proof that content, outreach or a placement caused a change.
                 </p>
               </div>
-              <button onClick={exportImpactReport} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white whitespace-nowrap" style={{ background: vars.accent }}>
+              <button onClick={exportImpactReport} className="aio-button aio-button--primary whitespace-nowrap" style={{ background: vars.accent }}>
                 <Download size={16} /> Export impact report
               </button>
             </div>
@@ -935,7 +935,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
             <div className="rounded-2xl border p-8 text-center bg-white" style={{ borderColor: vars.g200 }}>
               <p className="font-semibold" style={{ color: vars.navy }}>No phrase-level baseline yet</p>
               <p className="text-[13px] mt-2" style={{ color: vars.g500 }}>Run a new Earned Media Visibility Audit. Existing historical audits remain valid, but they did not record phrase-level provider evidence.</p>
-              <button onClick={() => onNavigate?.("llm-check")} className="mt-4 px-4 py-2 rounded-lg text-sm text-white" style={{ background: vars.accent }}>Run visibility audit</button>
+              <button onClick={() => onNavigate?.("llm-check")} className="aio-button aio-button--primary aio-button--compact mt-4" style={{ background: vars.accent }}>Run visibility audit</button>
             </div>
           ) : impactComparisons.map((comparison) => {
             const before = comparison.baseline?.measurement;
@@ -946,7 +946,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-[10px] uppercase tracking-[0.16em] font-bold" style={{ color: vars.accent }}>{comparison.phrase.intentGroup} · {providerLabel}</p>
-                    <h3 className="text-base font-semibold mt-1" style={{ color: vars.navy }}>{comparison.phrase.text}</h3>
+                    <h3 className="aio-type-card-title mt-1" style={{ color: vars.navy }}>{comparison.phrase.text}</h3>
                     <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>Model: {comparison.model}</p>
                     {comparison.baseline?.measurement.effectiveQuery && comparison.baseline.measurement.effectiveQuery !== comparison.phrase.text && (
                       <p className="text-[11px] mt-1" style={{ color: vars.g500 }}>Effective query measured: {comparison.baseline.measurement.effectiveQuery}</p>
@@ -1013,7 +1013,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
       {activeTab === "prmkt" && (
         <div className="space-y-6">
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-            <h2 className="text-lg font-semibold mb-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>PR &amp; Marketing performance</h2>
+            <h2 className="aio-type-section-title mb-1" style={{ color: vars.navy }}>PR &amp; Marketing performance</h2>
             <p className="text-[13px] font-light mb-4" style={{ color: vars.g500 }}>Pulled from your Earned Media Tracker for the date range below.</p>
             <div className="flex flex-col sm:flex-row sm:items-end gap-3 p-4 rounded-xl" style={{ background: vars.navy }}>
               <div className="flex-1">
@@ -1041,7 +1041,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           </div>
 
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4" style={{ color: vars.navy }}>Coverage per key message</h3>
+            <h3 className="aio-type-card-title mb-4" style={{ color: vars.navy }}>Coverage per key message</h3>
             <p className="text-[12px] font-light mb-4" style={{ color: vars.g500 }}>Counts only PR / Article / Case Study / Whitepaper rows from the Earned Media Tracker. Key messages are pulled from Project Set-Up (sections 1.2 &amp; 1.3).</p>
             {messageCoverage.length === 0 ? (
               <p className="text-[13px] font-light italic" style={{ color: vars.g400 }}>No key messages set for this client. Add them in <strong>Project Set-Up → sections 1.2 &amp; 1.3</strong>.</p>
@@ -1064,7 +1064,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Thought Leadership per key message</h3>
+              <h3 className="aio-type-card-title mb-3" style={{ color: vars.navy }}>Thought Leadership per key message</h3>
               <p className="text-[11px] font-light mb-3" style={{ color: vars.g500 }}>Articles only.</p>
               {messageCoverage.length === 0 ? (
                 <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>Add key messages in Project Set-Up (1.2 &amp; 1.3) to see this breakdown.</p>
@@ -1080,7 +1080,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               )}
             </div>
             <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Press Releases per key message</h3>
+              <h3 className="aio-type-card-title mb-3" style={{ color: vars.navy }}>Press Releases per key message</h3>
               <p className="text-[11px] font-light mb-3" style={{ color: vars.g500 }}>Press Release rows only.</p>
               {messageCoverage.length === 0 ? (
                 <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>Add key messages in Project Set-Up (1.2 &amp; 1.3) to see this breakdown.</p>
@@ -1098,7 +1098,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           </div>
 
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Press Release Performance</h3>
+              <h3 className="aio-type-card-title mb-3" style={{ color: vars.navy }}>Press Release Performance</h3>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
               <StatTile label="Press Releases in period" value={String(prRows.length)} color={vars.navy} icon={FileText} />
               <StatTile label="Average score / PR" value={String(prAvgScore)} sub="out of 10" color={vars.accent} icon={BarChart3} />
@@ -1117,7 +1117,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Volume by content type</h3>
+              <h3 className="aio-type-card-title mb-3" style={{ color: vars.navy }}>Volume by content type</h3>
               <div className="space-y-2">
                 {volByType.length === 0 && <p className="text-[12px] font-light" style={{ color: vars.g500 }}>No items in period.</p>}
                 {volByType.map(([t, n]) => (
@@ -1129,7 +1129,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               </div>
             </div>
             <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Volume by media category</h3>
+              <h3 className="aio-type-card-title mb-3" style={{ color: vars.navy }}>Volume by media category</h3>
               <div className="space-y-2">
                 {volByCategory.length === 0 && <p className="text-[12px] font-light" style={{ color: vars.g500 }}>No items in period.</p>}
                 {volByCategory.map(([t, n]) => (
@@ -1141,7 +1141,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               </div>
             </div>
             <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Volume by spokesperson</h3>
+              <h3 className="aio-type-card-title mb-3" style={{ color: vars.navy }}>Volume by spokesperson</h3>
               <div className="space-y-2">
                 {volBySpokesperson.length === 0 && <p className="text-[12px] font-light" style={{ color: vars.g500 }}>No items in period.</p>}
                 {volBySpokesperson.map(([t, n]) => (
@@ -1155,7 +1155,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           </div>
 
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-1" style={{ color: vars.navy }}>Social Impact</h3>
+            <h3 className="aio-type-card-title mb-1" style={{ color: vars.navy }}>Social Impact</h3>
             <p className="text-[12px] font-light mb-4" style={{ color: vars.g500 }}>
               LinkedIn metrics (shares, engagement rate, DMs and profile views) are not collected automatically. Enter figures directly from your LinkedIn Analytics dashboard to track spokesperson social performance.
             </p>
@@ -1190,13 +1190,13 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           <div className="rounded-2xl p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center gap-5" style={{ background: vars.navy, color: "white" }}>
             <div className="flex-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.2em] mb-2" style={{ color: "rgba(255,255,255,0.6)" }}>Close the loop</p>
-              <h3 className="text-[18px] sm:text-[20px] font-semibold mb-1" style={{ fontFamily: "'Alice', Georgia, serif" }}>Re-run Earned Media Visibility Audit</h3>
+              <h3 className="aio-type-card-title mb-1" style={{ color: "white" }}>Re-run Earned Media Visibility Audit</h3>
               <p className="text-[13px] font-light leading-relaxed" style={{ color: "rgba(255,255,255,0.75)" }}>
                 Refresh the LLM check; the Earned Media Authority Score and trends above will recalculate for the same date range.
               </p>
             </div>
             {onNavigate && (
-              <button onClick={() => onNavigate("llm-check")} className="px-5 py-3 rounded-lg text-[13px] font-semibold flex items-center gap-2 transition-all hover:brightness-110 self-start sm:self-auto" style={{ background: "#2896b9", color: "white" }}>
+              <button onClick={() => onNavigate("llm-check")} className="aio-button aio-button--secondary transition-all hover:brightness-110 self-start sm:self-auto" style={{ background: "#2896b9", color: "white" }}>
                 Re-run Earned Media Visibility Audit <ArrowRight size={14} />
               </button>
             )}
@@ -1221,7 +1221,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           {FEATURES.aiCoverageSearch && <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center gap-2 mb-1">
               <Search size={16} color={vars.accent} />
-              <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>AI Coverage Search</h3>
+              <h3 className="aio-type-card-title" style={{ color: vars.navy }}>AI Coverage Search</h3>
             </div>
             <p className="text-[13px] font-light mb-4" style={{ color: vars.g500 }}>
               Search the web for earned coverage about your project across Press Releases, Articles, Case Studies, Whitepapers, Blogs, Social, Conferences, Awards and Directories. Each item is scored across ChatGPT and Claude.
@@ -1303,7 +1303,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               <button
                 onClick={() => void runAiSearch()}
                 disabled={aiSearching}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60"
+                className="aio-button aio-button--primary disabled:opacity-60"
                 style={{ background: vars.accent }}
               >
                 {aiSearching
@@ -1313,7 +1313,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               </button>
               {aiSearched && aiResults.length > 0 && (
                 <>
-                  <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
+                  <button className="aio-button aio-button--outline aio-button--compact" style={{ borderColor: vars.g200, color: vars.g600 }}>
                     <Download size={14} /> Download Report
                   </button>
                   <button
@@ -1321,7 +1321,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                       aiResults.forEach(r => addAiResultToTracker(r));
                       alert(`Added ${aiResults.length} item${aiResults.length === 1 ? "" : "s"} to the Earned Media Tracker.`);
                     }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                    className="aio-button aio-button--secondary"
                     style={{ background: vars.navy }}
                   >
                     <Plus size={14} /> Add to Earned Media Tracker
@@ -1377,7 +1377,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center gap-2 mb-1">
               <Plus size={16} color={vars.accent} />
-              <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Manual Entry</h3>
+              <h3 className="aio-type-card-title" style={{ color: vars.navy }}>Manual Entry</h3>
             </div>
             <p className="text-[13px] font-light mb-4" style={{ color: vars.g500 }}>Add a row directly to the Earned Media Tracker spreadsheet.</p>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
@@ -1431,7 +1431,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                 <input type="number" min={0} max={10} value={manualForm.score} onChange={e => setManualForm({ ...manualForm, score: Number(e.target.value) })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
               </div>
             </div>
-            <button onClick={addManualRow} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: vars.accent }}>
+            <button onClick={addManualRow} className="aio-button aio-button--primary" style={{ background: vars.accent }}>
               <Plus size={14} /> Add to Earned Media Tracker
             </button>
           </div>
@@ -1440,7 +1440,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center gap-2 mb-1">
               <Search size={16} color={vars.accent} />
-              <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Search Earned Media Tracker</h3>
+              <h3 className="aio-type-card-title" style={{ color: vars.navy }}>Search Earned Media Tracker</h3>
             </div>
             <p className="text-[13px] font-light mb-4" style={{ color: vars.g500 }}>
               Filter the spreadsheet below by any combination of Date, Content Type, Message, Spokesperson, Media Category or Media Title.
@@ -1489,7 +1489,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <button
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                className="aio-button aio-button--primary"
                 style={{ background: vars.accent }}
                 onClick={() => {
                   const el = document.getElementById("tracker-spreadsheet");
@@ -1498,7 +1498,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               >
                 <Search size={14} /> Search
               </button>
-              <button onClick={() => setTrackerFilter(trackerFilterDefaults)} className="px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
+              <button onClick={() => setTrackerFilter(trackerFilterDefaults)} className="aio-button aio-button--outline aio-button--compact" style={{ borderColor: vars.g200, color: vars.g600 }}>
                 Clear filters
               </button>
               <span className="text-[12px]" style={{ color: vars.g500 }}>
@@ -1510,12 +1510,12 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           {/* Tracker Spreadsheet */}
           <div id="tracker-spreadsheet" className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-              <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Earned Media Tracker spreadsheet</h3>
+              <h3 className="aio-type-card-title" style={{ color: vars.navy }}>Earned Media Tracker spreadsheet</h3>
               <div className="flex items-center gap-2 flex-wrap">
                 {selectedIds.size > 0 && (
                   <button
                     onClick={deleteSelected}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white"
+                    className="aio-button aio-button--destructive aio-button--compact"
                     style={{ background: vars.red }}
                   >
                     <Trash2 size={12} /> Delete {selectedIds.size} selected
@@ -1526,7 +1526,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                     <button
                       onClick={downloadTrackerCsv}
                       title="Download as CSV / Excel"
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-semibold"
+                      className="aio-button aio-button--outline aio-button--compact"
                       style={{ borderColor: vars.g200, color: vars.g600 }}
                     >
                       <Download size={12} /> Excel (.csv)
@@ -1593,7 +1593,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           <div className="rounded-2xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center gap-2 mb-2">
               <Eye size={18} color={vars.accent} />
-              <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Earned Visibility Scorecard</h3>
+              <h3 className="aio-type-card-title" style={{ color: vars.navy }}>Earned Visibility Scorecard</h3>
             </div>
             <p className="text-sm font-light mb-6" style={{ color: vars.g500 }}>How your brand appears across ChatGPT and Claude when users ask questions in your category.</p>
             {llmScorecard.length === 0 ? (
@@ -1632,7 +1632,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           <div className="rounded-2xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center gap-2 mb-2">
               <Shield size={18} color={vars.accent} />
-              <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Technical &amp; Schema Audit</h3>
+              <h3 className="aio-type-card-title" style={{ color: vars.navy }}>Technical &amp; Schema Audit</h3>
             </div>
             <p className="text-sm font-light mb-5" style={{ color: vars.g500 }}>Assessment of structured data, crawler access and technical signals that help AI engines understand and trust your content.</p>
             {technicalAudit.length === 0 ? (
@@ -1655,7 +1655,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           <div className="rounded-2xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center gap-2 mb-2">
               <FileText size={18} color={vars.teal} />
-              <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Architecture Audit</h3>
+              <h3 className="aio-type-card-title" style={{ color: vars.navy }}>Content Architecture Audit</h3>
             </div>
             <p className="text-sm font-light mb-5" style={{ color: vars.g500 }}>How well your website content is structured for AI comprehension, citation and answer extraction.</p>
             {contentAudit.length === 0 ? (
@@ -1682,7 +1682,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               <p className="text-[12px] font-light" style={{ color: vars.g600 }}>The Website Technical GEO module consumes Project Data sections 1-3 and 7-8, then produces a downloadable, itemised action list to drive these scores up.</p>
             </div>
             {onNavigate && (
-              <button onClick={() => onNavigate("seo-audit")} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white flex-shrink-0 whitespace-nowrap" style={{ background: vars.accent }}>
+              <button onClick={() => onNavigate("seo-audit")} className="aio-button aio-button--primary flex-shrink-0 whitespace-nowrap" style={{ background: vars.accent }}>
                 Open Website Technical GEO <ArrowRight size={14} />
               </button>
             )}

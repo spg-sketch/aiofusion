@@ -335,7 +335,7 @@ function PlatformHomePage({
           {backToAgency}
           <button
             onClick={onBackToLanding}
-            className="flex shrink-0 items-center gap-2 px-4 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:brightness-110 rounded-xl"
+            className="aio-button aio-button--return shrink-0"
             style={{ background: accent, color: "white" }}
           >
             <ArrowLeft size={16} /> <span className="sm:hidden">Website</span><span className="hidden sm:inline">Back to website</span>
@@ -349,10 +349,10 @@ function PlatformHomePage({
             <Sparkles size={12} color="white" />
             <span className="text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: "white" }}>Platform Home</span>
           </div>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+          <h1 className="aio-type-display">
             Welcome to <span style={{ color: accent }}>AIO Fusion</span><span className="text-2xl sm:text-3xl lg:text-4xl font-light ml-2 align-baseline" style={{ color: vars.g500 }}>(beta)</span>
           </h1>
-          <p className="text-[16px] sm:text-[18px] font-light mt-4 leading-[1.7] sm:whitespace-nowrap" style={{ color: vars.g600 }}>
+          <p className="aio-type-body mt-4 sm:whitespace-nowrap" style={{ color: vars.g600 }}>
             {session
               ? "Manage your PR and marketing projects, then move through The AIO Fusion Approach to grow business AI authority."
               : "Sign in to manage your PR and marketing projects, then move through The AIO Fusion Approach to grow business AI authority."}
@@ -877,16 +877,16 @@ function PlatformHomePage({
                   <User size={24} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="inline-flex max-w-full items-center whitespace-nowrap mb-1.5 px-3 sm:px-5 py-2 rounded-md text-[15px] sm:text-[20px] font-bold uppercase tracking-[0.1em] sm:tracking-[0.16em]" style={{ background: session.role === "admin" ? ink : "rgba(255,255,255,0.18)", color: "white" }}>
+                  <span className="aio-type-label inline-flex max-w-full items-center whitespace-nowrap mb-1.5 px-3 sm:px-5 py-2 rounded-md uppercase tracking-[0.1em] sm:tracking-[0.16em]" style={{ background: session.role === "admin" ? ink : "rgba(255,255,255,0.18)", color: "white" }}>
                     {session.role === "client"
                       ? session.agencyManagedClient ? "Client Project" : "Client Account"
                       : session.role === "agency" ? "Agency Partner Account" : roleLabel(session.role)}
                   </span>
-                  <p className="text-[12px] font-bold uppercase tracking-[0.18em]" style={{ color: "rgba(255,255,255,0.7)" }}>Signed in as</p>
-                  <h2 className="text-[22px] font-bold leading-tight mt-0.5 break-words" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
+                  <p className="aio-type-eyebrow" style={{ color: "rgba(255,255,255,0.7)" }}>Signed in as</p>
+                  <h2 className="aio-type-card-title mt-0.5 break-words" style={{ color: "white" }}>
                     {getSessionIdentityLabels(session).signedInAs}
                   </h2>
-                  <div className="mt-2 space-y-0.5 text-[12px] break-words" style={{ color: "rgba(255,255,255,0.78)" }}>
+                  <div className="aio-type-supporting mt-2 space-y-0.5 break-words" style={{ color: "rgba(255,255,255,0.78)" }}>
                     <p><span className="font-bold uppercase tracking-[0.12em]">Company:</span> {getSessionIdentityLabels(session).companyName}</p>
                     <p><span className="font-bold uppercase tracking-[0.12em]">Access:</span> {getSessionIdentityLabels(session).access}</p>
                   </div>
@@ -896,8 +896,8 @@ function PlatformHomePage({
                 {session.insightsCmsAccess && onInsightsAdmin && (
                   <button
                     onClick={onInsightsAdmin}
-                    className="flex min-w-0 items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
-                    style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
+                    className="aio-button aio-button--outline min-w-0 sm:px-6 uppercase tracking-[0.14em] text-white hover:bg-white/10"
+                    style={{ border: "1.5px solid rgba(255,255,255,0.5)", background: "transparent", color: "white" }}
                   >
                     <FileEdit size={15} /> Edit Insights CMS
                   </button>
@@ -906,15 +906,15 @@ function PlatformHomePage({
                   <>
                     <button
                       onClick={onManageUsers}
-                      className="flex min-w-0 items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
-                      style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
+                      className="aio-button aio-button--outline min-w-0 sm:px-6 uppercase tracking-[0.14em] text-white hover:bg-white/10"
+                      style={{ border: "1.5px solid rgba(255,255,255,0.5)", background: "transparent", color: "white" }}
                     >
                       <Users size={15} /> Manage Accounts
                     </button>
                     <button
                       onClick={onManageTeam ?? onManageUsers}
-                      className="flex min-w-0 items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
-                      style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
+                      className="aio-button aio-button--outline min-w-0 sm:px-6 uppercase tracking-[0.14em] text-white hover:bg-white/10"
+                      style={{ border: "1.5px solid rgba(255,255,255,0.5)", background: "transparent", color: "white" }}
                     >
                       <Users size={15} /> Account &amp; Team Settings
                     </button>
@@ -922,8 +922,8 @@ function PlatformHomePage({
                 ) : (
                   <button
                     onClick={onManageSubAccounts}
-                    className="flex min-w-0 items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
-                    style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
+                    className="aio-button aio-button--outline min-w-0 sm:px-6 uppercase tracking-[0.14em] text-white hover:bg-white/10"
+                    style={{ border: "1.5px solid rgba(255,255,255,0.5)", background: "transparent", color: "white" }}
                   >
                     {session.role === "agency"
                       ? <><Users size={15} /> Account, Client &amp; Team Settings</>
@@ -932,7 +932,7 @@ function PlatformHomePage({
                 )}
                 <button
                   onClick={onContinueToProjects}
-                  className="flex min-w-0 items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-md hover:brightness-110"
+                  className="aio-button aio-button--primary min-w-0 sm:px-6 uppercase tracking-[0.14em] text-white hover:-translate-y-0.5 hover:shadow-md"
                   style={{ background: accent }}
                 >
                   Project Hub <ArrowRight size={15} />
@@ -945,8 +945,8 @@ function PlatformHomePage({
             <div className="mt-6 pt-5 flex justify-end" style={{ borderTop: "1px solid rgba(255,255,255,0.2)" }}>
               <button
                 onClick={onSignOut}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
-                style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
+                className="aio-button aio-button--outline uppercase tracking-[0.14em] text-white hover:bg-white/10"
+                style={{ border: "1.5px solid rgba(255,255,255,0.5)", background: "transparent", color: "white" }}
               >
                 <LogOut size={15} /> Sign out
               </button>

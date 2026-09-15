@@ -68,9 +68,9 @@ function RecoveryCodesBlock({ codes, onDone, doneLabel }: { codes: string[]; onD
     <div>
       <div className="flex items-center gap-2 mb-2">
         <KeyRound size={15} style={{ color: vars.teal }} />
-        <p className="text-[13px] font-bold uppercase tracking-[0.14em]" style={{ color: "#0a1628" }}>Your recovery codes</p>
+        <p className="aio-type-eyebrow" style={{ color: "#0a1628" }}>Your recovery codes</p>
       </div>
-      <p className="text-[13px] font-light leading-[1.6] mb-3" style={{ color: vars.g500 }}>
+      <p className="aio-type-body mb-3" style={{ color: vars.g500 }}>
         Save these somewhere safe - each works once if you lose access to your authenticator app. They will not be shown again.
       </p>
       <div className="grid grid-cols-2 gap-2 rounded-xl border p-4 mb-3 font-mono text-[13px]" style={{ borderColor: vars.g200, background: vars.g50, color: "#0a1628" }}>
@@ -85,7 +85,7 @@ function RecoveryCodesBlock({ codes, onDone, doneLabel }: { codes: string[]; onD
               setTimeout(() => setCopied(false), 2000);
             });
           }}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.12em] border transition-all hover:bg-black/5"
+          className="aio-button aio-button--outline aio-button--compact"
           style={{ borderColor: vars.g300, color: vars.g500 }}
         >
           {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy all"}
@@ -93,7 +93,7 @@ function RecoveryCodesBlock({ codes, onDone, doneLabel }: { codes: string[]; onD
         <button
           type="button"
           onClick={onDone}
-          className="px-5 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:brightness-110"
+          className="aio-button aio-button--primary aio-button--compact"
           style={{ background: "#C8497A" }}
         >
           {doneLabel}
@@ -167,17 +167,17 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
       <div className="rounded-2xl p-6 bg-white">
         <div className="flex items-center gap-2 mb-3">
           <AlertTriangle size={18} style={{ color: low ? vars.red : "#C8497A" }} />
-          <h3 className="text-[16px] font-bold" style={{ color: "#0a1628" }}>You signed in with a recovery code</h3>
+          <h3 className="aio-type-card-title" style={{ color: "#0a1628" }}>You signed in with a recovery code</h3>
         </div>
         <p
-          className="text-[14px] font-semibold mb-2"
+          className="aio-type-body font-semibold mb-2"
           style={{ color: low ? vars.red : "#0a1628" }}
         >
           {recoveryWarning === 0
             ? "You have no recovery codes left."
             : `Only ${recoveryWarning} recovery code${recoveryWarning === 1 ? "" : "s"} left.`}
         </p>
-        <p className="text-[13px] font-light leading-[1.7] mb-4" style={{ color: vars.g500 }}>
+        <p className="aio-type-body mb-4" style={{ color: vars.g500 }}>
           Recovery codes are single-use. {low
             ? "If you run out and lose access to your authenticator app, you could be locked out of your account. "
             : ""}
@@ -187,7 +187,7 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
         <button
           type="button"
           onClick={() => onSuccess(pendingLogin.session, pendingLogin.needsSetup)}
-          className="px-7 py-2.5 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:brightness-110"
+          className="aio-button aio-button--primary"
           style={{ background: "#C8497A" }}
         >
           Continue to AIO Fusion
@@ -202,7 +202,7 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
       <div className="rounded-2xl p-6 bg-white">
         <div className="flex items-center gap-2 mb-4">
           <ShieldCheck size={18} style={{ color: vars.green }} />
-          <h3 className="text-[16px] font-bold" style={{ color: "#0a1628" }}>Two-factor authentication is on</h3>
+          <h3 className="aio-type-card-title" style={{ color: "#0a1628" }}>Two-factor authentication is on</h3>
         </div>
         <RecoveryCodesBlock
           codes={recoveryCodes}
@@ -217,14 +217,14 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
     <div className="rounded-2xl p-6 bg-white">
       <div className="flex items-center gap-2 mb-2">
         <ShieldCheck size={18} style={{ color: "#C8497A" }} />
-        <h3 className="text-[16px] font-bold" style={{ color: "#0a1628" }}>
+        <h3 className="aio-type-card-title" style={{ color: "#0a1628" }}>
           {challenge.enroll ? "Set up two-factor authentication" : "Two-factor verification"}
         </h3>
       </div>
 
       {challenge.enroll ? (
         <>
-          <p className="text-[13px] font-light leading-[1.7] mb-4" style={{ color: vars.g500 }}>
+          <p className="aio-type-body mb-4" style={{ color: vars.g500 }}>
             Master accounts require two-factor authentication. Scan this QR code with an authenticator app
             (Google Authenticator, 1Password, Authy…), then enter the 6-digit code it shows.
           </p>
@@ -233,19 +233,19 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
               <div className="p-3 rounded-xl border" style={{ borderColor: vars.g200, background: "white" }}>
                 <QRCode value={otpauthUrl} size={148} />
               </div>
-              <div className="text-[12px] font-light" style={{ color: vars.g500 }}>
+              <div className="aio-type-supporting" style={{ color: vars.g500 }}>
                 <p className="mb-1.5">Can't scan? Enter this key manually:</p>
                 <code className="font-mono text-[12px] break-all px-2 py-1 rounded" style={{ background: vars.g50, color: "#0a1628" }}>{secret}</code>
               </div>
             </div>
           ) : !error ? (
-            <div className="flex items-center gap-2 text-[13px] mb-4" style={{ color: vars.g400 }}>
+            <div className="aio-type-supporting flex items-center gap-2 mb-4" style={{ color: vars.g400 }}>
               <Loader2 size={14} className="animate-spin" /> Preparing your QR code…
             </div>
           ) : null}
         </>
       ) : (
-        <p className="text-[13px] font-light leading-[1.7] mb-4" style={{ color: vars.g500 }}>
+        <p className="aio-type-body mb-4" style={{ color: vars.g500 }}>
           Enter the 6-digit code from your authenticator app to finish signing in.
         </p>
       )}
@@ -277,20 +277,20 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
             className="h-4 w-4 rounded cursor-pointer"
             style={{ accentColor: "#C8497A" }}
           />
-          <span className="text-[13px] font-light" style={{ color: vars.g500 }}>
+          <span className="aio-type-body" style={{ color: vars.g500 }}>
             Trust this device for 30 days - skip the code on this browser
           </span>
         </label>
       )}
 
-      {error && <p className="text-[13px] font-semibold mb-3" role="alert" aria-live="assertive" style={{ color: vars.red }}>{error}</p>}
+      {error && <p className="aio-type-supporting font-semibold mb-3" role="alert" aria-live="assertive" style={{ color: vars.red }}>{error}</p>}
 
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={submit}
           disabled={busy || (useRecovery ? !recoveryInput.trim() : code.length < 6)}
-          className="flex items-center gap-2 px-7 py-2.5 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:brightness-110 disabled:opacity-50"
+          className="aio-button aio-button--primary"
           style={{ background: "#C8497A" }}
         >
           {busy && <Loader2 size={14} className="animate-spin" />}
@@ -300,7 +300,7 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
           <button
             type="button"
             onClick={() => { setUseRecovery((v) => !v); setError(null); }}
-            className="text-[12px] font-semibold underline underline-offset-2 hover:opacity-70"
+            className="aio-button aio-button--text aio-button--compact underline underline-offset-2"
             style={{ color: vars.g500 }}
           >
             {useRecovery ? "Use authenticator code instead" : "Use a recovery code"}
@@ -309,7 +309,7 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
         <button
           type="button"
           onClick={onCancel}
-          className="text-[12px] font-semibold hover:opacity-70"
+          className="aio-button aio-button--text aio-button--compact"
           style={{ color: vars.g400 }}
         >
           Back to sign in
@@ -437,15 +437,15 @@ export function MfaSecuritySection({ session, light = false }: { session: Sessio
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2" style={{ color: fg }}>
           <ShieldCheck size={15} />
-          <span className="text-[13px] font-bold uppercase tracking-[0.14em]">Two-Factor Authentication</span>
+          <span className="aio-type-eyebrow">Two-Factor Authentication</span>
           <span
-            className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-[0.12em]"
+            className="aio-type-meta px-2 py-0.5 rounded-md font-bold uppercase tracking-[0.12em]"
             style={status.enabled ? chipOnStyle : chipOffStyle}
           >
             {status.enabled ? "On" : "Off"}
           </span>
           {status.required && (
-            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-[0.12em]" style={chipOffStyle}>
+            <span className="aio-type-meta px-2 py-0.5 rounded-md font-bold uppercase tracking-[0.12em]" style={chipOffStyle}>
               Required for master accounts
             </span>
           )}
@@ -455,8 +455,10 @@ export function MfaSecuritySection({ session, light = false }: { session: Sessio
             type="button"
             onClick={startEnroll}
             disabled={busy}
-            className={`px-5 py-2 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-50 ${light ? "hover:bg-black/5" : "text-white hover:bg-white/10"}`}
-            style={light ? { border: `1.5px solid ${vars.g300}`, color: fg } : { border: "1.5px solid rgba(255,255,255,0.5)" }}
+            className={`aio-button aio-button--outline aio-button--compact ${light ? "hover:bg-black/5" : "text-white hover:bg-white/10"}`}
+            style={light
+              ? { border: `1.5px solid ${vars.g300}`, color: fg }
+              : { border: "1.5px solid rgba(255,255,255,0.5)", background: "transparent", color: fg }}
           >
             Turn on
           </button>
@@ -465,7 +467,7 @@ export function MfaSecuritySection({ session, light = false }: { session: Sessio
           <button
             type="button"
             onClick={() => { setDisabling(true); setError(null); }}
-            className="text-[12px] font-semibold hover:opacity-70"
+            className="aio-button aio-button--text aio-button--compact"
             style={{ color: fgSoft }}
           >
             Turn off
@@ -474,7 +476,7 @@ export function MfaSecuritySection({ session, light = false }: { session: Sessio
       </div>
       {status.enabled && (
         <p
-          className={`mt-2 text-[12px] ${status.recoveryCodesRemaining <= 3 ? "font-semibold" : "font-light"}`}
+          className={`aio-type-supporting mt-2 ${status.recoveryCodesRemaining <= 3 ? "font-semibold" : "font-light"}`}
           style={{ color: status.recoveryCodesRemaining <= 3 ? warnColor : fgSoft }}
         >
           {status.recoveryCodesRemaining <= 3 && <AlertTriangle size={12} className="inline mr-1 -mt-0.5" />}
@@ -485,7 +487,7 @@ export function MfaSecuritySection({ session, light = false }: { session: Sessio
               <button
                 type="button"
                 onClick={() => { setRegenerating(true); setDisabling(false); setError(null); }}
-                className="font-semibold underline underline-offset-2 hover:opacity-70"
+                className="aio-button aio-button--text aio-button--compact font-semibold underline underline-offset-2"
                 style={{ color: fgStrong }}
               >
                 Regenerate
@@ -497,22 +499,22 @@ export function MfaSecuritySection({ session, light = false }: { session: Sessio
 
       {status.enabled && trustedDevices.length > 0 && (
         <div className="mt-3">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: fgMid }}>
+          <p className="aio-type-eyebrow mb-2" style={{ color: fgMid }}>
             Trusted devices (skip the code)
           </p>
           <div className="space-y-2">
             {trustedDevices.map((d) => (
               <div key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2" style={{ background: rowBg }}>
                 <div className="min-w-0">
-                  <p className="text-[12px] font-semibold truncate max-w-[420px]" style={{ color: fg }}>
+                  <p className="aio-type-supporting font-semibold truncate max-w-[420px]" style={{ color: fg }}>
                     {d.label}
                     {d.current && (
-                      <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-[0.1em]" style={chipOnStyle}>
+                      <span className="aio-type-meta ml-2 px-1.5 py-0.5 rounded font-bold uppercase tracking-[0.1em]" style={chipOnStyle}>
                         This device
                       </span>
                     )}
                   </p>
-                  <p className="text-[11px] font-light" style={{ color: fgSoft }}>
+                  <p className="aio-type-meta" style={{ color: fgSoft }}>
                     Trusted until {new Date(d.expiresAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
                   </p>
                 </div>
@@ -520,7 +522,7 @@ export function MfaSecuritySection({ session, light = false }: { session: Sessio
                   type="button"
                   onClick={() => revokeDevice(d.id)}
                   disabled={revokingId !== null}
-                  className="text-[11px] font-semibold underline underline-offset-2 hover:opacity-70 disabled:opacity-40"
+                  className="aio-button aio-button--text aio-button--compact underline underline-offset-2"
                   style={{ color: fgMid }}
                 >
                   {revokingId === d.id ? "Removing…" : "Remove"}
@@ -537,7 +539,7 @@ export function MfaSecuritySection({ session, light = false }: { session: Sessio
             <RecoveryCodesBlock codes={recoveryCodes} doneLabel="Done" onDone={() => setRecoveryCodes(null)} />
           ) : enrolling ? (
             <>
-              <p className="text-[13px] font-light leading-[1.7] mb-4" style={{ color: vars.g500 }}>
+              <p className="aio-type-body mb-4" style={{ color: vars.g500 }}>
                 Scan this QR code with an authenticator app, then enter the 6-digit code it shows.
               </p>
               <div className="flex flex-col sm:flex-row gap-5 items-start mb-4">
@@ -546,53 +548,53 @@ export function MfaSecuritySection({ session, light = false }: { session: Sessio
                     <QRCode value={otpauthUrl} size={132} />
                   </div>
                 )}
-                <div className="text-[12px] font-light" style={{ color: vars.g500 }}>
+                <div className="aio-type-supporting" style={{ color: vars.g500 }}>
                   <p className="mb-1.5">Can't scan? Enter this key manually:</p>
                   <code className="font-mono text-[12px] break-all px-2 py-1 rounded" style={{ background: vars.g50, color: "#0a1628" }}>{secret}</code>
                 </div>
               </div>
               <div className="mb-4"><OtpBoxes value={code} onChange={setCode} onComplete={confirmEnroll} disabled={busy} /></div>
-              {error && <p className="text-[13px] font-semibold mb-3" style={{ color: vars.red }}>{error}</p>}
+               {error && <p className="aio-type-supporting font-semibold mb-3" style={{ color: vars.red }}>{error}</p>}
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={confirmEnroll}
                   disabled={busy || code.length < 6}
-                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:brightness-110 disabled:opacity-50"
+                   className="aio-button aio-button--primary"
                   style={{ background: "#C8497A" }}
                 >
                   {busy && <Loader2 size={13} className="animate-spin" />} Verify & enable
                 </button>
-                <button type="button" onClick={() => { setEnrolling(false); setCode(""); setError(null); }} className="text-[12px] font-semibold hover:opacity-70" style={{ color: vars.g400 }}>
+                <button type="button" onClick={() => { setEnrolling(false); setCode(""); setError(null); }} className="aio-button aio-button--text aio-button--compact" style={{ color: vars.g400 }}>
                   Cancel
                 </button>
               </div>
             </>
           ) : regenerating ? (
             <>
-              <p className="text-[13px] font-light leading-[1.7] mb-4" style={{ color: vars.g500 }}>
+               <p className="aio-type-body mb-4" style={{ color: vars.g500 }}>
                 Enter the 6-digit code from your authenticator app to generate 10 fresh recovery codes. Your old recovery codes will stop working immediately.
               </p>
               <div className="mb-4"><OtpBoxes value={regenCode} onChange={setRegenCode} onComplete={confirmRegenerate} disabled={busy} /></div>
-              {error && <p className="text-[13px] font-semibold mb-3" style={{ color: vars.red }}>{error}</p>}
+               {error && <p className="aio-type-supporting font-semibold mb-3" style={{ color: vars.red }}>{error}</p>}
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={confirmRegenerate}
                   disabled={busy || regenCode.length < 6}
-                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:brightness-110 disabled:opacity-50"
+                   className="aio-button aio-button--primary"
                   style={{ background: "#C8497A" }}
                 >
                   {busy && <Loader2 size={13} className="animate-spin" />} Regenerate codes
                 </button>
-                <button type="button" onClick={() => { setRegenerating(false); setRegenCode(""); setError(null); }} className="text-[12px] font-semibold hover:opacity-70" style={{ color: vars.g400 }}>
+                 <button type="button" onClick={() => { setRegenerating(false); setRegenCode(""); setError(null); }} className="aio-button aio-button--text aio-button--compact" style={{ color: vars.g400 }}>
                   Cancel
                 </button>
               </div>
             </>
           ) : (
             <>
-              <p className="text-[13px] font-light leading-[1.7] mb-3" style={{ color: vars.g500 }}>
+               <p className="aio-type-body mb-3" style={{ color: vars.g500 }}>
                 Enter a code from your authenticator app (or a recovery code) to turn off two-factor authentication.
               </p>
               <input
@@ -604,18 +606,18 @@ export function MfaSecuritySection({ session, light = false }: { session: Sessio
                 className="w-full max-w-[240px] px-3 py-2.5 mb-3 rounded-lg border font-mono text-[14px] focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, color: "#0a1628", ["--tw-ring-color" as any]: vars.teal }}
               />
-              {error && <p className="text-[13px] font-semibold mb-3" style={{ color: vars.red }}>{error}</p>}
+               {error && <p className="aio-type-supporting font-semibold mb-3" style={{ color: vars.red }}>{error}</p>}
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={confirmDisable}
                   disabled={busy || !disableCode.trim()}
-                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90 disabled:opacity-50"
+                   className="aio-button aio-button--destructive"
                   style={{ background: vars.red }}
                 >
                   {busy && <Loader2 size={13} className="animate-spin" />} Turn off
                 </button>
-                <button type="button" onClick={() => { setDisabling(false); setDisableCode(""); setError(null); }} className="text-[12px] font-semibold hover:opacity-70" style={{ color: vars.g400 }}>
+                 <button type="button" onClick={() => { setDisabling(false); setDisableCode(""); setError(null); }} className="aio-button aio-button--text aio-button--compact" style={{ color: vars.g400 }}>
                   Cancel
                 </button>
               </div>

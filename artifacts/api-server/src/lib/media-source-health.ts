@@ -44,7 +44,7 @@ export function evaluateMediaSource(contact: MediaSourceContact, evidence: Media
     return nameTokens.length > 0 && nameTokens.every((token) => lower.includes(token));
   });
   const observedRole = nearby
-    .map((candidate) => candidate.replace(new RegExp(nameTokens.map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+"), "i"), "").replace(/^[\s|,–—-]+|[\s|,–—-]+$/g, "").trim())
+    .map((candidate) => candidate.replace(new RegExp(nameTokens.map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+"), "i"), "").replace(/^[\s|,–\u2014-]+|[\s|,–\u2014-]+$/g, "").trim())
     .find((candidate) => candidate.length >= 2 && candidate.length <= 100) ?? "";
   const differences: MediaSourceDifference[] = [];
 

@@ -17,7 +17,9 @@ vi.mock("@workspace/db", async () => {
       vat_number varchar, billing_address varchar, billing_address_version integer, website varchar, display_name varchar,
       free_access boolean DEFAULT false, status varchar NOT NULL DEFAULT 'active', setup_complete boolean,
       stripe_customer_id text, stripe_subscription_id text, plan varchar, billing_frequency varchar,
-      subscription_status varchar, current_period_end timestamptz, beta_trial_started_at timestamptz,
+      subscription_status varchar, current_period_end timestamptz,
+      cancel_at_period_end boolean NOT NULL DEFAULT false, renewal_reminder_period_end timestamptz,
+      beta_trial_started_at timestamptz,
       beta_trial_ends_at timestamptz, created_at timestamptz DEFAULT now());
     CREATE TABLE platform_users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), email varchar UNIQUE, name varchar,
       password_hash text, google_id varchar UNIQUE, microsoft_id varchar UNIQUE, session_version integer DEFAULT 0,
@@ -71,9 +73,14 @@ vi.mock("@workspace/db", async () => {
     CREATE TABLE media_recommendation_sets (id serial PRIMARY KEY, account_id varchar, project_id varchar, story_key varchar,
       criteria jsonb DEFAULT '{}', created_at timestamptz DEFAULT now());
     CREATE TABLE media_recommendation_items (id serial PRIMARY KEY, recommendation_set_id integer, contact_id integer,
-      score integer DEFAULT 0, reasons jsonb DEFAULT '[]', rank integer DEFAULT 0, created_at timestamptz DEFAULT now());
+      score integer DEFAULT 0, reasons jsonb DEFAULT '[]', phrase_attributions jsonb DEFAULT '[]',
+      rank integer DEFAULT 0, created_at timestamptz DEFAULT now());
     CREATE TABLE media_recommendation_decisions (id serial PRIMARY KEY, account_id varchar, project_id varchar,
       story_key varchar, contact_id integer);
+    CREATE TABLE media_outreach (id serial PRIMARY KEY, account_id varchar, project_id varchar,
+      story_key varchar, contact_id integer, outlet_id integer, updated_at timestamptz DEFAULT now());
+    CREATE TABLE media_outreach_activities (id serial PRIMARY KEY, account_id varchar, outreach_id integer);
+    CREATE TABLE media_placements (id serial PRIMARY KEY, account_id varchar, outreach_id integer);
     CREATE TABLE admin_events (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), actor_id varchar, actor_username varchar,
       action varchar, target_id varchar, target_type varchar, metadata jsonb, created_at timestamptz DEFAULT now());
   `);

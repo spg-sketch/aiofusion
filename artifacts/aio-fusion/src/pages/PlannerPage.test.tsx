@@ -2,6 +2,13 @@
 import { fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const isoWeek = vi.hoisted(() => (date: Date) => {
+  const day = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  day.setUTCDate(day.getUTCDate() + 4 - (day.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(day.getUTCFullYear(), 0, 1));
+  return Math.ceil(((day.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+});
+
 const plannerFixtures = vi.hoisted(() => ({
   phrase: {
     id: "phrase-927b9d3d",
@@ -16,7 +23,7 @@ const plannerFixtures = vi.hoisted(() => ({
     keyMessage: "",
     audience: "",
     channels: ["Website"],
-    week: new Date().getDate(),
+    week: isoWeek(new Date()),
     status: "Planned" as const,
     releaseDate: "",
     notes: "",
@@ -63,7 +70,7 @@ vi.mock("../lib/contentStore", () => ({
   useContentStore: () => 1,
   getContentStoreState: () => ({ status: "ready", mutationPending: false, mutationError: null }),
   initContentStore: vi.fn(),
-  getISOWeek: (date: Date) => date.getDate(),
+  getISOWeek: isoWeek,
   weekDateLabel: (week: number) => `2026-01-${String(week).padStart(2, "0")}`,
   DEFAULT_SCORING: {},
   STATUS_COLOURS: {
@@ -101,7 +108,7 @@ describe("PlannerPage exact target phrases", () => {
       keyMessage: "",
       audience: "",
       channels: ["Website"],
-      week: new Date().getDate(),
+      week: isoWeek(new Date()),
       status: "Planned",
       releaseDate: "",
       notes: "",

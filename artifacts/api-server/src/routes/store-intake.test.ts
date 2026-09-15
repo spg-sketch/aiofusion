@@ -68,6 +68,8 @@ vi.mock("@workspace/db", async () => {
       stripe_customer_id varchar,
       stripe_subscription_id varchar,
       current_period_end timestamptz,
+      cancel_at_period_end boolean NOT NULL DEFAULT false,
+      renewal_reminder_period_end timestamptz,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     );

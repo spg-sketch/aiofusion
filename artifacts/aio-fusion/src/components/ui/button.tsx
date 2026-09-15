@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0" +
+  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-xl text-[13px] font-bold transition-[background-color,border-color,color,filter,transform] duration-200 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-55 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0" +
 " hover-elevate active-elevate-2",
   {
     variants: {
@@ -25,14 +25,18 @@ const buttonVariants = cva(
           "border bg-secondary text-secondary-foreground border border-secondary-border ",
         // @replit no hover, transparent border
         ghost: "border border-transparent",
-        link: "text-primary underline-offset-4 hover:underline",
+        link: "min-h-9 bg-transparent px-2 text-primary underline-offset-4 hover:underline",
+        text: "min-h-9 border border-transparent bg-transparent px-2 text-foreground hover:bg-muted",
+        navigation:
+          "bg-[#C8497A] text-white uppercase tracking-[0.12em] hover:brightness-110 active:translate-y-px",
       },
       size: {
         // @replit changed sizes
-        default: "min-h-9 px-4 py-2",
-        sm: "min-h-8 rounded-md px-3 text-xs",
-        lg: "min-h-10 rounded-md px-8",
-        icon: "h-9 w-9",
+        default: "min-h-11 px-[18px] py-2.5",
+        sm: "min-h-9 rounded-[10px] px-3 text-xs",
+        lg: "min-h-12 px-7 text-sm",
+        icon: "h-11 w-11 p-0",
+        compact: "min-h-9 rounded-[10px] px-3 text-xs",
       },
     },
     defaultVariants: {

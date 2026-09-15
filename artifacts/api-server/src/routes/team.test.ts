@@ -50,6 +50,8 @@ vi.mock("@workspace/db", async () => {
       billing_frequency varchar(16),
       subscription_status varchar(16),
       current_period_end timestamptz,
+      cancel_at_period_end boolean NOT NULL DEFAULT false,
+      renewal_reminder_period_end timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS platform_memberships (
@@ -126,6 +128,7 @@ vi.mock("@workspace/db", async () => {
       tags jsonb DEFAULT '[]',
       headline text, standfirst text, body_copy text, body text,
       selected_messages jsonb, media_cats jsonb,
+      target_phrases jsonb, target_phrase_ids jsonb,
       pub_date varchar, released_at varchar, release_channel varchar, source varchar,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now(),
@@ -188,6 +191,8 @@ vi.mock("@workspace/db", async () => {
       standfirst   text,
       body_copy    text,
       action_notes text,
+      target_phrases jsonb,
+      target_phrase_ids jsonb,
       created_at   timestamptz NOT NULL DEFAULT now(),
       updated_at   timestamptz NOT NULL DEFAULT now(),
       deleted_at   timestamptz

@@ -279,7 +279,7 @@ function GuidancePage({ onBack }: { onBack: () => void }) {
         <div className="flex items-center gap-3.5">
           <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-12 sm:h-16" />
         </div>
-        <button onClick={onBack} className="text-[12px] font-medium flex items-center gap-1.5 hover:underline" style={{ color: vars.g500 }}>
+        <button onClick={onBack} className="aio-button aio-button--text aio-button--compact" style={{ color: vars.g500 }}>
           <ArrowLeft size={14} /> Back to platform home
         </button>
       </header>
@@ -288,10 +288,10 @@ function GuidancePage({ onBack }: { onBack: () => void }) {
           <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-3" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
             <BookOpen size={12} /> How-to Library
           </div>
-          <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+          <h1 className="aio-type-page-title">
             Guidance
           </h1>
-          <p className="text-[15px] font-light mt-2 max-w-2xl" style={{ color: vars.g500 }}>
+          <p className="aio-type-body mt-2 max-w-2xl" style={{ color: vars.g500 }}>
             Step-by-step guides for getting the most out of AIO Fusion - from first set-up to client reporting.
           </p>
         </div>

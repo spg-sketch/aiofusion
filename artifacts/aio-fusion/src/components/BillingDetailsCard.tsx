@@ -209,8 +209,8 @@ export function BillingDetailsCard({ onSaved }: { onSaved?: () => void } = {}) {
     }
   }
 
-  const inputClass = "w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 disabled:opacity-50";
-  const labelClass = "text-[11px] font-semibold block mb-1.5";
+  const inputClass = "aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2 disabled:opacity-50";
+  const labelClass = "aio-type-label block mb-1.5";
 
   function field(
     key: FieldKey,
@@ -243,7 +243,7 @@ export function BillingDetailsCard({ onSaved }: { onSaved?: () => void } = {}) {
           style={{ borderColor: error ? "#DC2626" : vars.g200, ["--tw-ring-color" as any]: accent }}
         />
         {(error || options.help) && (
-          <p id={descriptionId} className="text-[11px] mt-1" style={{ color: error ? "#B91C1C" : vars.g500 }}>
+          <p id={descriptionId} className="aio-type-meta mt-1" style={{ color: error ? "#B91C1C" : vars.g500 }}>
             {error ?? options.help}
           </p>
         )}
@@ -257,22 +257,22 @@ export function BillingDetailsCard({ onSaved }: { onSaved?: () => void } = {}) {
       className="rounded-2xl p-6 sm:p-8 mb-6 scroll-mt-6"
       style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}
     >
-      <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+      <h2 className="aio-type-card-title mb-1" style={{ color: ink }}>
         Company and billing information
       </h2>
-      <p className="text-[13px] mb-5" style={{ color: vars.g500 }}>
+      <p className="aio-type-body mb-5" style={{ color: vars.g500 }}>
         Required before payment. Invoices go to the billing contact. The key account holder is used for account-management communication only and does not change sign-in access.
       </p>
       <form onSubmit={handleSave} noValidate className="grid grid-cols-1 md:grid-cols-12 gap-4">
         {legacyBillingAddress && (
           <div className="md:col-span-12 rounded-xl p-4" style={{ background: "#FEF3C7", border: "1px solid #FCD34D" }}>
-            <p className="text-[12px] font-semibold mb-1" style={{ color: "#92400E" }}>
+            <p className="aio-type-supporting font-semibold mb-1" style={{ color: "#92400E" }}>
               Confirm your previously saved address
             </p>
-            <p className="text-[12px] mb-2" style={{ color: "#92400E" }}>
+            <p className="aio-type-supporting mb-2" style={{ color: "#92400E" }}>
               This older address was saved as free text. It has not been rearranged or sent to Stripe. Enter it in the structured address fields below, then save.
             </p>
-            <pre className="text-[12px] whitespace-pre-wrap font-sans" style={{ color: ink }}>{legacyBillingAddress}</pre>
+            <pre className="aio-type-supporting whitespace-pre-wrap font-sans" style={{ color: ink }}>{legacyBillingAddress}</pre>
           </div>
         )}
         {field("companyName", "Company name", { placeholder: "e.g. Acme Ltd", maxLength: 128 })}
@@ -295,7 +295,7 @@ export function BillingDetailsCard({ onSaved }: { onSaved?: () => void } = {}) {
           help: "Only add this if your business is VAT registered.",
         })}
         <div className="md:col-span-12 mt-1">
-          <span className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: ink }}>Company address</span>
+          <span className="aio-type-eyebrow" style={{ color: ink }}>Company address</span>
         </div>
         {field("addressLine1", "Address line 1", { placeholder: "e.g. 1 High Street" })}
         {field("addressLine2", "Address line 2", { placeholder: "e.g. Suite 4", optional: true })}
@@ -332,13 +332,13 @@ export function BillingDetailsCard({ onSaved }: { onSaved?: () => void } = {}) {
           <button
             type="submit"
             disabled={saving || !loaded}
-            className="px-5 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:opacity-90 disabled:opacity-50"
+            className="aio-button aio-button--primary rounded-full uppercase tracking-[0.12em]"
             style={{ background: accent }}
           >
             {saving ? "Saving..." : "Save company information"}
           </button>
           {message && (
-            <span role="status" className="text-[13px]" style={{ color: message.kind === "ok" ? "#166534" : "#991B1B" }}>
+              <span role="status" className="aio-type-supporting" style={{ color: message.kind === "ok" ? "#166534" : "#991B1B" }}>
               {message.text}
             </span>
           )}

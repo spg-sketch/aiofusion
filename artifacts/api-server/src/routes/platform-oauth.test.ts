@@ -50,6 +50,8 @@ vi.mock("@workspace/db", async () => {
       billing_frequency varchar(16),
       subscription_status varchar(16),
       current_period_end timestamptz,
+      cancel_at_period_end boolean NOT NULL DEFAULT false,
+      renewal_reminder_period_end timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS platform_memberships (
@@ -147,6 +149,106 @@ vi.mock("@workspace/db", async () => {
       name varchar NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     );
+    CREATE TABLE IF NOT EXISTS media_contact_categories (
+      id serial PRIMARY KEY,
+      contact_id uuid,
+      category_id uuid,
+      category_name varchar NOT NULL DEFAULT '',
+      account_id varchar,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_import_batches (
+      id serial PRIMARY KEY,
+      account_id varchar NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_contact_field_overrides (
+      id serial PRIMARY KEY,
+      contact_id uuid,
+      account_id varchar NOT NULL,
+      field_name varchar(80) NOT NULL,
+      value text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_recommendation_sets (
+      id serial PRIMARY KEY,
+      account_id varchar NOT NULL,
+      project_id varchar NOT NULL,
+      story_key varchar(200) NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_recommendation_items (
+      id serial PRIMARY KEY,
+      recommendation_set_id integer,
+      contact_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_recommendation_decisions (
+      id serial PRIMARY KEY,
+      account_id varchar NOT NULL,
+      project_id varchar NOT NULL,
+      story_key varchar(200) NOT NULL,
+      contact_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_outreach (
+      id serial PRIMARY KEY,
+      account_id varchar NOT NULL,
+      contact_id uuid,
+      outlet_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_outreach_activities (
+      id serial PRIMARY KEY,
+      account_id varchar NOT NULL,
+      outreach_id integer,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_placements (
+      id serial PRIMARY KEY,
+      account_id varchar NOT NULL,
+      outreach_id integer,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_contact_source_checks (
+      id serial PRIMARY KEY,
+      contact_id uuid,
+      account_id varchar NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS saved_audits (
+      id varchar PRIMARY KEY,
+      project_id varchar NOT NULL,
+      owner varchar NOT NULL,
+      saved_at varchar NOT NULL,
+      result jsonb NOT NULL,
+      deleted_at timestamptz
+    );
+    CREATE TABLE IF NOT EXISTS saved_diagnostics (
+      id varchar PRIMARY KEY,
+      project_id varchar NOT NULL,
+      owner varchar NOT NULL,
+      saved_at varchar NOT NULL,
+      result jsonb NOT NULL,
+      deleted_at timestamptz
+    );
+    CREATE TABLE IF NOT EXISTS saved_content_geo (
+      id varchar PRIMARY KEY,
+      project_id varchar NOT NULL,
+      owner varchar NOT NULL,
+      saved_at varchar NOT NULL,
+      result jsonb NOT NULL,
+      deleted_at timestamptz
+    );
+    CREATE TABLE IF NOT EXISTS saved_tech_geo (
+      id varchar PRIMARY KEY,
+      project_id varchar NOT NULL,
+      owner varchar NOT NULL,
+      saved_at varchar NOT NULL,
+      result jsonb NOT NULL,
+      deleted_at timestamptz
+    );
     CREATE TABLE IF NOT EXISTS token_usage (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       username varchar NOT NULL,
@@ -186,28 +288,7 @@ vi.mock("@workspace/db", async () => {
     );
   `);
 
-  return {
-    db,
-    platformUsersTable: schema.platformUsersTable,
-    platformCompaniesTable: schema.platformCompaniesTable,
-    platformMembershipsTable: schema.platformMembershipsTable,
-    platformAccountsTable: schema.platformAccountsTable,
-    platformMetaTable: schema.platformMetaTable,
-    platformSessionsTable: schema.platformSessionsTable,
-    projectsTable: schema.projectsTable,
-    projectSnapshotsTable: schema.projectSnapshotsTable,
-    archiveItemsTable: schema.archiveItemsTable,
-    plannerItemsTable: schema.plannerItemsTable,
-    scoringConfigsTable: schema.scoringConfigsTable,
-    mediaOutletsTable: schema.mediaOutletsTable,
-    mediaContactsTable: schema.mediaContactsTable,
-    mediaCategoriesTable: schema.mediaCategoriesTable,
-    tokenUsageTable: schema.tokenUsageTable,
-    auditLocksTable: schema.auditLocksTable,
-    adminEventsTable: schema.adminEventsTable,
-    platformEmailVerificationsTable: schema.platformEmailVerificationsTable,
-    platformPasswordResetsTable: schema.platformPasswordResetsTable,
-  };
+  return { db, ...schema };
 });
 
 vi.mock("../middleware/rate-limit", () => {

@@ -81,6 +81,8 @@ vi.mock("@workspace/db", async () => {
       billing_frequency varchar(16),
       subscription_status varchar(16),
       current_period_end timestamptz,
+      cancel_at_period_end boolean NOT NULL DEFAULT false,
+      renewal_reminder_period_end timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS platform_memberships (
@@ -610,6 +612,9 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   // ── platform - public / self-service (platform.ts) ───────────────────────
   "GET /platform/me",
   "GET /platform/status",
+  // Billing reconciliation is authenticated and owner/admin/billing-role
+  // gated by resolveBillingContext, but it is not an AI action.
+  "POST /platform/billing/reconcile-checkout",
   "POST /platform/login",
   "POST /platform/signup",
   "GET /platform/verify-email",
@@ -800,6 +805,13 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "DELETE /store/media-db/recommendations/feedback",
   "GET /store/media-db/recommendations/decisions",
   "PUT /store/media-db/recommendations/decisions",
+   // Media outreach and placement records are project-scoped and protected
+   // by memberProjectGate, but they do not invoke an AI action.
+   "GET /store/media-db/outreach",
+   "POST /store/media-db/outreach",
+   "PUT /store/media-db/outreach/:id",
+   "POST /store/media-db/outreach/:id/placements",
+   "PUT /store/media-db/placements/:id/verification",
 
   // ── contact forms (contact.ts) - public, no auth required ────────────────
   "POST /contact/book-demo",

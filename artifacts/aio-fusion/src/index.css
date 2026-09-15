@@ -45,6 +45,163 @@
   }
 }
 
+/*
+ * Authenticated product type and action system.
+ * These semantic classes intentionally leave each surface's colours and
+ * backgrounds alone while keeping proportions consistent across the product.
+ */
+@layer components {
+  .aio-type-display,
+  .aio-type-page-title,
+  .aio-type-section-title,
+  .aio-type-card-title {
+    font-family: 'Alice', 'DM Serif Display', Georgia, serif;
+    color: #0a1628;
+    text-wrap: balance;
+  }
+
+  .aio-type-display {
+    font-size: clamp(2.5rem, 5vw, 3.75rem);
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+  }
+
+  .aio-type-page-title {
+    font-size: clamp(2rem, 4vw, 3.125rem);
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+  }
+
+  .aio-type-section-title {
+    font-size: clamp(1.375rem, 2vw, 1.5rem);
+    line-height: 1.25;
+  }
+
+  .aio-type-card-title {
+    font-size: 1.125rem;
+    line-height: 1.35;
+  }
+
+  .aio-type-body {
+    font-size: 0.9375rem;
+    line-height: 1.7;
+  }
+
+  .aio-type-supporting {
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: #475569;
+  }
+
+  .aio-type-label {
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    font-weight: 600;
+  }
+
+  .aio-type-meta {
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: #64748b;
+  }
+
+  .aio-type-eyebrow {
+    font-size: 0.6875rem;
+    line-height: 1.3;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .aio-button {
+    display: inline-flex;
+    cursor: pointer;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1.125rem;
+    border: 1px solid transparent;
+    border-radius: 0.75rem;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 0.8125rem;
+    line-height: 1.25;
+    font-weight: 700;
+    transition: background-color 180ms ease, border-color 180ms ease,
+      color 180ms ease, filter 180ms ease, transform 180ms ease;
+  }
+
+  .aio-button > svg {
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 auto;
+  }
+
+  .aio-button:hover:not(:disabled):not([aria-disabled='true']) {
+    filter: brightness(1.08);
+  }
+
+  .aio-button:active:not(:disabled):not([aria-disabled='true']) {
+    transform: translateY(1px);
+  }
+
+  .aio-button:disabled,
+  .aio-button[aria-disabled='true'] {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .aio-button--primary {
+    background: #c8497a;
+    color: #fff;
+  }
+
+  .aio-button--secondary {
+    background: #0a1628;
+    color: #fff;
+  }
+
+  .aio-button--outline {
+    border-color: #cbd5e1;
+    background: #fff;
+    color: #0a1628;
+  }
+
+  .aio-button--text {
+    min-height: 2.25rem;
+    padding: 0.375rem 0.5rem;
+    background: transparent;
+    color: #334155;
+  }
+
+  .aio-button--compact {
+    min-height: 2.25rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.625rem;
+    font-size: 0.75rem;
+  }
+
+  .aio-button--return {
+    min-height: 2.75rem;
+    padding-inline: clamp(1rem, 3vw, 1.75rem);
+    background: #c8497a;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+
+  .aio-button--return-project {
+    width: 100%;
+    border-radius: 9999px;
+  }
+
+  .aio-button--destructive {
+    border-color: #dc2626;
+    background: #dc2626;
+    color: #fff;
+  }
+}
+
 @keyframes aio-indeterminate {
   0% { left: -45%; }
   100% { left: 100%; }

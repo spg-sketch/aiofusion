@@ -112,17 +112,9 @@ export function ImpersonationBanner() {
       <button
         onClick={handleExit}
         disabled={exiting}
+        className="aio-button aio-button--primary aio-button--compact"
         style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "4px 12px",
           borderRadius: 999,
-          background: "#C8497A",
-          color: "#ffffff",
-          fontSize: 12,
-          fontWeight: 600,
-          border: "none",
           cursor: exiting ? "default" : "pointer",
           opacity: exiting ? 0.7 : 1,
         }}

@@ -869,7 +869,7 @@ function SubAccountsPage({
           {backToAgency}
           <button
             onClick={onBack}
-            className="settings-back-button flex items-center gap-2 px-4 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all"
+            className="settings-back-button aio-button aio-button--return"
             style={{ background: accent, color: paper }}
           >
             <ArrowLeft size={16} /> Back to platform
@@ -879,10 +879,10 @@ function SubAccountsPage({
 
       <main className="settings-main px-4 sm:px-10 py-10 sm:py-14 max-w-[1320px] mx-auto">
         <div className="settings-intro mb-8">
-          <h1 className="text-3xl sm:text-4xl leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+          <h1 className="aio-type-page-title">
             Account Settings
           </h1>
-          <p className="settings-intro-description text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
+          <p className="settings-intro-description aio-type-body mt-3 max-w-2xl" style={{ color: vars.g600 }}>
             {isAgencyPartner
               ? "Manage your agency account, team and Client Projects in one place. Open managed projects directly without requiring clients to have a separate AIO Fusion login."
               : canCreateSubAccounts(session.role)
@@ -896,7 +896,7 @@ function SubAccountsPage({
           <aside className="settings-nav hidden lg:block w-56 flex-shrink-0 sticky top-6">
             {navGroups.map((group) => (
               <div key={group.label} className="mb-6">
-                <p className="text-[10px] font-bold uppercase tracking-[0.22em] mb-2 px-3" style={{ color: vars.g400 }}>{group.label}</p>
+                <p className="aio-type-eyebrow mb-2 px-3" style={{ color: vars.g400 }}>{group.label}</p>
                 <ul className="space-y-0.5">
                   {group.items.map((item) => {
                     const active = section === item.id;
@@ -907,7 +907,7 @@ function SubAccountsPage({
                           type="button"
                           onClick={() => selectSection(item.id)}
                           aria-current={active ? "page" : undefined}
-                          className={`settings-nav-button w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-[13px] transition-all ${active ? "settings-nav-button-active" : ""}`}
+                          className={`settings-nav-button aio-type-supporting w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-all ${active ? "settings-nav-button-active" : ""}`}
                           style={{
                             background: active ? accentSoft : "transparent",
                             color: active ? accent : vars.g600,
@@ -927,9 +927,9 @@ function SubAccountsPage({
             ))}
             {onOpenGeorge && (
               <div className="settings-george-card">
-                <p className="settings-george-title">Need help?</p>
-                <p>GEOrge is ready to help with your account and platform questions.</p>
-                <button type="button" onClick={onOpenGeorge}>
+                <p className="settings-george-title aio-type-eyebrow">Need help?</p>
+                <p className="aio-type-supporting">GEOrge is ready to help with your account and platform questions.</p>
+                <button type="button" onClick={onOpenGeorge} className="aio-button aio-button--primary">
                   <MessageCircle size={15} /> Ask GEOrge
                 </button>
               </div>
@@ -948,7 +948,7 @@ function SubAccountsPage({
                     type="button"
                     onClick={() => selectSection(item.id)}
                     aria-current={active ? "page" : undefined}
-                    className={`settings-mobile-nav-button flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[12px] font-bold whitespace-nowrap transition-all ${active ? "settings-mobile-nav-button-active" : ""}`}
+                    className={`settings-mobile-nav-button aio-type-label flex items-center gap-1.5 px-3.5 py-2 rounded-full whitespace-nowrap transition-all ${active ? "settings-mobile-nav-button-active" : ""}`}
                     style={{
                       background: active ? accent : "white",
                       color: active ? "white" : vars.g600,
@@ -963,7 +963,7 @@ function SubAccountsPage({
               })}
             </div>
             {onOpenGeorge && (
-              <button type="button" onClick={onOpenGeorge} className="settings-george-mobile-button">
+              <button type="button" onClick={onOpenGeorge} className="settings-george-mobile-button aio-button aio-button--primary">
                 <MessageCircle size={15} /> Ask GEOrge
               </button>
             )}
@@ -974,8 +974,8 @@ function SubAccountsPage({
         {section === "profile" && (<>
         {/* ACCOUNT TYPE */}
         <div className="settings-card settings-card-account-type rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-          <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Account type</h2>
-          <p className="text-[13px] font-light mb-5 leading-[1.7]" style={{ color: vars.g600 }}>
+          <h2 className="aio-type-section-title mb-1" style={{ color: ink }}>Account type</h2>
+          <p className="aio-type-supporting mb-5" style={{ color: vars.g600 }}>
             {session.role === "user"
               ? "Your account was created before account types existed - choose the one that fits how you work."
               : "Controls how your dashboard is set up - whether you manage multiple clients or one brand."}
@@ -983,14 +983,14 @@ function SubAccountsPage({
           {!isAgencyOrClient ? (
             <div className="flex items-start gap-2 px-4 py-3 rounded-xl" style={{ background: "#FEF9EC", border: "1px solid #F5D57A" }}>
               <Info size={14} className="flex-shrink-0 mt-0.5" style={{ color: "#A0720A" }} />
-              <p className="text-[12px] leading-[1.6]" style={{ color: "#7A5500" }}>
+              <p className="aio-type-supporting" style={{ color: "#7A5500" }}>
                 Your account type was set up by an administrator. Contact support to change it.
               </p>
             </div>
           ) : !isOwner ? (
             <div className="flex items-start gap-2 px-4 py-3 rounded-xl" style={{ background: "#FEF9EC", border: "1px solid #F5D57A" }}>
               <Info size={14} className="flex-shrink-0 mt-0.5" style={{ color: "#A0720A" }} />
-              <p className="text-[12px] leading-[1.6]" style={{ color: "#7A5500" }}>
+              <p className="aio-type-supporting" style={{ color: "#7A5500" }}>
                 Only the account owner can change the account type.
               </p>
             </div>
@@ -1013,13 +1013,13 @@ function SubAccountsPage({
                       <Building2 size={16} color={(selectedType ?? session.role) === "agency" ? "white" : vars.g500} />
                     </div>
                     <div>
-                      <p className="text-[14px] font-bold" style={{ color: ink }}>Agency / Partner</p>
+                      <p className="aio-type-card-title" style={{ color: ink }}>Agency / Partner</p>
                       {session.role === "agency" && !selectedType && (
-                        <span className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: accent }}>Current</span>
+                        <span className="aio-type-eyebrow" style={{ color: accent }}>Current</span>
                       )}
                     </div>
                   </div>
-                  <p className="text-[12px] leading-[1.6]" style={{ color: vars.g600 }}>
+                  <p className="aio-type-supporting" style={{ color: vars.g600 }}>
                     Manage PR for multiple clients. Create Client Projects and view all dashboards from one place.
                   </p>
                 </button>
@@ -1040,13 +1040,13 @@ function SubAccountsPage({
                       <User size={16} color={(selectedType ?? session.role) === "client" ? "white" : vars.g500} />
                     </div>
                     <div>
-                      <p className="text-[14px] font-bold" style={{ color: ink }}>Client</p>
+                      <p className="aio-type-card-title" style={{ color: ink }}>Client</p>
                       {session.role === "client" && !selectedType && (
-                        <span className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: "#1A647B" }}>Current</span>
+                        <span className="aio-type-eyebrow" style={{ color: "#1A647B" }}>Current</span>
                       )}
                     </div>
                   </div>
-                  <p className="text-[12px] leading-[1.6]" style={{ color: vars.g600 }}>
+                  <p className="aio-type-supporting" style={{ color: vars.g600 }}>
                     Manage PR for your own brand. One focused workspace for all your projects.
                   </p>
                 </button>
@@ -1055,13 +1055,13 @@ function SubAccountsPage({
               {typeError && (
                 <div className="flex items-start gap-2 mb-3 px-4 py-3 rounded-xl" style={{ background: "rgba(220,38,38,0.07)", border: "1px solid rgba(220,38,38,0.25)" }}>
                   <XCircle size={14} className="flex-shrink-0 mt-0.5" style={{ color: "rgb(185,28,28)" }} />
-                  <p className="text-[12px] font-semibold" style={{ color: "rgb(185,28,28)" }}>{typeError}</p>
+                  <p className="aio-type-supporting" style={{ color: "rgb(185,28,28)" }}>{typeError}</p>
                 </div>
               )}
               {typeSuccess && (
                 <div className="flex items-center gap-2 mb-3 px-4 py-3 rounded-xl" style={{ background: "rgba(22,163,74,0.07)", border: "1px solid rgba(22,163,74,0.25)" }}>
                   <CheckCircle2 size={14} style={{ color: "rgb(21,128,61)" }} />
-                  <p className="text-[12px] font-semibold" style={{ color: "rgb(21,128,61)" }}>{typeSuccess}</p>
+                  <p className="aio-type-supporting" style={{ color: "rgb(21,128,61)" }}>{typeSuccess}</p>
                 </div>
               )}
 
@@ -1071,7 +1071,7 @@ function SubAccountsPage({
                     type="button"
                     onClick={handleChangeAccountType}
                     disabled={typeChanging}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90 disabled:opacity-60"
+                    className="aio-button aio-button--primary text-white"
                     style={{ background: accent }}
                   >
                     {typeChanging ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
@@ -1080,7 +1080,7 @@ function SubAccountsPage({
                   <button
                     type="button"
                     onClick={() => { setSelectedType(null); setTypeError(null); }}
-                    className="px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                    className="aio-button aio-button--outline"
                     style={{ color: vars.g500, border: `1.5px solid ${vars.g200}` }}
                   >
                     Cancel
@@ -1097,11 +1097,11 @@ function SubAccountsPage({
             <div className="flex items-start gap-3">
               <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" style={{ color: "#A0720A" }} />
               <div className="flex-1 min-w-0">
-                <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Please check your company name</h2>
-                <p className="text-[13px] leading-[1.65] mb-4" style={{ color: "#7A5500" }}>
+                <h2 className="aio-type-section-title mb-1" style={{ color: ink }}>Please check your company name</h2>
+                <p className="aio-type-supporting mb-4" style={{ color: "#7A5500" }}>
                   An earlier Google or Microsoft sign-up may have used your personal name here. Confirm it if it is correct, or enter your organisation's name.
                 </p>
-                <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }} htmlFor="workspace-name-review">
+                <label className="aio-type-label block uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }} htmlFor="workspace-name-review">
                   Company name
                 </label>
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -1110,32 +1110,32 @@ function SubAccountsPage({
                     value={reviewWorkspaceName}
                     onChange={(event) => setReviewWorkspaceName(event.target.value)}
                     maxLength={64}
-                    className="flex-1 rounded-xl px-4 py-2.5 text-[14px] outline-none"
+                    className="aio-type-body flex-1 rounded-xl px-4 py-2.5 outline-none"
                     style={{ border: `1px solid ${vars.g300}`, color: ink, background: "white" }}
                   />
                   <button
                     type="button"
                     onClick={handleWorkspaceNameReview}
                     disabled={!reviewWorkspaceName.trim() || reviewingWorkspaceName}
-                    className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white disabled:opacity-60"
+                    className="aio-button aio-button--primary text-white"
                     style={{ background: accent }}
                   >
                     {reviewingWorkspaceName ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
                     {reviewingWorkspaceName ? "Saving..." : "Confirm name"}
                   </button>
                 </div>
-                {workspaceNameReviewError && <p className="mt-2 text-[12px] font-semibold" style={{ color: "rgb(185,28,28)" }}>{workspaceNameReviewError}</p>}
+                {workspaceNameReviewError && <p className="aio-type-supporting mt-2" style={{ color: "rgb(185,28,28)" }}>{workspaceNameReviewError}</p>}
               </div>
             </div>
           </div>
         )}
         <div className="settings-card settings-card-profile rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-          <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Your profile</h2>
-          <p className="text-[13px] leading-[1.6] mb-4" style={{ color: vars.g500 }}>
+          <h2 className="aio-type-section-title mb-1" style={{ color: ink }}>Your profile</h2>
+          <p className="aio-type-supporting mb-4" style={{ color: vars.g500 }}>
             This is the person currently signed in to AIO Fusion.
           </p>
           {(googleLinked === false || microsoftLinked === false) && (
-            <p className="text-[13.5px] leading-[1.65] mb-4" style={{ color: vars.g600 }}>
+            <p className="aio-type-body mb-4" style={{ color: vars.g600 }}>
               Linking is optional - if you would like to link your account to an existing Google or Microsoft account, please select below.
             </p>
           )}
@@ -1170,18 +1170,18 @@ function SubAccountsPage({
                 />
               </label>
               <div>
-                <p className="text-[14px] font-bold" style={{ color: ink }}>{session.userName?.trim() || session.userEmail?.trim() || session.username}</p>
+                 <p className="aio-type-card-title" style={{ color: ink }}>{session.userName?.trim() || session.userEmail?.trim() || session.username}</p>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: "#E6F4EA", color: "#1B7A3E" }}>
                     <CheckCircle2 size={10} /> Signed in
                   </span>
-                  {session.userEmail && <span className="text-[12px] font-medium" style={{ color: vars.g500 }}>{session.userEmail}</span>}
+                   {session.userEmail && <span className="aio-type-meta" style={{ color: vars.g500 }}>{session.userEmail}</span>}
                 </div>
                 {avatarUrl && (
                   <button
                     type="button"
                     onClick={() => handleImageRemove("avatar")}
-                    className="mt-1 text-[11px] font-medium hover:underline"
+                    className="aio-button aio-button--text mt-1"
                     style={{ color: vars.g400 }}
                   >
                     Remove photo
@@ -1197,7 +1197,7 @@ function SubAccountsPage({
               ) : googleLinked === false ? (
                 <a
                   href={`${apiBase()}/api/platform/auth/google/link`}
-                  className="flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] border transition-all hover:bg-gray-50"
+                   className="aio-button aio-button--outline"
                   style={{ borderColor: vars.g300, color: ink }}
                 >
                   <LinkIcon size={13} /> Link Google account
@@ -1210,7 +1210,7 @@ function SubAccountsPage({
               ) : microsoftLinked === false ? (
                 <a
                   href={`${apiBase()}/api/platform/auth/microsoft?action=link`}
-                  className="flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] border transition-all hover:bg-gray-50"
+                   className="aio-button aio-button--outline"
                   style={{ borderColor: vars.g300, color: ink }}
                 >
                   <LinkIcon size={13} /> Link Microsoft account
@@ -1220,7 +1220,7 @@ function SubAccountsPage({
                 <button
                   onClick={handleSwitchToMaster}
                   disabled={switchingToMaster}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90 disabled:opacity-60"
+                  className="aio-button aio-button--secondary"
                   style={{ background: ink, color: "#fff" }}
                 >
                   {switchingToMaster ? <Loader2 size={13} className="animate-spin" /> : <Shield size={13} />}
@@ -1230,7 +1230,7 @@ function SubAccountsPage({
             </div>
           </div>
           {switchToMasterError && (
-            <p className="mt-3 text-[12px] font-semibold" style={{ color: accent }}>{switchToMasterError}</p>
+            <p className="aio-type-supporting mt-3" style={{ color: accent }}>{switchToMasterError}</p>
           )}
 
           {/* ACTIVE WORKSPACE */}
@@ -1265,12 +1265,12 @@ function SubAccountsPage({
                 />
               </label>
               <div className="min-w-0">
-                <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: vars.g400 }}>
+                <p className="aio-type-eyebrow" style={{ color: vars.g400 }}>
                   {session.role === "client"
                     ? session.agencyManagedClient ? "Active client project" : "Active project"
                     : "Active workspace"}
                 </p>
-                <p className="text-[14px] font-bold truncate" style={{ color: ink }}>{confirmedWorkspaceName || session.companyName?.trim() || session.username}</p>
+                <p className="aio-type-card-title truncate" style={{ color: ink }}>{confirmedWorkspaceName || session.companyName?.trim() || session.username}</p>
                 <div className="flex items-center gap-2 flex-wrap mt-0.5">
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>
                     {session.role === "agency"
@@ -1284,14 +1284,14 @@ function SubAccountsPage({
                       href={accountWebsite}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[12px] font-medium hover:underline"
+                      className="aio-type-meta inline-flex items-center gap-1 hover:underline"
                       style={{ color: vars.g500 }}
                     >
                       <Globe size={11} /> {accountWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "")}
                     </a>
                   )}
                 </div>
-                <p className="text-[12px] font-light" style={{ color: vars.g500 }}>
+                <p className="aio-type-supporting" style={{ color: vars.g500 }}>
                   {logoUrl ? "This is the workspace logo, not your personal photo. Click it to change or resize it." : "Add a company or brand logo for this workspace (PNG, JPEG or WebP)."}
                 </p>
               </div>
@@ -1302,7 +1302,7 @@ function SubAccountsPage({
                   <button
                     type="button"
                     onClick={onOpenProject}
-                    className="settings-project-action flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white"
+                    className="aio-button aio-button--primary text-white"
                     style={{ background: accent }}
                   >
                     <FolderOpen size={13} /> Go to project
@@ -1318,7 +1318,7 @@ function SubAccountsPage({
                         }
                         setEditingActiveProject((editing) => !editing);
                       }}
-                      className="settings-project-action flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] transition-all hover:bg-black/5"
+                      className="aio-button aio-button--outline"
                       style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
                     >
                       <FileEdit size={13} /> {editingActiveProject ? "Cancel" : "Edit details"}
@@ -1330,7 +1330,7 @@ function SubAccountsPage({
                 <button
                   type="button"
                   onClick={() => handleImageRemove("logo")}
-                  className="text-[12px] font-medium hover:underline"
+                  className="aio-button aio-button--text"
                   style={{ color: vars.g400 }}
                 >
                   Remove
@@ -1340,23 +1340,23 @@ function SubAccountsPage({
           </div>
           {editingActiveProject && (
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl p-4" style={{ background: vars.g50, border: `1px solid ${vars.g200}` }}>
-              <label className="text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: vars.g500 }}>
+              <label className="aio-type-label uppercase tracking-[0.12em]" style={{ color: vars.g500 }}>
                 Project name
                 <input
                   value={activeProjectName}
                   onChange={(event) => setActiveProjectName(event.target.value)}
                   maxLength={64}
-                  className="mt-1.5 w-full rounded-xl px-3 py-2.5 text-[14px] font-normal normal-case tracking-normal outline-none"
+                  className="aio-type-body mt-1.5 w-full rounded-xl px-3 py-2.5 outline-none"
                   style={{ background: "white", border: `1px solid ${vars.g300}`, color: ink }}
                 />
               </label>
-              <label className="text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: vars.g500 }}>
+              <label className="aio-type-label uppercase tracking-[0.12em]" style={{ color: vars.g500 }}>
                 Company website
                 <input
                   value={activeProjectWebsite}
                   onChange={(event) => setActiveProjectWebsite(event.target.value)}
                   placeholder="https://www.example.com"
-                  className="mt-1.5 w-full rounded-xl px-3 py-2.5 text-[14px] font-normal normal-case tracking-normal outline-none"
+                  className="aio-type-body mt-1.5 w-full rounded-xl px-3 py-2.5 outline-none"
                   style={{ background: "white", border: `1px solid ${vars.g300}`, color: ink }}
                 />
               </label>
@@ -1365,19 +1365,19 @@ function SubAccountsPage({
                   type="button"
                   onClick={handleSaveActiveProject}
                   disabled={!activeProjectName.trim() || savingActiveProject}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white disabled:opacity-60"
+                  className="aio-button aio-button--primary text-white"
                   style={{ background: accent }}
                 >
                   {savingActiveProject ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
                   {savingActiveProject ? "Saving..." : "Save details"}
                 </button>
-                <span className="text-[12px]" style={{ color: vars.g500 }}>Click the logo above to change it.</span>
+                <span className="aio-type-supporting" style={{ color: vars.g500 }}>Click the logo above to change it.</span>
               </div>
-              {activeProjectError && <p className="sm:col-span-2 text-[12px] font-semibold" style={{ color: "rgb(185,28,28)" }}>{activeProjectError}</p>}
+              {activeProjectError && <p className="aio-type-supporting sm:col-span-2" style={{ color: "rgb(185,28,28)" }}>{activeProjectError}</p>}
             </div>
           )}
           {imageError && (
-            <p className="mt-3 text-[12px] font-semibold" style={{ color: accent }}>{imageError}</p>
+            <p className="aio-type-supporting mt-3" style={{ color: accent }}>{imageError}</p>
           )}
         </div>
         </>)}
@@ -1386,8 +1386,8 @@ function SubAccountsPage({
         {logoAdjust && (
           <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4" style={{ background: "rgba(10,22,40,0.55)" }} onClick={() => setLogoAdjust(null)}>
             <div className="rounded-2xl p-6 w-full max-w-sm" style={{ background: "white", boxShadow: "0 24px 64px -16px rgba(16,43,54,0.4)" }} onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Size your logo</h3>
-              <p className="text-[12.5px] font-light mb-4" style={{ color: vars.g500 }}>Drag to position and use the slider to zoom until your logo sits nicely in the square.</p>
+              <h3 className="aio-type-card-title mb-1" style={{ color: ink }}>Size your logo</h3>
+              <p className="aio-type-supporting mb-4" style={{ color: vars.g500 }}>Drag to position and use the slider to zoom until your logo sits nicely in the square.</p>
               <div className="mx-auto mb-4 relative overflow-hidden rounded-xl touch-none select-none" style={{ width: LOGO_PREVIEW, height: LOGO_PREVIEW, border: `1px solid ${vars.g200}`, background: "repeating-conic-gradient(#f1f5f9 0% 25%, white 0% 50%) 50% / 20px 20px", cursor: "grab" }}
                 onPointerDown={(e) => {
                   (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
@@ -1417,7 +1417,7 @@ function SubAccountsPage({
                 })()}
               </div>
               <div className="flex items-center gap-3 mb-5">
-                <span className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: vars.g500 }}>Zoom</span>
+                 <span className="aio-type-label uppercase tracking-[0.14em]" style={{ color: vars.g500 }}>Zoom</span>
                 <input
                   type="range"
                   aria-label="Logo zoom"
@@ -1432,7 +1432,7 @@ function SubAccountsPage({
                 <button
                   type="button"
                   onClick={() => setLogoAdjust((prev) => prev ? { ...prev, zoom: 1, offX: 0, offY: 0 } : prev)}
-                  className="text-[11px] font-semibold underline"
+                   className="aio-button aio-button--text underline"
                   style={{ color: vars.g500 }}
                 >
                   Reset
@@ -1442,7 +1442,7 @@ function SubAccountsPage({
                 <button
                   type="button"
                   onClick={() => setLogoAdjust(null)}
-                  className="px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] border transition-all hover:bg-gray-50"
+                   className="aio-button aio-button--outline"
                   style={{ borderColor: vars.g300, color: ink }}
                 >
                   Cancel
@@ -1450,7 +1450,7 @@ function SubAccountsPage({
                 <button
                   type="button"
                   onClick={handleLogoAdjustSave}
-                  className="px-5 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:opacity-90"
+                   className="aio-button aio-button--primary text-white"
                   style={{ background: accent }}
                 >
                   Save logo
@@ -1484,10 +1484,10 @@ function SubAccountsPage({
 
         {/* ADD CLIENT ACCOUNT - agency/admin only */}
         {section === "clients" && isClientManager && <div className="settings-card rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-          <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{isAgencyPartner ? "Add a Client Project" : "Create a client account"}</h2>
+           <h2 className="aio-type-section-title mb-4" style={{ color: ink }}>{isAgencyPartner ? "Add a Client Project" : "Create a client account"}</h2>
           <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-12 gap-3">
             <div className="md:col-span-6">
-              <label htmlFor="new-client-company-name" className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Company name</label>
+               <label htmlFor="new-client-company-name" className="aio-type-label uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Company name</label>
               <input
                 id="new-client-company-name"
                 type="text"
@@ -1495,12 +1495,12 @@ function SubAccountsPage({
                 onChange={(e) => { setNewCompanyName(e.target.value); setAddSuccess(null); }}
                 placeholder="e.g. Acme Ltd"
                 required
-                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                 className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               />
             </div>
             <div className="md:col-span-6">
-              <label htmlFor="new-client-company-website" className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Company website</label>
+               <label htmlFor="new-client-company-website" className="aio-type-label uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Company website</label>
               <input
                 id="new-client-company-website"
                 type="text"
@@ -1509,24 +1509,24 @@ function SubAccountsPage({
                 onChange={(e) => { setNewWebsite(e.target.value); setAddSuccess(null); }}
                 placeholder="e.g. https://www.acme.com"
                 required
-                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                 className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               />
             </div>
             <div className="md:col-span-6">
-              <label htmlFor="new-client-contact-name" className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Key contact full name <span className="font-medium normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
+               <label htmlFor="new-client-contact-name" className="aio-type-label uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Key contact full name <span className="normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
               <input
                 id="new-client-contact-name"
                 type="text"
                 value={newContactName}
                 onChange={(e) => { setNewContactName(e.target.value); setAddSuccess(null); }}
                 placeholder="e.g. Jane Smith"
-                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                 className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               />
             </div>
             <div className="md:col-span-6">
-              <label htmlFor="new-client-contact-email" className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Key contact email <span className="font-medium normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
+               <label htmlFor="new-client-contact-email" className="aio-type-label uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Key contact email <span className="normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
               <input
                 id="new-client-contact-email"
                 type="text"
@@ -1534,12 +1534,12 @@ function SubAccountsPage({
                 value={newContactEmail}
                 onChange={(e) => { setNewContactEmail(e.target.value); setAddSuccess(null); }}
                 placeholder="e.g. jane@acme.com"
-                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                 className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               />
             </div>
             {!isAgencyPartner && (
-            <label htmlFor="new-client-managed" className="md:col-span-12 flex items-start gap-3 rounded-lg border px-4 py-3 cursor-pointer" style={{ borderColor: vars.g200, background: newManaged ? accentSoft : "white" }}>
+             <label htmlFor="new-client-managed" className="md:col-span-12 flex items-start gap-3 rounded-lg border px-4 py-3 cursor-pointer" style={{ borderColor: vars.g200, background: newManaged ? accentSoft : "white" }}>
               <input
                 id="new-client-managed"
                 type="checkbox"
@@ -1549,21 +1549,21 @@ function SubAccountsPage({
                 style={{ accentColor: accent }}
               />
               <span>
-                <span className="block text-[13px] font-bold" style={{ color: ink }}>We'll manage this account on the client's behalf</span>
-                <span className="block text-[12px] font-light mt-0.5" style={{ color: vars.g500 }}>
+                 <span className="aio-type-label block" style={{ color: ink }}>We'll manage this account on the client's behalf</span>
+                 <span className="aio-type-supporting block mt-0.5" style={{ color: vars.g500 }}>
                   The client won't be given sign-in access - no password to share and no email is sent. You work on their projects through "View account". You can give them access later by setting a password on their account.
                 </span>
               </span>
             </label>
             )}
             <div className="md:col-span-6">
-              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Client logo <span className="font-medium normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
+               <label className="aio-type-label uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Client logo <span className="normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
               <div className="flex items-center gap-3">
                 {newLogoDataUrl && (
                   <img src={newLogoDataUrl} alt="Client logo preview" className="h-10 w-10 rounded-lg object-contain" style={{ border: `1px solid ${vars.g200}`, background: "white" }} />
                 )}
                 <label
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border text-[13px] font-semibold cursor-pointer transition-all hover:opacity-80"
+                   className="aio-button aio-button--outline cursor-pointer"
                   style={{ borderColor: vars.g200, color: ink }}
                 >
                   {logoProcessing ? "Processing..." : newLogoDataUrl ? "Replace logo" : "Upload logo"}
@@ -1593,7 +1593,7 @@ function SubAccountsPage({
             </div>
             {!isAgencyPartner && !newManaged && (
               <div className="md:col-span-6">
-                <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Password</label>
+                 <label className="aio-type-label uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Password</label>
                 <input
                   type="password"
                   autoComplete="new-password"
@@ -1601,7 +1601,7 @@ function SubAccountsPage({
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="min 8 characters"
                   required
-                  className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                   className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
                   style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
                 />
               </div>
@@ -1610,21 +1610,21 @@ function SubAccountsPage({
               <button
                 type="submit"
                 disabled={addingClient || logoProcessing}
-                className="w-full md:w-auto flex items-center justify-center gap-2 px-8 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90 disabled:opacity-60"
+                 className="aio-button aio-button--primary w-full md:w-auto text-white"
                 style={{ background: accent }}
               >
                 {addingClient ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} {isAgencyPartner ? "Add Client Project" : "Add client"}
               </button>
             </div>
-            <p className="md:col-span-12 text-[12px] font-light" style={{ color: vars.g500 }}>
+             <p className="aio-type-supporting md:col-span-12" style={{ color: vars.g500 }}>
               {isAgencyPartner
                 ? "Your agency manages this client and their projects. There is no separate client login or password, and billing stays with your agency."
                 : newManaged
                 ? "No email will be sent and the client won't be able to sign in - you manage everything on their behalf."
                 : "If you add a key contact email, we'll let them know their account has been created and they can set their own password."}
             </p>
-            {addError && <p className="md:col-span-12 text-[12px] font-semibold" style={{ color: accent }}>{addError}</p>}
-            {addSuccess && <p className="md:col-span-12 text-[12px] font-semibold" style={{ color: vars.green }}>{addSuccess}</p>}
+             {addError && <p className="aio-type-supporting md:col-span-12" style={{ color: accent }}>{addError}</p>}
+             {addSuccess && <p className="aio-type-supporting md:col-span-12" style={{ color: vars.green }}>{addSuccess}</p>}
           </form>
         </div>}
 
@@ -1634,7 +1634,7 @@ function SubAccountsPage({
         <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{isAgencyPartner ? "Your Client Projects" : "Your client accounts"} ({subAccounts.length}{archivedSubAccounts.length > 0 ? ` + ${archivedSubAccounts.length} archived` : ""})</h2>
+               <h2 className="aio-type-section-title" style={{ color: ink }}>{isAgencyPartner ? "Your Client Projects" : "Your client accounts"} ({subAccounts.length}{archivedSubAccounts.length > 0 ? ` + ${archivedSubAccounts.length} archived` : ""})</h2>
               {isAgencyPartner && projectAllowanceSummary && (
                 <span className="inline-flex items-center rounded-full px-3 py-1 text-[11px] font-bold" style={{ background: accentSoft, color: accent }}>
                   {projectAllowanceSummary.used} of {projectAllowanceSummary.total} project slots used · {Math.max(0, projectAllowanceSummary.total - projectAllowanceSummary.used)} remaining
@@ -1643,7 +1643,7 @@ function SubAccountsPage({
             </div>
           </div>
           {subAccounts.length === 0 ? (
-            <p className="px-6 py-6 text-[13px] font-light italic" style={{ color: vars.g500 }}>
+             <p className="aio-type-supporting px-6 py-6 italic" style={{ color: vars.g500 }}>
               {isAgencyPartner ? "No Client Projects yet. Add one above, then start its first project." : "No client accounts yet. Create one above to give a client their own login."}
             </p>
           ) : (
@@ -1670,9 +1670,9 @@ function SubAccountsPage({
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-[14px] font-bold" style={{ color: ink }}>{u.displayName ?? u.username}</p>
+                             <p className="aio-type-card-title" style={{ color: ink }}>{u.displayName ?? u.username}</p>
                             {u.displayName && (
-                              <p className="text-[11px] font-light" style={{ color: vars.g500 }}>@{u.username}</p>
+                               <p className="aio-type-meta" style={{ color: vars.g500 }}>@{u.username}</p>
                             )}
                             <span className="inline-flex items-center gap-1.5">
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>{isAgencyPartner ? "Client Project" : "Client"}</span>
@@ -1683,7 +1683,7 @@ function SubAccountsPage({
                           </div>
                         </div>
                       </div>
-                      {!isAgencyPartner && <p className="flex items-center gap-1.5 text-[11px] font-medium sm:pl-[52px]" style={{ color: vars.g500 }}>
+                       {!isAgencyPartner && <p className="aio-type-meta flex items-center gap-1.5 sm:pl-[52px]" style={{ color: vars.g500 }}>
                         <Clock size={12} />
                         {u.lastSignInAt ? `Last signed in ${formatLastSignIn(u.lastSignInAt)}` : "Never signed in"}
                       </p>}
@@ -1693,7 +1693,7 @@ function SubAccountsPage({
                             ? void handleOpenClientProjects(u.username, owned.length === 1 ? owned[0].id : null)
                             : handleEnterAccount(u.username))}
                           disabled={enteringUsername === u.username || checkingAllowanceFor === u.username}
-                          className="settings-project-action flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] transition-all text-white"
+                          className="aio-button aio-button--primary text-white"
                           style={{ background: accent, opacity: enteringUsername === u.username ? 0.7 : 1 }}
                         >
                           {enteringUsername === u.username || checkingAllowanceFor === u.username
@@ -1723,7 +1723,7 @@ function SubAccountsPage({
                             setProfileWebsite(u.website || "");
                             setProfileError(null);
                           }}
-                          className="settings-project-action flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] transition-all hover:bg-black/5"
+                          className="aio-button aio-button--outline"
                           style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
                         >
                           <FileEdit size={13} /> {editingProfile ? "Cancel" : "Edit details"}
@@ -1731,7 +1731,7 @@ function SubAccountsPage({
                         {!isAgencyPartner && !u.agencyManaged && (
                         <button
                           onClick={() => { setPwUser(editingPw ? null : u.username); setPwValue(""); setPwError(null); }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                           className="aio-button aio-button--compact"
                           style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
                         >
                           <KeyRound size={12} /> {editingPw ? "Cancel" : "Change password"}
@@ -1740,7 +1740,7 @@ function SubAccountsPage({
                         {isAgencyPartner || u.agencyManaged ? null : u.managed ? (
                           <button
                             onClick={() => { setAccessUser(accessUser === u.username ? null : u.username); setAccessPassword(""); setAccessError(null); setAccessNotice(null); }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                            className="aio-button aio-button--compact"
                             style={{ color: vars.green, border: `1.5px solid ${vars.green}40` }}
                           >
                             <Shield size={12} /> {accessUser === u.username ? "Cancel" : "Give client access"}
@@ -1750,7 +1750,7 @@ function SubAccountsPage({
                             <button
                               onClick={() => handleResendWelcome(u.username)}
                               disabled={accessBusy}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5 disabled:opacity-60"
+                            className="aio-button aio-button--compact"
                               style={{ color: accent, border: `1.5px solid ${accent}40` }}
                               title="Send a fresh set-password email"
                             >
@@ -1758,7 +1758,7 @@ function SubAccountsPage({
                             </button>
                             <button
                               onClick={() => handleRevokeAccess(u.username)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                              className="aio-button aio-button--compact"
                               style={{ color: vars.g500, border: `1.5px solid ${vars.g200}` }}
                             >
                               <Lock size={12} /> Remove client access
@@ -1768,7 +1768,7 @@ function SubAccountsPage({
                               title={isAgencyPartner
                                 ? "Use this if the Client Project is run by your agency and was never given sign-in access."
                                 : "Use this if the client account is run by your organisation and was never given sign-in access."}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                              className="aio-button aio-button--compact"
                               style={{ color: vars.g500, border: `1.5px solid ${vars.g200}` }}
                             >
                               <Shield size={12} /> Mark as managed
@@ -1777,14 +1777,14 @@ function SubAccountsPage({
                         )}
                         <button
                           onClick={() => handleArchive(u.username, true)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                          className="aio-button aio-button--compact"
                           style={{ color: vars.g500, border: `1.5px solid ${vars.g200}` }}
                         >
                           <Archive size={12} /> Archive
                         </button>
                         <button
                           onClick={() => handleDelete(u.username)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                          className="aio-button aio-button--compact"
                           style={{ color: accent, border: `1.5px solid ${accent}40` }}
                         >
                           <Trash2 size={12} /> Delete
@@ -1792,7 +1792,7 @@ function SubAccountsPage({
                       </div>
                     </div>
                     {enterError && enteringUsername === null && (
-                      <p className="mt-2 text-[12px] font-semibold sm:pl-[52px]" style={{ color: accent }}>{enterError}</p>
+                      <p className="aio-type-supporting mt-2 sm:pl-[52px]" style={{ color: accent }}>{enterError}</p>
                     )}
                     {editingProfile && (
                       <form onSubmit={handleSaveClientProfile} className="mt-3 flex flex-wrap items-center gap-2 sm:pl-[52px]">
@@ -1801,7 +1801,7 @@ function SubAccountsPage({
                           value={profileName}
                           onChange={(e) => setProfileName(e.target.value)}
                           placeholder="Client name (leave blank to clear)"
-                          className="flex-1 min-w-[180px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                          className="aio-type-body flex-1 min-w-[180px] px-3 py-2 rounded-lg border focus:outline-none focus:ring-2"
                           style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
                         />
                         <input
@@ -1809,60 +1809,60 @@ function SubAccountsPage({
                           value={profileWebsite}
                           onChange={(e) => setProfileWebsite(e.target.value)}
                           placeholder="Website (leave blank to clear)"
-                          className="flex-1 min-w-[180px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                          className="aio-type-body flex-1 min-w-[180px] px-3 py-2 rounded-lg border focus:outline-none focus:ring-2"
                           style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
                         />
-                        <button type="submit" className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white" style={{ background: accent }}>
+                        <button type="submit" className="aio-button aio-button--primary text-white" style={{ background: accent }}>
                           Save details
                         </button>
-                        {profileError && <span className="text-[12px] font-semibold w-full" style={{ color: accent }}>{profileError}</span>}
+                        {profileError && <span className="aio-type-supporting w-full" style={{ color: accent }}>{profileError}</span>}
                       </form>
                     )}
                     {accessNotice?.username === u.username && (
-                      <p className="mt-2 text-[12px] font-semibold sm:pl-[52px]" style={{ color: vars.green }}>{accessNotice.text}</p>
+                      <p className="aio-type-supporting mt-2 sm:pl-[52px]" style={{ color: vars.green }}>{accessNotice.text}</p>
                     )}
                     {accessUser === u.username && (
                       <div className="mt-3 rounded-xl p-4 sm:ml-[52px]" style={{ background: vars.g100 + "60", border: `1px solid ${vars.g200}` }}>
-                        <p className="text-[12px] font-semibold mb-2" style={{ color: ink }}>Give this client sign-in access</p>
+                        <p className="aio-type-label mb-2" style={{ color: ink }}>Give this client sign-in access</p>
                         <div className="flex flex-wrap items-center gap-2">
                           <button
                             type="button"
                             disabled={accessBusy}
                             onClick={() => handleGrantAccess(u.username)}
-                            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white disabled:opacity-60"
+                            className="aio-button aio-button--primary text-white"
                             style={{ background: accent }}
                           >
                             {accessBusy ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />} Email set-password link
                           </button>
-                          <span className="text-[11px] font-light" style={{ color: vars.g500 }}>or</span>
+                          <span className="aio-type-meta" style={{ color: vars.g500 }}>or</span>
                           <input
                             type="text"
                             value={accessPassword}
                             onChange={(e) => setAccessPassword(e.target.value)}
                             placeholder="Set a password (min 8 chars)"
-                            className="flex-1 min-w-[180px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                            className="aio-type-body flex-1 min-w-[180px] px-3 py-2 rounded-lg border focus:outline-none focus:ring-2"
                             style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
                           />
                           <button
                             type="button"
                             disabled={accessBusy || accessPassword.length < 8}
                             onClick={() => handleGrantAccess(u.username, accessPassword)}
-                            className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] disabled:opacity-50"
+                            className="aio-button aio-button--outline"
                             style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
                           >
                             Set password
                           </button>
                         </div>
-                        <p className="mt-2 text-[11px] font-light" style={{ color: vars.g500 }}>
+                        <p className="aio-type-meta mt-2" style={{ color: vars.g500 }}>
                           Emailing sends the key contact a single-use set-password link (valid 7 days). Setting a password yourself means you share it with the client directly.
                         </p>
-                        {accessError && <p className="mt-2 text-[12px] font-semibold" style={{ color: accent }}>{accessError}</p>}
+                        {accessError && <p className="aio-type-supporting mt-2" style={{ color: accent }}>{accessError}</p>}
                       </div>
                     )}
                     <div className="mt-3 sm:pl-[52px]">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: vars.g500 }}>Their projects ({owned.length})</p>
+                      <p className="aio-type-eyebrow mb-1.5" style={{ color: vars.g500 }}>Their projects ({owned.length})</p>
                       {owned.length === 0 ? (
-                        <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No projects yet.</p>
+                        <p className="aio-type-supporting italic" style={{ color: vars.g400 }}>No projects yet.</p>
                       ) : (
                         <div className="flex flex-wrap gap-1.5">
                           {owned.map((p) => (
@@ -1871,7 +1871,7 @@ function SubAccountsPage({
                               type="button"
                               onClick={() => isAgencyPartner && handleOpenClientProjects(u.username, p.id)}
                               disabled={!isAgencyPartner || enteringUsername === u.username}
-                              className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full transition-opacity disabled:cursor-default"
+                              className="aio-type-meta inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full transition-opacity disabled:cursor-default"
                               style={{ background: accentSoft, color: accent, opacity: enteringUsername === u.username ? 0.7 : 1 }}
                               title={isAgencyPartner ? `Open ${p.name}` : undefined}
                             >
@@ -1889,11 +1889,11 @@ function SubAccountsPage({
                           value={pwValue}
                           onChange={(e) => setPwValue(e.target.value)}
                           placeholder="New password (min 8 chars)"
-                          className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                          className="aio-type-body flex-1 min-w-[200px] px-3 py-2 rounded-lg border focus:outline-none focus:ring-2"
                           style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
                         />
-                        <button type="submit" className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white" style={{ background: accent }}>Save</button>
-                        {pwError && <span className="text-[12px] font-semibold w-full" style={{ color: accent }}>{pwError}</span>}
+                        <button type="submit" className="aio-button aio-button--primary text-white" style={{ background: accent }}>Save</button>
+                        {pwError && <span className="aio-type-supporting w-full" style={{ color: accent }}>{pwError}</span>}
                       </form>
                     )}
                   </li>
@@ -1908,14 +1908,14 @@ function SubAccountsPage({
         {section === "archived" && (
           archivedSubAccounts.length === 0 ? (
             <div className="settings-card rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-              <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{isAgencyPartner ? "Archived Client Projects" : "Archived clients"}</h2>
-              <p className="text-[13px] font-light italic" style={{ color: vars.g500 }}>{isAgencyPartner ? "No archived Client Projects. When you archive a Client Project, it appears here and can be restored at any time." : "No archived client accounts. When you archive a client, they appear here and can be restored at any time."}</p>
+              <h2 className="aio-type-section-title mb-1" style={{ color: ink }}>{isAgencyPartner ? "Archived Client Projects" : "Archived clients"}</h2>
+              <p className="aio-type-supporting italic" style={{ color: vars.g500 }}>{isAgencyPartner ? "No archived Client Projects. When you archive a Client Project, it appears here and can be restored at any time." : "No archived client accounts. When you archive a client, they appear here and can be restored at any time."}</p>
             </div>
           ) : (
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
             <div className="px-6 py-4 border-b" style={{ borderColor: vars.g200 }}>
-              <h2 className="text-[16px] font-bold" style={{ color: vars.g400, fontFamily: "'Alice', Georgia, serif" }}>{isAgencyPartner ? "Archived Client Projects" : "Archived clients"} ({archivedSubAccounts.length})</h2>
-              <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g400 }}>These accounts cannot sign in. Their projects remain visible to you.</p>
+               <h2 className="aio-type-section-title" style={{ color: vars.g400 }}>{isAgencyPartner ? "Archived Client Projects" : "Archived clients"} ({archivedSubAccounts.length})</h2>
+               <p className="aio-type-supporting mt-0.5" style={{ color: vars.g400 }}>These accounts cannot sign in. Their projects remain visible to you.</p>
             </div>
             <ul className="divide-y" style={{ borderColor: vars.g200 }}>
               {archivedSubAccounts.map((u) => {
@@ -1938,9 +1938,9 @@ function SubAccountsPage({
                           />
                         </div>
                         <div>
-                          <p className="text-[14px] font-bold" style={{ color: vars.g500 }}>{u.displayName ?? u.username}</p>
+                           <p className="aio-type-card-title" style={{ color: vars.g500 }}>{u.displayName ?? u.username}</p>
                           {u.displayName && (
-                            <p className="text-[11px] font-light" style={{ color: vars.g400 }}>@{u.username}</p>
+                            <p className="aio-type-meta" style={{ color: vars.g400 }}>@{u.username}</p>
                           )}
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: vars.g200, color: vars.g400 }}>Archived</span>
                         </div>
@@ -1948,14 +1948,14 @@ function SubAccountsPage({
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleArchive(u.username, false)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                           className="aio-button aio-button--compact"
                           style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
                         >
                           <ArchiveRestore size={12} /> Restore
                         </button>
                         <button
                           onClick={() => handleDelete(u.username)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                           className="aio-button aio-button--compact"
                           style={{ color: accent, border: `1.5px solid ${accent}40` }}
                         >
                           <Trash2 size={12} /> Delete
@@ -1964,10 +1964,10 @@ function SubAccountsPage({
                     </div>
                     {owned.length > 0 && (
                       <div className="mt-3 sm:pl-[52px]">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: vars.g400 }}>Their projects ({owned.length})</p>
+                         <p className="aio-type-eyebrow mb-1.5" style={{ color: vars.g400 }}>Their projects ({owned.length})</p>
                         <div className="flex flex-wrap gap-1.5">
                           {owned.map((p) => (
-                            <span key={p.id} className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full opacity-60" style={{ background: vars.g200, color: vars.g500 }}>
+                             <span key={p.id} className="aio-type-meta inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full opacity-60" style={{ background: vars.g200, color: vars.g500 }}>
                               <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[8px] font-bold text-white" style={{ background: p.color }}>{p.initials}</span>
                               {p.name}
                             </span>
@@ -1987,9 +1987,9 @@ function SubAccountsPage({
         {section === "assign" && (
         <div className="rounded-2xl overflow-hidden" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <div className="px-6 py-4 border-b" style={{ borderColor: vars.g200 }}>
-            <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Assign projects</h2>
-            <p className="text-[12px] font-light mt-1" style={{ color: vars.g500 }}>Review every active agency and client project before moving it. No project is matched to a client by name.</p>
-            <div className="mt-3 rounded-xl px-4 py-3 text-[12px]" style={{ background: vars.g100, border: `1px solid ${vars.g200}`, color: vars.g500 }}>
+             <h2 className="aio-type-section-title" style={{ color: ink }}>Assign projects</h2>
+             <p className="aio-type-supporting mt-1" style={{ color: vars.g500 }}>Review every active agency and client project before moving it. No project is matched to a client by name.</p>
+            <div className="aio-type-supporting mt-3 rounded-xl px-4 py-3" style={{ background: vars.g100, border: `1px solid ${vars.g200}`, color: vars.g500 }}>
               {reconciliationLoading ? (
                 <p className="flex items-center gap-2"><Loader2 size={13} className="animate-spin" /> Checking server records and this browser's cache...</p>
               ) : reconciliationError ? (
@@ -1998,7 +1998,7 @@ function SubAccountsPage({
                   <button
                     type="button"
                     onClick={() => setReconciliationAttempt((attempt) => attempt + 1)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.14em]"
+                     className="aio-button aio-button--compact"
                     style={{ color: accent, border: `1px solid ${accent}40` }}
                   >
                     <RefreshCw size={11} /> Retry audit
@@ -2030,7 +2030,7 @@ function SubAccountsPage({
             </div>
           </div>
           {manageable.length === 0 ? (
-            <p className="px-6 py-6 text-[13px] font-light italic" style={{ color: vars.g500 }}>No projects to assign yet.</p>
+             <p className="aio-type-supporting px-6 py-6 italic" style={{ color: vars.g500 }}>No projects to assign yet.</p>
           ) : (
             <ul className="divide-y" style={{ borderColor: vars.g200 }}>
               {manageable.map((p) => (
@@ -2038,12 +2038,12 @@ function SubAccountsPage({
                   <div className="flex items-center gap-3">
                     <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-[10px] font-bold text-white" style={{ background: p.color }}>{p.initials}</span>
                     <div>
-                      <p className="text-[14px] font-bold" style={{ color: ink }}>{p.name}</p>
-                      <p className="text-[11px] font-light" style={{ color: vars.g500 }}>Currently with: {ownerLabel(p.owner)}</p>
+                      <p className="aio-type-card-title" style={{ color: ink }}>{p.name}</p>
+                      <p className="aio-type-meta" style={{ color: vars.g500 }}>Currently with: {ownerLabel(p.owner)}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <label className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: vars.g500 }}>Owner</label>
+                    <label className="aio-type-label uppercase tracking-[0.16em]" style={{ color: vars.g500 }}>Owner</label>
                     <select
                       value={(p.owner || "").toLowerCase() === session.username.toLowerCase() ? "__me__" : (p.owner || "")}
                       onChange={(e) => {
@@ -2052,7 +2052,7 @@ function SubAccountsPage({
                       }}
                       disabled={assigningProjectId === p.id || !reconciliationReady || unrecoveredProjectIds.has(p.id)}
                       aria-label={`Owner for ${p.name}`}
-                      className="px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2 bg-white"
+                       className="aio-type-body px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 bg-white"
                       style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
                       title={unrecoveredProjectIds.has(p.id) ? "This browser-only project must be recovered before it can be assigned." : undefined}
                     >

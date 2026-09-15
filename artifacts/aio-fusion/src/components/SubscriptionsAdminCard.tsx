@@ -133,9 +133,9 @@ export function SubscriptionsAdminCard() {
   };
 
   const inputStyle = { background: "white", borderColor: vars.g200, color: ink } as const;
-  const labelCls = "text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5";
-  const thCls = "text-left text-[10px] font-bold uppercase tracking-[0.14em] px-3 py-2 whitespace-nowrap";
-  const tdCls = "px-3 py-2 text-[12px] whitespace-nowrap";
+  const labelCls = "aio-type-eyebrow block mb-1.5";
+  const thCls = "aio-type-eyebrow text-left px-3 py-2 whitespace-nowrap";
+  const tdCls = "aio-type-meta px-3 py-2 whitespace-nowrap";
 
   return (
     <div className="rounded-2xl p-6 sm:p-8 mt-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
@@ -144,17 +144,17 @@ export function SubscriptionsAdminCard() {
           <CreditCard size={16} color={accent} />
         </div>
         <div>
-          <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Subscriptions</h2>
-          <p className="text-[13px] font-light mt-0.5 leading-[1.6]" style={{ color: vars.g600 }}>
+          <h2 className="aio-type-card-title" style={{ color: ink }}>Subscriptions</h2>
+          <p className="aio-type-body mt-0.5" style={{ color: vars.g600 }}>
             Every account's subscription at a glance, plus beta and VIP discount invitations.
           </p>
         </div>
       </div>
 
       {/* Overview table */}
-      {rowsError && <p className="text-[13px] font-semibold mb-3" style={{ color: "#B3261E" }}>{rowsError}</p>}
+       {rowsError && <p className="aio-type-supporting font-semibold mb-3" style={{ color: "#B3261E" }}>{rowsError}</p>}
       {!rows && !rowsError ? (
-        <div className="flex items-center gap-2 py-4 text-[13px]" style={{ color: vars.g500 }}>
+         <div className="aio-type-supporting flex items-center gap-2 py-4" style={{ color: vars.g500 }}>
           <Loader2 size={14} className="animate-spin" /> Loading subscriptions…
         </div>
       ) : rows && (
@@ -180,7 +180,7 @@ export function SubscriptionsAdminCard() {
                 return (
                   <tr key={r.slug} style={{ borderTop: `1px solid ${vars.g200}`, color: ink }}>
                     <td className={tdCls}>
-                      <span className="font-semibold">{r.displayName}</span>
+                       <span className="aio-type-label">{r.displayName}</span>
                       <span className="ml-1.5" style={{ color: vars.g400 }}>{r.slug}</span>
                     </td>
                     <td className={tdCls} style={{ color: vars.g600 }}>{r.accountType === "agency" ? "Agency/Partner" : r.accountType === "client" ? "In-House" : r.accountType}</td>
@@ -211,7 +211,7 @@ export function SubscriptionsAdminCard() {
                         <button
                           onClick={() => handleEndDiscount(r.slug)}
                           disabled={endingSlug === r.slug}
-                          className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.1em] hover:opacity-70 disabled:opacity-40"
+                           className="aio-button aio-button--text aio-button--compact uppercase tracking-[0.1em]"
                           style={{ color: "#B3261E" }}
                         >
                           {endingSlug === r.slug ? <Loader2 size={11} className="animate-spin" /> : <XCircle size={11} />}
@@ -228,43 +228,43 @@ export function SubscriptionsAdminCard() {
       )}
 
       {/* Invite form */}
-      <h3 className="text-[14px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Send a discount invitation</h3>
-      <p className="text-[12px] font-light mb-4 leading-[1.6]" style={{ color: vars.g600 }}>
+       <h3 className="aio-type-card-title mb-1" style={{ color: ink }}>Send a discount invitation</h3>
+       <p className="aio-type-body mb-4" style={{ color: vars.g600 }}>
         Creates a single-use link (valid 30 days) that pre-loads the account type and applies the discount automatically at checkout - the discount persists on every renewal until you end it. For 100% free access, use the free-access toggle in Token & AI Usage.
       </p>
       <form onSubmit={handleCreateInvite} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-3 items-end">
         <div className="lg:col-span-2">
           <label className={labelCls} style={{ color: vars.g500 }}>Invitee email</label>
-          <input type="email" required value={invEmail} onChange={(e) => setInvEmail(e.target.value)} placeholder="them@company.com" className="w-full px-3 py-2.5 rounded-xl border text-[13px] focus:outline-none focus:ring-2" style={inputStyle} />
+           <input type="email" required value={invEmail} onChange={(e) => setInvEmail(e.target.value)} placeholder="them@company.com" className="aio-type-body w-full px-3 py-2.5 rounded-xl border focus:outline-none focus:ring-2" style={inputStyle} />
         </div>
         <div>
           <label className={labelCls} style={{ color: vars.g500 }}>Account type</label>
-          <select value={invType} onChange={(e) => setInvType(e.target.value as "client" | "agency")} className="w-full px-3 py-2.5 rounded-xl border text-[13px] focus:outline-none" style={inputStyle}>
+           <select value={invType} onChange={(e) => setInvType(e.target.value as "client" | "agency")} className="aio-type-body w-full px-3 py-2.5 rounded-xl border focus:outline-none" style={inputStyle}>
             <option value="client">In-House</option>
             <option value="agency">Agency/Partner</option>
           </select>
         </div>
         <div>
           <label className={labelCls} style={{ color: vars.g500 }}>Discount %</label>
-          <input type="number" required min={1} max={99} step={1} value={invPercent} onChange={(e) => setInvPercent(e.target.value)} placeholder="e.g. 50" className="w-full px-3 py-2.5 rounded-xl border text-[13px] focus:outline-none focus:ring-2" style={inputStyle} />
+           <input type="number" required min={1} max={99} step={1} value={invPercent} onChange={(e) => setInvPercent(e.target.value)} placeholder="e.g. 50" className="aio-type-body w-full px-3 py-2.5 rounded-xl border focus:outline-none focus:ring-2" style={inputStyle} />
         </div>
         <div>
           <label className={labelCls} style={{ color: vars.g500 }}>Label</label>
-          <input type="text" required value={invLabel} onChange={(e) => setInvLabel(e.target.value)} placeholder="Beta / VIP" className="w-full px-3 py-2.5 rounded-xl border text-[13px] focus:outline-none focus:ring-2" style={inputStyle} />
+           <input type="text" required value={invLabel} onChange={(e) => setInvLabel(e.target.value)} placeholder="Beta / VIP" className="aio-type-body w-full px-3 py-2.5 rounded-xl border focus:outline-none focus:ring-2" style={inputStyle} />
         </div>
         <div className="sm:col-span-2 lg:col-span-5">
-          <button type="submit" disabled={invLoading} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:brightness-110 disabled:opacity-50" style={{ background: accent }}>
+           <button type="submit" disabled={invLoading} className="aio-button aio-button--primary uppercase tracking-[0.14em]" style={{ background: accent }}>
             {invLoading ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
             Create invitation link
           </button>
         </div>
       </form>
-      {invError && <p className="text-[13px] font-semibold mb-3" style={{ color: "#B3261E" }}>{invError}</p>}
+       {invError && <p className="aio-type-supporting font-semibold mb-3" style={{ color: "#B3261E" }}>{invError}</p>}
       {createdUrl && (
-        <div className="flex items-center gap-2 mb-4 px-3 py-2.5 rounded-xl text-[12px]" style={{ background: "#E7F6EE", color: "#1E7A46" }}>
-          <span className="font-semibold shrink-0">Invitation link:</span>
+         <div className="aio-type-supporting flex items-center gap-2 mb-4 px-3 py-2.5 rounded-xl" style={{ background: "#E7F6EE", color: "#1E7A46" }}>
+           <span className="font-semibold shrink-0">Invitation link:</span>
           <span className="truncate">{createdUrl}</span>
-          <button onClick={() => handleCopy(createdUrl)} className="inline-flex items-center gap-1 font-bold uppercase tracking-[0.1em] text-[11px] shrink-0 hover:opacity-70">
+           <button onClick={() => handleCopy(createdUrl)} className="aio-button aio-button--text aio-button--compact shrink-0 uppercase tracking-[0.1em]">
             {copied === createdUrl ? <Check size={12} /> : <Copy size={12} />}
             {copied === createdUrl ? "Copied" : "Copy"}
           </button>
@@ -272,7 +272,7 @@ export function SubscriptionsAdminCard() {
       )}
 
       {/* Invite list */}
-      {invitesError && <p className="text-[13px] font-semibold mb-3" style={{ color: "#B3261E" }}>{invitesError}</p>}
+       {invitesError && <p className="aio-type-supporting font-semibold mb-3" style={{ color: "#B3261E" }}>{invitesError}</p>}
       {invites && invites.length > 0 && (
         <div className="overflow-x-auto rounded-xl border" style={{ borderColor: vars.g200 }}>
           <table className="w-full" style={{ borderCollapse: "collapse" }}>
@@ -306,7 +306,7 @@ export function SubscriptionsAdminCard() {
                   </td>
                   <td className={tdCls}>
                     {i.url && !i.expired && (
-                      <button onClick={() => handleCopy(i.url!)} className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.1em] hover:opacity-70" style={{ color: accent }}>
+                       <button onClick={() => handleCopy(i.url!)} className="aio-button aio-button--text aio-button--compact uppercase tracking-[0.1em]" style={{ color: accent }}>
                         {copied === i.url ? <Check size={11} /> : <Copy size={11} />}
                         {copied === i.url ? "Copied" : "Copy link"}
                       </button>

@@ -275,24 +275,24 @@ Engine used:
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-2">
             <Globe size={20} color="#ffffff" />
-            <h1 className="text-3xl sm:text-4xl tracking-tight flex items-center" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
+            <h1 className="aio-type-page-title flex items-center" style={{ color: "#ffffff" }}>
               Website Visibility Audit
               <InfoTip text="Runs an AI-powered audit of your website (URL or pasted text) against GEO readiness criteria - content structure, entity clarity, schema markup, and authority signals. Returns scored findings with prioritised recommendations." width={260} />
             </h1>
           </div>
-          <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>
+          <p className="aio-type-body" style={{ color: "rgba(255,255,255,0.85)" }}>
             Score your site for AI agent visibility and citation.
           </p>
-          <p className="text-[14px] font-light leading-relaxed mt-3 max-w-3xl" style={{ color: "rgba(255,255,255,0.85)" }}>
+          <p className="aio-type-body mt-3 max-w-3xl" style={{ color: "rgba(255,255,255,0.85)" }}>
             This assessment looks at your website the way AI search and answer engines now read it. We check the things that decide whether an engine will trust your site, understand what you do, and name you in its answers: how your content is structured, how clearly your brand and services are described, the behind-the-scenes markup that helps machines make sense of the page, and the signals that show you are a credible source.
           </p>
-          <p className="text-[14px] font-light leading-relaxed mt-3 max-w-3xl" style={{ color: "rgba(255,255,255,0.85)" }}>
+          <p className="aio-type-body mt-3 max-w-3xl" style={{ color: "rgba(255,255,255,0.85)" }}>
             You get a single readiness score and a short, prioritised list of fixes, so you can see exactly where you stand today and what to improve to be mentioned more often when people ask AI about your sector.
           </p>
         </div>
         <div className="rounded-xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
           <div>
-            <label className="text-[13px] font-bold uppercase tracking-[0.14em] mb-3 flex items-center gap-2" style={{ color: vars.navy }}>
+            <label className="aio-type-label mb-3 flex items-center gap-2" style={{ color: vars.navy }}>
               <Globe size={18} style={{ color: vars.teal }} />
               Enter your homepage URL
             </label>
@@ -344,14 +344,14 @@ Engine used:
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => { setShowDiagConfirm(false); handleRunDiagnostic(diagPendingForce); }}
-                    className="px-4 py-1.5 rounded text-xs font-medium text-white"
+                    className="aio-button aio-button--primary aio-button--compact"
                     style={{ background: "#1f748f" }}
                   >
                     Confirm
                   </button>
                   <button
                     onClick={() => setShowDiagConfirm(false)}
-                    className="px-4 py-1.5 rounded text-xs font-medium"
+                    className="aio-button aio-button--outline aio-button--compact"
                     style={{ background: "#e8ecf0", color: "#165265" }}
                   >
                     Cancel
@@ -369,7 +369,7 @@ Engine used:
                   <button
                     onClick={() => { setDiagPendingForce(diagAuditLock.locked); setShowDiagConfirm(true); }}
                     disabled={loading || showDiagConfirm}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-60"
+                    className="aio-button aio-button--primary disabled:opacity-60 hover:opacity-90"
                     style={{ background: "#1f748f" }}
                   >
                     {loading ? (
@@ -419,8 +419,8 @@ Engine used:
               <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="h-10 sm:h-14" />
               <div className="hidden sm:block w-px h-10" style={{ background: "rgba(255,255,255,0.25)" }} />
               <div className="hidden sm:block">
-                <p className="text-[12px] uppercase tracking-[0.15em] text-white/60 mb-0.5">Authority & Visibility Report</p>
-                <p className="text-white text-lg font-medium" style={{ fontFamily: "'Alice', Georgia, serif" }}>GEO Diagnostic Analysis</p>
+               <p className="aio-type-eyebrow text-white/60 mb-0.5">Authority & Visibility Report</p>
+               <p className="aio-type-card-title text-white">GEO Diagnostic Analysis</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -453,10 +453,10 @@ Engine used:
               )}
             </div>
             <div className="flex items-center gap-2 self-start flex-shrink-0">
-              <button onClick={() => saveDiagnostic()} disabled={justSaved} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
+              <button onClick={() => saveDiagnostic()} disabled={justSaved} className="aio-button aio-button--outline aio-button--compact transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
                 {justSaved ? <CheckCircle2 size={14} color={vars.green} /> : <Save size={14} />} {justSaved ? "Saved" : "Save audit"}
               </button>
-              <button onClick={() => { const s = document.createElement('style'); s.id = 'aio-print-fix'; s.textContent = '@media print { body, #root, [data-radix-scroll-area-viewport], .overflow-y-auto, .overflow-auto { overflow: visible !important; max-height: none !important; height: auto !important; } }'; document.head.appendChild(s); window.print(); setTimeout(() => { const el = document.getElementById('aio-print-fix'); if (el) el.remove(); }, 2000); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ background: "#1f748f" }}>
+              <button onClick={() => { const s = document.createElement('style'); s.id = 'aio-print-fix'; s.textContent = '@media print { body, #root, [data-radix-scroll-area-viewport], .overflow-y-auto, .overflow-auto { overflow: visible !important; max-height: none !important; height: auto !important; } }'; document.head.appendChild(s); window.print(); setTimeout(() => { const el = document.getElementById('aio-print-fix'); if (el) el.remove(); }, 2000); }} className="aio-button aio-button--primary aio-button--compact" style={{ background: "#1f748f" }}>
                 <Download size={14} /> Print / PDF
               </button>
             </div>
@@ -537,7 +537,7 @@ Engine used:
         return (
           <div className="rounded-2xl border p-4 sm:p-6 mb-6 hover:shadow-sm transition-shadow" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="text-[16px] font-bold uppercase tracking-[0.12em]" style={{ color: vars.navy }}>Measured On Your Page</h3>
+             <h3 className="aio-type-section-title" style={{ color: vars.navy }}>Measured On Your Page</h3>
             </div>
             <p className="text-[14px] font-light mb-4" style={{ color: vars.g500 }}>
               These figures are counted directly from your live page, not estimated. They are the same every time the page is checked.
@@ -591,7 +591,7 @@ Engine used:
       </div>
 
       <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-        <h3 className="text-[16px] font-bold uppercase tracking-[0.12em] mb-4" style={{ color: vars.navy }}>Category Detail</h3>
+         <h3 className="aio-type-section-title mb-4" style={{ color: vars.navy }}>Category Detail</h3>
         <div className="space-y-4">
           {(result.categories || []).map((cat) => (
             <div key={cat.name} className="rounded-xl border p-5 hover:shadow-md transition-shadow cursor-pointer hover:bg-slate-50" style={{ borderColor: vars.g200, background: vars.g50 }}>
@@ -636,7 +636,7 @@ Engine used:
 
       {(result.priorityActions || []).length > 0 && (
         <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-          <h3 className="text-[16px] font-bold uppercase tracking-[0.12em] mb-4" style={{ color: vars.navy }}>Priority Actions</h3>
+           <h3 className="aio-type-section-title mb-4" style={{ color: vars.navy }}>Priority Actions</h3>
           <div className="space-y-3">
             {(result.priorityActions || []).map((action, i) => {
               const prioColor = action.priority === "Critical" ? vars.red : action.priority === "High" ? vars.amber : vars.teal;
@@ -659,20 +659,20 @@ Engine used:
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <button onClick={() => copyToClipboard(buildVibeCodePrompt(result), "vibe")} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border" style={{ borderColor: vars.navy, background: "white", color: vars.navy }}>
+        <button onClick={() => copyToClipboard(buildVibeCodePrompt(result), "vibe")} className="aio-button aio-button--outline" style={{ borderColor: vars.navy, background: "white", color: vars.navy }}>
           {copiedKey === "vibe" ? <CheckCircle2 size={14} color={vars.green} /> : <ClipboardList size={14} />} {copiedKey === "vibe" ? "Copied" : "Copy Vibe Code Prompt"}
         </button>
-        <button onClick={() => copyToClipboard(buildSeoImprovementsText(result), "seo")} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border" style={{ borderColor: vars.navy, background: "white", color: vars.navy }}>
+        <button onClick={() => copyToClipboard(buildSeoImprovementsText(result), "seo")} className="aio-button aio-button--outline" style={{ borderColor: vars.navy, background: "white", color: vars.navy }}>
           {copiedKey === "seo" ? <CheckCircle2 size={14} color={vars.green} /> : <ClipboardList size={14} />} {copiedKey === "seo" ? "Copied" : "Copy SEO Improvements"}
         </button>
-        <button onClick={() => { setResult(null); setError(null); }} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:brightness-110" style={{ background: vars.navy }}>
+        <button onClick={() => { setResult(null); setError(null); }} className="aio-button aio-button--secondary transition-all duration-200 hover:brightness-110" style={{ background: vars.navy }}>
           <Repeat size={14} /> Run New Diagnostic
         </button>
         <div className="flex items-center gap-2 sm:ml-auto">
-          <button onClick={() => saveDiagnostic()} disabled={justSaved} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
+          <button onClick={() => saveDiagnostic()} disabled={justSaved} className="aio-button aio-button--outline disabled:cursor-default transition-all hover:brightness-95" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
             {justSaved ? <CheckCircle2 size={14} color={vars.green} /> : <Save size={14} />} {justSaved ? "Saved" : "Save audit"}
           </button>
-          <button onClick={() => { const s = document.createElement('style'); s.id = 'aio-print-fix'; s.textContent = '@media print { body, #root, [data-radix-scroll-area-viewport], .overflow-y-auto, .overflow-auto { overflow: visible !important; max-height: none !important; height: auto !important; } }'; document.head.appendChild(s); window.print(); setTimeout(() => { const el = document.getElementById('aio-print-fix'); if (el) el.remove(); }, 2000); }} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:brightness-110" style={{ background: vars.accent }}>
+          <button onClick={() => { const s = document.createElement('style'); s.id = 'aio-print-fix'; s.textContent = '@media print { body, #root, [data-radix-scroll-area-viewport], .overflow-y-auto, .overflow-auto { overflow: visible !important; max-height: none !important; height: auto !important; } }'; document.head.appendChild(s); window.print(); setTimeout(() => { const el = document.getElementById('aio-print-fix'); if (el) el.remove(); }, 2000); }} className="aio-button aio-button--primary transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:brightness-110" style={{ background: vars.accent }}>
             <Download size={14} /> Print / PDF
           </button>
         </div>

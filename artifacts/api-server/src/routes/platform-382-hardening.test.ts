@@ -172,6 +172,9 @@ vi.mock("@workspace/db", async () => {
       review_notes text NOT NULL DEFAULT '',
       provenance jsonb NOT NULL DEFAULT '{}',
       last_verified_at timestamptz,
+       source_check_claimed_at timestamptz,
+       source_check_claim_token varchar(80),
+       source_check_failure_count integer NOT NULL DEFAULT 0,
       updated_at timestamptz NOT NULL DEFAULT now(),
       account_id varchar,
       deleted_at timestamptz,
@@ -219,6 +222,7 @@ vi.mock("@workspace/db", async () => {
       contact_id integer NOT NULL REFERENCES media_contacts(id),
       score integer NOT NULL,
       reasons jsonb NOT NULL DEFAULT '[]',
+      phrase_attributions jsonb NOT NULL DEFAULT '[]',
       rank integer NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     );
@@ -232,6 +236,28 @@ vi.mock("@workspace/db", async () => {
       note text NOT NULL DEFAULT '',
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_outreach (
+      id serial PRIMARY KEY,
+      account_id varchar NOT NULL,
+      project_id varchar NOT NULL,
+      story_key varchar(200) NOT NULL,
+      contact_id integer,
+      outlet_id integer,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_outreach_activities (
+      id serial PRIMARY KEY,
+      outreach_id integer NOT NULL,
+      account_id varchar NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_placements (
+      id serial PRIMARY KEY,
+      outreach_id integer NOT NULL,
+      account_id varchar NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS saved_audits (
       id varchar PRIMARY KEY, project_id varchar NOT NULL, owner varchar NOT NULL,
@@ -324,6 +350,9 @@ vi.mock("@workspace/db", async () => {
     mediaRecommendationSetsTable: schema.mediaRecommendationSetsTable,
     mediaRecommendationItemsTable: schema.mediaRecommendationItemsTable,
     mediaRecommendationDecisionsTable: schema.mediaRecommendationDecisionsTable,
+    mediaOutreachTable: schema.mediaOutreachTable,
+    mediaOutreachActivitiesTable: schema.mediaOutreachActivitiesTable,
+    mediaPlacementsTable: schema.mediaPlacementsTable,
     savedAuditsTable: schema.savedAuditsTable,
     savedDiagnosticsTable: schema.savedDiagnosticsTable,
     savedContentGeoTable: schema.savedContentGeoTable,

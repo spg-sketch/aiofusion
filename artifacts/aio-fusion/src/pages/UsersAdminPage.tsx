@@ -831,7 +831,7 @@ export function UsersAdminPage({
                 <User size={18} />
               </div>
               <div>
-                <p className="text-[15px] font-bold leading-tight" style={{ color: ink }}>
+                <p className="aio-type-card-title leading-tight" style={{ color: ink }}>
                   {accountLabel(u)}
                   {isMe && <span className="ml-2 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: vars.g500 }}>(you)</span>}
                   {hasChildren && (
@@ -853,7 +853,7 @@ export function UsersAdminPage({
                       <ShieldCheck size={10} /> 2FA on
                     </span>
                   )}
-                  <span className="text-[11px] font-light truncate" style={{ color: vars.g500 }}>
+                  <span className="aio-type-meta truncate" style={{ color: vars.g500 }}>
                     {[
                       hasDisplayName ? u.username : null,
                       u.parent ? `reports to ${u.parent}` : null,
@@ -877,7 +877,7 @@ export function UsersAdminPage({
                   onClick={() => handleToggleMasterOwner(u.username, isMasterOwner)}
                   disabled={isTogglingMasterOwner}
                   title={isMasterOwner ? "Revoke master-owner access" : "Grant master-owner access"}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-40 hover:brightness-95"
+                      className="aio-button aio-button--compact"
                   style={isMasterOwner
                     ? { color: "white", background: "#0a1628", border: `1.5px solid #0a1628` }
                     : { color: vars.g500, background: "white", border: `1.5px solid ${vars.g200}` }
@@ -892,7 +892,7 @@ export function UsersAdminPage({
                   onClick={() => handleViewAccount(u.username)}
                   disabled={impersonatingUsername === u.username}
                   title="View this account (support mode)"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-40 hover:brightness-110"
+                  className="aio-button aio-button--primary"
                   style={{ color: "white", background: accent, border: `1.5px solid ${accent}` }}
                 >
                   {impersonatingUsername === u.username ? <Loader2 size={12} className="animate-spin" /> : <Eye size={12} />} View account
@@ -921,14 +921,14 @@ export function UsersAdminPage({
                         setWebsiteValue(u.website || "");
                         setNameError(null);
                       }}
-                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] font-medium text-left hover:bg-black/5"
+                      className="aio-type-supporting w-full flex items-center gap-2.5 px-3.5 py-2 text-left hover:bg-black/5"
                       style={{ color: ink }}
                     >
                       <FileEdit size={13} /> Edit profile
                     </button>
                     <button
                       onClick={() => { setManageMenuUser(null); setPwUser(u.username); setPwValue(""); setPwError(null); }}
-                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] font-medium text-left hover:bg-black/5"
+                      className="aio-type-supporting w-full flex items-center gap-2.5 px-3.5 py-2 text-left hover:bg-black/5"
                       style={{ color: ink }}
                     >
                       <KeyRound size={13} /> Reset password
@@ -937,7 +937,7 @@ export function UsersAdminPage({
                       <button
                         onClick={() => { setManageMenuUser(null); handleResetMfa(u.username); }}
                         title="Clear this account's two-factor login so they can sign in with just their password"
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] font-medium text-left hover:bg-black/5"
+                        className="aio-type-supporting w-full flex items-center gap-2.5 px-3.5 py-2 text-left hover:bg-black/5"
                         style={{ color: ink }}
                       >
                         <ShieldOff size={13} /> Reset two-factor
@@ -946,7 +946,7 @@ export function UsersAdminPage({
                     {!isMe && (
                       <button
                         onClick={() => { setManageMenuUser(null); setRoleUser(u.username); setRoleValue((u.role as LocalRole) || "agency"); setRoleError(null); }}
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] font-medium text-left hover:bg-black/5"
+                        className="aio-type-supporting w-full flex items-center gap-2.5 px-3.5 py-2 text-left hover:bg-black/5"
                         style={{ color: ink }}
                       >
                         <Shield size={13} /> Change role
@@ -955,7 +955,7 @@ export function UsersAdminPage({
                     {u.role !== "admin" && (
                       <button
                         onClick={() => { setManageMenuUser(null); setSeatCapUser(u.username); setSeatCapValue(""); setSeatCapError(null); }}
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] font-medium text-left hover:bg-black/5"
+                        className="aio-type-supporting w-full flex items-center gap-2.5 px-3.5 py-2 text-left hover:bg-black/5"
                         style={{ color: ink }}
                       >
                         <Users size={13} /> Seat cap
@@ -969,7 +969,7 @@ export function UsersAdminPage({
                         setAccountSessionsError(null);
                         loadAccountSessions(u.username);
                       }}
-                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] font-medium text-left hover:bg-black/5"
+                      className="aio-type-supporting w-full flex items-center gap-2.5 px-3.5 py-2 text-left hover:bg-black/5"
                       style={{ color: ink }}
                     >
                       <MonitorSmartphone size={13} /> Sessions
@@ -979,7 +979,7 @@ export function UsersAdminPage({
                       <button
                         onClick={() => { setManageMenuUser(null); handleResetStagingTestAccount(u.username); }}
                         title="Staging only: preserve this login but clear its new-account journey"
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] font-medium text-left hover:bg-black/5"
+                        className="aio-type-supporting w-full flex items-center gap-2.5 px-3.5 py-2 text-left hover:bg-black/5"
                         style={{ color: accent }}
                       >
                         <RefreshCw size={13} /> Reset signup test
@@ -989,7 +989,7 @@ export function UsersAdminPage({
                       onClick={() => { setManageMenuUser(null); handleDelete(u.username); }}
                       disabled={isMe}
                       title={isMe ? "You cannot delete your own account" : "Delete account"}
-                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] font-medium text-left hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="aio-type-supporting w-full flex items-center gap-2.5 px-3.5 py-2 text-left hover:bg-black/5 disabled:cursor-not-allowed"
                       style={{ color: accent }}
                     >
                       <Trash2 size={13} /> Delete account
@@ -1041,13 +1041,13 @@ export function UsersAdminPage({
             return (
               <div className="mt-3 sm:pl-[52px]">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: vars.g500 }}>
+                 <p className="aio-type-eyebrow" style={{ color: vars.g500 }}>
                     Projects ({owned.length})
                   </p>
                   {shouldOfferCollapse && (
                     <button
                       onClick={() => toggleProjectsExpanded(u.username)}
-                      className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.14em] hover:opacity-70"
+                       className="aio-button aio-button--text"
                       style={{ color: accent }}
                     >
                       {isExpanded ? "Show fewer" : `Show all ${owned.length}`} {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
@@ -1055,14 +1055,14 @@ export function UsersAdminPage({
                   )}
                 </div>
                 {owned.length === 0 ? (
-                  <p className="text-[12px] font-light italic mt-1.5" style={{ color: vars.g400 }}>No projects yet.</p>
+                   <p className="aio-type-supporting italic mt-1.5" style={{ color: vars.g400 }}>No projects yet.</p>
                 ) : (
                   <div className="flex flex-col mt-1.5 rounded-lg overflow-hidden" style={{ border: `1px solid ${vars.g200}` }}>
                     {visible.map((p, i) => (
                       <div key={p.id} style={{ background: i % 2 === 0 ? "white" : vars.g100 + "60", borderTop: i > 0 ? `1px solid ${vars.g200}` : undefined }}>
                         <div className="flex flex-wrap items-center gap-2 px-2.5 py-1.5">
                           <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[8px] font-bold text-white shrink-0" style={{ background: p.color }}>{p.initials}</span>
-                          <span className="text-[12px] font-medium truncate" style={{ color: ink }}>{p.name}</span>
+                           <span className="aio-type-meta truncate" style={{ color: ink }}>{p.name}</span>
                           {isDemoProject(p) && (
                             <span className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em]" style={{ background: "#FFF4D8", color: "#9A5A00" }}>
                               Demo
@@ -1071,7 +1071,7 @@ export function UsersAdminPage({
                           <select
                             value={(p.owner || "").toLowerCase()}
                             onChange={(e) => handleAssign(p.id, e.target.value)}
-                            className="ml-auto px-2 py-1 rounded-md border text-[11px] bg-white focus:outline-none focus:ring-2"
+                             className="aio-type-meta ml-auto px-2 py-1 rounded-md border bg-white focus:outline-none focus:ring-2"
                             style={{ borderColor: vars.g200, color: vars.g500, ["--tw-ring-color" as any]: accent }}
                           >
                             {users.map((o) => (
@@ -1090,7 +1090,7 @@ export function UsersAdminPage({
                             </span>
                             <button
                               onClick={() => clearAuditLock(p.id, lk.auditType)}
-                              className="text-[9px] font-semibold px-1.5 py-0.5 rounded border hover:opacity-80"
+                               className="aio-button aio-button--compact"
                               style={{ borderColor: vars.g300, color: vars.g500, background: "white" }}
                             >
                               Clear lock
@@ -1111,7 +1111,7 @@ export function UsersAdminPage({
                 value={nameValue}
                 onChange={(e) => setNameValue(e.target.value)}
                 placeholder="Display name (leave blank to clear)"
-                className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                 className="aio-type-body flex-1 min-w-[200px] px-3 py-2 rounded-lg border focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               />
               <input
@@ -1119,12 +1119,12 @@ export function UsersAdminPage({
                 value={websiteValue}
                 onChange={(e) => setWebsiteValue(e.target.value)}
                 placeholder="Website (leave blank to clear)"
-                className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                 className="aio-type-body flex-1 min-w-[200px] px-3 py-2 rounded-lg border focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               />
               <button
                 type="submit"
-                className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white"
+                 className="aio-button aio-button--primary text-white"
                 style={{ background: accent }}
               >
                 Save
@@ -1139,12 +1139,12 @@ export function UsersAdminPage({
                 value={pwValue}
                 onChange={(e) => setPwValue(e.target.value)}
                 placeholder="New password (min 8 chars)"
-                className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                 className="aio-type-body flex-1 min-w-[200px] px-3 py-2 rounded-lg border focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               />
               <button
                 type="submit"
-                className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white"
+                 className="aio-button aio-button--primary text-white"
                 style={{ background: accent }}
               >
                 Save
@@ -1157,7 +1157,7 @@ export function UsersAdminPage({
               <select
                 value={roleValue}
                 onChange={(e) => setRoleValue(e.target.value as LocalRole)}
-                className="px-3 py-2 rounded-lg border text-[13px] bg-white focus:outline-none focus:ring-2"
+                 className="aio-type-body px-3 py-2 rounded-lg border bg-white focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               >
                 <option value="agency">Agency</option>
@@ -1165,7 +1165,7 @@ export function UsersAdminPage({
               </select>
               <button
                 type="submit"
-                className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white"
+                 className="aio-button aio-button--primary text-white"
                 style={{ background: accent }}
               >
                 Save
@@ -1182,14 +1182,14 @@ export function UsersAdminPage({
                   value={seatCapValue}
                   onChange={(e) => setSeatCapValue(e.target.value)}
                   placeholder="No limit (leave blank)"
-                  className="w-44 px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                   className="aio-type-body w-44 px-3 py-2 rounded-lg border focus:outline-none focus:ring-2"
                   style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
                 />
                 <span className="text-[12px]" style={{ color: vars.g500 }}>max sub-accounts (blank = no limit)</span>
               </div>
               <button
                 type="submit"
-                className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white"
+                 className="aio-button aio-button--primary text-white"
                 style={{ background: accent }}
               >
                 Save
@@ -1352,14 +1352,14 @@ export function UsersAdminPage({
           value={accountSearch}
           onChange={(e) => setAccountSearch(e.target.value)}
           placeholder="Search name, username, email or website"
-          className="w-full rounded-xl border py-2.5 pl-9 pr-3 text-[13px] outline-none focus:ring-2"
+           className="aio-type-body w-full rounded-xl border py-2.5 pl-9 pr-3 outline-none focus:ring-2"
           style={{ borderColor: vars.g200, ["--tw-ring-color" as string]: accent }}
         />
       </label>
       <button
         type="button"
         onClick={() => setOnly2FAOff((value) => !value)}
-        className="rounded-xl border px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.12em]"
+         className="aio-button aio-button--compact rounded-xl"
         style={{
           borderColor: only2FAOff ? accent : vars.g200,
           background: only2FAOff ? accentSoft : "white",
@@ -1389,7 +1389,7 @@ export function UsersAdminPage({
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] rounded-xl transition-all hover:brightness-110"
+            className="aio-button aio-button--return"
             style={{ background: accent, color: "white" }}
           >
             <ArrowLeft size={16} /> Back to platform
@@ -1403,7 +1403,7 @@ export function UsersAdminPage({
           <div className="py-6 px-4 space-y-8">
             {navGroups.map((group) => (
               <div key={group.label}>
-                <h3 className="px-3 mb-2 text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: vars.g500 }}>
+                <h3 className="aio-type-eyebrow px-3 mb-2" style={{ color: vars.g500 }}>
                   {group.label}
                 </h3>
                 <nav className="space-y-1">
@@ -1414,7 +1414,7 @@ export function UsersAdminPage({
                       <button
                         key={item.id}
                         onClick={() => selectSection(item.id)}
-                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] font-semibold transition-all ${
+                         className={`aio-type-supporting w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all ${
                           isActive ? 'bg-[#FBE3ED] text-[#C8497A]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                         }`}
                       >
@@ -1428,7 +1428,7 @@ export function UsersAdminPage({
             ))}
             {(onInsightsAdmin || onLeadsAdmin || onSupportAdmin) && (
               <div>
-                <h3 className="px-3 mb-2 text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: vars.g500 }}>
+                 <h3 className="aio-type-eyebrow px-3 mb-2" style={{ color: vars.g500 }}>
                   Content &amp; Enquiries
                 </h3>
                 <nav className="space-y-1">
@@ -1436,7 +1436,7 @@ export function UsersAdminPage({
                     <button
                       type="button"
                       onClick={onInsightsAdmin}
-                      className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] font-semibold text-gray-600 transition-all hover:bg-gray-100 hover:text-gray-900"
+                       className="aio-type-supporting w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all hover:bg-gray-100 hover:text-gray-900"
                     >
                       <FileText size={16} className="text-gray-400" /> Insights
                     </button>
@@ -1445,7 +1445,7 @@ export function UsersAdminPage({
                     <button
                       type="button"
                       onClick={onLeadsAdmin}
-                      className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] font-semibold text-gray-600 transition-all hover:bg-gray-100 hover:text-gray-900"
+                       className="aio-type-supporting w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all hover:bg-gray-100 hover:text-gray-900"
                     >
                       <Mail size={16} className="text-gray-400" /> Leads
                     </button>
@@ -1454,7 +1454,7 @@ export function UsersAdminPage({
                     <button
                       type="button"
                       onClick={onSupportAdmin}
-                      className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-[13px] font-semibold text-gray-600 transition-all hover:bg-gray-100 hover:text-gray-900"
+                       className="aio-type-supporting w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-all hover:bg-gray-100 hover:text-gray-900"
                     >
                       <MessageSquare size={16} className="shrink-0 text-gray-400" />
                       <span>
@@ -1474,13 +1474,13 @@ export function UsersAdminPage({
         <div className="min-w-0 flex-1 px-4 py-6 sm:px-10 sm:py-10">
           <div className="max-w-5xl mx-auto space-y-12">
             <label className="block md:hidden">
-              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: vars.g500 }}>
+                 <span className="aio-type-eyebrow mb-1.5 block" style={{ color: vars.g500 }}>
                 Manage accounts
               </span>
               <select
                 value={section}
                 onChange={(e) => selectSection(e.target.value as MasterSection)}
-                className="w-full rounded-xl border bg-white px-3 py-3 text-[13px] font-semibold"
+                 className="aio-type-label w-full rounded-xl border bg-white px-3 py-3"
                 style={{ borderColor: vars.g200, color: ink }}
               >
                 {navGroups.map((group) => (
@@ -1498,7 +1498,7 @@ export function UsersAdminPage({
                   <button
                     type="button"
                     onClick={onInsightsAdmin}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border bg-white px-3 py-3 text-[12px] font-semibold"
+                     className="aio-button aio-button--outline flex-1"
                     style={{ borderColor: vars.g200, color: ink }}
                   >
                     <FileText size={15} /> Insights
@@ -1508,7 +1508,7 @@ export function UsersAdminPage({
                   <button
                     type="button"
                     onClick={onLeadsAdmin}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border bg-white px-3 py-3 text-[12px] font-semibold"
+                     className="aio-button aio-button--outline flex-1"
                     style={{ borderColor: vars.g200, color: ink }}
                   >
                     <Mail size={15} /> Leads
@@ -1518,7 +1518,7 @@ export function UsersAdminPage({
                   <button
                     type="button"
                     onClick={onSupportAdmin}
-                    className="col-span-2 flex items-center justify-center gap-2 rounded-xl border bg-white px-3 py-3 text-[12px] font-semibold"
+                     className="aio-button aio-button--outline col-span-2"
                     style={{ borderColor: vars.g200, color: ink }}
                   >
                     <MessageSquare size={15} />
@@ -1542,8 +1542,8 @@ export function UsersAdminPage({
             {section === "masters" && (
               <div className="space-y-6">
                 <div>
-                  <h2 className="text-2xl font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Master accounts</h2>
-                  <p className="text-sm text-gray-500 mt-1">Manage active Master administrators and their account access.</p>
+                   <h2 className="aio-type-section-title" style={{ color: ink }}>Master accounts</h2>
+                   <p className="aio-type-supporting mt-1">Manage active Master administrators and their account access.</p>
                 </div>
                 {renderAccountFilters()}
                 <div className="flex flex-col gap-4">
@@ -1556,54 +1556,54 @@ export function UsersAdminPage({
             {section === "agencies" && (
               <div className="space-y-6">
                 <div>
-                  <h2 className="text-2xl font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Agency / Partner accounts</h2>
-                  <p className="text-sm text-gray-500 mt-1">Manage active agency accounts and their sub-clients.</p>
+                   <h2 className="aio-type-section-title" style={{ color: ink }}>Agency / Partner accounts</h2>
+                   <p className="aio-type-supporting mt-1">Manage active agency accounts and their sub-clients.</p>
                 </div>
                 {renderAccountFilters()}
                 <div className="flex flex-col gap-4">
                   
               <div className="rounded-2xl p-6 sm:p-8 mb-6 bg-white border shadow-sm" style={{ borderColor: vars.g200 }}>
-                <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Add a new account</h2>
+                 <h2 className="aio-type-card-title mb-4" style={{ color: ink }}>Add a new account</h2>
                 <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-12 gap-3 md:items-end">
                   <div className="md:col-span-6">
-                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Display name</label>
+                     <label className="aio-type-label uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Display name</label>
                     <input
                       type="text"
                       value={newDisplayName}
                       onChange={(e) => setNewDisplayName(e.target.value)}
                       placeholder="e.g. Acme Agency Ltd"
-                      className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                       className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
                       style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
                     />
                   </div>
                   <div className="md:col-span-6">
-                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Username (login)</label>
+                     <label className="aio-type-label uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Username (login)</label>
                     <input
                       type="text"
                       value={newUsername}
                       onChange={(e) => setNewUsername(e.target.value)}
                       placeholder="e.g. patrick"
-                      className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                       className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
                       style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
                     />
                   </div>
                   <div className="md:col-span-4">
-                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Password</label>
+                     <label className="aio-type-label uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Password</label>
                     <input
                       type="text"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="min 8 characters"
-                      className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                       className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
                       style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
                     />
                   </div>
                   <div className="md:col-span-4">
-                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Account type</label>
+                     <label className="aio-type-label uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Account type</label>
                     <select
                       value={newRole}
                       onChange={(e) => setNewRole(e.target.value as any)}
-                      className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 bg-white"
+                       className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2 bg-white"
                       style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
                     >
                       <option value="agency">Agency</option>
@@ -1613,7 +1613,7 @@ export function UsersAdminPage({
                   <div className="md:col-span-4">
                     <button
                       type="submit"
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90"
+                       className="aio-button aio-button--primary w-full text-white"
                       style={{ background: accent }}
                     >
                       <Plus size={14} /> Add
@@ -1628,7 +1628,7 @@ export function UsersAdminPage({
                 </form>
               </div>
 
-                  {agenciesUsers.length === 0 && <p className="text-sm text-gray-500">No active agency accounts.</p>}
+                   {agenciesUsers.length === 0 && <p className="aio-type-supporting">No active agency accounts.</p>}
                   {agenciesUsers.map(u => renderAccountNode(u, 0, false))}
                 </div>
               </div>
@@ -1637,54 +1637,54 @@ export function UsersAdminPage({
             {section === "clients" && (
               <div className="space-y-6">
                 <div>
-                  <h2 className="text-2xl font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Direct Client accounts</h2>
-                  <p className="text-sm text-gray-500 mt-1">Manage active direct clients and standalone users.</p>
+                   <h2 className="aio-type-section-title" style={{ color: ink }}>Direct Client accounts</h2>
+                   <p className="aio-type-supporting mt-1">Manage active direct clients and standalone users.</p>
                 </div>
                 {renderAccountFilters()}
                 <div className="flex flex-col gap-4">
                   
               <div className="rounded-2xl p-6 sm:p-8 mb-6 bg-white border shadow-sm" style={{ borderColor: vars.g200 }}>
-                <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Add a new account</h2>
+                 <h2 className="aio-type-card-title mb-4" style={{ color: ink }}>Add a new account</h2>
                 <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-12 gap-3 md:items-end">
                   <div className="md:col-span-6">
-                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Display name</label>
+                     <label className="aio-type-label uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Display name</label>
                     <input
                       type="text"
                       value={newDisplayName}
                       onChange={(e) => setNewDisplayName(e.target.value)}
                       placeholder="e.g. Acme Agency Ltd"
-                      className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                       className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
                       style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
                     />
                   </div>
                   <div className="md:col-span-6">
-                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Username (login)</label>
+                     <label className="aio-type-label uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Username (login)</label>
                     <input
                       type="text"
                       value={newUsername}
                       onChange={(e) => setNewUsername(e.target.value)}
                       placeholder="e.g. patrick"
-                      className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                       className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
                       style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
                     />
                   </div>
                   <div className="md:col-span-4">
-                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Password</label>
+                     <label className="aio-type-label uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Password</label>
                     <input
                       type="text"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="min 8 characters"
-                      className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                       className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
                       style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
                     />
                   </div>
                   <div className="md:col-span-4">
-                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Account type</label>
+                     <label className="aio-type-label uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Account type</label>
                     <select
                       value={newRole}
                       onChange={(e) => setNewRole(e.target.value as any)}
-                      className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 bg-white"
+                       className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2 bg-white"
                       style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
                     >
                       <option value="agency">Agency</option>
@@ -1694,7 +1694,7 @@ export function UsersAdminPage({
                   <div className="md:col-span-4">
                     <button
                       type="submit"
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90"
+                       className="aio-button aio-button--primary w-full text-white"
                       style={{ background: accent }}
                     >
                       <Plus size={14} /> Add
@@ -1709,7 +1709,7 @@ export function UsersAdminPage({
                 </form>
               </div>
 
-                  {clientsUsers.length === 0 && <p className="text-sm text-gray-500">No active direct client accounts.</p>}
+                   {clientsUsers.length === 0 && <p className="aio-type-supporting">No active direct client accounts.</p>}
                   {clientsUsers.map(u => renderAccountNode(u, 0, false))}
                 </div>
               </div>
@@ -1718,12 +1718,12 @@ export function UsersAdminPage({
             {section === "archived" && (
               <div className="space-y-6">
                 <div>
-                  <h2 className="text-2xl font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Archived accounts</h2>
-                  <p className="text-sm text-gray-500 mt-1">Suspended and archived accounts. They cannot sign in.</p>
+                   <h2 className="aio-type-section-title" style={{ color: ink }}>Archived accounts</h2>
+                   <p className="aio-type-supporting mt-1">Suspended and archived accounts. They cannot sign in.</p>
                 </div>
                 {renderAccountFilters()}
                 <div className="flex flex-col gap-4">
-                  {filterAccountRoots(visibleArchivedTopLevel).length === 0 && <p className="text-sm text-gray-500">No archived accounts match these filters.</p>}
+                   {filterAccountRoots(visibleArchivedTopLevel).length === 0 && <p className="aio-type-supporting">No archived accounts match these filters.</p>}
                   {filterAccountRoots(visibleArchivedTopLevel).map(u => renderAccountNode(u, 0, true))}
                 </div>
               </div>
@@ -1732,15 +1732,15 @@ export function UsersAdminPage({
             {section === "audit" && (
               <div className="space-y-12">
                 <div>
-                  <h2 className="text-2xl font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>System Audit</h2>
-                  <p className="text-sm text-gray-500 mt-1">Review system logs and backend assessment outcomes.</p>
+                   <h2 className="aio-type-section-title" style={{ color: ink }}>System Audit</h2>
+                   <p className="aio-type-supporting mt-1">Review system logs and backend assessment outcomes.</p>
                 </div>
 
                 <details className="rounded-2xl border bg-white p-5" style={{ borderColor: vars.g200 }}>
-                  <summary className="cursor-pointer text-[13px] font-bold" style={{ color: ink }}>
+                   <summary className="aio-type-label cursor-pointer" style={{ color: ink }}>
                     Legacy pending-account recovery ({pendingAccounts?.length ?? 0})
                   </summary>
-                  <p className="mt-2 text-[12px]" style={{ color: vars.g500 }}>
+                   <p className="aio-type-supporting mt-2" style={{ color: vars.g500 }}>
                     Compatibility access for older applications only. Normal sign-up no longer uses manual approval.
                   </p>
                   <div className="mt-4 space-y-3">
@@ -1751,9 +1751,9 @@ export function UsersAdminPage({
                     )}
                     {pendingAccounts?.map((account) => (
                       <div key={account.username} className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: vars.g200 }}>
-                        <div>
-                          <p className="text-[13px] font-semibold" style={{ color: ink }}>{account.displayName || account.username}</p>
-                          <p className="text-[11px]" style={{ color: vars.g500 }}>
+                         <div>
+                           <p className="aio-type-label" style={{ color: ink }}>{account.displayName || account.username}</p>
+                           <p className="aio-type-meta" style={{ color: vars.g500 }}>
                             {[account.username, account.email, account.website].filter(Boolean).join(" · ")}
                           </p>
                         </div>
@@ -1762,7 +1762,7 @@ export function UsersAdminPage({
                             type="button"
                             onClick={() => handleApprove(account.username)}
                             disabled={approvingUser === account.username || rejectingUser === account.username}
-                            className="rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white disabled:opacity-40"
+                             className="aio-button aio-button--primary text-white"
                             style={{ background: green }}
                           >
                             {approvingUser === account.username ? "Approving..." : "Approve legacy account"}
@@ -1771,7 +1771,7 @@ export function UsersAdminPage({
                             type="button"
                             onClick={() => handleReject(account.username)}
                             disabled={approvingUser === account.username || rejectingUser === account.username}
-                            className="rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] disabled:opacity-40"
+                             className="aio-button aio-button--outline"
                             style={{ borderColor: vars.red, color: vars.red }}
                           >
                             {rejectingUser === account.username ? "Rejecting..." : "Reject"}
@@ -1779,7 +1779,7 @@ export function UsersAdminPage({
                         </div>
                       </div>
                     ))}
-                    <button type="button" onClick={loadPendingAccounts} className="text-[11px] font-semibold" style={{ color: accent }}>
+                     <button type="button" onClick={loadPendingAccounts} className="aio-button aio-button--text" style={{ color: accent }}>
                       Refresh legacy pending accounts
                     </button>
                   </div>
@@ -1794,8 +1794,8 @@ export function UsersAdminPage({
                   <BarChart3 size={16} color="#D97706" />
                 </div>
                 <div>
-                  <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Authority assessment outcomes</h2>
-                  <p className="text-[13px] font-light mt-0.5 leading-[1.6]" style={{ color: vars.g600 }}>
+                   <h2 className="aio-type-card-title" style={{ color: ink }}>Authority assessment outcomes</h2>
+                   <p className="aio-type-supporting mt-0.5" style={{ color: vars.g600 }}>
                     Safe status metadata for saved Earned Media reports. Raw probes, prompts and report narratives are not shown here.
                   </p>
                 </div>
@@ -1803,7 +1803,7 @@ export function UsersAdminPage({
               <button
                 onClick={loadAssessmentOutcomes}
                 disabled={assessmentOutcomesLoading}
-                className="flex items-center justify-center gap-2 px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] border transition-all hover:opacity-80 disabled:opacity-40"
+                 className="aio-button aio-button--outline"
                 style={{ borderColor: vars.g200, color: vars.navy }}
               >
                 {assessmentOutcomesLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
@@ -1813,21 +1813,21 @@ export function UsersAdminPage({
 
             <div className="grid grid-cols-1 sm:grid-cols-[1fr_220px] gap-3 mb-4">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-[0.14em] block mb-1.5" style={{ color: vars.g500 }}>Project ID</label>
+                 <label className="aio-type-label uppercase tracking-[0.14em] block mb-1.5" style={{ color: vars.g500 }}>Project ID</label>
                 <input
                   value={assessmentProjectFilter}
                   onChange={(e) => setAssessmentProjectFilter(e.target.value)}
                   placeholder="Optional exact project ID"
-                  className="w-full px-3 py-2.5 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                   className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
                   style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-[0.14em] block mb-1.5" style={{ color: vars.g500 }}>Outcome</label>
+                 <label className="aio-type-label uppercase tracking-[0.14em] block mb-1.5" style={{ color: vars.g500 }}>Outcome</label>
                 <select
                   value={assessmentStatusFilter}
                   onChange={(e) => setAssessmentStatusFilter(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white focus:outline-none focus:ring-2"
+                   className="aio-type-body w-full px-3 py-2.5 rounded-lg border bg-white focus:outline-none focus:ring-2"
                   style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
                 >
                   <option value="">All outcomes</option>
@@ -1900,8 +1900,8 @@ export function UsersAdminPage({
                 <Shield size={16} color="#1f748f" />
               </div>
               <div>
-                <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Audit log</h2>
-                <p className="text-[13px] font-light mt-0.5 leading-[1.6]" style={{ color: vars.g600 }}>
+                 <h2 className="aio-type-card-title" style={{ color: ink }}>Audit log</h2>
+                 <p className="aio-type-supporting mt-0.5" style={{ color: vars.g600 }}>
                   Read-only record of privileged admin actions. Up to 500 events, newest first.
                 </p>
               </div>
@@ -1910,7 +1910,7 @@ export function UsersAdminPage({
               <button
                 onClick={() => { void exportAuditCsv(); }}
                 disabled={auditExporting}
-                className="flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] border transition-all hover:opacity-80 disabled:opacity-40"
+                 className="aio-button aio-button--outline"
                 style={{ borderColor: vars.g200, color: vars.g600 }}
                 title="Export matching events as CSV"
               >
@@ -1920,7 +1920,7 @@ export function UsersAdminPage({
               <button
                 onClick={loadAuditEvents}
                 disabled={auditLoading}
-                className="flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] border transition-all hover:opacity-80 disabled:opacity-40"
+                 className="aio-button aio-button--outline"
                 style={{ borderColor: vars.g200, color: vars.navy }}
               >
                 {auditLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
@@ -1936,7 +1936,7 @@ export function UsersAdminPage({
               placeholder="Filter actor…"
               value={auditActorFilter}
               onChange={e => setAuditActorFilter(e.target.value)}
-              className="px-3 py-1.5 rounded-lg border text-[12px] outline-none focus:ring-1"
+               className="aio-type-supporting px-3 py-1.5 rounded-lg border outline-none focus:ring-1"
               style={{ borderColor: vars.g200, color: ink, background: vars.g100 }}
             />
             <input
@@ -1944,14 +1944,14 @@ export function UsersAdminPage({
               placeholder="Filter action…"
               value={auditActionFilter}
               onChange={e => setAuditActionFilter(e.target.value)}
-              className="px-3 py-1.5 rounded-lg border text-[12px] outline-none focus:ring-1"
+               className="aio-type-supporting px-3 py-1.5 rounded-lg border outline-none focus:ring-1"
               style={{ borderColor: vars.g200, color: ink, background: vars.g100 }}
             />
             <input
               type="date"
               value={auditFrom}
               onChange={e => setAuditFrom(e.target.value)}
-              className="px-3 py-1.5 rounded-lg border text-[12px] outline-none focus:ring-1"
+               className="aio-type-supporting px-3 py-1.5 rounded-lg border outline-none focus:ring-1"
               style={{ borderColor: vars.g200, color: auditFrom ? ink : vars.g400, background: vars.g100 }}
               title="From date"
             />
@@ -1959,7 +1959,7 @@ export function UsersAdminPage({
               type="date"
               value={auditTo}
               onChange={e => setAuditTo(e.target.value)}
-              className="px-3 py-1.5 rounded-lg border text-[12px] outline-none focus:ring-1"
+               className="aio-type-supporting px-3 py-1.5 rounded-lg border outline-none focus:ring-1"
               style={{ borderColor: vars.g200, color: auditTo ? ink : vars.g400, background: vars.g100 }}
               title="To date"
             />
@@ -1973,7 +1973,7 @@ export function UsersAdminPage({
                 placeholder="Search actor, action, target, detail…"
                 value={auditSearch}
                 onChange={e => setAuditSearch(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 rounded-lg border text-[12px] outline-none focus:ring-1"
+                 className="aio-type-supporting w-full pl-8 pr-3 py-1.5 rounded-lg border outline-none focus:ring-1"
                 style={{ borderColor: vars.g200, color: ink, background: vars.g100 }}
               />
             </div>

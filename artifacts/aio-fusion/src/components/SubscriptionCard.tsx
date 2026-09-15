@@ -147,15 +147,15 @@ function RenewalDetails({
   const days = daysUntilRenewal(currentPeriodEnd);
   return (
     <div className="mt-2 space-y-0.5" data-testid="subscription-renewal-details">
-      <p className="text-[13px]" style={{ color: vars.g500 }}>
+      <p className="aio-type-supporting" style={{ color: vars.g500 }}>
         Paid until <strong style={{ color: ink }}>{renewal}</strong>.
       </p>
       {status === "cancelled" ? (
-        <p className="text-[13px]" style={{ color: "#991B1B" }}>
+        <p className="aio-type-supporting" style={{ color: "#991B1B" }}>
           Your subscription is cancelled and will not renew.
         </p>
       ) : days !== null ? (
-        <p className="text-[13px]" style={{ color: vars.g500 }}>
+        <p className="aio-type-supporting" style={{ color: vars.g500 }}>
           Next renewal in <strong style={{ color: ink }}>{days} {days === 1 ? "day" : "days"}</strong>.
         </p>
       ) : null}
@@ -178,14 +178,14 @@ function PaymentSuccessState({
       aria-live="polite"
       style={{ background: "#ECFDF5", border: "1px solid #A7F3D0" }}
     >
-      <h3 className="text-[16px] font-bold" style={{ color: "#166534" }}>
+      <h3 className="aio-type-card-title" style={{ color: "#166534" }}>
         Thank you for signing up to AIO Fusion
       </h3>
-      <p className="text-[13px] mt-1" style={{ color: "#166534" }}>
+      <p className="aio-type-supporting mt-1" style={{ color: "#166534" }}>
         Your payment was successful and your subscription is now active.
       </p>
       {renewal && (
-        <p className="text-[13px] mt-1" style={{ color: "#166534" }}>
+        <p className="aio-type-supporting mt-1" style={{ color: "#166534" }}>
           You are paid until <strong>{renewal}</strong>.
         </p>
       )}
@@ -364,20 +364,20 @@ export function SubscriptionCard({
   return (
     <>
       <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-        <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Subscription</h2>
+        <h2 className="aio-type-card-title mb-1" style={{ color: ink }}>Subscription</h2>
 
         {checkoutResult === "success" && checkoutConfirmed && paidSubscription && (
           <PaymentSuccessState info={info} />
         )}
         {checkoutResult === "success" && (!checkoutConfirmed || !paidSubscription) && (
           <div className="mb-5" data-testid="payment-confirmation-pending">
-            <p className="text-[13px]" style={{ color: confirmationError ? "#991B1B" : vars.g600 }}>
+            <p className="aio-type-supporting" style={{ color: confirmationError ? "#991B1B" : vars.g600 }}>
               {confirmationError ?? (confirming ? "Securely confirming your completed Stripe checkout..." : "Confirming payment...")}
             </p>
             {confirmationError && (
               <button
                 type="button"
-                className="mt-3 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em]"
+                className="aio-button aio-button--outline aio-button--compact mt-3 rounded-full uppercase tracking-[0.12em]"
                 style={{ color: ink, border: `1.5px solid ${vars.g300}`, background: "white" }}
                 onClick={() => setRefreshTick((tick) => tick + 1)}
               >
@@ -387,22 +387,22 @@ export function SubscriptionCard({
           </div>
         )}
         {checkoutResult === "cancelled" && (
-          <p className="text-[13px] mb-3 px-3 py-2 rounded-lg" style={{ background: vars.g50, color: vars.g600 }}>
+          <p className="aio-type-supporting mb-3 px-3 py-2 rounded-lg" style={{ background: vars.g50, color: vars.g600 }}>
             Checkout was cancelled - no payment was taken.
           </p>
         )}
 
         {!onboarding && trial.status === "eligible" && (
           <div className="mb-5 rounded-xl p-4" style={{ background: "#FBE3ED55", border: `1px solid ${accent}55` }}>
-            <p className="text-[14px] font-bold mb-1" style={{ color: ink }}>Try AIO Fusion free for 60 days</p>
-            <p className="text-[13px] mb-3" style={{ color: vars.g600 }}>
+            <p className="aio-type-card-title mb-1" style={{ color: ink }}>Try AIO Fusion free for 60 days</p>
+            <p className="aio-type-body mb-3" style={{ color: vars.g600 }}>
               No card required. Your one-time trial starts when you confirm and includes two project workspaces.
             </p>
             <button
               type="button"
               onClick={startTrial}
               disabled={startingTrial}
-              className="px-5 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white disabled:opacity-50"
+              className="aio-button aio-button--primary rounded-full uppercase tracking-[0.12em]"
               style={{ background: accent }}
             >
               {startingTrial ? "Starting trial..." : "Start free beta trial"}
@@ -412,12 +412,12 @@ export function SubscriptionCard({
 
         {trial.status === "active" && (
           <div className="mb-5 rounded-xl p-4" style={{ background: "#ECFDF5", border: "1px solid #A7F3D0" }}>
-            <p className="text-[14px] font-bold" style={{ color: "#166534" }}>
+            <p className="aio-type-card-title" style={{ color: "#166534" }}>
               {trial.daysRemaining <= 1
                 ? "Beta trial ends today"
                 : `Beta trial active - ${trial.daysRemaining} days remaining`}
             </p>
-            <p className="text-[13px] mt-1" style={{ color: "#166534" }}>
+            <p className="aio-type-supporting mt-1" style={{ color: "#166534" }}>
               Choose a plan below before the trial ends to keep paid features available.
             </p>
           </div>
@@ -425,8 +425,8 @@ export function SubscriptionCard({
 
         {trial.status === "expired" && (
           <div className="mb-5 rounded-xl p-4" style={{ background: "#FEF2F2", border: "1px solid #FECACA" }}>
-            <p className="text-[14px] font-bold" style={{ color: "#991B1B" }}>Your beta trial has ended</p>
-            <p className="text-[13px] mt-1" style={{ color: "#991B1B" }}>
+            <p className="aio-type-card-title" style={{ color: "#991B1B" }}>Your beta trial has ended</p>
+            <p className="aio-type-supporting mt-1" style={{ color: "#991B1B" }}>
               Your account and existing work remain available. Choose a plan below to continue using paid features and project capacity.
             </p>
           </div>
@@ -435,21 +435,21 @@ export function SubscriptionCard({
         {subscribed ? (
           <div>
             <div className="flex items-center gap-3 mb-3">
-              <span className="text-[14px] font-semibold" style={{ color: ink }}>
+              <span className="aio-type-label" style={{ color: ink }}>
                 {planLabel} plan{info.frequency ? ` - billed ${info.frequency === "annual" ? "annually" : "quarterly"}` : ""}
               </span>
               {status && (
-                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full" style={{ color: status.color, background: status.bg }}>
+                <span className="aio-type-meta font-bold px-2.5 py-1 rounded-full" style={{ color: status.color, background: status.bg }}>
                   {status.text}
                 </span>
               )}
             </div>
-            <p className="text-[13px]" style={{ color: vars.g500 }}>
+            <p className="aio-type-supporting" style={{ color: vars.g500 }}>
               {info.includedProjects} Premium project{info.includedProjects === 1 ? "" : "s"} included.
             </p>
             <RenewalDetails status={info.status} currentPeriodEnd={info.currentPeriodEnd} />
             {info.entitled && (
-              <p className="text-[13px] mt-1" style={{ color: vars.g500 }}>
+              <p className="aio-type-supporting mt-1" style={{ color: vars.g500 }}>
                 Projects: <strong style={{ color: ink }}>{info.projectsUsed} of {info.projectAllowance}</strong> in use
                 {info.unassignedAddons.length > 0 && (
                   <> - {info.unassignedAddons.length} purchased project slot{info.unassignedAddons.length === 1 ? "" : "s"} ({info.unassignedAddons.map((a) => TIER_LABELS[a.tier]).join(", ")}) waiting for a new project</>
@@ -458,12 +458,12 @@ export function SubscriptionCard({
               </p>
             )}
             {info.status === "past_due" && (
-              <p className="text-[13px] mt-2" style={{ color: "#92400E" }}>
+              <p className="aio-type-supporting mt-2" style={{ color: "#92400E" }}>
                 Your last payment did not go through. We'll retry automatically - please update your card details below to avoid interruption.
               </p>
             )}
             {info.latestInvoiceUrl && (
-              <p className="text-[13px] mt-1">
+              <p className="aio-type-supporting mt-1">
                 <a
                   href={info.latestInvoiceUrl}
                   target="_blank"
@@ -478,7 +478,7 @@ export function SubscriptionCard({
             {info.portalAvailable && <PortalButtons />}
             {info.status === "cancelled" && (
               <div className="mt-3">
-                <p className="text-[13px] mb-3" style={{ color: vars.g500 }}>
+                <p className="aio-type-supporting mb-3" style={{ color: vars.g500 }}>
                   Your subscription has been cancelled. You can restart it below.
                 </p>
                 <RestartChooser info={info} frequency={frequency} setFrequency={setFrequency} starting={starting} onStart={startCheckout} error={error} />
@@ -487,7 +487,7 @@ export function SubscriptionCard({
           </div>
         ) : (
           <div>
-            <p className="text-[13px] mb-4" style={{ color: vars.g500 }}>
+            <p className="aio-type-body mb-4" style={{ color: vars.g500 }}>
               {trial.status === "active" ? "Subscribe when you are ready to continue after the trial." : `Subscribe to the ${planLabel} plan.`} {info.includedProjects} Premium project{info.includedProjects === 1 ? "" : "s"} included. Prices exclude VAT - tax is calculated at checkout based on your billing country, and business customers can enter a VAT number there.
             </p>
             <RestartChooser info={info} frequency={frequency} setFrequency={setFrequency} starting={starting} onStart={startCheckout} error={error} />
@@ -540,7 +540,7 @@ function PortalButtons() {
           type="button"
           onClick={openPortal}
           disabled={busy}
-          className="px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-80 disabled:opacity-50"
+          className="aio-button aio-button--outline aio-button--compact rounded-full uppercase tracking-[0.12em]"
           style={{ color: ink, border: `1.5px solid ${vars.g300}`, background: "white" }}
         >
           {busy ? "Opening..." : "Update payment method"}
@@ -549,14 +549,14 @@ function PortalButtons() {
           type="button"
           onClick={openPortal}
           disabled={busy}
-          className="px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-80 disabled:opacity-50"
+          className="aio-button aio-button--outline aio-button--compact rounded-full uppercase tracking-[0.12em]"
           style={{ color: "#991B1B", border: "1.5px solid #FECACA", background: "white" }}
         >
           Cancel subscription
         </button>
-        {error && <span className="text-[13px]" style={{ color: "#991B1B" }}>{error}</span>}
+        {error && <span className="aio-type-supporting" style={{ color: "#991B1B" }}>{error}</span>}
       </div>
-      <p className="text-[11px] mt-2" style={{ color: vars.g400 }}>
+      <p className="aio-type-meta mt-2" style={{ color: vars.g400 }}>
         Both open your secure Stripe billing portal, where you can update your card or cancel at the end of the billing period.
       </p>
     </div>
@@ -595,8 +595,8 @@ function AddProjectCard({ info }: { info: SubscriptionInfo }) {
 
   return (
     <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-       <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Add a project workspace</h2>
-      <p className="text-[13px] mb-4" style={{ color: vars.g500 }}>
+       <h2 className="aio-type-card-title mb-1" style={{ color: ink }}>Add a project workspace</h2>
+      <p className="aio-type-body mb-4" style={{ color: vars.g500 }}>
          Add one independent project workspace for another brand, client, or programme. Billed annually, excl. VAT (added at checkout). Once paid, your next new project uses the tier you choose here. This adds a separate workspace, not extra runtime capacity inside an existing project.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 max-w-2xl">
@@ -611,14 +611,14 @@ function AddProjectCard({ info }: { info: SubscriptionInfo }) {
               background: tier === t ? "#FBE3ED22" : "white",
             }}
           >
-            <span className="text-[13px] font-bold block" style={{ color: ink }}>{TIER_LABELS[t]}</span>
-            <span className="text-[16px] font-bold block" style={{ color: ink }}>{pounds(info.tierPrices[t].yearlyTotal)}/yr</span>
-            <span className="text-[12px]" style={{ color: vars.g500 }}>{info.tierPrices[t].actionsPerMonth} actions/month</span>
+            <span className="aio-type-label block" style={{ color: ink }}>{TIER_LABELS[t]}</span>
+            <span className="aio-type-card-title block" style={{ color: ink }}>{pounds(info.tierPrices[t].yearlyTotal)}/yr</span>
+            <span className="aio-type-meta" style={{ color: vars.g500 }}>{info.tierPrices[t].actionsPerMonth} actions/month</span>
           </button>
         ))}
       </div>
       {info.checkoutAvailable && !info.companyRecordComplete && (
-        <p className="text-[13px] mb-3" style={{ color: "#92400E" }}>
+        <p className="aio-type-supporting mb-3" style={{ color: "#92400E" }}>
           Save your company and billing information before adding another project.
         </p>
       )}
@@ -627,12 +627,12 @@ function AddProjectCard({ info }: { info: SubscriptionInfo }) {
           type="button"
           onClick={buy}
           disabled={busy || !info.checkoutAvailable || !info.companyRecordComplete}
-          className="px-5 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:opacity-90 disabled:opacity-50"
+          className="aio-button aio-button--primary rounded-full uppercase tracking-[0.12em]"
           style={{ background: accent }}
         >
           {busy ? "Starting checkout..." : "Continue to payment"}
         </button>
-        {error && <span className="text-[13px]" style={{ color: "#991B1B" }}>{error}</span>}
+        {error && <span className="aio-type-supporting" style={{ color: "#991B1B" }}>{error}</span>}
       </div>
     </div>
   );
@@ -698,17 +698,17 @@ function ChangeTierCard({ info, onChanged }: { info: SubscriptionInfo; onChanged
 
   return (
     <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-      <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Change a project's tier</h2>
-      <p className="text-[13px] mb-4" style={{ color: vars.g500 }}>
+      <h2 className="aio-type-card-title mb-1" style={{ color: ink }}>Change a project's tier</h2>
+      <p className="aio-type-body mb-4" style={{ color: vars.g500 }}>
         Upgrades apply immediately (the prorated difference is charged to your card). Downgrades take effect at your next renewal.
       </p>
       <div className="grid grid-cols-1 md:grid-cols-12 gap-3 max-w-2xl">
         <div className="md:col-span-6">
-          <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Project</label>
+          <label className="aio-type-eyebrow block mb-1.5" style={{ color: ink }}>Project</label>
           <select
             value={projectId}
             onChange={(e) => { setProjectId(e.target.value); setTier(""); setMessage(null); }}
-            className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+            className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
             style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent, background: "white" }}
           >
             <option value="">Choose a project...</option>
@@ -721,12 +721,12 @@ function ChangeTierCard({ info, onChanged }: { info: SubscriptionInfo; onChanged
           </select>
         </div>
         <div className="md:col-span-6">
-          <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>New tier</label>
+          <label className="aio-type-eyebrow block mb-1.5" style={{ color: ink }}>New tier</label>
           <select
             value={tier}
             onChange={(e) => { setTier(e.target.value as ProjectTier | ""); setMessage(null); }}
             disabled={!selected}
-            className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 disabled:opacity-50"
+            className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2 disabled:opacity-50"
             style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent, background: "white" }}
           >
             <option value="">Choose a tier...</option>
@@ -743,17 +743,17 @@ function ChangeTierCard({ info, onChanged }: { info: SubscriptionInfo; onChanged
         </div>
       </div>
       {selected && !selectedIsAddon && (
-        <p className="text-[12px] mt-2" style={{ color: vars.g500 }}>
+        <p className="aio-type-meta mt-2" style={{ color: vars.g500 }}>
           This project is included in your plan at Premium. Upgrading it adds a paid project tier ({tier !== "" ? `${pounds(info.tierPrices[tier].yearlyTotal)}/yr` : "billed annually"}) on top of your plan.
         </p>
       )}
       {selected && !selectedIsAddon && info.checkoutAvailable && !info.companyRecordComplete && (
-        <p className="text-[12px] mt-2" style={{ color: "#92400E" }}>
+        <p className="aio-type-meta mt-2" style={{ color: "#92400E" }}>
           Save your company and billing information before continuing to payment.
         </p>
       )}
       {selected && selectedIsAddon && tier !== "" && !isUpgrade && (
-        <p className="text-[12px] mt-2" style={{ color: vars.g500 }}>
+        <p className="aio-type-meta mt-2" style={{ color: vars.g500 }}>
           This is a downgrade - the lower price and allowance apply from your next renewal.
         </p>
       )}
@@ -762,13 +762,13 @@ function ChangeTierCard({ info, onChanged }: { info: SubscriptionInfo; onChanged
           type="button"
           onClick={submit}
           disabled={busy || !selected || tier === "" || (!selectedIsAddon && (!info.checkoutAvailable || !info.companyRecordComplete))}
-          className="px-5 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:opacity-90 disabled:opacity-50"
+          className="aio-button aio-button--primary rounded-full uppercase tracking-[0.12em]"
           style={{ background: accent }}
         >
           {busy ? "Working..." : selectedIsAddon ? "Change tier" : "Continue to payment"}
         </button>
         {message && (
-          <span className="text-[13px]" style={{ color: message.kind === "ok" ? "#166534" : "#991B1B" }}>{message.text}</span>
+          <span className="aio-type-supporting" style={{ color: message.kind === "ok" ? "#166534" : "#991B1B" }}>{message.text}</span>
         )}
       </div>
     </div>
@@ -799,22 +799,22 @@ function InvoicesCard() {
 
   return (
     <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-      <h2 className="text-[16px] font-bold mb-3" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Invoices</h2>
+      <h2 className="aio-type-card-title mb-3" style={{ color: ink }}>Invoices</h2>
       <div className="divide-y" style={{ borderColor: vars.g100 }}>
         {invoices.map((inv) => (
           <div key={inv.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
             <div className="min-w-0">
-              <span className="text-[13px] font-semibold" style={{ color: ink }}>
+              <span className="aio-type-label" style={{ color: ink }}>
                 {inv.number ?? inv.id}
               </span>
-              <span className="text-[12px] ml-3" style={{ color: vars.g500 }}>
+              <span className="aio-type-meta ml-3" style={{ color: vars.g500 }}>
                 {new Date(inv.created).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
               </span>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-[13px] font-semibold" style={{ color: ink }}>{pounds(inv.amountDuePence)}</span>
+              <span className="aio-type-label" style={{ color: ink }}>{pounds(inv.amountDuePence)}</span>
               {inv.status && (
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{
+                <span className="aio-type-meta font-bold px-2 py-0.5 rounded-full" style={{
                   color: inv.status === "paid" ? "#166534" : vars.g600,
                   background: inv.status === "paid" ? "#DCFCE7" : vars.g100,
                 }}>
@@ -826,7 +826,7 @@ function InvoicesCard() {
                   href={inv.invoicePdf ?? inv.hostedInvoiceUrl ?? "#"}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[12px] font-bold underline"
+                  className="aio-button aio-button--text aio-button--compact underline"
                   style={{ color: accent }}
                 >
                   PDF
@@ -881,18 +881,18 @@ function RestartChooser({
               background: frequency === opt.key ? "#FBE3ED22" : "white",
             }}
           >
-            <span className="text-[16px] font-bold block" style={{ color: ink }}>{opt.title}</span>
-            <span className="text-[12px]" style={{ color: vars.g500 }}>{opt.detail}</span>
+            <span className="aio-type-card-title block" style={{ color: ink }}>{opt.title}</span>
+            <span className="aio-type-meta" style={{ color: vars.g500 }}>{opt.detail}</span>
           </button>
         ))}
       </div>
       {!info.checkoutAvailable && (
-        <p className="text-[13px] mb-3" style={{ color: vars.g500 }}>
+        <p className="aio-type-supporting mb-3" style={{ color: vars.g500 }}>
           Online checkout isn't available right now - contact info@aiofusion.ai to subscribe.
         </p>
       )}
       {info.checkoutAvailable && !info.companyRecordComplete && (
-        <p className="text-[13px] mb-3 px-3 py-2 rounded-lg" style={{ color: "#92400E", background: "#FEF3C7" }}>
+        <p className="aio-type-supporting mb-3 px-3 py-2 rounded-lg" style={{ color: "#92400E", background: "#FEF3C7" }}>
           Complete and save your company and billing information below before continuing to payment.
         </p>
       )}
@@ -901,14 +901,14 @@ function RestartChooser({
           type="button"
           onClick={onStart}
           disabled={starting || !info.checkoutAvailable || !info.companyRecordComplete}
-          className="px-5 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:opacity-90 disabled:opacity-50"
+          className="aio-button aio-button--primary rounded-full uppercase tracking-[0.12em]"
           style={{ background: accent }}
         >
           {starting ? "Starting checkout..." : "Continue to payment"}
         </button>
-        {error && <span className="text-[13px]" style={{ color: "#991B1B" }}>{error}</span>}
+        {error && <span className="aio-type-supporting" style={{ color: "#991B1B" }}>{error}</span>}
       </div>
-      <p className="text-[11px] mt-3" style={{ color: vars.g400 }}>
+      <p className="aio-type-meta mt-3" style={{ color: vars.g400 }}>
         Payments are processed securely by Stripe. During Beta, payments run in test mode.
       </p>
     </div>

@@ -40,12 +40,12 @@ function ReleaseGatewayPage() {
   return (
     <div className="p-6 sm:p-10 max-w-6xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-3xl sm:text-4xl mb-2" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Release Gateway</h1>
-        <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>Send approved content out through connected media tools or download it for manual distribution, all from one controlled step. A clean, consistent release process gets your content live properly so it starts earning AI citations sooner.</p>
+        <h1 className="aio-type-page-title mb-2" style={{ color: "#ffffff" }}>Release Gateway</h1>
+        <p className="aio-type-body" style={{ color: "rgba(255,255,255,0.85)" }}>Send approved content out through connected media tools or download it for manual distribution, all from one controlled step. A clean, consistent release process gets your content live properly so it starts earning AI citations sooner.</p>
       </div>
 
       <section className="mb-10">
-        <h2 className="text-[18px] font-semibold mb-4" style={{ color: vars.navy }}>Approved & ready to release</h2>
+        <h2 className="aio-type-section-title mb-4" style={{ color: vars.navy }}>Approved & ready to release</h2>
         {finals.length === 0 ? (
           <div className="bg-white border rounded-2xl p-10 text-center" style={{ borderColor: vars.g200 }}>
             <Send size={28} color={vars.g400} className="mx-auto mb-3" />
@@ -58,7 +58,7 @@ function ReleaseGatewayPage() {
               <div key={item.id} className="bg-white border rounded-xl p-5" style={{ borderColor: vars.g200 }}>
                 <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
                   <div>
-                    <h3 className="text-[15px] font-semibold" style={{ color: vars.navy }}>{item.title}</h3>
+                    <h3 className="aio-type-card-title" style={{ color: vars.navy }}>{item.title}</h3>
                     <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g500 }}>{item.contentType}{item.spokesperson ? ` · ${item.spokesperson}` : ""}</p>
                     {item.releasedAt && (
                       <p className="text-[11px] font-semibold mt-1" style={{ color: vars.green }}>Released via {item.releaseChannel} on {new Date(item.releasedAt).toLocaleDateString()}</p>
@@ -73,7 +73,7 @@ function ReleaseGatewayPage() {
                         a.href = url; a.download = `${item.title}.txt`; a.click();
                         URL.revokeObjectURL(url);
                       }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border bg-white"
+                      className="aio-button aio-button--outline aio-button--compact"
                       style={{ borderColor: vars.g200, color: vars.navy }}
                     >
                       <Download size={12} /> Download
@@ -81,7 +81,7 @@ function ReleaseGatewayPage() {
                     <a
                       href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent("https://aiofusion.ai")}&summary=${encodeURIComponent(item.title)}`}
                       target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white"
+                      className="aio-button aio-button--primary aio-button--compact"
                       style={{ background: "#0A66C2" }}
                     >
                       <Send size={12} /> LinkedIn
@@ -95,8 +95,8 @@ function ReleaseGatewayPage() {
                       <button
                         key={w.name}
                         onClick={() => handleRelease(item, w.name)}
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-semibold text-white hover:brightness-110 transition-all"
-                        style={{ background: w.color }}
+                        className="aio-button aio-button--compact hover:brightness-110 transition-all"
+                        style={{ background: w.color, color: "white" }}
                         title={w.desc}
                       >
                         <Radio size={11} /> {w.name}
@@ -111,7 +111,7 @@ function ReleaseGatewayPage() {
       </section>
 
       <section>
-        <h2 className="text-[18px] font-semibold mb-4" style={{ color: vars.navy }}>Wire connectors</h2>
+        <h2 className="aio-type-section-title mb-4" style={{ color: vars.navy }}>Wire connectors</h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {wires.map((w) => (
             <div key={w.name} className="bg-white border rounded-xl p-4" style={{ borderColor: vars.g200 }}>

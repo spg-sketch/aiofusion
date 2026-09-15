@@ -507,16 +507,16 @@ OUTPUT INSTRUCTIONS:
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-3">
               <Wand2 size={24} color="#ffffff" />
-              <h1 className="text-3xl sm:text-4xl tracking-tight flex items-center" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
+               <h1 className="aio-type-page-title flex items-center" style={{ color: "#ffffff" }}>
                 Content Optimiser & Editor
                 <span className="ml-3"><InfoTip text="Rewrites your content to be more citation-worthy for AI models - clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} /></span>
               </h1>
             </div>
-            <p className="text-[16px] font-light leading-relaxed max-w-4xl" style={{ color: "rgba(255,255,255,0.95)" }}>
+            <p className="aio-type-body max-w-4xl" style={{ color: "rgba(255,255,255,0.95)" }}>
               Paste your own human-written draft below - a press release, article, case study or any other copy - then click Optimise. The tool rewrites it with sharper structure, stronger authority signals and your key messages woven in, so AI models are more likely to cite it. Project Data is used as a reference brief, not as the source.
             </p>
           </div>
-          <button onClick={() => setShowRetrieve(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[14px] font-semibold text-white hover:brightness-110 transition-all shadow-sm whitespace-nowrap" style={{ background: vars.teal }}>
+           <button onClick={() => setShowRetrieve(true)} className="aio-button aio-button--secondary hover:brightness-110 transition-all shadow-sm whitespace-nowrap" style={{ background: vars.teal }}>
             <Archive size={16} /> Retrieve content draft
           </button>
         </div>
@@ -778,7 +778,7 @@ OUTPUT INSTRUCTIONS:
             <button
               onClick={() => setShowOptimiseBriefModal(true)}
               disabled={optimising}
-              className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
+              className="aio-button aio-button--primary min-w-[170px] uppercase tracking-[0.1em] transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
               style={{ background: "#C8497A" }}
             >
               {optimising ? <><Loader2 size={14} className="animate-spin" /> Optimising…</> : <><Sparkles size={14} /> Optimise</>}
@@ -786,7 +786,7 @@ OUTPUT INSTRUCTIONS:
             {optimised && (
               <button
                 onClick={rejectOptimised}
-                className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg hover:brightness-110 active:scale-95"
+                className="aio-button aio-button--destructive min-w-[170px] uppercase tracking-[0.1em] transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg hover:brightness-110 active:scale-95"
                 style={{ background: "#B03D33" }}
               >
                 <X size={14} /> Reject Optimised
@@ -795,7 +795,7 @@ OUTPUT INSTRUCTIONS:
             <button
               onClick={downloadDraft}
               disabled={!hasAnyContent}
-              className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
+              className="aio-button aio-button--outline min-w-[170px] uppercase tracking-[0.1em] transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
               style={{ borderColor: vars.navy, color: vars.navy, background: "#ffffff" }}
               title="Download the current draft as a Word document"
             >
@@ -805,7 +805,7 @@ OUTPUT INSTRUCTIONS:
               onClick={() => setShowDownloadNotesModal(true)}
               disabled={!hasAnyContent}
               title={!hasAnyContent ? "Add some content first to generate Optimised Notes" : "Download the optimised piece with a change log"}
-              className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
+               className="aio-button aio-button--outline min-w-[170px] uppercase tracking-[0.1em] transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
               style={{ borderColor: vars.navy, color: vars.navy, background: "#ffffff" }}
             >
               <FileText size={14} /> Optimised Notes
@@ -813,7 +813,7 @@ OUTPUT INSTRUCTIONS:
             <button
               onClick={shareDraft}
               disabled={!hasAnyContent}
-              className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
+               className="aio-button aio-button--outline min-w-[170px] uppercase tracking-[0.1em] transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
               style={{ borderColor: vars.navy, color: vars.navy, background: "#ffffff" }}
               title="Open your email client with the current draft ready to send for review"
             >
@@ -825,7 +825,7 @@ OUTPUT INSTRUCTIONS:
             <button
               onClick={() => archiveItem(contentStatus === "Final" ? "Final" : "Draft")}
               disabled={!hasAnyContent}
-              className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
+               className="aio-button aio-button--outline min-w-[170px] uppercase tracking-[0.1em] transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
               style={hasAnyContent ? { borderColor: "#C8497A", color: "#ffffff", background: "#C8497A" } : { borderColor: "#C8497A", color: "#C8497A", background: "#ffffff" }}
               title="Sign off this piece and save it to the Content Library"
             >
@@ -835,7 +835,7 @@ OUTPUT INSTRUCTIONS:
               <button
                 onClick={sendToMediaResearch}
                 disabled={!hasAnyContent}
-                className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
+                 className="aio-button aio-button--outline min-w-[170px] uppercase tracking-[0.1em] transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
                 style={hasAnyContent ? { borderColor: "#84AB7D", color: "#ffffff", background: "#84AB7D" } : { borderColor: "#84AB7D", color: "#84AB7D", background: "#ffffff" }}
                 title="Save the draft and jump to Media Research to find target publications and journalists"
               >
@@ -845,7 +845,7 @@ OUTPUT INSTRUCTIONS:
             <button
               onClick={pushToPlanner}
               disabled={!hasAnyContent}
-              className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
+               className="aio-button aio-button--outline min-w-[170px] uppercase tracking-[0.1em] transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
               style={hasAnyContent ? { borderColor: "#D4922A", color: "#ffffff", background: "#D4922A" } : { borderColor: "#D4922A", color: "#D4922A", background: "#ffffff" }}
               title="Push this piece to the Comms Planner"
             >
@@ -883,7 +883,7 @@ OUTPUT INSTRUCTIONS:
             <div className="rounded-xl border overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
               <div className="px-5 py-3 border-b flex items-center gap-2" style={{ background: vars.g50, borderColor: vars.g200 }}>
                 <MessageSquare size={14} color="#2896b9" />
-                <h2 className="text-sm font-semibold" style={{ color: vars.navy }}>Change log</h2>
+                <h2 className="aio-type-card-title" style={{ color: vars.navy }}>Change log</h2>
                 <span className="ml-auto text-[11px] font-light" style={{ color: vars.g500 }}>{promptVariant === "pitch" ? "Prompt 2.2" : promptVariant === "prompt1" ? "Prompt 1.1" : "Prompt 2.1"} · {contentType}</span>
               </div>
               <div className="p-5 space-y-2">
@@ -906,7 +906,7 @@ OUTPUT INSTRUCTIONS:
               <div className="px-5 py-3 border-b flex items-center justify-between" style={{ background: vars.g50, borderColor: vars.g200 }}>
                 <div className="flex items-center gap-2">
                   <Sparkles size={16} color="#2896b9" />
-                  <h2 className="text-sm font-semibold" style={{ color: vars.navy }}>Tracked Changes</h2>
+                  <h2 className="aio-type-card-title" style={{ color: vars.navy }}>Tracked Changes</h2>
                 </div>
                 <span className="text-xs" style={{ color: vars.g400 }}>{trackedChanges.length} optimisations applied</span>
               </div>
@@ -950,7 +950,7 @@ OUTPUT INSTRUCTIONS:
             {/* Semantic Phrase Usage (renamed from Guide) */}
             <div className="rounded-xl border overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
               <div className="px-5 py-3 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}>
-                <h2 className="text-sm font-semibold" style={{ color: vars.navy }}>Semantic Phrase Usage</h2>
+                <h2 className="aio-type-card-title" style={{ color: vars.navy }}>Semantic Phrase Usage</h2>
                 <p className="text-xs mt-0.5" style={{ color: vars.g400 }}>Key phrases LLMs are most likely to extract and cite from this optimised content</p>
               </div>
               <div className="p-5 space-y-2">
@@ -981,7 +981,7 @@ OUTPUT INSTRUCTIONS:
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowOptimiseBriefModal(false)}>
             <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-                <h2 className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+                <h2 className="aio-type-card-title flex items-center gap-2" style={{ color: vars.navy }}>
                   <Sparkles size={16} color={vars.coral} /> Optimise - LLM brief preview
                 </h2>
                 <button onClick={() => setShowOptimiseBriefModal(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
@@ -998,8 +998,8 @@ OUTPUT INSTRUCTIONS:
                 </div>
               </div>
               <div className="px-6 py-4 border-t flex items-center justify-end gap-2" style={{ borderColor: vars.g200 }}>
-                <button onClick={() => setShowOptimiseBriefModal(false)} className="px-4 py-2 rounded-lg text-[13px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>Cancel</button>
-                <button onClick={runOptimise} disabled={optimising} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white disabled:opacity-60" style={{ background: vars.coral }}>{optimising ? <><Loader2 size={13} className="animate-spin" /> Optimising…</> : <><Sparkles size={13} /> Run optimisation</>}</button>
+                <button onClick={() => setShowOptimiseBriefModal(false)} className="aio-button aio-button--outline aio-button--compact" style={{ borderColor: vars.g200, color: vars.navy, background: "white" }}>Cancel</button>
+                <button onClick={runOptimise} disabled={optimising} className="aio-button aio-button--primary aio-button--compact disabled:opacity-60" style={{ background: vars.coral }}>{optimising ? <><Loader2 className="animate-spin" /> Optimising…</> : <><Sparkles /> Run optimisation</>}</button>
               </div>
             </div>
           </div>
@@ -1010,7 +1010,7 @@ OUTPUT INSTRUCTIONS:
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowRetrieve(false)}>
             <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-                <h2 className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+                <h2 className="aio-type-card-title flex items-center gap-2" style={{ color: vars.navy }}>
                   <Archive size={16} color={vars.accent} /> Retrieve content draft
                 </h2>
                 <button onClick={() => setShowRetrieve(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
@@ -1057,7 +1057,7 @@ OUTPUT INSTRUCTIONS:
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowDownloadNotesModal(false)}>
             <div className="bg-white rounded-2xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
               <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-                <h2 className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+                <h2 className="aio-type-card-title flex items-center gap-2" style={{ color: vars.navy }}>
                   <FileText size={16} color="#C8497A" /> Download optimised notes
                 </h2>
                 <button onClick={() => setShowDownloadNotesModal(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
@@ -1068,12 +1068,12 @@ OUTPUT INSTRUCTIONS:
                 </p>
                 <p className="text-[11px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: vars.g500 }}>Choose a format</p>
                 <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => downloadOptimisedNotes("word")} className="flex flex-col items-center justify-center gap-2 px-4 py-5 rounded-xl border text-[13px] font-semibold transition-colors hover:bg-gray-50" style={{ borderColor: vars.g200, color: vars.navy }}>
+                   <button onClick={() => downloadOptimisedNotes("word")} className="aio-button aio-button--outline flex flex-col items-center justify-center gap-2 px-4 py-5 rounded-xl text-[13px] font-semibold transition-colors hover:bg-gray-50" style={{ borderColor: vars.g200, color: vars.navy }}>
                     <FileText size={22} color={vars.accent} />
                     Word document
                     <span className="text-[10px] font-light" style={{ color: vars.g400 }}>.doc - opens in Word</span>
                   </button>
-                  <button onClick={() => downloadOptimisedNotes("pdf")} className="flex flex-col items-center justify-center gap-2 px-4 py-5 rounded-xl border text-[13px] font-semibold transition-colors hover:bg-gray-50" style={{ borderColor: vars.g200, color: vars.navy }}>
+                   <button onClick={() => downloadOptimisedNotes("pdf")} className="aio-button aio-button--outline flex flex-col items-center justify-center gap-2 px-4 py-5 rounded-xl text-[13px] font-semibold transition-colors hover:bg-gray-50" style={{ borderColor: vars.g200, color: vars.navy }}>
                     <Download size={22} color={vars.accent} />
                     Print / PDF
                     <span className="text-[10px] font-light" style={{ color: vars.g400 }}>opens print dialog</span>

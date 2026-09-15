@@ -739,18 +739,18 @@ export function InsightsAdminPage({ onBack }: { onBack: () => void }) {
       {/* Top Navbar */}
       <header className="h-16 border-b border-gray-200 bg-white flex items-center justify-between px-6 shrink-0 shadow-sm z-30 relative">
         <div className="flex items-center gap-6">
-          <button onClick={onBack} className="text-gray-400 hover:text-[#0a1628] bg-gray-50 hover:bg-gray-100 p-2 rounded-lg transition-colors">
+          <button onClick={onBack} aria-label="Back to admin" className="aio-button aio-button--outline aio-button--compact">
             <ArrowLeft size={20}/>
           </button>
           <div className="flex flex-col">
-            <h1 className="text-lg font-bold text-[#0a1628] leading-tight">Insights Publication</h1>
-            <span className="text-xs font-semibold text-gray-400 tracking-wider">EDITORIAL WORKSPACE</span>
+            <h1 className="aio-type-card-title">Insights Publication</h1>
+            <span className="aio-type-eyebrow text-gray-400">Editorial workspace</span>
           </div>
         </div>
         <div className="flex items-center gap-4">
           <button 
             onClick={() => setIsGlobalMediaOpen(true)} 
-            className="text-sm font-bold text-[#0a1628] flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 shadow-sm"
+            className="aio-button aio-button--outline"
           >
             <ImageIcon size={16} className="text-[#C8497A]"/> Media Library
           </button>
@@ -761,7 +761,7 @@ export function InsightsAdminPage({ onBack }: { onBack: () => void }) {
         {/* Sidebar: Story List */}
         <aside className="w-[340px] border-r border-gray-200 bg-[#f8fafc] flex flex-col shrink-0 z-20">
           <div className="p-5 border-b border-gray-200 bg-white flex flex-col gap-4 shrink-0 shadow-sm relative z-10">
-            <button onClick={handleNewStory} className="w-full bg-[#0a1628] text-white rounded-lg py-2.5 text-sm font-bold flex items-center justify-center gap-2 hover:bg-[#152744] transition-colors shadow-md hover:shadow-lg">
+            <button onClick={handleNewStory} className="aio-button aio-button--secondary w-full">
               <Plus size={18}/> Write New Story
             </button>
             <div className="relative group">

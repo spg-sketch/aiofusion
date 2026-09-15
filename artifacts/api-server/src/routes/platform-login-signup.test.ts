@@ -50,6 +50,8 @@ vi.mock("@workspace/db", async () => {
       billing_frequency varchar(16),
       subscription_status varchar(16),
       current_period_end timestamptz,
+      cancel_at_period_end boolean NOT NULL DEFAULT false,
+      renewal_reminder_period_end timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS platform_memberships (

@@ -159,17 +159,17 @@ function DashboardPage({
           <Sparkles size={12} color={accentPink} />
           <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accentPink }}>Authority Dashboard</span>
         </div>
-        <h1 className="text-3xl sm:text-4xl tracking-tight leading-[1.1]" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
+        <h1 className="aio-type-page-title" style={{ color: "#ffffff" }}>
           {activeClient.name}
         </h1>
-        <p className="text-[15px] font-light mt-2" style={{ color: "rgba(255,255,255,0.85)" }}>
+        <p className="aio-type-body mt-2" style={{ color: "rgba(255,255,255,0.85)" }}>
           Your AI authority performance at a glance.
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6">
         <div className="group flex flex-col min-h-[220px] rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
-          <h3 className="text-[13px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.navy }}>
+          <h3 className="aio-type-card-title mb-4 flex items-center" style={{ color: vars.navy }}>
             Project Set-Up
             <InfoTip text="The onboarding questionnaire that captures the business profile, messaging, spokespeople and target media. Once accepted it becomes the signed-off Project Data brief used to optimise every piece of content." />
           </h3>
@@ -195,13 +195,13 @@ function DashboardPage({
               </div>
             ))}
           </div>
-          <button onClick={() => onNavigate("intake")} className="mt-auto pt-4 text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+          <button onClick={() => onNavigate("intake")} className="aio-button aio-button--text aio-button--compact mt-auto hover:underline" style={{ color: vars.accent }}>
             {intakePct < 100 ? "Continue Project Set-Up" : "View Project Set-Up"} <ArrowRight size={12} />
           </button>
         </div>
 
         <div className="group flex flex-col min-h-[220px] rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
-          <h3 className="text-[13px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.navy }}>
+          <h3 className="aio-type-card-title mb-4 flex items-center" style={{ color: vars.navy }}>
             Earned Media Visibility Audit
             <InfoTip text="Shows whether AI models mention your brand when asked about your sector. We sample real questions across ChatGPT and Claude." />
           </h3>
@@ -238,7 +238,7 @@ function DashboardPage({
               </div>
             </>
           )}
-          <button onClick={() => onNavigate("llm-check")} className="mt-auto text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+          <button onClick={() => onNavigate("llm-check")} className="aio-button aio-button--text aio-button--compact mt-auto hover:underline" style={{ color: vars.accent }}>
             {earnedAuditLock.locked
               ? <><Lock size={11} />View Audit (locked)</>
               : earnedScore === null ? "Run Earned Media Visibility Audit" : "View / Re-run Audit"}
@@ -247,7 +247,7 @@ function DashboardPage({
         </div>
 
         <div className="group flex flex-col min-h-[220px] rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
-          <h3 className="text-[13px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.navy }}>
+          <h3 className="aio-type-card-title mb-4 flex items-center" style={{ color: vars.navy }}>
             Website Visibility Audit
             <InfoTip text="Score for how well your website is structured for AI citation - schema, crawlability, entity clarity, internal authority graph." />
           </h3>
@@ -284,7 +284,7 @@ function DashboardPage({
               </div>
             </>
           )}
-          <button onClick={() => onNavigate("diagnostic")} className="mt-auto text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+          <button onClick={() => onNavigate("diagnostic")} className="aio-button aio-button--text aio-button--compact mt-auto hover:underline" style={{ color: vars.accent }}>
             {websiteAuditLock.locked
               ? <><Lock size={11} />View Audit (locked)</>
               : websiteScore === null ? "Run Website Visibility Audit" : "View / Re-run Audit"}
@@ -302,7 +302,7 @@ function DashboardPage({
           { label: "Final / Ready", value: archiveFinal, icon: CheckCircle2, color: vars.green, tip: "Content Library items marked Final - approved and ready to send.", nav: "archive", cta: "Open Content Library" },
         ].map((s) => (
           <div key={s.label} className="group flex flex-col min-h-[220px] rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
-            <h3 className="text-[13px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.navy }}>
+            <h3 className="aio-type-card-title mb-4 flex items-center" style={{ color: vars.navy }}>
               {s.label}
               <InfoTip text={s.tip} />
             </h3>
@@ -312,7 +312,7 @@ function DashboardPage({
               </div>
               <p className="text-4xl font-bold leading-none tracking-tight" style={{ color: vars.navy }}>{s.value}</p>
             </div>
-            <button onClick={() => onNavigate(s.nav)} className="mt-auto text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+            <button onClick={() => onNavigate(s.nav)} className="aio-button aio-button--text aio-button--compact mt-auto hover:underline" style={{ color: vars.accent }}>
               {s.cta} <ArrowRight size={12} />
             </button>
           </div>

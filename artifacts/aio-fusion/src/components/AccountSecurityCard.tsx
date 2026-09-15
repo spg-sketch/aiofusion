@@ -165,26 +165,26 @@ export function AccountSecurityCard({
 
   return (
     <section aria-labelledby="sign-in-security-heading" className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-      <h2 id="sign-in-security-heading" className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Sign-in &amp; security</h2>
+      <h2 id="sign-in-security-heading" className="aio-type-section-title mb-4" style={{ color: ink }}>Sign-in &amp; security</h2>
 
       {/* ACTIVE SIGN-IN METHODS */}
       {methodsKnown && activeMethods.length > 0 && (
         <div className="mb-5">
-          <p className="text-[12px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: vars.g500 }}>
+          <p className="aio-type-eyebrow mb-2" style={{ color: vars.g500 }}>
             Active sign-in methods
           </p>
           <div className="flex flex-wrap gap-2">
             {activeMethods.map((m) => (
               <span
                 key={m}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold"
+                className="aio-type-label inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full"
                 style={{ background: vars.g50, border: `1px solid ${vars.g200}`, color: ink }}
               >
                 <CheckCircle2 size={13} style={{ color: "#1B7A3E" }} /> {m}
               </span>
             ))}
           </div>
-          <p className="text-[12px] font-light mt-2 leading-[1.6]" style={{ color: vars.g600 }}>
+          <p className="aio-type-supporting mt-2" style={{ color: vars.g600 }}>
             These are the ways you can currently sign in to this account.
           </p>
         </div>
@@ -201,7 +201,7 @@ export function AccountSecurityCard({
           type="button"
           aria-expanded={showSessions}
           aria-controls="account-login-sessions"
-          className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity"
+          className="aio-button aio-button--text aio-button--compact"
           style={{ color: ink }}
         >
           <MonitorSmartphone size={15} />
@@ -211,25 +211,25 @@ export function AccountSecurityCard({
         {showSessions && (
           <div id="account-login-sessions" className="mt-5">
             {sessionsLoading && (
-              <div className="flex items-center gap-2 text-[14px]" role="status" aria-live="polite" style={{ color: vars.g400 }}>
+                <div className="aio-type-body flex items-center gap-2" role="status" aria-live="polite" style={{ color: vars.g400 }}>
                 <Loader2 size={14} className="animate-spin" /> Loading sessions…
               </div>
             )}
             {sessionsError && (
-              <p className="text-[13px] font-medium" role="alert" aria-live="assertive" style={{ color: vars.red }}>{sessionsError}</p>
+              <p className="aio-type-supporting font-medium" role="alert" aria-live="assertive" style={{ color: vars.red }}>{sessionsError}</p>
             )}
             {!sessionsLoading && mySessions !== null && (
               mySessions.length === 0 ? (
-                <p className="text-[13px] font-light" style={{ color: vars.g400 }}>No active sessions found.</p>
+                <p className="aio-type-supporting" style={{ color: vars.g400 }}>No active sessions found.</p>
               ) : (
                 <div className="overflow-x-auto rounded-xl border" style={{ borderColor: vars.g200 }}>
-                  <table className="w-full text-left text-[13px]" style={{ borderCollapse: "collapse" }}>
+                  <table className="w-full text-left aio-type-supporting" style={{ borderCollapse: "collapse" }}>
                     <thead>
                       <tr style={{ background: vars.g50, borderBottom: `1px solid ${vars.g200}` }}>
-                        <th className="px-4 py-3 font-bold uppercase tracking-[0.12em] text-[11px]" style={{ color: vars.g500 }}>Started</th>
-                        <th className="px-4 py-3 font-bold uppercase tracking-[0.12em] text-[11px]" style={{ color: vars.g500 }}>Expires</th>
-                        <th className="px-4 py-3 font-bold uppercase tracking-[0.12em] text-[11px]" style={{ color: vars.g500 }}>IP</th>
-                        <th className="px-4 py-3 font-bold uppercase tracking-[0.12em] text-[11px]" style={{ color: vars.g500 }}></th>
+                        <th className="aio-type-eyebrow px-4 py-3" style={{ color: vars.g500 }}>Started</th>
+                        <th className="aio-type-eyebrow px-4 py-3" style={{ color: vars.g500 }}>Expires</th>
+                        <th className="aio-type-eyebrow px-4 py-3" style={{ color: vars.g500 }}>IP</th>
+                        <th className="aio-type-eyebrow px-4 py-3" style={{ color: vars.g500 }}></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -240,15 +240,15 @@ export function AccountSecurityCard({
                             {" "}
                             {new Date(s.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                             {s.isCurrent && (
-                              <span className="ml-3 inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-[0.14em]" style={{ background: "rgba(34,197,94,0.1)", color: vars.green }}>
+                              <span className="aio-type-meta ml-3 inline-flex items-center px-2 py-0.5 rounded-md font-bold uppercase tracking-[0.14em]" style={{ background: "rgba(34,197,94,0.1)", color: vars.green }}>
                                 This session
                               </span>
                             )}
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap font-mono text-[12px]" style={{ color: vars.g500 }}>
+                          <td className="aio-type-meta px-4 py-3 whitespace-nowrap font-mono" style={{ color: vars.g500 }}>
                             {new Date(s.expiresAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap font-mono text-[12px]" style={{ color: vars.g500 }}>
+                          <td className="aio-type-meta px-4 py-3 whitespace-nowrap font-mono" style={{ color: vars.g500 }}>
                             {s.ipHint ?? "-"}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
@@ -256,7 +256,7 @@ export function AccountSecurityCard({
                               <button
                                 onClick={() => handleRevokeSession(s.sid)}
                                 disabled={revokingSession === s.sid}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-[0.12em] transition-all hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                                 className="aio-button aio-button--outline aio-button--compact"
                                 style={{ color: vars.g500, border: `1.5px solid ${vars.g200}` }}
                               >
                                 {revokingSession === s.sid ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
@@ -288,7 +288,7 @@ export function AccountSecurityCard({
               type="button"
               aria-expanded={showChangePassword}
               aria-controls="set-password-panel"
-              className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity"
+              className="aio-button aio-button--text aio-button--compact"
               style={{ color: ink }}
             >
               <KeyRound size={15} />
@@ -299,26 +299,26 @@ export function AccountSecurityCard({
                 {setPasswordSent ? (
                   <div className="flex items-start gap-3" role="status" aria-live="polite" style={{ color: "#1B7A3E" }}>
                     <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
-                    <p className="text-[14px] font-medium leading-[1.6]">
+                    <p className="aio-type-body font-medium">
                       Check your email - we've sent you a link to set your password.
                       The link expires in 1 hour and can only be used once.
                     </p>
                   </div>
                 ) : (
                   <>
-                    <p className="text-[13px] font-light leading-[1.7] mb-4" style={{ color: vars.g600 }}>
+                    <p className="aio-type-body mb-4" style={{ color: vars.g600 }}>
                       Your account currently uses Google or Microsoft sign-in only - no password is set.
                       Click below and we'll email you a one-time link to choose a password.
                       Once set, you can sign in with your email and password as well.
                     </p>
                     {setPasswordError && (
-                      <p className="mb-3 text-[13px] font-medium" role="alert" aria-live="assertive" style={{ color: vars.red }}>{setPasswordError}</p>
+                      <p className="aio-type-supporting mb-3 font-medium" role="alert" aria-live="assertive" style={{ color: vars.red }}>{setPasswordError}</p>
                     )}
                     <button
                       type="button"
                       onClick={handleRequestSetPassword}
                       disabled={setPasswordLoading}
-                      className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90 disabled:opacity-50"
+                      className="aio-button aio-button--primary"
                       style={{ background: accent }}
                     >
                       {setPasswordLoading ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
@@ -344,7 +344,7 @@ export function AccountSecurityCard({
               type="button"
               aria-expanded={showChangePassword}
               aria-controls="change-password-panel"
-              className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity"
+              className="aio-button aio-button--text aio-button--compact"
               style={{ color: ink }}
             >
               <KeyRound size={15} />
@@ -372,13 +372,13 @@ export function AccountSecurityCard({
                   </div>
                 ) : (
                   <>
-                    <p className="text-[13px] font-light leading-[1.7] mb-4" style={{ color: vars.g600 }}>
+                    <p className="aio-type-body mb-4" style={{ color: vars.g600 }}>
                       Enter your current password, then choose a new one (at least 8 characters).
                       You will stay signed in here, but every other device will be signed out.
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        <label htmlFor="current-password" className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: vars.g500 }}>Current password</label>
+                        <label htmlFor="current-password" className="aio-type-eyebrow block mb-1.5" style={{ color: vars.g500 }}>Current password</label>
                         <input
                           id="current-password"
                           type="password"
@@ -386,12 +386,12 @@ export function AccountSecurityCard({
                           autoComplete="current-password"
                           value={changeCurrentPassword}
                           onChange={(e) => setChangeCurrentPassword(e.target.value)}
-                          className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none"
+                          className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none"
                           style={{ borderColor: vars.g200, background: "white", color: ink }}
                         />
                       </div>
                       <div>
-                        <label htmlFor="new-password" className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: vars.g500 }}>New password</label>
+                        <label htmlFor="new-password" className="aio-type-eyebrow block mb-1.5" style={{ color: vars.g500 }}>New password</label>
                         <input
                           id="new-password"
                           type="password"
@@ -399,12 +399,12 @@ export function AccountSecurityCard({
                           autoComplete="new-password"
                           value={changeNewPassword1}
                           onChange={(e) => setChangeNewPassword1(e.target.value)}
-                          className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none"
+                          className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none"
                           style={{ borderColor: vars.g200, background: "white", color: ink }}
                         />
                       </div>
                       <div>
-                        <label htmlFor="confirm-new-password" className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: vars.g500 }}>Confirm new password</label>
+                        <label htmlFor="confirm-new-password" className="aio-type-eyebrow block mb-1.5" style={{ color: vars.g500 }}>Confirm new password</label>
                         <input
                           id="confirm-new-password"
                           type="password"
@@ -412,18 +412,18 @@ export function AccountSecurityCard({
                           autoComplete="new-password"
                           value={changeNewPassword2}
                           onChange={(e) => setChangeNewPassword2(e.target.value)}
-                          className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none"
+                          className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none"
                           style={{ borderColor: vars.g200, background: "white", color: ink }}
                         />
                       </div>
                     </div>
                     {changePasswordError && (
-                      <p className="mt-3 text-[13px] font-medium" role="alert" aria-live="assertive" style={{ color: vars.red }}>{changePasswordError}</p>
+                    <p className="aio-type-supporting mt-3 font-medium" role="alert" aria-live="assertive" style={{ color: vars.red }}>{changePasswordError}</p>
                     )}
                     <button
                       type="submit"
                       disabled={changePasswordLoading}
-                      className="mt-4 flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90 disabled:opacity-50"
+                      className="aio-button aio-button--primary mt-4"
                       style={{ background: accent }}
                     >
                       {changePasswordLoading ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
@@ -450,7 +450,7 @@ export function AccountSecurityCard({
           type="button"
           aria-expanded={showDeleteAccount}
           aria-controls="delete-account-panel"
-          className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity"
+          className="aio-button aio-button--text aio-button--compact"
           style={{ color: vars.g500 }}
         >
           <Trash2 size={13} />
@@ -458,7 +458,7 @@ export function AccountSecurityCard({
         </button>
         {showDeleteAccount && (
           <form id="delete-account-panel" onSubmit={handleDeleteAccount} className="mt-4 rounded-xl p-5 border" style={panelStyle}>
-            <p className="text-[13px] font-light leading-[1.7] mb-4" style={{ color: vars.g600 }}>
+            <p className="aio-type-body mb-4" style={{ color: vars.g600 }}>
               This permanently deletes your account, all your projects, archive items, planner entries and other data.
               This cannot be undone. {canCreateSubAccounts(session.role)
                 ? session.role === "agency"
@@ -467,7 +467,7 @@ export function AccountSecurityCard({
                 : ""}
             </p>
             <div className="mb-4 space-y-3 rounded-xl border p-4" style={{ borderColor: "#F2B8B5", background: "#FFF7F6" }}>
-              <label className="flex items-start gap-3 text-[13px] font-medium leading-[1.6] cursor-pointer" style={{ color: ink }}>
+              <label className="aio-type-supporting flex items-start gap-3 font-medium cursor-pointer" style={{ color: ink }}>
                 <input
                   type="checkbox"
                   checked={deleteDataAcknowledged}
@@ -478,7 +478,7 @@ export function AccountSecurityCard({
                   I understand this deletes all workspace-owned projects, media research, recommendations, imports, overrides, audits and GEO reports.
                 </span>
               </label>
-              <label className="flex items-start gap-3 text-[13px] font-medium leading-[1.6] cursor-pointer" style={{ color: ink }}>
+              <label className="aio-type-supporting flex items-start gap-3 font-medium cursor-pointer" style={{ color: ink }}>
                 <input
                   type="checkbox"
                   checked={deleteIrreversibleAcknowledged}
@@ -498,7 +498,7 @@ export function AccountSecurityCard({
                       <a
                         href={deleteWarningsAcknowledged ? `${apiBase()}/api/platform/auth/google/delete-confirmation` : undefined}
                         aria-disabled={!deleteWarningsAcknowledged}
-                        className="px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white text-center"
+                        className="aio-button aio-button--primary"
                         style={{ background: accent, opacity: deleteWarningsAcknowledged ? 1 : 0.5, pointerEvents: deleteWarningsAcknowledged ? "auto" : "none" }}
                       >
                         Confirm with Google
@@ -508,7 +508,7 @@ export function AccountSecurityCard({
                       <a
                         href={deleteWarningsAcknowledged ? `${apiBase()}/api/platform/auth/microsoft/delete-confirmation` : undefined}
                         aria-disabled={!deleteWarningsAcknowledged}
-                        className="px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white text-center"
+                        className="aio-button aio-button--primary"
                         style={{ background: accent, opacity: deleteWarningsAcknowledged ? 1 : 0.5, pointerEvents: deleteWarningsAcknowledged ? "auto" : "none" }}
                       >
                         Confirm with Microsoft
@@ -519,7 +519,7 @@ export function AccountSecurityCard({
                   <button
                     type="submit"
                      disabled={deleting || !deleteWarningsAcknowledged}
-                    className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white disabled:opacity-50"
+                    className="aio-button aio-button--destructive"
                     style={{ background: vars.red }}
                   >
                     {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
@@ -530,20 +530,20 @@ export function AccountSecurityCard({
             ) : (
               <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
                 <div className="flex-1">
-                <label htmlFor="delete-account-password" className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: vars.g500 }}>Confirm your password</label>
+                <label htmlFor="delete-account-password" className="aio-type-eyebrow block mb-1.5" style={{ color: vars.g500 }}>Confirm your password</label>
                 <input
                   id="delete-account-password"
                   type="password"
                   value={deletePassword}
                   onChange={(e) => setDeletePassword(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none"
+                  className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none"
                   style={{ borderColor: vars.g200, background: "white", color: ink }}
                 />
               </div>
               <button
                 type="submit"
                 disabled={deleting || !deleteWarningsAcknowledged}
-                className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90 disabled:opacity-50"
+                className="aio-button aio-button--destructive"
                 style={{ background: vars.red }}
               >
                 {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
@@ -551,7 +551,7 @@ export function AccountSecurityCard({
               </button>
               </div>
             )}
-            {deleteError && <p className="mt-3 text-[13px] font-semibold" role="alert" aria-live="assertive" style={{ color: vars.red }}>{deleteError}</p>}
+            {deleteError && <p className="aio-type-supporting mt-3 font-semibold" role="alert" aria-live="assertive" style={{ color: vars.red }}>{deleteError}</p>}
           </form>
         )}
       </div>
@@ -560,7 +560,7 @@ export function AccountSecurityCard({
       <div className="mt-4 pt-5" style={{ borderTop: `1px solid ${vars.g200}` }}>
         <button
           onClick={onSignOut}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+          className="aio-button aio-button--outline"
           style={{ border: `1.5px solid ${vars.g300}`, color: ink }}
         >
           <LogOut size={15} /> Sign out
