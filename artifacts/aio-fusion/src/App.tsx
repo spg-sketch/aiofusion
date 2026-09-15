@@ -943,6 +943,9 @@ function App() {
     const v = new URLSearchParams(window.location.search).get("checkout");
     return v === "success" || v === "cancelled" ? v : null;
   });
+  const [checkoutSessionId] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get("session_id"),
+  );
 
   // Team invite token from /?invite=<token> - captured once on mount (the
   // history-sync effect rewrites the URL soon after).
@@ -1282,6 +1285,7 @@ function App() {
     return (
       <GuidedOnboardingPage
         checkoutResult={checkoutResult}
+        checkoutSessionId={checkoutSessionId}
         onRoleChanged={(role) => {
           setSessionState({ ...session, role });
           void refreshAccountsCache();

@@ -468,6 +468,25 @@ export async function releaseCheckout(slug: string, claimToken: string): Promise
   `);
 }
 
+export async function checkoutClaimMatchesSession(
+  slug: string,
+  sessionId: string,
+  claimToken: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ value: platformMetaTable.value })
+    .from(platformMetaTable)
+    .where(eq(platformMetaTable.key, checkoutPendingKey(slug)))
+    .limit(1);
+  if (!row?.value) return false;
+  try {
+    const claim = JSON.parse(row.value) as Partial<CheckoutClaim>;
+    return claim.sid === sessionId && claim.tok === claimToken;
+  } catch {
+    return false;
+  }
+}
+
 // True when the project exists, is live (not deleted) and is owned by the
 // billing account's subtree. Used to revalidate stale project bindings at
 // webhook fulfilment and before any add-on-driven project mutation - a
@@ -886,6 +905,13 @@ async function invoiceMatchesStoredSubscription(
 export async function handleCheckoutCompleted(event: Stripe.Event): Promise<void> {
   const session = event.data.object as Stripe.Checkout.Session;
   if (session.mode !== "subscription") return;
+  if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") {
+    logger.info(
+      { eventId: event.id, sessionId: session.id, paymentStatus: session.payment_status },
+      "billing: completed checkout is not paid yet - awaiting asynchronous payment confirmation",
+    );
+    return;
+  }
   const slug = normUsername(String(session.metadata?.["slug"] ?? session.client_reference_id ?? ""));
   if (!slug) {
     logger.error({ eventId: event.id, sessionId: session.id }, "billing: checkout.session.completed without account slug");
@@ -1310,6 +1336,8 @@ export async function handleSubscriptionDeleted(event: Stripe.Event): Promise<vo
 export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
   const relevant =
     event.type === "checkout.session.completed" ||
+    event.type === "checkout.session.async_payment_succeeded" ||
+    event.type === "checkout.session.async_payment_failed" ||
     event.type === "checkout.session.expired" ||
     event.type === "invoice.payment_succeeded" ||
     event.type === "invoice.payment_failed" ||
@@ -1325,8 +1353,35 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
   try {
     switch (event.type) {
       case "checkout.session.completed":
+      case "checkout.session.async_payment_succeeded":
         await handleCheckoutCompleted(event);
         break;
+      case "checkout.session.async_payment_failed": {
+        const failedSession = event.data.object as Stripe.Checkout.Session;
+        const failedSlug = normUsername(
+          String(failedSession.metadata?.["slug"] ?? failedSession.client_reference_id ?? ""),
+        );
+        const failedClaimToken = failedSession.metadata?.["claim_tok"];
+        if (failedSlug && failedClaimToken) {
+          await releaseCheckout(failedSlug, failedClaimToken);
+          logger.info({ slug: failedSlug }, "billing: asynchronous checkout payment failed - claim released");
+        }
+        const failedSubscriptionId = typeof failedSession.subscription === "string"
+          ? failedSession.subscription
+          : failedSession.subscription?.id;
+        if (failedSubscriptionId) {
+          try {
+            const stripe = await getUncachableStripeClient();
+            await stripe.subscriptions.cancel(failedSubscriptionId);
+          } catch (err) {
+            logger.warn(
+              { err, slug: failedSlug, subscriptionId: failedSubscriptionId },
+              "billing: could not cancel failed asynchronous checkout subscription (non-fatal)",
+            );
+          }
+        }
+        break;
+      }
       case "checkout.session.expired": {
         // Release the checkout claim so the account is not locked while waiting
         // for the TTL. The session has expired on Stripe's side so it can never

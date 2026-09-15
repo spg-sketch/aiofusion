@@ -169,7 +169,6 @@ function PaymentSuccessState({
   info: SubscriptionInfo;
 }) {
   const renewal = formatSubscriptionEnd(info.currentPeriodEnd);
-  const confirmed = info.entitled && info.status !== "none" && info.status !== "cancelled";
 
   return (
     <div
@@ -183,11 +182,9 @@ function PaymentSuccessState({
         Thank you for signing up to AIO Fusion
       </h3>
       <p className="text-[13px] mt-1" style={{ color: "#166534" }}>
-        {confirmed
-          ? "Your payment was successful and your subscription is now active."
-          : "Your payment was received. We are confirming your subscription now - this usually takes a few seconds."}
+        Your payment was successful and your subscription is now active.
       </p>
-      {renewal && confirmed && (
+      {renewal && (
         <p className="text-[13px] mt-1" style={{ color: "#166534" }}>
           You are paid until <strong>{renewal}</strong>.
         </p>
@@ -198,10 +195,12 @@ function PaymentSuccessState({
 
 export function SubscriptionCard({
   checkoutResult,
+  checkoutSessionId,
   onboarding = false,
   onAccessActivated,
 }: {
   checkoutResult?: "success" | "cancelled" | null;
+  checkoutSessionId?: string | null;
   onboarding?: boolean;
   onAccessActivated?: (summary: SubscriptionActivationSummary) => void;
 }) {
@@ -212,6 +211,10 @@ export function SubscriptionCard({
   const [startingTrial, setStartingTrial] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [confirmationError, setConfirmationError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [checkoutConfirmed, setCheckoutConfirmed] = useState(false);
+  const paidSubscription = info?.status === "active" || info?.status === "past_due";
 
   useEffect(() => {
     let cancelled = false;
@@ -237,28 +240,72 @@ export function SubscriptionCard({
   }, []);
 
   useEffect(() => {
-    if (info?.entitled && onboarding) {
+    const accessConfirmed = checkoutResult === "success"
+      ? checkoutConfirmed && paidSubscription
+      : info?.entitled;
+    if (accessConfirmed && onboarding && info) {
       onAccessActivated?.({
         plan: info.plan,
         frequency: info.frequency,
         currentPeriodEnd: info.currentPeriodEnd,
       });
     }
-  }, [info?.currentPeriodEnd, info?.entitled, info?.frequency, info?.plan, onboarding, onAccessActivated]);
+  }, [
+    checkoutConfirmed,
+    checkoutResult,
+    info?.currentPeriodEnd,
+    info?.entitled,
+    info?.frequency,
+    info?.plan,
+    onboarding,
+    onAccessActivated,
+    paidSubscription,
+  ]);
 
-  // Checkout can return before Stripe's webhook has applied entitlement. Poll
-  // briefly only on that return path, then stop; a later refresh remains the
-  // normal recovery path if Stripe takes longer than this bounded window.
   useEffect(() => {
-    if (!onboarding || checkoutResult !== "success" || info?.entitled) return;
+    if (!onboarding || checkoutResult !== "success" || checkoutConfirmed) return;
+    if (!checkoutSessionId) {
+      setConfirmationError("The payment return link is incomplete. Use the retry button below or contact support if payment was taken.");
+      return;
+    }
+    let cancelled = false;
+    let timer: number | undefined;
     let attempts = 0;
-    const timer = window.setInterval(() => {
-      attempts += 1;
-      setRefreshTick((tick) => tick + 1);
-      if (attempts >= 10) window.clearInterval(timer);
-    }, 1500);
-    return () => window.clearInterval(timer);
-  }, [checkoutResult, info?.entitled, onboarding]);
+    const reconcile = async () => {
+      if (cancelled) return;
+      setConfirming(true);
+      setConfirmationError(null);
+      try {
+        const res = await fetch(`${apiBase()}/api/platform/billing/reconcile-checkout`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: checkoutSessionId }),
+        });
+        const json = await res.json().catch(() => ({})) as { status?: string; error?: string };
+        if (res.ok && json.status === "confirmed") {
+          setCheckoutConfirmed(true);
+          setRefreshTick((tick) => tick + 1);
+          return;
+        }
+        if (res.status === 202 && attempts < 20) {
+          attempts += 1;
+          timer = window.setTimeout(reconcile, 1500);
+          return;
+        }
+        setConfirmationError(json.error ?? "Payment confirmation is taking longer than expected. Try again safely below.");
+      } catch {
+        setConfirmationError("Could not connect to confirm payment. Check your connection and try again.");
+      } finally {
+        if (!cancelled) setConfirming(false);
+      }
+    };
+    void reconcile();
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [checkoutConfirmed, checkoutResult, checkoutSessionId, onboarding, refreshTick]);
 
   async function startCheckout() {
     setStarting(true);
@@ -319,8 +366,25 @@ export function SubscriptionCard({
       <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
         <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Subscription</h2>
 
-        {checkoutResult === "success" && (
+        {checkoutResult === "success" && checkoutConfirmed && paidSubscription && (
           <PaymentSuccessState info={info} />
+        )}
+        {checkoutResult === "success" && (!checkoutConfirmed || !paidSubscription) && (
+          <div className="mb-5" data-testid="payment-confirmation-pending">
+            <p className="text-[13px]" style={{ color: confirmationError ? "#991B1B" : vars.g600 }}>
+              {confirmationError ?? (confirming ? "Securely confirming your completed Stripe checkout..." : "Confirming payment...")}
+            </p>
+            {confirmationError && (
+              <button
+                type="button"
+                className="mt-3 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em]"
+                style={{ color: ink, border: `1.5px solid ${vars.g300}`, background: "white" }}
+                onClick={() => setRefreshTick((tick) => tick + 1)}
+              >
+                Try payment confirmation again
+              </button>
+            )}
+          </div>
         )}
         {checkoutResult === "cancelled" && (
           <p className="text-[13px] mb-3 px-3 py-2 rounded-lg" style={{ background: vars.g50, color: vars.g600 }}>

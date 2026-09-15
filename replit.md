@@ -241,3 +241,15 @@ Run through these steps after activating Stripe Tax in the Stripe **test** dashb
 6. **Invoice email sent** — Check the email address associated with the test account (or the billing email if set). Stripe should have sent a "Your invoice from AIO Fusion" email with a PDF attachment and "View invoice" button. If no email arrives, confirm **Settings → Emails → "Email finished invoices to customers"** is enabled in the Stripe dashboard.
 
 7. **Repeat for add-on project checkout** — Go to **Billing → Add a project**, choose a tier, and complete checkout. Confirm VAT appears and the new invoice link is visible after payment.
+
+## Staging Stripe webhook verification
+
+Published staging uses the protected `STRIPE_STAGING_WEBHOOK_SECRET`. It must be the signing secret for the Stripe test-mode endpoint whose URL is `https://aio-fusion-staging.replit.app/api/stripe/webhook`. Updating the endpoint URL does not rotate or recover its signing secret.
+
+After changing the endpoint or secret, complete one test-mode checkout and verify:
+
+1. Stripe reports a successful 2xx delivery for `checkout.session.completed`.
+2. Deployment logs do not contain `stripe webhook: signature verification failed`.
+3. The matching workspace has its subscription and onboarding state activated locally.
+
+If deliveries return 400 with a signature-verification error, copy that endpoint's current `whsec_...` signing secret into the protected `STRIPE_STAGING_WEBHOOK_SECRET` secret and republish staging. Never put the signing secret in this file, source control, or chat.

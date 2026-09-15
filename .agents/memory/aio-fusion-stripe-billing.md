@@ -10,6 +10,9 @@ description: Stripe connection quirks, webhook secret location, entitlement/tier
 - **Published staging limitation**: Replit exposes only its live credential slot to a published deployment and rejects sandbox keys in that slot. A staging deployment must use the protected `STRIPE_STAGING_SECRET_KEY` override, validated as `sk_test_`/`rk_test_`; production must ignore it.
 - **Staging override readiness**: any Stripe startup/configured guard must count a valid staging override as configured. Otherwise checkout works but migrations, webhook registration, and backfill silently skip.
 - **Staging webhook independence**: published staging may not have the `stripe` mirror schema. Use the protected signing-secret override and direct Stripe endpoint update; keep business entitlement handling independent of mirror/backfill success.
+- **Webhook URL updates do not update signing secrets**: moving a managed endpoint to the staging URL while retaining a secret from another endpoint causes every delivery to fail signature verification. The protected staging secret must come from the exact test-mode endpoint receiving `/api/stripe/webhook`.
+- **Why:** a valid test subscription and paid invoice remained unapplied because Stripe deliveries reached staging but all returned 400 from a mismatched endpoint secret.
+- **How to apply:** after any staging endpoint or secret change, republish and require both a 2xx `checkout.session.completed` delivery and no signature-verification warning in deployment logs.
 - **Approved billing confirmation UI**: preserve the Account and Team Settings billing layout with payment confirmation, plan/frequency, Active status, renewal date, invoice link, and update/cancel actions.
 
 **Why:** The user confirmed this exact post-checkout Billing details presentation looked great after a successful annual sandbox subscription.

@@ -26,6 +26,9 @@ import {
   getBetaTrialSummary,
   startBetaTrial,
   BETA_TRIAL_PROJECT_CAP,
+  checkoutClaimMatchesSession,
+  handleCheckoutCompleted,
+  handleSubscriptionUpdated,
 } from "../lib/billing";
 import {
   PLAN_PRICES,
@@ -388,7 +391,7 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
         plan: ctx.plan,
         frequency,
         successUrl: onboarding
-          ? `${base}/?checkout=success&onboarding=1`
+          ? `${base}/?checkout=success&onboarding=1&session_id={CHECKOUT_SESSION_ID}`
           : `${base}/?account_section=billing&checkout=success`,
         cancelUrl: onboarding
           ? `${base}/?checkout=cancelled&onboarding=1`
@@ -441,6 +444,91 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
   } catch (err) {
     logger.error({ err }, "billing: failed to create checkout session");
     sendCheckoutError(res, err);
+  }
+});
+
+router.post("/platform/billing/reconcile-checkout", requirePlatformAuth, async (req, res) => {
+  try {
+    const ctx = await resolveBillingContext(req, res);
+    if (!ctx) return;
+    const sessionId = typeof req.body?.sessionId === "string" ? req.body.sessionId.trim() : "";
+    if (!sessionId || !/^cs_(test|live)_[A-Za-z0-9_]+$/.test(sessionId)) {
+      res.status(400).json({ error: "The payment confirmation link is incomplete. Return to billing and try again." });
+      return;
+    }
+
+    const stripe = await getUncachableStripeClient();
+    const session = await stripe.checkout.sessions.retrieve(sessionId, { expand: ["subscription"] });
+    const slug = normUsername(String(session.metadata?.["slug"] ?? session.client_reference_id ?? ""));
+    const plan = session.metadata?.["plan"];
+    const frequency = session.metadata?.["frequency"];
+    const claimToken = session.metadata?.["claim_tok"] ?? "";
+    const subscriptionId = typeof session.subscription === "string"
+      ? session.subscription
+      : session.subscription?.id ?? null;
+    const current = await getBillingState(ctx.slug);
+    const alreadyApplied = !!subscriptionId
+      && current?.stripeSubscriptionId === subscriptionId
+      && hasPaidSubscription(current);
+
+    if (
+      session.mode !== "subscription"
+      || slug !== ctx.slug
+      || plan !== ctx.plan
+      || !isBillingFrequency(frequency)
+    ) {
+      logger.warn({ requestedSlug: ctx.slug, sessionId, sessionSlug: slug, plan }, "billing: rejected mismatched checkout return");
+      res.status(403).json({ error: "This payment does not belong to the signed-in workspace." });
+      return;
+    }
+    if (!alreadyApplied && (!claimToken || !(await checkoutClaimMatchesSession(ctx.slug, sessionId, claimToken)))) {
+      res.status(409).json({ error: "This checkout can no longer be matched to the payment started by this workspace." });
+      return;
+    }
+    if (session.status !== "complete") {
+      res.status(202).json({ status: "processing" });
+      return;
+    }
+    if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") {
+      res.status(409).json({ error: "Stripe has not confirmed payment for this checkout yet." });
+      return;
+    }
+
+    if (!alreadyApplied) {
+      await handleCheckoutCompleted({
+        id: `return:${session.id}`,
+        type: "checkout.session.completed",
+        data: { object: session },
+      } as unknown as import("stripe").default.Event);
+    }
+    if (session.subscription && typeof session.subscription !== "string") {
+      await handleSubscriptionUpdated({
+        id: `return-subscription:${session.id}`,
+        type: "customer.subscription.updated",
+        data: { object: session.subscription },
+      } as unknown as import("stripe").default.Event);
+    }
+    const state = await getBillingState(ctx.slug);
+    if (!state || !hasPaidSubscription(state)) {
+      res.status(202).json({ status: "processing" });
+      return;
+    }
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      status: "confirmed",
+      subscription: {
+        plan: state.plan,
+        frequency: state.frequency,
+        currentPeriodEnd: state.currentPeriodEnd?.toISOString() ?? null,
+      },
+    });
+  } catch (err) {
+    if (isMissingStripeResource(err)) {
+      res.status(404).json({ error: "Stripe could not find this checkout session." });
+      return;
+    }
+    logger.error({ err }, "billing: failed to reconcile checkout return");
+    res.status(500).json({ error: "Payment confirmation is temporarily unavailable. Please try again." });
   }
 });
 

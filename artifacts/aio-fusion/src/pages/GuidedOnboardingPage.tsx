@@ -42,11 +42,13 @@ export function GuidedOnboardingPage({
   onRoleChanged,
   onComplete,
   checkoutResult,
+  checkoutSessionId,
 }: {
   onSignOut: () => void;
   onRoleChanged: (role: "agency" | "client") => void;
   onComplete: () => Promise<{ ok: boolean; error?: string }>;
   checkoutResult?: "success" | "cancelled" | null;
+  checkoutSessionId?: string | null;
 }) {
   const [state, setState] = useState<State | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -217,7 +219,7 @@ export function GuidedOnboardingPage({
               className="fo-primary inline-flex items-center justify-center gap-2 rounded-md px-8 py-4 text-white text-sm font-bold uppercase tracking-wider transition-all duration-300 disabled:opacity-50 hover:brightness-110"
             style={{ background: vars.accent }}
           >
-            {busy ? <Loader2 size={18} className="animate-spin" /> : "Continue to billing"}
+            {busy ? <Loader2 size={18} className="animate-spin" /> : "Continue to my account"}
             {!busy && <ArrowRight size={18} />}
           </button>
           {error && <p className="mt-4 text-sm font-medium text-red-700">{error}</p>}
@@ -371,7 +373,12 @@ export function GuidedOnboardingPage({
 
           <div className="space-y-8">
             <BillingDetailsCard />
-            <SubscriptionCard checkoutResult={checkoutResult} onboarding onAccessActivated={handleAccessActivated} />
+            <SubscriptionCard
+              checkoutResult={checkoutResult}
+              checkoutSessionId={checkoutSessionId}
+              onboarding
+              onAccessActivated={handleAccessActivated}
+            />
           </div>
           
           {error && (

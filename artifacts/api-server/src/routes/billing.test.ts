@@ -188,7 +188,7 @@ const stripeCalls = vi.hoisted(() => ({
   // Records session ids that were expired via checkout.sessions.expire.
   sessionExpires: [] as string[],
   // Per-id overrides for checkout.sessions.retrieve.
-  sessionRetrieveOverrides: {} as Record<string, Partial<{ status: "open" | "complete" | "expired"; metadata: Record<string, string> }>>,
+  sessionRetrieveOverrides: {} as Record<string, Record<string, unknown>>,
   // Per-id errors for checkout.sessions.retrieve.
   sessionRetrieveErrors: {} as Record<string, Error & { code?: string }>,
   // When true, the next finalizeCheckoutClaim call will throw (simulates DB write failure or 0-row preemption).
@@ -465,7 +465,10 @@ async function seedWorkspace(
 }
 
 function fakeEvent(id: string, type: string, object: Record<string, unknown>): Stripe.Event {
-  return { id, type, data: { object } } as unknown as Stripe.Event;
+  const normalized = type === "checkout.session.completed" || type === "checkout.session.async_payment_succeeded"
+    ? { payment_status: "paid", ...object }
+    : object;
+  return { id, type, data: { object: normalized } } as unknown as Stripe.Event;
 }
 
 beforeAll(async () => {
@@ -647,6 +650,69 @@ describe("stripe webhook handlers", () => {
     await handleStripeEvent(evt);
     state = await getBillingState("hooks-agency");
     expect(state?.status).toBe("cancelled");
+  });
+
+  it("does not activate an unpaid completed checkout and activates after asynchronous payment succeeds", async () => {
+    await seedWorkspace("delayed-pay", "owner@delayed-pay.test");
+    const checkout = {
+      mode: "subscription",
+      payment_status: "unpaid",
+      customer: "cus_delayed",
+      subscription: "sub_delayed",
+      metadata: { slug: "delayed-pay", plan: "agency", frequency: "annual" },
+    };
+
+    await handleStripeEvent(fakeEvent("evt_delayed_complete", "checkout.session.completed", checkout));
+    expect((await getBillingState("delayed-pay"))?.status).toBe("none");
+    expect((await getBillingState("delayed-pay"))?.stripeSubscriptionId).toBeNull();
+
+    await handleStripeEvent(fakeEvent(
+      "evt_delayed_paid",
+      "checkout.session.async_payment_succeeded",
+      { ...checkout, payment_status: "paid" },
+    ));
+    expect((await getBillingState("delayed-pay"))?.status).toBe("active");
+    expect((await getBillingState("delayed-pay"))?.stripeSubscriptionId).toBe("sub_delayed");
+  });
+
+  it("releases a failed asynchronous payment so the workspace can start a replacement checkout", async () => {
+    const { sid } = await seedWorkspace("failed-delayed-pay", "owner@failed-delayed-pay.test", {
+      accountRole: "client",
+    });
+    const initialSessions = stripeCalls.sessions.length;
+    const first = await api("/api/platform/billing/checkout", {
+      sid,
+      body: { frequency: "annual", onboarding: true },
+    });
+    expect(first.status).toBe(200);
+    const [claim] = await db.select({ value: platformMetaTable.value })
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, "checkout:pending:failed-delayed-pay"));
+    const claimData = JSON.parse(claim!.value) as { tok: string };
+    const sessionsBefore = stripeCalls.sessions.length;
+
+    await handleStripeEvent(fakeEvent("evt_delayed_failed", "checkout.session.async_payment_failed", {
+      id: "cs_test_mock",
+      mode: "subscription",
+      payment_status: "unpaid",
+      customer: "cus_failed_delayed",
+      subscription: "sub_failed_delayed",
+      metadata: {
+        slug: "failed-delayed-pay",
+        plan: "inhouse",
+        frequency: "annual",
+        claim_tok: claimData.tok,
+      },
+    }));
+
+    const retry = await api("/api/platform/billing/checkout", {
+      sid,
+      body: { frequency: "annual", onboarding: true },
+    });
+    expect(retry.status).toBe(200);
+    expect(stripeCalls.sessions).toHaveLength(sessionsBefore + 1);
+    expect(stripeCalls.subscriptionCancels).toContain("sub_failed_delayed");
+    stripeCalls.sessions.splice(initialSessions);
   });
 
   it("invoice.payment_failed marks past_due and emails the billing contact", async () => {
@@ -906,8 +972,103 @@ describe("billing routes", () => {
     const params = stripeCalls.sessions.at(-1) as any;
     expect(params.success_url).toContain("checkout=success");
     expect(params.success_url).toContain("onboarding=1");
+    expect(params.success_url).toContain("session_id={CHECKOUT_SESSION_ID}");
     expect(params.cancel_url).toContain("checkout=cancelled");
     expect(params.cancel_url).toContain("onboarding=1");
+  });
+
+  it.each([
+    ["agency", "agency", "return-agency"],
+    ["client", "inhouse", "return-client"],
+  ])("reconciles a completed onboarding checkout for a direct %s workspace", async (accountRole, plan, slug) => {
+    const { sid } = await seedWorkspace(slug, `${slug}@test.example`, { accountRole });
+    const started = await api("/api/platform/billing/checkout", {
+      sid,
+      body: { frequency: "annual", onboarding: true },
+    });
+    expect(started.status).toBe(200);
+    const [claim] = await db.select({ value: platformMetaTable.value })
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, `checkout:pending:${slug}`));
+    const claimData = JSON.parse(claim!.value) as { tok: string };
+    stripeCalls.sessionRetrieveOverrides["cs_test_mock"] = {
+      id: "cs_test_mock",
+      mode: "subscription",
+      status: "complete",
+      payment_status: "paid",
+      customer: `cus_${slug}`,
+      subscription: {
+        id: `sub_${slug}`,
+        customer: `cus_${slug}`,
+        status: "active",
+        cancel_at_period_end: false,
+        current_period_end: 4_077_052_800,
+      },
+      client_reference_id: slug,
+      metadata: { slug, plan, frequency: "annual", claim_tok: claimData.tok },
+    };
+
+    const reconciled = await api("/api/platform/billing/reconcile-checkout", {
+      sid,
+      body: { sessionId: "cs_test_mock" },
+    });
+    expect(reconciled.status).toBe(200);
+    expect(reconciled.json.status).toBe("confirmed");
+    expect(reconciled.json.subscription.plan).toBe(plan);
+    expect((await getBillingState(slug))?.stripeSubscriptionId).toBe(`sub_${slug}`);
+
+    const duplicate = await api("/api/platform/billing/reconcile-checkout", {
+      sid,
+      body: { sessionId: "cs_test_mock" },
+    });
+    expect(duplicate.status).toBe(200);
+    expect((await getBillingState(slug))?.stripeSubscriptionId).toBe(`sub_${slug}`);
+    delete stripeCalls.sessionRetrieveOverrides["cs_test_mock"];
+  });
+
+  it("keeps an open checkout pending and rejects a checkout belonging to another workspace", async () => {
+    const { sid } = await seedWorkspace("return-owner", "return-owner@test.example", { accountRole: "client" });
+    await api("/api/platform/billing/checkout", {
+      sid,
+      body: { frequency: "quarterly", onboarding: true },
+    });
+    const [claim] = await db.select({ value: platformMetaTable.value })
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, "checkout:pending:return-owner"));
+    const claimData = JSON.parse(claim!.value) as { tok: string };
+    stripeCalls.sessionRetrieveOverrides["cs_test_mock"] = {
+      id: "cs_test_mock",
+      mode: "subscription",
+      status: "open",
+      payment_status: "unpaid",
+      metadata: {
+        slug: "return-owner",
+        plan: "inhouse",
+        frequency: "quarterly",
+        claim_tok: claimData.tok,
+      },
+    };
+    expect((await api("/api/platform/billing/reconcile-checkout", {
+      sid,
+      body: { sessionId: "cs_test_mock" },
+    })).status).toBe(202);
+
+    stripeCalls.sessionRetrieveOverrides["cs_test_mock"] = {
+      ...stripeCalls.sessionRetrieveOverrides["cs_test_mock"],
+      status: "complete",
+      payment_status: "paid",
+      metadata: {
+        slug: "different-workspace",
+        plan: "inhouse",
+        frequency: "quarterly",
+        claim_tok: claimData.tok,
+      },
+    };
+    expect((await api("/api/platform/billing/reconcile-checkout", {
+      sid,
+      body: { sessionId: "cs_test_mock" },
+    })).status).toBe(403);
+    delete stripeCalls.sessionRetrieveOverrides["cs_test_mock"];
   });
 
   it("lets an active beta customer choose a paid plan before the trial ends", async () => {
