@@ -62,7 +62,7 @@ vi.mock("../lib/contentAi", () => ({
   escapeHtml: (value: string) => value,
 }));
 
-import { MediaResearchPage, resolveArticleTargetPhrases } from "./MediaResearchPage";
+import { MediaResearchPage, resolveArticleTargetPhrases, SHORTLIST_EXPORT_COLUMNS, sanitizeSpreadsheetCell as sanitizeResearchSpreadsheetCell, shortlistExportRow } from "./MediaResearchPage";
 import { exactTargetPhraseId } from "../lib/exactTargetPhrases";
 
 const storyOnePhrase = {
@@ -106,6 +106,24 @@ describe("MediaResearchPage live discovery", () => {
   it("keeps explicit empty phrase snapshots empty while legacy articles inherit project phrases", () => {
     expect(resolveArticleTargetPhrases({ targetPhrases: [], targetPhraseIds: [] }, [storyOnePhrase])).toEqual([]);
     expect(resolveArticleTargetPhrases({}, [storyOnePhrase])).toEqual([storyOnePhrase]);
+  });
+
+  it("keeps shortlist exports rich and spreadsheet-safe", () => {
+    const contact = {
+      id: 91, outletId: 4, firstName: "Jane", lastName: "Reporter", role: "Energy editor",
+      email: "=unsafe@example.com", phone: "+447700900000", mobile: "", notes: "Review + follow-up",
+      accountId: "workspace-a", outletName: "Energy Today", outletCategory: "Energy", outletCountry: "UK",
+      publicationReach: "1M-5M", beats: ["energy"], sectors: ["Environment"], geography: "UK",
+      language: "English", seniority: "Senior", editorialStatus: "Active",
+      linkedinUrl: "https://linkedin.example/jane", sourceUrl: "https://energy.example/jane",
+      sourceRef: "Contacts:2", publicationAuthority: 82, journalistAuthority: 91,
+      confidence: "High", lastVerifiedAt: "2026-09-08T12:00:00.000Z", sourceStatus: "current",
+      lifecycleStatus: "active", reviewNotes: "Check current remit",
+    } as never;
+    const row = shortlistExportRow(contact);
+    expect(SHORTLIST_EXPORT_COLUMNS).toEqual(expect.arrayContaining(["Sectors", "Source Reference", "Confidence", "Lifecycle Status"]));
+    expect(row).toEqual(expect.arrayContaining(["Environment", "Contacts:2", "High", "active"]));
+    expect(sanitizeResearchSpreadsheetCell("=HYPERLINK(\"https://bad.example\")")).toBe("'=HYPERLINK(\"https://bad.example\")");
   });
 
   let requests: { url: string; body?: Record<string, unknown> }[] = [];

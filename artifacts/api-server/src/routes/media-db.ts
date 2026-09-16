@@ -3,20 +3,33 @@ import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaC
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { inAssignedScope, memberProjectGate } from "../lib/member-guards";
-import { getVisibleUsernames, normUsername } from "../lib/platform-auth";
+import {
+  DEFAULT_ADMIN_USERNAME,
+  getVisibleUsernames,
+  normUsername,
+  canWriteProjects,
+} from "../lib/platform-auth";
 import { TRADE_MEDIA_CATEGORIES } from "../lib/trade-media-categories";
 import {
-  buildMediaContactNotes,
   canonicalMediaEmail,
-  classifyMediaReconciliation,
   filterVisibleRecommendationItems,
-  mediaOutletKey,
   mediaOverrideOwner,
   parseMediaImportCsv,
   parseMediaImportXlsx,
-  planMediaImport,
 } from "../lib/media-csv-import";
 import type { MediaImportRow } from "../lib/media-csv-import";
+import {
+  buildImportedContactMetadata,
+  importedOutletMetadata,
+  importDimensionCounts,
+  reconcileMediaImport,
+  reconciliationFingerprint,
+  sourceHashForImport,
+  verifyMediaImportPreviewToken,
+  issueMediaImportPreviewToken,
+  mergeImportedProvenance,
+} from "../lib/media-import-reconciliation";
+import type { ImportReconciliation } from "../lib/media-import-reconciliation";
 import { mediaDiscoveryNotes, verifyMediaDiscoveries } from "../lib/media-discovery-token";
 import { approvedSourceUpdates, mediaSourceNextDueAt } from "../lib/media-source-health";
 import { claimMediaContactForManualReverification, reverifyClaimedMediaContact } from "../lib/media-source-reverification";
@@ -61,12 +74,47 @@ export function canonicalPlacementUrl(value: string): string {
 // entirely, viewers may only issue reads.
 router.use(["/store/media-categories", "/store/media-db"], memberProjectGate);
 
+const GLOBAL_MEDIA_OWNER = "__global_admin__";
+type MediaCollectionScope = "shared" | "workspace";
+
 async function visibleAccounts(req: Request): Promise<string[] | null> {
+  // Authentication normalises non-Master rows with a legacy `admin` role to an
+  // agency, but keep this boundary defensive for legacy sessions and tests:
+  // only the canonical Master workspace gets the unrestricted visibility list.
+  if (req.account?.role === "admin" && normUsername(req.account.username) !== DEFAULT_ADMIN_USERNAME) {
+    return [normUsername(req.account.username)];
+  }
   return getVisibleUsernames(req.account!);
 }
 
-function isAdmin(req: Request): boolean {
-  return req.account?.role === "admin";
+function isMasterWorkspace(req: Request): boolean {
+  return req.account?.role === "admin"
+    && normUsername(req.account.username) === DEFAULT_ADMIN_USERNAME;
+}
+
+function isWritableMaster(req: Request): boolean {
+  return isMasterWorkspace(req) && canWriteProjects(req.account!);
+}
+
+function parseCollectionScope(value: unknown): MediaCollectionScope | null {
+  if (value === undefined || value === null || value === "") return "workspace";
+  return value === "shared" || value === "workspace" ? value : null;
+}
+
+function collectionOwner(scope: MediaCollectionScope, workspaceId: string): string {
+  return scope === "shared" ? GLOBAL_MEDIA_OWNER : workspaceId;
+}
+
+function collectionPreviewOwner(scope: MediaCollectionScope, workspaceId: string): string {
+  // Keep the internal namespace out of the user-facing preview. The namespace
+  // is still included separately so clients that need to reconcile ownership
+  // can do so without displaying an implementation detail.
+  return scope === "shared" ? "Master" : workspaceId;
+}
+
+function sharedMutationError(res: Response, action: string): boolean {
+  res.status(403).json({ error: `Only a writable Master member may ${action} shared media records.` });
+  return false;
 }
 
 function outletVisible(accountId: string | null, visible: string[] | null): boolean {
@@ -75,14 +123,78 @@ function outletVisible(accountId: string | null, visible: string[] | null): bool
   return visible.includes(accountId);
 }
 
+/**
+ * The reconciliation helper intentionally has no authorization/database
+ * concerns. Workspace imports include shared outlets so private contacts can
+ * still link to them, but shared outlet metadata must remain read-only. Keep
+ * this ownership normalization at the route boundary and repeat it for the
+ * transaction plan rather than trusting a preview/plan to authorize an
+ * update.
+ */
+function enforceImportOutletOwnership(
+  reconciliation: ImportReconciliation,
+  existingOutlets: Array<{ id: number; accountId: string | null }>,
+  writableAccountId: string | null,
+): ImportReconciliation {
+  const outletById = new Map(existingOutlets.map((outlet) => [outlet.id, outlet]));
+  const blockedPublicationRefs = new Set<string>();
+  let blockedUpdates = 0;
+
+  const publicationRows = reconciliation.publicationRows.map((publication) => {
+    if (!publication.outletRef.startsWith("existing:") || !publication.changedFields.length) {
+      return publication;
+    }
+    const outletId = Number(publication.outletRef.slice("existing:".length));
+    const outlet = outletById.get(outletId);
+    if (!outlet || outlet.accountId === writableAccountId) return publication;
+    blockedPublicationRefs.add(publication.outletRef);
+    blockedUpdates += 1;
+    return {
+      ...publication,
+      changedFields: [],
+      status: "unchanged" as const,
+    };
+  });
+
+  if (!blockedUpdates) return reconciliation;
+
+  const blockedPublicationRows = new Set(
+    publicationRows
+      .filter((publication) => blockedPublicationRefs.has(publication.outletRef))
+      .map((publication) => `${publication.row.sheetName ?? ""}:${publication.row.sourceRow}`),
+  );
+  const outcomes = reconciliation.outcomes.map((outcome) => (
+    blockedPublicationRows.has(`${outcome.sheetName ?? ""}:${outcome.sourceRow}`)
+      ? { ...outcome, changedFields: [] }
+      : outcome
+  ));
+  const counts = {
+    ...reconciliation.counts,
+    outletRefreshed: Math.max(0, reconciliation.counts.outletRefreshed - blockedUpdates),
+    outletUnchanged: reconciliation.counts.outletUnchanged + blockedUpdates,
+  };
+  const expectedMutations = {
+    ...reconciliation.expectedMutations,
+    outletsUpdated: Math.max(0, reconciliation.expectedMutations.outletsUpdated - blockedUpdates),
+    outletsUnchanged: reconciliation.expectedMutations.outletsUnchanged + blockedUpdates,
+  };
+  return { ...reconciliation, publicationRows, outcomes, counts, expectedMutations };
+}
+
+function importOutletOwnerCondition(accountId: string | null) {
+  return accountId === null
+    ? isNull(mediaOutletsTable.accountId)
+    : eq(mediaOutletsTable.accountId, accountId);
+}
+
 async function editableContact(req: Request, id: number) {
   const rows = await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, id)).limit(1);
   const row = rows[0];
   if (!row || row.deletedAt) return { ok: false as const, status: 404, error: "Contact not found" };
-  if (row.accountId === null && !isAdmin(req)) {
-    return { ok: false as const, status: 403, error: "Only admins may check global contacts" };
+  if (row.accountId === null && !isWritableMaster(req)) {
+    return { ok: false as const, status: 403, error: "Only a writable Master member may change shared contacts" };
   }
-  if (row.accountId !== null && !isAdmin(req) && row.accountId !== normUsername(req.account!.username)) {
+  if (row.accountId !== null && row.accountId !== normUsername(req.account!.username)) {
     return { ok: false as const, status: 403, error: "You can only check your own contacts" };
   }
   return { ok: true as const, row, owner: mediaOverrideOwner(row.accountId) };
@@ -136,7 +248,17 @@ router.post(
   "/store/media-db/import",
   requirePlatformAuth,
   async (req: Request, res: Response): Promise<void> => {
-    const { csv, xlsxBase64, rows, category, commit, filename, idempotencyKey } = req.body ?? {};
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const { csv, xlsxBase64, rows, category, commit, filename, idempotencyKey, collectionScope: requestedScope } = body;
+    const collectionScope = parseCollectionScope(requestedScope);
+    if (!collectionScope) {
+      res.status(400).json({ error: "collectionScope must be shared or workspace." });
+      return;
+    }
+    if (collectionScope === "shared" && !isWritableMaster(req)) {
+      sharedMutationError(res, "upload");
+      return;
+    }
     if (typeof csv !== "string" && typeof xlsxBase64 !== "string" && !Array.isArray(rows)) {
       res.status(400).json({ error: "Choose a CSV or XLSX file to import." });
       return;
@@ -145,153 +267,428 @@ router.post(
       res.status(400).json({ error: "Category must be text." });
       return;
     }
+    if (Array.isArray(rows) && rows.length > 50_000) {
+      res.status(413).json({ error: "Parsed import rows must contain 50,000 rows or fewer." });
+      return;
+    }
+    const selectedCategory = typeof category === "string" ? category.trim() : "";
 
     try {
+      // Hash the bytes that were actually uploaded, before parsing.  This
+      // prevents a retry from changing the workbook while retaining its name
+      // or idempotency key, and lets the commit route reject a stale preview.
+      const source = sourceHashForImport({ csv, xlsxBase64, rows });
+      const maxBytes = source.sourceType === "csv" ? 2 * 1024 * 1024 : 12 * 1024 * 1024;
+      if (source.byteLength < 1 || source.byteLength > maxBytes) {
+        res.status(413).json({ error: `Import files must be between 1 byte and ${Math.round(maxBytes / (1024 * 1024))} MB.` });
+        return;
+      }
+
       const parsed = typeof csv === "string"
         ? parseMediaImportCsv(csv)
         : typeof xlsxBase64 === "string"
           ? await parseMediaImportXlsx(xlsxBase64)
           : {
-            rows: rows.filter((row: unknown) => row && typeof row === "object").slice(0, 5_000).map((raw: Record<string, unknown>, index: number): MediaImportRow => ({
-              sourceRow: Number(raw.sourceRow) || index + 1,
-              sheetName: typeof raw.sheetName === "string" ? raw.sheetName.slice(0, 200) : undefined,
-              sector: typeof raw.sector === "string" ? raw.sector.slice(0, 200) : undefined,
-              firstName: typeof raw.firstName === "string" ? raw.firstName.trim() : "", lastName: typeof raw.lastName === "string" ? raw.lastName.trim() : "",
-              role: typeof raw.role === "string" ? raw.role.trim() : "", outletName: typeof raw.outletName === "string" ? raw.outletName.trim() : "",
-              email: typeof raw.email === "string" ? canonicalMediaEmail(raw.email) : "", website: typeof raw.website === "string" ? raw.website.trim() : "",
-              description: typeof raw.description === "string" ? raw.description.trim() : "", beat: typeof raw.beat === "string" ? raw.beat.trim() : "",
-              country: typeof raw.country === "string" ? raw.country.trim() : "", reachBand: typeof raw.reachBand === "string" ? raw.reachBand.trim() : "",
-              confidence: typeof raw.confidence === "string" ? raw.confidence.trim() : "", notes: typeof raw.notes === "string" ? raw.notes.trim() : "",
-              linkedinUrl: typeof raw.linkedinUrl === "string" ? raw.linkedinUrl.trim() : "", sourceUrl: typeof raw.sourceUrl === "string" ? raw.sourceUrl.trim() : "",
-              verifiedDate: typeof raw.verifiedDate === "string" ? raw.verifiedDate.trim() : "", publicationAuthority: typeof raw.publicationAuthority === "string" ? raw.publicationAuthority.trim() : "",
-              journalistAuthority: typeof raw.journalistAuthority === "string" ? raw.journalistAuthority.trim() : "", reviewNotes: typeof raw.reviewNotes === "string" ? raw.reviewNotes.trim() : "",
-            })).filter((row: MediaImportRow) => row.outletName && (row.firstName || row.lastName || row.email)),
-            errors: [], headers: [],
+             rows: (Array.isArray(rows) ? rows : []).filter((row: unknown) => row && typeof row === "object").map((raw: unknown, index: number): MediaImportRow => {
+              const item = raw as Record<string, unknown>;
+              return {
+                sourceRow: Number(item.sourceRow) || index + 1,
+                sheetName: typeof item.sheetName === "string" ? item.sheetName.slice(0, 200) : undefined,
+                sector: typeof item.sector === "string" ? item.sector.slice(0, 200) : undefined,
+                recordType: item.recordType === "publication" || item.recordType === "contact" ? item.recordType : undefined,
+                firstName: typeof item.firstName === "string" ? item.firstName.trim() : "",
+                lastName: typeof item.lastName === "string" ? item.lastName.trim() : "",
+                role: typeof item.role === "string" ? item.role.trim() : "",
+                outletName: typeof item.outletName === "string" ? item.outletName.trim() : "",
+                email: typeof item.email === "string" ? canonicalMediaEmail(item.email) : "",
+                website: typeof item.website === "string" ? item.website.trim() : "",
+                description: typeof item.description === "string" ? item.description.trim() : "",
+                beat: typeof item.beat === "string" ? item.beat.trim() : "",
+                country: typeof item.country === "string" ? item.country.trim() : "",
+                reachBand: typeof item.reachBand === "string" ? item.reachBand.trim() : "",
+                confidence: typeof item.confidence === "string" ? item.confidence.trim() : "",
+                notes: typeof item.notes === "string" ? item.notes.trim() : "",
+                linkedinUrl: typeof item.linkedinUrl === "string" ? item.linkedinUrl.trim() : "",
+                sourceUrl: typeof item.sourceUrl === "string" ? item.sourceUrl.trim() : "",
+                verifiedDate: typeof item.verifiedDate === "string" ? item.verifiedDate.trim() : "",
+                publicationAuthority: typeof item.publicationAuthority === "string" ? item.publicationAuthority.trim() : "",
+                journalistAuthority: typeof item.journalistAuthority === "string" ? item.journalistAuthority.trim() : "",
+                reviewNotes: typeof item.reviewNotes === "string" ? item.reviewNotes.trim() : "",
+                // The parser's canonical email is intentionally retained while
+                // preserving the source assertion in provenance.
+                ...(typeof item.rawEmail === "string" ? { rawEmail: item.rawEmail.trim() } : {}),
+                ...(item.rawMetadata && typeof item.rawMetadata === "object" && !Array.isArray(item.rawMetadata)
+                  ? { rawMetadata: Object.fromEntries(Object.entries(item.rawMetadata as Record<string, unknown>).filter(([, value]) => typeof value === "string")) as Record<string, string> }
+                  : {}),
+              } as MediaImportRow;
+            }),
+            errors: [],
+            headers: [],
           };
-      const accountId = normUsername(req.account!.username);
+      const workspaceId = normUsername(req.account!.username);
+      const accountId = collectionScope === "shared" ? null : workspaceId;
+      const owner = collectionOwner(collectionScope, workspaceId);
+      const previewOwner = collectionPreviewOwner(collectionScope, workspaceId);
+
       const loadExisting = async () => {
         const [existingOutlets, existingContacts] = await Promise.all([
-          db
-            .select({
-              id: mediaOutletsTable.id,
-              name: mediaOutletsTable.name,
-              website: mediaOutletsTable.website,
-            })
-            .from(mediaOutletsTable)
-            .where(and(
-              isNull(mediaOutletsTable.deletedAt),
-              or(eq(mediaOutletsTable.accountId, accountId), isNull(mediaOutletsTable.accountId)),
-            )),
-          db
-            .select({
-              id: mediaContactsTable.id,
-              outletId: mediaContactsTable.outletId,
-              firstName: mediaContactsTable.firstName,
-              lastName: mediaContactsTable.lastName,
-              email: mediaContactsTable.email,
-              sectors: mediaContactsTable.sectors,
-              role: mediaContactsTable.role,
-              publicationReach: mediaContactsTable.publicationReach,
-              confidence: mediaContactsTable.confidence,
-            })
-            .from(mediaContactsTable)
-            // Imports only reconcile this workspace's private contacts. A
-            // globally-curated canonical email is reference data, not an
-            // import target; importing it creates a private workspace copy.
-            .where(and(isNull(mediaContactsTable.deletedAt), eq(mediaContactsTable.accountId, accountId))),
+          db.select({
+            id: mediaOutletsTable.id,
+            name: mediaOutletsTable.name,
+            website: mediaOutletsTable.website,
+            accountId: mediaOutletsTable.accountId,
+              category: mediaOutletsTable.category,
+              description: mediaOutletsTable.description,
+              country: mediaOutletsTable.country,
+              reachBand: mediaOutletsTable.reachBand,
+          }).from(mediaOutletsTable).where(and(
+            isNull(mediaOutletsTable.deletedAt),
+            collectionScope === "shared"
+              ? isNull(mediaOutletsTable.accountId)
+              : or(eq(mediaOutletsTable.accountId, workspaceId), isNull(mediaOutletsTable.accountId)),
+          )),
+          db.select({
+            id: mediaContactsTable.id,
+            outletId: mediaContactsTable.outletId,
+            firstName: mediaContactsTable.firstName,
+            lastName: mediaContactsTable.lastName,
+            role: mediaContactsTable.role,
+            email: mediaContactsTable.email,
+            linkedinUrl: mediaContactsTable.linkedinUrl,
+            sourceUrl: mediaContactsTable.sourceUrl,
+            publicationReach: mediaContactsTable.publicationReach,
+            publicationAuthority: mediaContactsTable.publicationAuthority,
+            journalistAuthority: mediaContactsTable.journalistAuthority,
+            confidence: mediaContactsTable.confidence,
+            reviewNotes: mediaContactsTable.reviewNotes,
+            notes: mediaContactsTable.notes,
+            beats: mediaContactsTable.beats,
+            sectors: mediaContactsTable.sectors,
+            provenance: mediaContactsTable.provenance,
+            geography: mediaContactsTable.geography,
+            sourceRef: mediaContactsTable.sourceRef,
+          }).from(mediaContactsTable).where(and(
+            isNull(mediaContactsTable.deletedAt),
+            collectionScope === "shared"
+              ? isNull(mediaContactsTable.accountId)
+              : eq(mediaContactsTable.accountId, workspaceId),
+          )),
         ]);
         return { existingOutlets, existingContacts };
       };
+
       const existing = await loadExisting();
-      const initialPlan = planMediaImport(parsed.rows, existing.existingOutlets, existing.existingContacts);
-      const previewOverrides = await db.select({ contactId: mediaContactFieldOverridesTable.contactId, fieldName: mediaContactFieldOverridesTable.fieldName })
-        .from(mediaContactFieldOverridesTable).where(eq(mediaContactFieldOverridesTable.accountId, accountId));
-      const reconciliation = classifyMediaReconciliation(parsed.rows, existing.existingContacts, new Set(previewOverrides.map((item) => `${item.contactId}:${item.fieldName}`)));
+      const previewOverrides = await db.select({
+        contactId: mediaContactFieldOverridesTable.contactId,
+        fieldName: mediaContactFieldOverridesTable.fieldName,
+        value: mediaContactFieldOverridesTable.value,
+      }).from(mediaContactFieldOverridesTable).where(eq(mediaContactFieldOverridesTable.accountId, owner));
+      const overrideSet = new Set(previewOverrides.map((item) => `${item.contactId}:${item.fieldName}`));
+      const overrideFingerprint = previewOverrides.map((item) => `${item.contactId}:${item.fieldName}:${item.value}`);
+      const reconciliation = reconcileMediaImport(
+        parsed.rows,
+        existing.existingOutlets,
+        existing.existingContacts,
+        overrideSet,
+        { selectedCategory },
+      );
+      const authorizedReconciliation = enforceImportOutletOwnership(
+        reconciliation,
+        existing.existingOutlets,
+        accountId,
+      );
+      const dimensionCounts = importDimensionCounts(parsed.rows);
+      const fingerprint = reconciliationFingerprint(
+        owner,
+        collectionScope,
+        source.sourceHash,
+        existing.existingOutlets,
+        existing.existingContacts,
+        overrideFingerprint,
+        authorizedReconciliation,
+      );
+      const previewToken = issueMediaImportPreviewToken({
+        owner,
+        scope: collectionScope,
+        category: selectedCategory,
+        sourceHash: source.sourceHash,
+        fingerprint,
+      });
       const preview = {
+        collectionScope,
+        owner: previewOwner,
+        ownerNamespace: owner,
+        sourceHash: source.sourceHash,
+        sourceByteLength: source.byteLength,
+        metadata: parsed.metadata,
+        sheetInventory: parsed.sheetInventory,
+        reviewedToken: previewToken,
+        previewToken,
+        // reviewToken is the v33 UI name; the explicit aliases above preserve
+        // the API name used by non-browser clients.
+        reviewToken: previewToken,
+        recordTypeCounts: dimensionCounts.byRecordType,
+        sectorCounts: dimensionCounts.bySector,
+        sectorCountsByRecordType: dimensionCounts.byRecordTypeAndSector,
+        scopeInventory: {
+          collectionScope,
+          owner: previewOwner,
+          sourceType: source.sourceType,
+          sourceByteLength: source.byteLength,
+          acceptedRows: parsed.rows.length,
+          rejectedRows: parsed.errors.length,
+          contactRows: dimensionCounts.byRecordType.contact ?? 0,
+          publicationRows: dimensionCounts.byRecordType.publication ?? 0,
+          sectorCounts: dimensionCounts.bySector,
+          sectorCountsByRecordType: dimensionCounts.byRecordTypeAndSector,
+        },
         validRows: parsed.rows.length,
-        importableRows: initialPlan.importRows.length,
-        duplicateRows: initialPlan.duplicatesSkipped,
-        ...reconciliation,
-        invalid: reconciliation.invalid + parsed.errors.length,
-        invalidRows: parsed.errors.length,
-        outletCount: initialPlan.outletCount,
-        newOutletCount: initialPlan.newOutletCount,
+        importableRows: authorizedReconciliation.importRows.length,
+        publicationRows: authorizedReconciliation.publicationRows.length,
+        matchedExisting: authorizedReconciliation.matchedExisting,
+        duplicateRows: authorizedReconciliation.duplicatesSkipped,
+        ...authorizedReconciliation.counts,
+        invalid: authorizedReconciliation.counts.invalid + parsed.errors.length,
+        invalidRows: authorizedReconciliation.counts.invalid + parsed.errors.length,
+        outletCount: authorizedReconciliation.outletCount,
+        newOutletCount: authorizedReconciliation.newOutletCount,
+        expectedMutations: authorizedReconciliation.expectedMutations,
         headers: parsed.headers,
-        errors: parsed.errors.slice(0, 50),
-        sample: initialPlan.importRows.slice(0, 8).map(({ row }) => row),
+        warnings: parsed.warnings ?? [],
+        errors: [
+          ...parsed.errors,
+          ...authorizedReconciliation.outcomes.flatMap((outcome) => outcome.conflicts.map((conflict) => ({
+            row: conflict.sourceRow,
+            ...(outcome.sheetName ? { sheetName: outcome.sheetName } : {}),
+            ...(conflict.conflictingSheetName ? { conflictingSheetName: conflict.conflictingSheetName } : {}),
+            ...(conflict.conflictingSourceRow !== undefined ? { conflictingSourceRow: conflict.conflictingSourceRow } : {}),
+            ...(conflict.existingContactId !== undefined ? { existingContactId: conflict.existingContactId } : {}),
+            message: conflict.message,
+          }))),
+        ],
+        rowOutcomes: authorizedReconciliation.outcomes.map((outcome) => ({
+          ...outcome,
+          outcome: outcome.status,
+          reason: outcome.conflicts.map((conflict) => conflict.message).join(" "),
+          fields: outcome.changedFields?.length
+            ? outcome.changedFields
+            : outcome.conflicts.flatMap((conflict) => conflict.field ? [conflict.field] : []),
+        })),
+        sample: authorizedReconciliation.importRows.slice(0, 8).map(({ row }) => row),
       };
       if (commit !== true) {
         res.json({ ok: true, preview });
         return;
       }
-      if (initialPlan.importRows.length === 0 && initialPlan.matchedExisting === 0) {
+
+      const safeKey = typeof idempotencyKey === "string" ? idempotencyKey.trim().slice(0, 160) : "";
+      // A successful commit may have changed the reconciliation fingerprint.
+      // Resolve an exact idempotent retry before validating the old preview
+      // token so network retries remain safe after that state change.
+      if (safeKey) {
+        const prior = await db.select({
+          summary: mediaImportBatchesTable.summary,
+          sourceHash: mediaImportBatchesTable.sourceHash,
+        }).from(mediaImportBatchesTable).where(and(
+          eq(mediaImportBatchesTable.accountId, owner),
+          eq(mediaImportBatchesTable.idempotencyKey, safeKey),
+        )).limit(1);
+        if (prior[0]) {
+          if (prior[0].sourceHash !== source.sourceHash) {
+            res.status(409).json({ error: "This idempotency key was already used for a different source file." });
+            return;
+          }
+          const priorSummary = prior[0].summary as Record<string, unknown>;
+          if (String(priorSummary.category ?? "") !== selectedCategory) {
+            res.status(409).json({ error: "This idempotency key was already used for a different import category." });
+            return;
+          }
+          res.json({
+            ok: true,
+            preview,
+            result: { ...priorSummary, replayed: true },
+          });
+          return;
+        }
+      }
+      const reviewedToken = typeof body.reviewedToken === "string"
+        ? body.reviewedToken
+        : typeof body.previewToken === "string"
+          ? body.previewToken
+          : typeof body.reviewToken === "string" ? body.reviewToken : "";
+      const requestedHash = typeof body.sourceHash === "string" ? body.sourceHash : "";
+      if (!requestedHash || requestedHash !== source.sourceHash || !reviewedToken
+        || !verifyMediaImportPreviewToken(reviewedToken, {
+          owner,
+          scope: collectionScope,
+          category: selectedCategory,
+          sourceHash: source.sourceHash,
+          fingerprint,
+        })) {
+        res.status(409).json({
+          error: "This import preview is stale or has not been reviewed. Preview the exact file again before committing.",
+          sourceHash: source.sourceHash,
+          previewRequired: true,
+        });
+        return;
+      }
+      if (body.acknowledgeTarget !== true || (authorizedReconciliation.counts.conflicted > 0 && body.acknowledgeConflicts !== true)) {
+        res.status(409).json({
+          error: "Acknowledge the import target and review all conflicts before committing.",
+          previewRequired: true,
+          acknowledgementRequired: true,
+        });
+        return;
+      }
+      if (authorizedReconciliation.importRows.length === 0 && authorizedReconciliation.matches.length === 0
+        && authorizedReconciliation.publicationRows.length === 0 && authorizedReconciliation.counts.conflicted === 0) {
         res.status(400).json({ error: "The import does not contain any valid contacts to reconcile.", preview });
         return;
       }
 
-      // Imports are always private to the active account, including admin imports.
-      // This avoids accidentally publishing a customer's uploaded list globally.
-      const selectedCategory = typeof category === "string" ? category.trim() : "";
       const result = await db.transaction(async (tx) => {
-        // Serialize import commits for this account. The schema intentionally
-        // allows manual duplicates, so a transaction-scoped advisory lock is
-        // safer than adding broad uniqueness constraints.
         if (process.env.NODE_ENV !== "test") {
-          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`media-import:${accountId}`}))`);
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`media-import:${owner}`}))`);
         }
-        const safeKey = typeof idempotencyKey === "string" ? idempotencyKey.trim().slice(0, 160) : "";
         if (safeKey) {
-          const prior = await tx.select({ summary: mediaImportBatchesTable.summary })
+          const prior = await tx.select({ summary: mediaImportBatchesTable.summary, sourceHash: mediaImportBatchesTable.sourceHash })
             .from(mediaImportBatchesTable)
-            .where(and(eq(mediaImportBatchesTable.accountId, accountId), eq(mediaImportBatchesTable.idempotencyKey, safeKey)))
+            .where(and(eq(mediaImportBatchesTable.accountId, owner), eq(mediaImportBatchesTable.idempotencyKey, safeKey)))
             .limit(1);
-          if (prior[0]) return { ...(prior[0].summary as Record<string, number>), replayed: true };
+          if (prior[0]) {
+            if (prior[0].sourceHash !== source.sourceHash) {
+              throw new Error("This idempotency key was already used for a different source file.");
+            }
+            const priorSummary = prior[0].summary as Record<string, unknown>;
+            if (String(priorSummary.category ?? "") !== selectedCategory) {
+              throw new Error("This idempotency key was already used for a different import category.");
+            }
+            return { ...priorSummary, replayed: true };
+          }
         }
-        const existingOutlets = await tx
-          .select({
+
+        // The transaction repeats the read and the shared pure plan.  The
+        // preview token above was based on the same snapshot; if another
+        // commit changed an identity, this second plan remains deterministic
+        // and no source-owned field can be applied to the wrong contact.
+        const [existingOutlets, existingContacts] = await Promise.all([
+          tx.select({
             id: mediaOutletsTable.id,
             name: mediaOutletsTable.name,
             website: mediaOutletsTable.website,
-          })
-          .from(mediaOutletsTable)
-          .where(and(
+            accountId: mediaOutletsTable.accountId,
+            category: mediaOutletsTable.category,
+            description: mediaOutletsTable.description,
+            country: mediaOutletsTable.country,
+            reachBand: mediaOutletsTable.reachBand,
+          }).from(mediaOutletsTable).where(and(
             isNull(mediaOutletsTable.deletedAt),
-            or(eq(mediaOutletsTable.accountId, accountId), isNull(mediaOutletsTable.accountId)),
-          ));
-        const existingContacts = await tx
-          .select({
+            collectionScope === "shared"
+              ? isNull(mediaOutletsTable.accountId)
+              : or(eq(mediaOutletsTable.accountId, workspaceId), isNull(mediaOutletsTable.accountId)),
+          )),
+          tx.select({
             id: mediaContactsTable.id,
             outletId: mediaContactsTable.outletId,
             firstName: mediaContactsTable.firstName,
             lastName: mediaContactsTable.lastName,
+            role: mediaContactsTable.role,
             email: mediaContactsTable.email,
+            linkedinUrl: mediaContactsTable.linkedinUrl,
+            sourceUrl: mediaContactsTable.sourceUrl,
+            publicationReach: mediaContactsTable.publicationReach,
+            publicationAuthority: mediaContactsTable.publicationAuthority,
+            journalistAuthority: mediaContactsTable.journalistAuthority,
+            confidence: mediaContactsTable.confidence,
+            reviewNotes: mediaContactsTable.reviewNotes,
+            notes: mediaContactsTable.notes,
+            beats: mediaContactsTable.beats,
             sectors: mediaContactsTable.sectors,
-          })
-          .from(mediaContactsTable)
-          .where(and(isNull(mediaContactsTable.deletedAt), eq(mediaContactsTable.accountId, accountId)));
-
-        const commitPlan = planMediaImport(parsed.rows, existingOutlets, existingContacts);
+            provenance: mediaContactsTable.provenance,
+            geography: mediaContactsTable.geography,
+            sourceRef: mediaContactsTable.sourceRef,
+          }).from(mediaContactsTable).where(and(
+            isNull(mediaContactsTable.deletedAt),
+            collectionScope === "shared" ? isNull(mediaContactsTable.accountId) : eq(mediaContactsTable.accountId, workspaceId),
+          )),
+        ]);
+        const commitOverrides = await tx.select({
+          contactId: mediaContactFieldOverridesTable.contactId,
+          fieldName: mediaContactFieldOverridesTable.fieldName,
+          value: mediaContactFieldOverridesTable.value,
+        }).from(mediaContactFieldOverridesTable).where(eq(mediaContactFieldOverridesTable.accountId, owner));
+        const currentOverrideSet = new Set(commitOverrides.map((entry) => `${entry.contactId}:${entry.fieldName}`));
+        const currentOverrideFingerprint = commitOverrides.map((entry) => `${entry.contactId}:${entry.fieldName}:${entry.value}`);
+        const rawCommitPlan = reconcileMediaImport(
+          parsed.rows,
+          existingOutlets,
+          existingContacts,
+          currentOverrideSet,
+          { selectedCategory },
+        );
+        const commitPlan = enforceImportOutletOwnership(rawCommitPlan, existingOutlets, accountId);
+        const currentFingerprint = reconciliationFingerprint(
+          owner,
+          collectionScope,
+          source.sourceHash,
+          existingOutlets,
+          existingContacts,
+          currentOverrideFingerprint,
+          commitPlan,
+        );
+        if (currentFingerprint !== fingerprint) {
+          throw new Error("This import preview is stale because the collection or manual overrides changed. Preview the file again.");
+        }
         const outletIdByRef = new Map(existingOutlets.map((outlet) => [`existing:${outlet.id}`, outlet.id]));
         let outletsCreated = 0;
+        let outletsUpdated = 0;
         let contactsCreated = 0;
-
-        for (const { row, outletRef } of commitPlan.importRows) {
+        for (const { row, outletRef, changedFields } of commitPlan.publicationRows) {
+          const existingOutletId = outletIdByRef.get(outletRef);
+          if (existingOutletId) {
+            if (changedFields.length) {
+              const metadata = importedOutletMetadata(row, selectedCategory);
+              const updated = await tx.update(mediaOutletsTable)
+                .set(Object.fromEntries(changedFields.map((field) => [field, metadata[field as keyof typeof metadata]])))
+                .where(and(
+                  eq(mediaOutletsTable.id, existingOutletId),
+                  importOutletOwnerCondition(accountId),
+                ))
+                .returning({ id: mediaOutletsTable.id });
+              if (updated.length) outletsUpdated += 1;
+            }
+            continue;
+          }
+          const metadata = importedOutletMetadata(row, selectedCategory);
+          const [created] = await tx.insert(mediaOutletsTable).values({
+            name: row.outletName,
+            ...metadata,
+            website: row.website.trim(),
+            accountId,
+          }).returning({ id: mediaOutletsTable.id });
+          outletIdByRef.set(outletRef, created.id);
+          outletsCreated += 1;
+        }
+        for (const { row, outletRef, aggregate } of commitPlan.importRows) {
           let outletId = outletIdByRef.get(outletRef);
           if (!outletId) {
+            const metadata = importedOutletMetadata(row, selectedCategory);
             const [created] = await tx.insert(mediaOutletsTable).values({
               name: row.outletName,
-              category: selectedCategory || row.sector || "",
-              website: row.website,
-              description: row.description,
-              country: row.country,
-              reachBand: row.reachBand,
+              ...metadata,
+              website: row.website.trim(),
               accountId,
             }).returning({ id: mediaOutletsTable.id });
             outletId = created.id;
             outletIdByRef.set(outletRef, outletId);
             outletsCreated += 1;
           }
-
+          const imported = buildImportedContactMetadata(row, aggregate, {
+            filename: typeof filename === "string" ? filename.slice(0, 500) : "",
+            sourceHash: source.sourceHash,
+            sourceType: source.sourceType,
+            selectedCategory,
+          });
           await tx.insert(mediaContactsTable).values({
             outletId,
             firstName: row.firstName,
@@ -299,13 +696,11 @@ router.post(
             role: row.role,
             email: row.email,
             phone: "",
-            notes: buildMediaContactNotes(row),
-            beats: row.beat ? row.beat.split(/[;,|]/).map((value) => value.trim()).filter(Boolean) : [],
-            sectors: Array.from(new Set(parsed.rows
-              .filter((candidate: MediaImportRow) => row.email && candidate.email === row.email)
-              .flatMap((candidate: MediaImportRow) => [candidate.sector, selectedCategory])
-              .filter((value: string | undefined): value is string => !!value))),
-            sourceRef: `${row.sheetName ?? "CSV"}:${row.sourceRow}`,
+            notes: imported.notes,
+            beats: imported.beats,
+            sectors: imported.sectors,
+            geography: imported.geography,
+            sourceRef: imported.sourceRef,
             linkedinUrl: row.linkedinUrl ?? "",
             sourceUrl: row.sourceUrl ?? "",
             publicationReach: row.reachBand,
@@ -313,58 +708,101 @@ router.post(
             journalistAuthority: row.journalistAuthority ?? "",
             confidence: row.confidence,
             reviewNotes: row.reviewNotes ?? "",
-            lastVerifiedAt: row.verifiedDate && !Number.isNaN(Date.parse(row.verifiedDate)) ? new Date(row.verifiedDate) : null,
-            provenance: { importFilename: typeof filename === "string" ? filename.slice(0, 500) : "", sheet: row.sheetName ?? "", sourceRow: row.sourceRow },
+            // Workbook dates are source assertions, not page verification.
+            provenance: imported.provenance,
             accountId,
           });
           contactsCreated += 1;
         }
-        // Reconciliation updates workbook/source-owned metadata for canonical
-        // email matches, but never overwrites an explicitly user-owned field.
-        const matched = existingContacts.filter((contact) => contact.email);
-        const overrides = matched.length ? await tx.select({ contactId: mediaContactFieldOverridesTable.contactId, fieldName: mediaContactFieldOverridesTable.fieldName })
-          .from(mediaContactFieldOverridesTable).where(eq(mediaContactFieldOverridesTable.accountId, accountId)) : [];
-        const overridden = new Set(overrides.map((entry) => `${entry.contactId}:${entry.fieldName}`));
-        for (const row of parsed.rows) {
-          if (!row.email) continue;
-          const contact = matched.find((candidate) => candidate.email.trim().toLowerCase() === row.email);
-          if (!contact) continue;
+
+        for (const match of commitPlan.matches) {
+          const aggregate = match.aggregate;
+          const { row } = aggregate;
+          const contact = match.contact;
+          const imported = buildImportedContactMetadata(row, aggregate, {
+            filename: typeof filename === "string" ? filename.slice(0, 500) : "",
+            sourceHash: source.sourceHash,
+            sourceType: source.sourceType,
+            selectedCategory,
+          });
           const next: Record<string, unknown> = {
-            role: row.role, linkedinUrl: row.linkedinUrl ?? "", sourceUrl: row.sourceUrl ?? "", sourceRef: `${row.sheetName ?? "CSV"}:${row.sourceRow}`,
-            publicationReach: row.reachBand, publicationAuthority: row.publicationAuthority ?? "", journalistAuthority: row.journalistAuthority ?? "",
-            confidence: row.confidence, reviewNotes: row.reviewNotes ?? "", beats: row.beat ? row.beat.split(/[;,|]/).map((value: string) => value.trim()).filter(Boolean) : [],
-            sectors: Array.from(new Set([...(contact.sectors ?? []), ...(row.sector ? [row.sector] : []), ...(selectedCategory ? [selectedCategory] : [])])),
+            sourceRef: imported.sourceRef,
+            // Sectors are additive, including rows with no email.
+            sectors: Array.from(new Set([...(contact.sectors ?? []), ...imported.sectors])),
+            provenance: mergeImportedProvenance(contact.provenance, imported.provenance),
           };
-          for (const key of Object.keys(next)) if (overridden.has(`${contact.id}:${key}`)) delete next[key];
-          if (Object.keys(next).length) await tx.update(mediaContactsTable).set(next).where(eq(mediaContactsTable.id, contact.id));
+          if (row.role) next.role = row.role;
+          if (row.linkedinUrl) next.linkedinUrl = row.linkedinUrl;
+          if (row.sourceUrl) next.sourceUrl = row.sourceUrl;
+          if (imported.geography) next.geography = imported.geography;
+          if (row.reachBand) next.publicationReach = row.reachBand;
+          if (row.publicationAuthority) next.publicationAuthority = row.publicationAuthority;
+          if (row.journalistAuthority) next.journalistAuthority = row.journalistAuthority;
+          if (row.confidence) next.confidence = row.confidence;
+          if (row.reviewNotes) next.reviewNotes = row.reviewNotes;
+          if (imported.beats.length) {
+            // Workbook refreshes add beat evidence; they do not erase a
+            // previously curated or source-derived beat.
+            next.beats = Array.from(new Set([...(contact.beats ?? []), ...imported.beats]));
+          }
+          if (!contact.email && row.email) next.email = row.email;
+          for (const key of Object.keys(next)) {
+            if (overrideSet.has(`${contact.id}:${key}`) || match.overriddenFields.includes(key)) delete next[key];
+          }
+          if (Object.keys(next).length) {
+            await tx.update(mediaContactsTable).set({ ...next, updatedAt: new Date() }).where(eq(mediaContactsTable.id, contact.id!));
+          }
         }
         const summary = {
           outletsCreated,
+          outletsUpdated,
+          outletsUnchanged: commitPlan.counts.outletUnchanged,
           contactsCreated,
+          contactsMatched: commitPlan.matches.length,
           duplicatesSkipped: commitPlan.duplicatesSkipped,
+          publicationsProcessed: commitPlan.publicationRows.length,
+          expectedMutations: commitPlan.expectedMutations,
+          category: selectedCategory,
+          new: commitPlan.counts.new,
+          refreshed: commitPlan.counts.refreshed,
+          unchanged: commitPlan.counts.unchanged,
+          conflicted: commitPlan.counts.conflicted,
+          invalid: commitPlan.counts.invalid + parsed.errors.length,
+          sourceHash: source.sourceHash,
         };
         await tx.insert(mediaImportBatchesTable).values({
-          accountId,
+          accountId: owner,
           idempotencyKey: safeKey || null,
           sourceFilename: typeof filename === "string" ? filename.slice(0, 500) : "",
-          sourceType: typeof xlsxBase64 === "string" ? "xlsx" : Array.isArray(rows) ? "parsed" : "csv",
+          sourceHash: source.sourceHash,
+          sourceType: source.sourceType,
           summary,
           committedAt: new Date(),
         });
         return summary;
       });
 
+      const aggregateResult = result as Record<string, unknown>;
       req.log.info({
-        accountId,
+        accountId: owner,
         validRows: parsed.rows.length,
         invalidRows: parsed.errors.length,
-        ...result,
-      }, "Media database CSV import completed");
+        outletsCreated: aggregateResult.outletsCreated,
+        contactsCreated: aggregateResult.contactsCreated,
+        duplicatesSkipped: aggregateResult.duplicatesSkipped,
+        publicationsProcessed: aggregateResult.publicationsProcessed,
+        new: aggregateResult.new,
+        refreshed: aggregateResult.refreshed,
+        unchanged: aggregateResult.unchanged,
+        conflicted: aggregateResult.conflicted,
+        invalid: aggregateResult.invalid,
+        sourceHash: aggregateResult.sourceHash,
+      }, "Media database import completed");
       res.json({ ok: true, preview, result });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to import CSV.";
-      req.log.warn({ err: error }, "Media database CSV import rejected");
-      res.status(400).json({ error: message });
+      const message = error instanceof Error ? error.message : "Failed to import the media file.";
+      req.log.warn({ err: error }, "Media database import rejected");
+      res.status(/idempotency key|preview is stale|collection changed|manual overrides changed/i.test(message) ? 409 : 400).json({ error: message });
     }
   },
 );
@@ -413,9 +851,15 @@ router.delete(
         return;
       }
       const row = existing[0];
-      // Only the account that created the category (or admin) may delete it.
+      // Shared categories follow the same Master-only mutation rule as shared
+      // media records. Private categories remain owned by their workspace,
+      // including when the caller is the Master account.
       const requestingAccount = normUsername(req.account!.username);
-      if (!isAdmin(req) && row.accountId !== requestingAccount) {
+      if (row.accountId === null && !isWritableMaster(req)) {
+        sharedMutationError(res, "delete");
+        return;
+      }
+      if (row.accountId !== null && row.accountId !== requestingAccount) {
         res.status(403).json({ error: "You cannot delete this category" });
         return;
       }
@@ -465,7 +909,13 @@ router.post(
         res.status(400).json({ error: "Missing outlet name" });
         return;
       }
-      const accountId = isAdmin(req) ? null : normUsername(req.account!.username);
+      if (isMasterWorkspace(req) && !isWritableMaster(req)) {
+        sharedMutationError(res, "create");
+        return;
+      }
+      // Preserve the established Master manual-entry behaviour (global rows),
+      // while all non-Master manual entries stay private to their workspace.
+      const accountId = isMasterWorkspace(req) ? null : normUsername(req.account!.username);
       const [created] = await db
         .insert(mediaOutletsTable)
         .values({
@@ -501,12 +951,13 @@ router.put(
         res.status(404).json({ error: "Outlet not found" });
         return;
       }
-      // Global rows (accountId null) require admin; account-scoped rows require ownership.
-      if (row.accountId === null && !isAdmin(req)) {
-        res.status(403).json({ error: "Only admins may edit global outlets" });
+      // Shared rows are controlled by a writable Master member. A Master
+      // session must not gain access to another workspace's private rows.
+      if (row.accountId === null && !isWritableMaster(req)) {
+        sharedMutationError(res, "edit");
         return;
       }
-      if (row.accountId !== null && !isAdmin(req) && row.accountId !== normUsername(req.account!.username)) {
+      if (row.accountId !== null && row.accountId !== normUsername(req.account!.username)) {
         res.status(403).json({ error: "You can only edit your own outlets" });
         return;
       }
@@ -546,11 +997,11 @@ router.delete(
         res.json({ ok: true });
         return;
       }
-      if (row.accountId === null && !isAdmin(req)) {
-        res.status(403).json({ error: "Only admins may delete global outlets" });
+      if (row.accountId === null && !isWritableMaster(req)) {
+        sharedMutationError(res, "delete");
         return;
       }
-      if (row.accountId !== null && !isAdmin(req) && row.accountId !== normUsername(req.account!.username)) {
+      if (row.accountId !== null && row.accountId !== normUsername(req.account!.username)) {
         res.status(403).json({ error: "You can only delete your own outlets" });
         return;
       }
@@ -903,6 +1354,9 @@ router.get(
       const query = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
       const category = typeof req.query.category === "string" ? req.query.category.trim().toLowerCase() : "";
       const country = typeof req.query.country === "string" ? req.query.country.trim().toLowerCase() : "";
+      const outletId = typeof req.query.outletId === "string" && /^\d+$/.test(req.query.outletId)
+        ? Number(req.query.outletId)
+        : null;
       const page = Math.max(1, Math.min(100000, Number(req.query.page) || 1));
       const pageSize = Math.max(1, Math.min(200, Number(req.query.pageSize) || 50));
       const sort = ["firstName", "lastName", "role", "email", "outletName", "createdAt"].includes(String(req.query.sort))
@@ -913,8 +1367,10 @@ router.get(
           .filter(Boolean).join(" ").toLowerCase();
         const queryGroups = searchTokens(query);
         return (!query || queryGroups.every((alternatives) => alternatives.some((token) => haystack.includes(token))))
-          && (!category || (contact.outletCategory ?? "").toLowerCase().includes(category))
-          && countryMatchesFilter(country, contact.outletCountry ?? "", contact.geography);
+          && (!category || (contact.outletCategory ?? "").toLowerCase().includes(category)
+            || contact.sectors.some((sector) => sector.toLowerCase().includes(category)))
+          && countryMatchesFilter(country, contact.outletCountry ?? "", contact.geography)
+          && (outletId === null || contact.outletId === outletId);
       }).sort((a, b) => {
         const av = String(a[sort as keyof typeof a] ?? "").toLowerCase();
         const bv = String(b[sort as keyof typeof b] ?? "").toLowerCase();
@@ -958,7 +1414,19 @@ router.post("/store/media-db/contacts/:id/source-checks/:checkId/approve", requi
   const access = await editableContact(req, id);
   if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
   const [check] = await db.select().from(mediaContactSourceChecksTable)
-    .where(and(eq(mediaContactSourceChecksTable.id, checkId), eq(mediaContactSourceChecksTable.contactId, id), eq(mediaContactSourceChecksTable.accountId, access.owner)))
+    .where(and(
+      eq(mediaContactSourceChecksTable.id, checkId),
+      eq(mediaContactSourceChecksTable.contactId, id),
+      access.row.accountId === null
+        ? or(
+          eq(mediaContactSourceChecksTable.accountId, access.owner),
+          // Older manual source checks used the legacy global namespace.
+          // Accept those observations for review, but all new overrides and
+          // imports use the canonical __global_admin__ owner namespace.
+          eq(mediaContactSourceChecksTable.accountId, "__global__"),
+        )
+        : eq(mediaContactSourceChecksTable.accountId, access.owner),
+    ))
     .limit(1);
   if (!check) { res.status(404).json({ error: "Source check not found" }); return; }
   const overrides = await db.select({ fieldName: mediaContactFieldOverridesTable.fieldName })
@@ -996,11 +1464,20 @@ router.post(
             res.status(403).json({ error: "You cannot link to this outlet" });
             return;
           }
+          if (isMasterWorkspace(req) && outletRow[0].accountId !== null) {
+            res.status(403).json({ error: "Shared contacts can only link to shared outlets" });
+            return;
+          }
           resolvedOutletId = numOutletId;
         }
       }
-      // Admins can create global contacts (accountId = null)
-      const accountId = isAdmin(req) ? null : normUsername(req.account!.username);
+      if (isMasterWorkspace(req) && !isWritableMaster(req)) {
+        sharedMutationError(res, "create");
+        return;
+      }
+      // Preserve the established Master manual-entry behaviour (global rows),
+      // while all non-Master manual entries stay private to their workspace.
+      const accountId = isMasterWorkspace(req) ? null : normUsername(req.account!.username);
       const stringValues = cleanContactStrings(body);
       const beats = cleanContactArray(body.beats);
       const sectors = cleanContactArray(body.sectors);
@@ -1041,12 +1518,13 @@ router.put(
         res.status(404).json({ error: "Contact not found" });
         return;
       }
-      // Global contacts (accountId null) require admin; account-scoped require ownership.
-      if (row.accountId === null && !isAdmin(req)) {
-        res.status(403).json({ error: "Only admins may edit global contacts" });
+      // Shared rows are controlled by a writable Master member. A Master
+      // session must not gain access to another workspace's private rows.
+      if (row.accountId === null && !isWritableMaster(req)) {
+        sharedMutationError(res, "edit");
         return;
       }
-      if (row.accountId !== null && !isAdmin(req) && row.accountId !== normUsername(req.account!.username)) {
+      if (row.accountId !== null && row.accountId !== normUsername(req.account!.username)) {
         res.status(403).json({ error: "You can only edit your own contacts" });
         return;
       }
@@ -1068,6 +1546,10 @@ router.put(
             }
             if (!outletVisible(outletRow[0].accountId, visible)) {
               res.status(403).json({ error: "You cannot link to this outlet" });
+              return;
+            }
+            if (row.accountId === null && outletRow[0].accountId !== null) {
+              res.status(403).json({ error: "Shared contacts can only link to shared outlets" });
               return;
             }
             resolvedOutletId = numOid;
@@ -1136,11 +1618,11 @@ router.delete(
         res.json({ ok: true });
         return;
       }
-      if (row.accountId === null && !isAdmin(req)) {
-        res.status(403).json({ error: "Only admins may delete global contacts" });
+      if (row.accountId === null && !isWritableMaster(req)) {
+        sharedMutationError(res, "delete");
         return;
       }
-      if (row.accountId !== null && !isAdmin(req) && row.accountId !== normUsername(req.account!.username)) {
+      if (row.accountId !== null && row.accountId !== normUsername(req.account!.username)) {
         res.status(403).json({ error: "You can only delete your own contacts" });
         return;
       }

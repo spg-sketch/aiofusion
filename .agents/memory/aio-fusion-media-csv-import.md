@@ -3,9 +3,9 @@ name: Media workbook import safety
 description: Durable scoping, reconciliation, and OOXML rules for importing media contacts and outlets.
 ---
 
-Customer-uploaded media lists must always be scoped to the active account, even when the uploader is a platform admin. An admin upload must not silently create globally visible contacts.
+Customer-uploaded media lists default to the active account. Shared collection imports are a separate, explicit Master-controlled operation, never an implicit consequence of an admin uploading a file.
 
-**Why:** The platform also supports intentional global records and manual duplicates. Treating every admin import as global risks leaking a customer's private media list, while broad database uniqueness constraints would change existing manual-entry semantics.
+**Why:** The platform supports both a central reference collection and private customer lists. Shared search and recommendations must not expose private contacts, shortlists or outreach. Treating every admin import as global risks leaking customer data.
 
 **How to apply:** Use the same duplicate-planning rules for preview and commit. Re-plan inside the commit transaction after taking an account-scoped advisory lock. Skip an existing contact before creating its proposed new outlet, so duplicate contacts cannot leave orphan outlets.
 

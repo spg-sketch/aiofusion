@@ -39,6 +39,9 @@ export type Contact = {
   publicationReach?: string;
   publicationAuthority?: string | number;
   journalistAuthority?: string | number;
+  reviewNotes?: string;
+  provenance?: ContactProvenance | null;
+  sourceCheckClaimedAt?: string | null;
   sourceStatus?: "current" | "due" | "unavailable" | "changed" | "unverified";
   sourceReviewDueAt?: string | null;
   sourceCheckQueued?: boolean;
@@ -55,20 +58,32 @@ export type Contact = {
   recentBylines?: MediaByline[];
   journalistInterests?: string[];
   mediaOpportunities?: MediaOpportunity[];
-  provenance?: {
-    latestPublicDiscovery?: {
-      recentBylines?: MediaByline[];
-      journalistInterests?: string[];
-      mediaOpportunities?: MediaOpportunity[];
-      mediaOpportunity?: string;
-    };
-  } | null;
   lifecycleStatus?: "active" | "departed";
   hasPendingCorrection?: boolean;
 };
 
+export type ContactProvenance = Record<string, unknown> & {
+  latestPublicDiscovery?: {
+    recentBylines?: MediaByline[];
+    journalistInterests?: string[];
+    mediaOpportunities?: MediaOpportunity[];
+    mediaOpportunity?: string;
+  };
+};
+
 export type MediaByline = { title: string; url?: string; date?: string; summary?: string };
 export type MediaOpportunity = { title: string; angle: string; rationale?: string };
+
+/**
+ * Keep contact email values useful for review without turning untrusted
+ * workbook/page values into mail links.  Import reconciliation normally
+ * canonicalises emails, but manually entered and legacy records can still
+ * contain a malformed value.
+ */
+export function isSendableContactEmail(value: unknown): value is string {
+  return typeof value === "string"
+    && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
 
 export type Recommendation = {
   rank: number;
@@ -289,7 +304,9 @@ export function RecommendationCard({
             {c.email && (
               <div className="flex items-center gap-2" style={{ color: vars.g600 }}>
                 <Mail size={14} className="text-slate-400" />
-                <a href={`mailto:${c.email}`} className="hover:underline">{c.email}</a>
+                {isSendableContactEmail(c.email)
+                  ? <a href={`mailto:${c.email}`} className="hover:underline">{c.email}</a>
+                  : <span title="Review required before sending">{c.email} <span className="text-[11px] text-amber-700">Review - not sendable</span></span>}
               </div>
             )}
             {(c.phone || c.mobile) && (
@@ -378,20 +395,27 @@ export function RecommendationCard({
                  <span className="text-[13px] font-bold text-slate-700">{c.publicationReach}</span>
               </div>
             )}
-            {c.publicationAuthority ? (
+             {c.publicationAuthority !== undefined && c.publicationAuthority !== null && c.publicationAuthority !== "" ? (
               <div className="flex flex-col items-center p-2 rounded-lg bg-slate-50 border border-slate-100 flex-1 min-w-[70px]">
                  <Award size={14} className="text-slate-400 mb-1" />
                  <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wide">Pub Auth</span>
                  <span className="text-[13px] font-bold text-slate-700">{c.publicationAuthority}</span>
               </div>
             ) : null}
-            {c.journalistAuthority ? (
+             {c.journalistAuthority !== undefined && c.journalistAuthority !== null && c.journalistAuthority !== "" ? (
               <div className="flex flex-col items-center p-2 rounded-lg bg-slate-50 border border-slate-100 flex-1 min-w-[70px]">
                  <Award size={14} className="text-amber-500 mb-1" />
-                 <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wide">Authority</span>
+                  <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wide">Journalist authority</span>
                  <span className="text-[13px] font-bold text-slate-700">{c.journalistAuthority}</span>
               </div>
             ) : null}
+             {(c.confidence || c.confidenceLevel) && (
+               <div className="flex flex-col items-center p-2 rounded-lg bg-indigo-50 border border-indigo-100 flex-1 min-w-[70px]">
+                  <Shield size={14} className="text-indigo-500 mb-1" />
+                  <span className="text-[10px] uppercase text-indigo-600 font-semibold tracking-wide">Confidence</span>
+                  <span className="text-[11px] font-medium text-indigo-700">{c.confidence || c.confidenceLevel}</span>
+               </div>
+             )}
             {c.lastVerifiedAt && (
               <div className="flex flex-col items-center p-2 rounded-lg bg-emerald-50 border border-emerald-100 flex-1 min-w-[70px]">
                  <Shield size={14} className="text-emerald-500 mb-1" />
@@ -498,7 +522,9 @@ export function LiveDiscoveryCard({
             {candidate.email && (
               <div className="flex items-center gap-2" style={{ color: vars.g600 }}>
                 <Mail size={14} className="text-slate-400" />
-                <a href={`mailto:${candidate.email}`} className="hover:underline">{candidate.email}</a>
+                {isSendableContactEmail(candidate.email)
+                  ? <a href={`mailto:${candidate.email}`} className="hover:underline">{candidate.email}</a>
+                  : <span title="Review required before sending">{candidate.email} <span className="text-[11px] text-amber-700">Review - not sendable</span></span>}
               </div>
             )}
             {candidate.sourceUrl && (

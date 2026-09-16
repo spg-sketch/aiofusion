@@ -98,17 +98,21 @@ export function SearchableOutletPicker({
 // ---------------------------------------------------------------------------
 // Media Database page - outlets, contacts and custom categories
 // ---------------------------------------------------------------------------
-import type { Contact } from "./JournalistComponents";
+import { isSendableContactEmail, type Contact } from "./JournalistComponents";
 import { RecommendationCard } from "./JournalistComponents";
 
-type Outlet = { id: number; name: string; category: string; website: string; description: string; country: string; reachBand: string; accountId: string | null };
+type CollectionScope = "shared" | "workspace";
+type CollectionOwnedItem = { accountId: string | null; collectionScope?: CollectionScope; owner?: string | null };
+type Outlet = { id: number; name: string; category: string; website: string; description: string; country: string; reachBand: string } & CollectionOwnedItem;
 type UnifiedResult =
   | { type: "contact"; id: number; contact: Contact; matchedFields: string[]; matchedPhrases: string[]; reasons: string[]; authority: number }
   | { type: "outlet"; id: number; outlet: Outlet; matchedFields: string[]; matchedPhrases: string[]; reasons: string[]; authority: number };
 
-type ImportPreview = {
+export type ImportPreview = {
   validRows: number;
   importableRows: number;
+  publicationRows?: number;
+  matchedExisting?: number;
   duplicateRows: number;
   invalidRows: number;
   new?: number;
@@ -117,12 +121,151 @@ type ImportPreview = {
   duplicate?: number;
   invalid?: number;
   conflicted?: number;
+  conflicts?: number;
   outletCount: number;
-  errors: Array<{ row: number; message: string }>;
-  sample: Array<{ sourceRow: number; firstName: string; lastName: string; role: string; outletName: string; email: string }>;
+  /** The server-resolved destination for this preview. */
+  collectionScope?: CollectionScope;
+  /** The server-resolved owner of the destination collection. */
+  owner?: string | null;
+  errors: Array<{ row: number; message: string; sheetName?: string }>;
+  sample: Array<{ sourceRow: number; sheetName?: string; firstName: string; lastName: string; role: string; outletName: string; email: string }>;
+  /** Reconciliation worker contract: one non-PII outcome per source row. */
+  rowOutcomes?: ImportRowOutcome[];
+  /** Opaque server review token bound to the uploaded payload and target. */
+  reviewToken?: string;
+  sourceHash?: string;
+  sourceByteLength?: number;
+  recordTypeCounts?: Record<string, number>;
+  sectorCounts?: Record<string, number>;
+  sectorCountsByRecordType?: Record<string, Record<string, number>>;
+  /** Counts the reviewer should see before acknowledging the destination. */
+  scopeInventory?: Record<string, ImportInventoryValue>;
 };
 
+export type ImportRowOutcome = {
+  sourceRow: number;
+  sheetName?: string;
+  outcome?: string;
+  status?: string;
+  reason?: string;
+  fields?: string[];
+};
+
+type ImportInventoryValue = string | number | boolean | null | { [key: string]: ImportInventoryValue };
+
+export function importOutcomesWithErrors(
+  outcomes: ImportRowOutcome[] | undefined,
+  errors: Array<{ row: number; message: string; sheetName?: string }> | undefined,
+): ImportRowOutcome[] {
+  const rows = [...(outcomes || [])];
+  const representedRows = new Set(rows.map((outcome) => `${outcome.sheetName || ""}\u0000${outcome.sourceRow}`));
+  for (const error of errors || []) {
+    const key = `${error.sheetName || ""}\u0000${error.row}`;
+    if (!representedRows.has(key)) rows.push({ sourceRow: error.row, sheetName: error.sheetName, outcome: "invalid", reason: error.message, fields: [] });
+  }
+  return rows.sort((a, b) => (a.sheetName || "").localeCompare(b.sheetName || "") || a.sourceRow - b.sourceRow);
+}
+
+export function importPlanHasWork(preview: ImportPreview | null): boolean {
+  if (!preview) return false;
+  return Number(preview.importableRows || 0) > 0
+    || Number(preview.publicationRows || 0) > 0
+    || Number(preview.matchedExisting || 0) > 0
+    || Number(preview.refreshed || 0) > 0
+    || Number(preview.unchanged || 0) > 0;
+}
+
+export const CONTACT_EXPORT_COLUMNS = [
+  "First Name", "Last Name", "Role", "Email", "Email Status", "Phone", "Mobile",
+  "Outlet", "Category", "Country", "Publication Reach", "Beats", "Sectors",
+  "Geography", "Language", "Seniority", "Editorial Status", "LinkedIn URL",
+  "Source URL", "Source Reference", "Publication Authority", "Journalist Authority",
+  "Confidence", "Last Verified", "Source Status", "Lifecycle Status", "Notes", "Review Notes",
+] as const;
+
+/**
+ * Prefix values that spreadsheet applications may evaluate as formulas.  The
+ * apostrophe is intentionally part of the exported cell text and keeps
+ * phone numbers such as +44... safe as well as explicit formula strings.
+ */
+export function sanitizeSpreadsheetCell(value: unknown): string {
+  const text = String(value ?? "");
+  return /^[\t\r\n ]*[=+\-@]/.test(text) ? `'${text}` : text;
+}
+
+function csvCell(value: unknown): string {
+  return `"${sanitizeSpreadsheetCell(value).replace(/"/g, '""')}"`;
+}
+
+function contactEmailStatus(contact: Contact): string {
+  if (!contact.email) return "";
+  return isSendableContactEmail(contact.email) ? "Sendable format" : "Review - not sendable";
+}
+
+function exportDate(value: string | null | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString().split("T")[0];
+}
+
+export function contactExportRow(contact: Contact): string[] {
+  return [
+    contact.firstName,
+    contact.lastName,
+    contact.role,
+    contact.email,
+    contactEmailStatus(contact),
+    contact.phone,
+    contact.mobile,
+    contact.outletName,
+    contact.outletCategory,
+    contact.outletCountry,
+    contact.publicationReach || contact.outletReachBand,
+    (contact.beats || []).join("; "),
+    (contact.sectors || []).join("; "),
+    contact.geography,
+    contact.language,
+    contact.seniority,
+    contact.editorialStatus,
+    contact.linkedinUrl,
+    contact.sourceUrl,
+    contact.sourceRef,
+    contact.publicationAuthority,
+    contact.journalistAuthority,
+    contact.confidence || contact.confidenceLevel,
+    exportDate(contact.lastVerifiedAt),
+    contact.sourceStatus,
+    contact.lifecycleStatus,
+    contact.notes,
+    contact.reviewNotes,
+  ].map((value) => String(value ?? ""));
+}
+
+function isSharedCollection(item: CollectionOwnedItem): boolean {
+  // Older API responses identify the centrally managed collection with a null
+  // accountId. Prefer the explicit scope when the newer response is present.
+  return item.collectionScope === "shared" || (item.collectionScope === undefined && item.accountId === null);
+}
+
+function canManageCollectionItem(item: CollectionOwnedItem, isMaster: boolean, canWrite: boolean, username?: string | null): boolean {
+  if (!canWrite) return false;
+  if (isSharedCollection(item)) return isMaster;
+  // Master can browse every workspace collection, but private records remain
+  // writable only from their owning workspace (including a Master-created
+  // private collection).
+  return Boolean(username && item.accountId && item.accountId.toLowerCase() === username.toLowerCase());
+}
+
 function MediaDatabasePage() {
+  const session = getLocalSession();
+  // Match the server's canonical Master boundary: an admin-role session for
+  // the bootstrap "admin" workspace. Other admin-role workspaces are still
+  // customer workspaces and may only write their own private records.
+  const isMaster = session?.role === "admin" && session.username.trim().toLowerCase() === "admin";
+  // memberProjectGate permits writes for owner/admin/content (and legacy
+  // sessions without a membership role), but blocks viewers and billing
+  // members. Keep every mutating control behind the same decision.
+  const canWriteMediaDatabase = Boolean(session && session.membershipRole !== "viewer" && session.membershipRole !== "billing");
   const [activeTab, setActiveTab] = useState<"outlets" | "contacts">("contacts");
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -182,11 +325,25 @@ function MediaDatabasePage() {
   const [importPayload, setImportPayload] = useState<{ csv?: string; xlsxBase64?: string } | null>(null);
   const [importIdempotencyKey, setImportIdempotencyKey] = useState("");
   const [importCategory, setImportCategory] = useState("");
+  const [importCollectionScope, setImportCollectionScope] = useState<CollectionScope>(() => isMaster && canWriteMediaDatabase ? "shared" : "workspace");
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [importError, setImportError] = useState("");
   const [importBusy, setImportBusy] = useState(false);
-  const [importResult, setImportResult] = useState<{ outletsCreated: number; contactsCreated: number; duplicatesSkipped: number } | null>(null);
+  const [importResult, setImportResult] = useState<{ outletsCreated: number; contactsCreated: number; duplicatesSkipped: number; publicationsProcessed?: number; refreshed?: number; unchanged?: number; rowOutcomes?: ImportRowOutcome[] } | null>(null);
+  const [importTargetAcknowledged, setImportTargetAcknowledged] = useState(false);
+  const [importConflictsAcknowledged, setImportConflictsAcknowledged] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const importPreviewSequence = useRef(0);
   const projectCategories = getProjectMediaCategories();
+  const profileProvenance = showContactProfile?.provenance && typeof showContactProfile.provenance === "object"
+    ? showContactProfile.provenance
+    : null;
+  const profileImportFilename = profileProvenance && typeof profileProvenance.importFilename === "string" ? profileProvenance.importFilename : "";
+  const profileImportSheet = profileProvenance && typeof profileProvenance.sheet === "string" ? profileProvenance.sheet : "";
+  const profileImportRow = profileProvenance && (typeof profileProvenance.sourceRow === "number" || typeof profileProvenance.sourceRow === "string")
+    ? String(profileProvenance.sourceRow)
+    : "";
 
   const loadData = async () => {
     setLoading(true);
@@ -243,72 +400,157 @@ function MediaDatabasePage() {
       if (contactSearch.trim()) params.set("q", contactSearch.trim());
       if (contactCategoryFilter) params.set("category", contactCategoryFilter);
       if (contactCountryFilter) params.set("country", contactCountryFilter);
+      if (contactOutletFilter) params.set("outletId", contactOutletFilter);
       fetch(`${apiBase()}/api/store/media-db/contacts?${params}`, { credentials: "include", signal: controller.signal })
         .then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not search contacts.")))
         .then((data) => { setContacts(data.contacts ?? []); setContactTotal(data.total ?? 0); })
         .catch((error) => { if (error.name !== "AbortError") console.error(error); });
     }, 200);
     return () => { controller.abort(); window.clearTimeout(timer); };
-  }, [contactSearch, contactCategoryFilter, contactCountryFilter, contactSort, contactDirection, contactPage]);
+  }, [contactSearch, contactCategoryFilter, contactCountryFilter, contactOutletFilter, contactSort, contactDirection, contactPage]);
 
   const resetImport = () => {
+    importPreviewSequence.current += 1;
     setImportFileName("");
     setImportPayload(null);
     setImportIdempotencyKey("");
     setImportCategory("");
+    setImportCollectionScope(isMaster && canWriteMediaDatabase ? "shared" : "workspace");
     setImportPreview(null);
     setImportError("");
     setImportResult(null);
+    setImportTargetAcknowledged(false);
+    setImportConflictsAcknowledged(false);
   };
 
   const openImport = () => {
+    if (!canWriteMediaDatabase) return;
     resetImport();
     setShowImportModal(true);
   };
 
-  const previewImport = async (payload: { csv?: string; xlsxBase64?: string }, fileName: string) => {
+  const previewImport = async (
+    payload: { csv?: string; xlsxBase64?: string },
+    fileName: string,
+    requestedScope: CollectionScope = importCollectionScope,
+    requestedCategory = importCategory,
+  ) => {
+    if (!canWriteMediaDatabase) return;
+    // A non-Master session can never request a shared import, even if stale
+    // browser state or a crafted event attempts to select it.
+    const collectionScope: CollectionScope = isMaster && canWriteMediaDatabase && requestedScope === "shared" ? "shared" : "workspace";
+    const previewRequestId = ++importPreviewSequence.current;
     setImportBusy(true);
     setImportError("");
     setImportPreview(null);
     setImportResult(null);
+    setImportTargetAcknowledged(false);
+    setImportConflictsAcknowledged(false);
     try {
       const resp = await fetch(`${apiBase()}/api/store/media-db/import`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, category: importCategory, filename: fileName, commit: false }),
+        body: JSON.stringify({ ...payload, category: requestedCategory, filename: fileName, collectionScope, commit: false }),
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || "Could not read this CSV.");
+      if (previewRequestId !== importPreviewSequence.current) return;
       setImportPayload(payload);
       setImportFileName(fileName);
       setImportIdempotencyKey(`media-import:${fileName}:${crypto.randomUUID()}`);
-      setImportPreview(data.preview);
+      const preview: ImportPreview = data.preview;
+      const resolvedScope: CollectionScope = preview?.collectionScope === "shared"
+        ? (isMaster && canWriteMediaDatabase ? "shared" : "workspace")
+        : preview?.collectionScope === "workspace"
+          ? "workspace"
+          : collectionScope;
+      setImportCollectionScope(resolvedScope);
+      setImportPreview({ ...preview, collectionScope: resolvedScope });
     } catch (error) {
-      setImportError(error instanceof Error ? error.message : "Could not read this CSV.");
+      if (previewRequestId === importPreviewSequence.current) {
+        setImportError(error instanceof Error ? error.message : "Could not read this CSV.");
+      }
     }
-    setImportBusy(false);
+    if (previewRequestId === importPreviewSequence.current) setImportBusy(false);
   };
 
   const importContacts = async () => {
-    if (!importPayload || importBusy) return;
+    if (!canWriteMediaDatabase || !importPayload || importBusy || !importPlanHasWork(importPreview)) return;
+    const requiresReviewerAcknowledgement = Boolean(importPreview?.reviewToken);
+    const conflictCount = Number(importPreview?.conflicted ?? importPreview?.conflicts ?? 0);
+    if (requiresReviewerAcknowledgement && (!importTargetAcknowledged || (conflictCount > 0 && !importConflictsAcknowledged))) {
+      setImportError("Acknowledge the owning collection and review conflicts before importing.");
+      return;
+    }
     setImportBusy(true);
     setImportError("");
     try {
+      const collectionScope: CollectionScope = isMaster && canWriteMediaDatabase && (importPreview?.collectionScope ?? importCollectionScope) === "shared"
+        ? "shared"
+        : "workspace";
       const resp = await fetch(`${apiBase()}/api/store/media-db/import`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...importPayload, category: importCategory, filename: importFileName, idempotencyKey: importIdempotencyKey, commit: true }),
+        body: JSON.stringify({
+          ...importPayload,
+          category: importCategory,
+          filename: importFileName,
+          idempotencyKey: importIdempotencyKey,
+          collectionScope,
+          commit: true,
+          sourceHash: importPreview?.sourceHash || undefined,
+          // The token is opaque and only meaningful to the reconciliation
+          // worker. Do not derive or log its contents in the browser.
+          reviewToken: importPreview?.reviewToken || undefined,
+          acknowledgeTarget: requiresReviewerAcknowledgement ? importTargetAcknowledged : undefined,
+          acknowledgeConflicts: requiresReviewerAcknowledgement ? importConflictsAcknowledged : undefined,
+        }),
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || "Could not import these contacts.");
-      setImportResult(data.result);
+      setImportResult({
+        ...data.result,
+        rowOutcomes: importOutcomesWithErrors(
+          Array.isArray(data.rowOutcomes)
+            ? data.rowOutcomes
+            : Array.isArray(data.result?.rowOutcomes)
+              ? data.result.rowOutcomes
+              : importPreview?.rowOutcomes,
+          importPreview?.errors,
+        ),
+      });
       await loadData();
     } catch (error) {
       setImportError(error instanceof Error ? error.message : "Could not import these contacts.");
     }
     setImportBusy(false);
+  };
+
+  const downloadRowOutcomes = (outcomes: ImportRowOutcome[] | undefined) => {
+    if (!outcomes?.length) return;
+    // Deliberately export only source row and reconciliation outcome. Worker
+    // contracts may carry identifying values for internal reconciliation, but
+    // they must never leak into this reviewer-facing download or browser logs.
+    const rows = [
+      ["Sheet", "Source row", "Outcome", "Reason", "Fields"],
+      ...outcomes.map((outcome) => [
+        outcome.sheetName || "",
+        outcome.sourceRow,
+         outcome.outcome || outcome.status || "",
+        outcome.reason || "",
+        (outcome.fields || []).join("; "),
+      ]),
+    ];
+    const content = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "Media import row outcomes.csv";
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   // Outlets
@@ -319,17 +561,19 @@ function MediaDatabasePage() {
   });
 
   const openAddOutlet = () => {
+    if (!canWriteMediaDatabase) return;
     setEditingOutlet(null);
     setOutletForm({ name: "", category: "", website: "", description: "", country: "", reachBand: "" });
     setShowOutletModal(true);
   };
   const openEditOutlet = (o: Outlet) => {
+    if (!canManageCollectionItem(o, isMaster, canWriteMediaDatabase, session?.username)) return;
     setEditingOutlet(o);
     setOutletForm({ name: o.name, category: o.category, website: o.website, description: o.description, country: o.country, reachBand: o.reachBand });
     setShowOutletModal(true);
   };
   const saveOutlet = async () => {
-    if (!outletForm.name.trim() || outletSaving) return;
+    if (!canWriteMediaDatabase || (editingOutlet && !canManageCollectionItem(editingOutlet, isMaster, canWriteMediaDatabase, session?.username)) || !outletForm.name.trim() || outletSaving) return;
     setOutletSaving(true);
     try {
       const resp = editingOutlet
@@ -340,6 +584,8 @@ function MediaDatabasePage() {
     setOutletSaving(false);
   };
   const deleteOutlet = async (id: number) => {
+    const outlet = outlets.find((item) => item.id === id);
+    if (!outlet || !canManageCollectionItem(outlet, isMaster, canWriteMediaDatabase, session?.username)) return;
     setDeletingOutletId(id);
     try {
       await fetch(`${apiBase()}/api/store/media-db/outlets/${id}`, { method: "DELETE", credentials: "include" });
@@ -355,6 +601,7 @@ function MediaDatabasePage() {
   });
 
   const openAddContact = () => {
+    if (!canWriteMediaDatabase) return;
     setEditingContact(null);
     setContactForm({
       outletId: "", firstName: "", lastName: "", role: "", email: "", phone: "", notes: "",
@@ -366,6 +613,7 @@ function MediaDatabasePage() {
     setShowContactModal(true);
   };
   const openEditContact = (c: Contact) => {
+    if (!canManageCollectionItem(c, isMaster, canWriteMediaDatabase, session?.username)) return;
     setEditingContact(c);
     setContactForm({
       outletId: c.outletId ? String(c.outletId) : "",
@@ -384,7 +632,7 @@ function MediaDatabasePage() {
     setShowContactModal(true);
   };
   const saveContact = async () => {
-    if ((!contactForm.firstName.trim() && !contactForm.lastName.trim()) || contactSaving) return;
+    if (!canWriteMediaDatabase || (editingContact && !canManageCollectionItem(editingContact, isMaster, canWriteMediaDatabase, session?.username)) || (!contactForm.firstName.trim() && !contactForm.lastName.trim()) || contactSaving) return;
     setContactSaving(true);
     try {
       const payload = {
@@ -402,6 +650,8 @@ function MediaDatabasePage() {
     setContactSaving(false);
   };
   const deleteContact = async (id: number) => {
+    const contact = contacts.find((item) => item.id === id);
+    if (!contact || !canManageCollectionItem(contact, isMaster, canWriteMediaDatabase, session?.username)) return;
     setDeletingContactId(id);
     try {
       await fetch(`${apiBase()}/api/store/media-db/contacts/${id}`, { method: "DELETE", credentials: "include" });
@@ -410,6 +660,7 @@ function MediaDatabasePage() {
     setDeletingContactId(null);
   };
   const recheckSource = async (contact: Contact) => {
+    if (!canManageCollectionItem(contact, isMaster, canWriteMediaDatabase, session?.username)) return;
     setSourceCheckingId(contact.id); setSourceActionError("");
     try {
       const response = await fetch(`${apiBase()}/api/store/media-db/contacts/${contact.id}/source-check`, { method: "POST", credentials: "include" });
@@ -421,7 +672,7 @@ function MediaDatabasePage() {
     setSourceCheckingId(null);
   };
   const approveSourceUpdates = async (contact: Contact) => {
-    if (!contact.sourceCheck) return;
+    if (!canManageCollectionItem(contact, isMaster, canWriteMediaDatabase, session?.username) || !contact.sourceCheck) return;
     const fields = contact.sourceCheck.differences.filter((difference) => difference.supported && difference.observedValue).map((difference) => difference.field);
     if (!fields.length) return;
     setSourceCheckingId(contact.id); setSourceActionError("");
@@ -438,6 +689,7 @@ function MediaDatabasePage() {
   };
 
   const setContactStatus = async (contact: Contact, status: "active" | "departed") => {
+    if (!canManageCollectionItem(contact, isMaster, canWriteMediaDatabase, session?.username)) return;
     setStatusBusyId(contact.id);
     try {
       const response = await fetch(`${apiBase()}/api/store/media-db/contacts/${contact.id}/status`, {
@@ -452,7 +704,7 @@ function MediaDatabasePage() {
   };
 
   const submitCorrection = async () => {
-    if (!correctionContact || !correctionFields.length || !correctionDetails.trim()) return;
+    if (!correctionContact || !canManageCollectionItem(correctionContact, isMaster, canWriteMediaDatabase, session?.username) || !correctionFields.length || !correctionDetails.trim()) return;
     setCorrectionBusy(true);
     try {
       const response = await fetch(`${apiBase()}/api/store/media-db/contacts/${correctionContact.id}/corrections`, {
@@ -486,20 +738,135 @@ function MediaDatabasePage() {
     </div>;
   };
 
-  // Export contacts
+  const fetchAllContactsForExport = async (): Promise<Contact[]> => {
+    const pageSize = 200;
+    const all: Contact[] = [];
+    let page = 1;
+    let total = Number.POSITIVE_INFINITY;
+    while (all.length < total && page <= 500) {
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
+        sort: contactSort,
+        direction: contactDirection,
+      });
+      if (contactSearch.trim()) params.set("q", contactSearch.trim());
+      if (contactCategoryFilter) params.set("category", contactCategoryFilter);
+      if (contactCountryFilter) params.set("country", contactCountryFilter);
+      if (contactOutletFilter) params.set("outletId", contactOutletFilter);
+      const response = await fetch(`${apiBase()}/api/store/media-db/contacts?${params}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Could not prepare the contact export.");
+      const data = await response.json() as { contacts?: Contact[]; total?: number };
+      const pageRows = Array.isArray(data.contacts) ? data.contacts : [];
+      all.push(...pageRows);
+      total = Number.isFinite(Number(data.total)) ? Number(data.total) : all.length;
+      if (pageRows.length === 0) break;
+      page += 1;
+    }
+    // Outlet filtering is retained locally as a compatibility guard while
+    // older API deployments add the outletId query contract.
+    return contactOutletFilter
+      ? all.filter((contact) => String(contact.outletId ?? "") === contactOutletFilter)
+      : all;
+  };
+
+  const fetchAllSearchContactsForExport = async (): Promise<Contact[]> => {
+    const pageSize = 100;
+    const all: Contact[] = [];
+    let page = 1;
+    let total = Number.POSITIVE_INFINITY;
+    while (all.length < total && page <= 1000) {
+      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+      if (searchPhrase.trim()) params.set("phrase", searchPhrase.trim());
+      if (searchTopic.trim()) params.set("topic", searchTopic.trim());
+      if (searchLocation.trim()) params.set("location", searchLocation.trim());
+      if (searchCategory) params.set("category", searchCategory);
+      if (searchAuthority) params.set("authority", searchAuthority);
+      const response = await fetch(`${apiBase()}/api/store/media-db/search?${params}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Could not prepare the search export.");
+      const data = await response.json() as { results?: UnifiedResult[]; total?: number };
+      const pageRows = (Array.isArray(data.results) ? data.results : [])
+        .flatMap((result) => result.type === "contact" ? [result.contact] : []);
+      all.push(...pageRows);
+      total = Number.isFinite(Number(data.total)) ? Number(data.total) : all.length;
+      if (pageRows.length === 0) break;
+      page += 1;
+    }
+    return all;
+  };
+
+  // Export contacts. Filtered exports deliberately fetch every matching API
+  // page instead of exporting only the currently visible page.
   const exportContacts = async (format: "xlsx" | "word", selectedRows?: Contact[]) => {
-    const rows = selectedRows ?? filteredContacts;
-    if (format === "xlsx") {
-      const headers = ["First Name", "Last Name", "Role", "Email", "Phone", "Outlet", "Category", "Notes"];
-      const dataRows = rows.map((c) => [c.firstName, c.lastName, c.role, c.email, c.phone, c.outletName ?? "", c.outletCategory ?? "", c.notes]);
-      const csvContent = [headers, ...dataRows].map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "Media Contacts.csv"; a.click(); URL.revokeObjectURL(url);
-    } else {
-      const rows2 = rows.map((c) => `<tr><td>${escapeHtml(`${c.firstName} ${c.lastName}`.trim())}</td><td>${escapeHtml(c.role)}</td><td>${escapeHtml(c.email)}</td><td>${escapeHtml(c.phone)}</td><td>${escapeHtml(c.outletName ?? "")}</td><td>${escapeHtml(c.outletCategory ?? "")}</td></tr>`).join("");
-      const html = `<!doctype html><html><head><meta charset="utf-8"><title>Media Contacts</title><style>body{font-family:Arial,sans-serif;font-size:12px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ddd;padding:6px 10px;text-align:left;}th{background:#102B36;color:#fff;}</style></head><body><h2 style="font-family:Georgia,serif;color:#102B36;">Media Contacts</h2><table><tr><th>Name</th><th>Role</th><th>Email</th><th>Phone</th><th>Outlet</th><th>Category</th></tr>${rows2}</table></body></html>`;
-      const blob = new Blob([html], { type: "application/msword" });
-      const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "Media Contacts.doc"; a.click(); URL.revokeObjectURL(url);
+    setExportBusy(true);
+    setExportError("");
+    try {
+      const rows = selectedRows ?? await fetchAllContactsForExport();
+      if (format === "xlsx") {
+        const csvContent = [CONTACT_EXPORT_COLUMNS, ...rows.map(contactExportRow)]
+          .map((row) => row.map(csvCell).join(",")).join("\r\n");
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "Media Contacts.csv";
+        link.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const headers = CONTACT_EXPORT_COLUMNS.map((header) => `<th>${escapeHtml(header)}</th>`).join("");
+        const body = rows.map((contact) => {
+          const values = contactExportRow(contact);
+          return `<tr>${values.map((value) => `<td>${escapeHtml(value)}</td>`).join("")}</tr>`;
+        }).join("");
+        const html = `<!doctype html><html><head><meta charset="utf-8"><title>Media Contacts</title><style>body{font-family:Arial,sans-serif;font-size:12px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ddd;padding:6px 10px;text-align:left;vertical-align:top;}th{background:#102B36;color:#fff;}</style></head><body><h2 style="font-family:Georgia,serif;color:#102B36;">Media Contacts</h2><table><tr>${headers}</tr>${body}</table></body></html>`;
+        const blob = new Blob([html], { type: "application/msword" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "Media Contacts.doc";
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Could not prepare the contact export.");
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
+  const exportSearchContacts = async (format: "xlsx" | "word") => {
+    setExportBusy(true);
+    setExportError("");
+    try {
+      const rows = await fetchAllSearchContactsForExport();
+      // Search exports use the same rich schema and sanitisation as database
+      // exports while retaining the exact filtered result set.
+      if (format === "xlsx") {
+        const csvContent = [CONTACT_EXPORT_COLUMNS, ...rows.map(contactExportRow)]
+          .map((row) => row.map(csvCell).join(",")).join("\r\n");
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "Media Search results.csv";
+        link.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const headers = CONTACT_EXPORT_COLUMNS.map((header) => `<th>${escapeHtml(header)}</th>`).join("");
+        const body = rows.map((contact) => `<tr>${contactExportRow(contact).map((value) => `<td>${escapeHtml(value)}</td>`).join("")}</tr>`).join("");
+        const html = `<!doctype html><html><head><meta charset="utf-8"><title>Media Search results</title></head><body><h2>Media Search results</h2><table border="1"><tr>${headers}</tr>${body}</table></body></html>`;
+        const blob = new Blob([html], { type: "application/msword" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "Media Search results.doc";
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Could not prepare the search export.");
+    } finally {
+      setExportBusy(false);
     }
   };
 
@@ -522,7 +889,7 @@ function MediaDatabasePage() {
           <Database size={24} color="#ffffff" />
           <h1 className="text-[28px] font-semibold mb-1" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Media Database</h1>
         </div>
-        <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>Publications, journalists and custom trade media categories for your account.</p>
+         <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>Search publications and journalists from the shared Master collection or your private workspace collection.</p>
       </div>
 
       <section className="mb-5 rounded-2xl border bg-white shadow-sm" style={{ borderColor: vars.g200 }}>
@@ -550,9 +917,11 @@ function MediaDatabasePage() {
         <div className="border-t px-4 py-3 flex flex-wrap gap-2 justify-between" style={{ borderColor: vars.g100, background: vars.g50 }}>
           <span className="text-[11px]" style={{ color: vars.g500 }}>Database management</span>
           <div className="flex flex-wrap gap-2">
-            <button onClick={openAddContact} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.accent }}><Plus size={13} /> Add contact</button>
-            <button onClick={openAddOutlet} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}><Building2 size={13} /> Add publication</button>
-            <button onClick={openImport} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}><Upload size={13} /> Import</button>
+            {canWriteMediaDatabase && <>
+              <button onClick={openAddContact} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.accent }}><Plus size={13} /> Add contact</button>
+              <button onClick={openAddOutlet} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}><Building2 size={13} /> Add publication</button>
+              <button onClick={openImport} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}><Upload size={13} /> Import</button>
+            </>}
           </div>
         </div>
       </section>
@@ -560,9 +929,10 @@ function MediaDatabasePage() {
       {searchActive && <section className="mb-6">
         <div className="flex items-center justify-between gap-3 mb-3">
           <p className="text-[13px]" style={{ color: vars.g500 }}>{searchLoading ? "Searching..." : `${searchTotal} results: ${searchCounts.contacts} contacts and ${searchCounts.outlets} publications`}</p>
-          {searchResults.some((result) => result.type === "contact") && <button onClick={() => void exportContacts("xlsx", searchResults.flatMap((result) => result.type === "contact" ? [result.contact] : []))} className="inline-flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: vars.navy }}><Download size={13} /> Export this page</button>}
-        </div>
-        <div className="space-y-3" aria-live="polite">
+           {searchResults.some((result) => result.type === "contact") && <button disabled={exportBusy} onClick={() => void exportSearchContacts("xlsx")} className="inline-flex items-center gap-1.5 text-[12px] font-semibold disabled:opacity-50" style={{ color: vars.navy }}><Download size={13} /> Export all matches</button>}
+         </div>
+         {exportError && <p className="mb-3 rounded-lg bg-white px-3 py-2 text-[12px]" style={{ color: vars.red }}>{exportError}</p>}
+         <div className="space-y-3" aria-live="polite">
           {searchResults.map((result) => {
             const isContact = result.type === "contact";
             const contact = isContact ? result.contact : null;
@@ -587,8 +957,11 @@ function MediaDatabasePage() {
               <ul className="mt-3 space-y-1 text-[12px]" style={{ color: vars.g600 }}>{result.reasons.map((reason) => <li key={reason} className="flex gap-2"><Check size={13} className="mt-0.5 shrink-0" color={vars.accent} />{reason}</li>)}</ul>
               <div className="mt-4 pt-3 border-t flex flex-wrap gap-2" style={{ borderColor: vars.g100 }}>
                 {contact && <><button onClick={() => setShowContactProfile(contact)} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>View profile</button>
-                  <button disabled={statusBusyId === contact.id} onClick={() => void setContactStatus(contact, contact.lifecycleStatus === "departed" ? "active" : "departed")} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.g600 }}>{contact.lifecycleStatus === "departed" ? "Mark active" : "Mark as departed"}</button>
-                  <button onClick={() => { setCorrectionContact(contact); setCorrectionFields([]); setCorrectionDetails(""); }} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.g600 }}>Flag incorrect details</button></>}
+                  {canManageCollectionItem(contact, isMaster, canWriteMediaDatabase, session?.username) && <>
+                    <button disabled={statusBusyId === contact.id} onClick={() => void setContactStatus(contact, contact.lifecycleStatus === "departed" ? "active" : "departed")} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.g600 }}>{contact.lifecycleStatus === "departed" ? "Mark active" : "Mark as departed"}</button>
+                    <button onClick={() => { setCorrectionContact(contact); setCorrectionFields([]); setCorrectionDetails(""); }} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.g600 }}>Flag incorrect details</button>
+                  </>}
+                </>}
                 {outlet?.website && <a href={outlet.website.startsWith("http") ? outlet.website : `https://${outlet.website}`} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Visit publication</a>}
               </div>
             </article>;
@@ -620,9 +993,9 @@ function MediaDatabasePage() {
               <option value="">All categories</option>
               {catOptions.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            <button onClick={openAddOutlet} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors" style={{ background: vars.accent }}>
-              <Plus size={14} /> Add outlet
-            </button>
+             {canWriteMediaDatabase && <button onClick={openAddOutlet} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors" style={{ background: vars.accent }}>
+               <Plus size={14} /> Add outlet
+             </button>}
           </div>
 
           {filteredOutlets.length === 0 ? (
@@ -630,7 +1003,7 @@ function MediaDatabasePage() {
               <Building2 size={32} className="mx-auto mb-3" color={vars.g300} />
               <p className="text-[15px] font-semibold mb-1" style={{ color: vars.navy }}>No outlets yet</p>
               <p className="text-[13px] font-light mb-4" style={{ color: vars.g400 }}>Add publications to build your media database.</p>
-              <button onClick={openAddOutlet} className="px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>Add your first outlet</button>
+               {canWriteMediaDatabase && <button onClick={openAddOutlet} className="px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>Add your first outlet</button>}
             </div>
           ) : (
             <div className="rounded-2xl border overflow-hidden" style={{ borderColor: vars.g200, background: "white" }}>
@@ -651,7 +1024,7 @@ function MediaDatabasePage() {
                       <td className="px-4 py-3">
                         <p className="font-semibold" style={{ color: vars.navy }}>{o.name}</p>
                         {o.description && <p className="text-[11px] font-light mt-0.5" style={{ color: vars.g500 }}>{o.description.slice(0, 80)}{o.description.length > 80 ? "…" : ""}</p>}
-                        {o.accountId === null && <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded" style={{ background: "rgba(31,116,143,0.1)", color: vars.accent }}>Global</span>}
+                        {isSharedCollection(o) && <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded" style={{ background: "rgba(31,116,143,0.1)", color: vars.accent }}>Shared collection</span>}
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell" style={{ color: vars.g600 }}>{o.category}</td>
                       <td className="px-4 py-3 hidden md:table-cell" style={{ color: vars.g600 }}>{o.country}</td>
@@ -661,8 +1034,10 @@ function MediaDatabasePage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 justify-end">
-                          <button onClick={() => openEditOutlet(o)} className="p-1.5 rounded-lg hover:bg-gray-50" title="Edit"><PenLine size={13} color={vars.g400} /></button>
-                          <button onClick={() => { if (window.confirm(`Delete "${o.name}"?`)) void deleteOutlet(o.id); }} disabled={deletingOutletId === o.id} className="p-1.5 rounded-lg hover:bg-red-50" title="Delete"><Trash2 size={13} color={deletingOutletId === o.id ? vars.g300 : vars.red} /></button>
+                           {canManageCollectionItem(o, isMaster, canWriteMediaDatabase, session?.username) && <>
+                            <button onClick={() => openEditOutlet(o)} className="p-1.5 rounded-lg hover:bg-gray-50" title="Edit"><PenLine size={13} color={vars.g400} /></button>
+                            <button onClick={() => { if (window.confirm(`Delete "${o.name}"?`)) void deleteOutlet(o.id); }} disabled={deletingOutletId === o.id} className="p-1.5 rounded-lg hover:bg-red-50" title="Delete"><Trash2 size={13} color={deletingOutletId === o.id ? vars.g300 : vars.red} /></button>
+                          </>}
                         </div>
                       </td>
                     </tr>
@@ -702,16 +1077,18 @@ function MediaDatabasePage() {
               </select>
               {(contactSearch || contactCategoryFilter || contactCountryFilter || contactOutletFilter) && <button onClick={() => { setContactSearch(""); setContactCategoryFilter(""); setContactCountryFilter(""); setContactOutletFilter(""); setContactPage(1); }} className="px-3 py-2 rounded-lg text-[12px] font-medium text-slate-500 hover:text-slate-700 transition-colors">Clear filters</button>}
               <div className="flex-1"></div>
-              <button onClick={openAddContact} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors" style={{ background: vars.accent }}>
-                <Plus size={14} /> Add contact
-              </button>
-              <button onClick={openImport} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold border bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.gold, color: vars.navy }}>
-                <Upload size={14} className="text-amber-600" /> Import CSV
-              </button>
-              {filteredContacts.length > 0 && (
+               {canWriteMediaDatabase && <>
+                 <button onClick={openAddContact} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors" style={{ background: vars.accent }}>
+                   <Plus size={14} /> Add contact
+                 </button>
+                 <button onClick={openImport} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold border bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.gold, color: vars.navy }}>
+                   <Upload size={14} className="text-amber-600" /> Import CSV
+                 </button>
+               </>}
+               {contactTotal > 0 && (
                 <div className="flex items-center gap-1 border-l pl-2 ml-1" style={{ borderColor: vars.g200 }}>
-                  <button onClick={() => void exportContacts("xlsx")} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} className="text-slate-400" /> Excel</button>
-                  <button onClick={() => void exportContacts("word")} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}><FileText size={13} className="text-slate-400" /> Word</button>
+                  <button disabled={exportBusy} onClick={() => void exportContacts("xlsx")} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border bg-white hover:bg-slate-50 transition-colors disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} className="text-slate-400" /> Excel</button>
+                  <button disabled={exportBusy} onClick={() => void exportContacts("word")} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border bg-white hover:bg-slate-50 transition-colors disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><FileText size={13} className="text-slate-400" /> Word</button>
                 </div>
               )}
             </div>
@@ -722,7 +1099,7 @@ function MediaDatabasePage() {
               <Users size={32} className="mx-auto mb-3" color={vars.g300} />
               <p className="text-[15px] font-semibold mb-1" style={{ color: vars.navy }}>No contacts yet</p>
               <p className="text-[13px] font-light mb-4" style={{ color: vars.g400 }}>Add journalists and PR contacts to your database.</p>
-              <button onClick={openAddContact} className="px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>Add your first contact</button>
+               {canWriteMediaDatabase && <button onClick={openAddContact} className="px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>Add your first contact</button>}
             </div>
           ) : (
             <div className="rounded-2xl border overflow-hidden" style={{ borderColor: vars.g200, background: "white" }}>
@@ -744,7 +1121,8 @@ function MediaDatabasePage() {
                     <tr key={c.id} style={{ borderTop: `1px solid ${vars.g100}` }}>
                       <td className="px-4 py-3">
                         <p className="font-semibold" style={{ color: vars.navy }}>{`${c.firstName} ${c.lastName}`.trim()}</p>
-                        {c.outletCategory && <p className="text-[11px] font-light" style={{ color: vars.g500 }}>{c.outletCategory}</p>}
+                         {c.outletCategory && <p className="text-[11px] font-light" style={{ color: vars.g500 }}>{c.outletCategory}</p>}
+                         {isSharedCollection(c) && <span className="inline-flex text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded" style={{ background: "rgba(31,116,143,0.1)", color: vars.accent }}>Shared collection</span>}
                         {sourceBadge(c)}
                          {(c.beats?.length || c.sectors?.length || c.seniority || c.editorialStatus) && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>{[c.beats?.length ? `Beats: ${c.beats.join(", ")}` : "", c.sectors?.length ? `Sectors: ${c.sectors.join(", ")}` : "", c.seniority, c.editorialStatus].filter(Boolean).join(" · ")}</p>}
                          {(c.reach || c.reachBand || c.authority !== undefined || c.authorityScore !== undefined || c.confidence || c.confidenceLevel) && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>{[c.reach || c.reachBand ? `Reach: ${c.reach || c.reachBand}` : "", c.authority ?? c.authorityScore !== undefined ? `Authority: ${c.authority ?? c.authorityScore}` : "", c.confidence || c.confidenceLevel ? `Confidence: ${c.confidence || c.confidenceLevel}` : ""].filter(Boolean).join(" · ")}</p>}
@@ -752,7 +1130,9 @@ function MediaDatabasePage() {
                       <td className="px-4 py-3 hidden sm:table-cell" style={{ color: vars.g600 }}>{c.role}</td>
                       <td className="px-4 py-3 hidden md:table-cell" style={{ color: vars.g600 }}>{c.outletName}</td>
                       <td className="px-4 py-3 hidden lg:table-cell">
-                        {c.email && <a href={`mailto:${c.email}`} className="underline" style={{ color: vars.accent }}>{c.email}</a>}
+                        {c.email && (isSendableContactEmail(c.email)
+                          ? <a href={`mailto:${c.email}`} className="underline" style={{ color: vars.accent }}>{c.email}</a>
+                          : <span title="Review required before sending">{c.email} <span className="text-[10px] text-amber-700">Review - not sendable</span></span>)}
                          {c.mobile && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>Mobile: {c.mobile}</p>}
                          {c.linkedinUrl && <a href={c.linkedinUrl} target="_blank" rel="noreferrer" className="block text-[10px] underline mt-1" style={{ color: vars.accent }}>LinkedIn</a>}
                          {c.sourceUrl && <a href={c.sourceUrl} target="_blank" rel="noreferrer" className="block text-[10px] underline mt-1" style={{ color: vars.accent }}>Source</a>}
@@ -765,8 +1145,10 @@ function MediaDatabasePage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 justify-end">
                           <button onClick={() => setShowContactProfile(c)} className="px-2 py-1 text-[11px] font-medium rounded border hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}>View Profile</button>
-                          <button onClick={() => openEditContact(c)} className="p-1.5 rounded-lg hover:bg-gray-50" title="Edit"><PenLine size={13} color={vars.g400} /></button>
-                          <button onClick={() => { if (window.confirm(`Delete ${c.firstName} ${c.lastName}?`)) void deleteContact(c.id); }} disabled={deletingContactId === c.id} className="p-1.5 rounded-lg hover:bg-red-50" title="Delete"><Trash2 size={13} color={deletingContactId === c.id ? vars.g300 : vars.red} /></button>
+                            {canManageCollectionItem(c, isMaster, canWriteMediaDatabase, session?.username) && <>
+                             <button onClick={() => openEditContact(c)} className="p-1.5 rounded-lg hover:bg-gray-50" title="Edit"><PenLine size={13} color={vars.g400} /></button>
+                             <button onClick={() => { if (window.confirm(`Delete ${c.firstName} ${c.lastName}?`)) void deleteContact(c.id); }} disabled={deletingContactId === c.id} className="p-1.5 rounded-lg hover:bg-red-50" title="Delete"><Trash2 size={13} color={deletingContactId === c.id ? vars.g300 : vars.red} /></button>
+                           </>}
                         </div>
                       </td>
                     </tr>
@@ -775,7 +1157,8 @@ function MediaDatabasePage() {
               </table>
             </div>
           )}
-          {contactTotal > 50 && <div className="flex justify-end items-center gap-3 mt-3 text-[12px]" style={{ color: vars.navy }}><button disabled={contactPage === 1} onClick={() => setContactPage((page) => page - 1)} className="px-3 py-1 border rounded disabled:opacity-40">Previous</button><span>Page {contactPage} of {Math.ceil(contactTotal / 50)}</span><button disabled={contactPage * 50 >= contactTotal} onClick={() => setContactPage((page) => page + 1)} className="px-3 py-1 border rounded disabled:opacity-40">Next</button></div>}
+           {exportError && <p className="mt-3 rounded-lg bg-white px-3 py-2 text-[12px]" style={{ color: vars.red }}>{exportError}</p>}
+           {contactTotal > 50 && <div className="flex justify-end items-center gap-3 mt-3 text-[12px]" style={{ color: vars.navy }}><button disabled={contactPage === 1} onClick={() => setContactPage((page) => page - 1)} className="px-3 py-1 border rounded disabled:opacity-40">Previous</button><span>Page {contactPage} of {Math.ceil(contactTotal / 50)}</span><button disabled={contactPage * 50 >= contactTotal} onClick={() => setContactPage((page) => page + 1)} className="px-3 py-1 border rounded disabled:opacity-40">Next</button></div>}
         </div>
       )}
       </>}
@@ -834,9 +1217,61 @@ function MediaDatabasePage() {
                       }}
                     />
                   </label>
+                  <fieldset className="rounded-xl border p-4" style={{ borderColor: vars.g200 }}>
+                    <legend className="px-1 text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: vars.g500 }}>Collection target</legend>
+                    <p className="text-[12px] mb-3" style={{ color: vars.g500 }}>
+                      {isMaster && canWriteMediaDatabase
+                        ? "Choose whether this import is centrally managed for every account or private to the active workspace."
+                        : "Imports from this account are private to the active workspace."}
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="radiogroup" aria-label="Collection target">
+                       {isMaster && canWriteMediaDatabase && (
+                        <label className="flex items-start gap-2 rounded-lg border p-3 cursor-pointer" style={{ borderColor: importCollectionScope === "shared" ? vars.accent : vars.g200, background: importCollectionScope === "shared" ? "rgba(31,116,143,0.06)" : "white" }}>
+                          <input
+                            type="radio"
+                            name="media-import-collection-scope"
+                            value="shared"
+                            aria-label="Shared collection"
+                            checked={importCollectionScope === "shared"}
+                            onChange={() => {
+                              setImportCollectionScope("shared");
+                               if (importPayload && importFileName) void previewImport(importPayload, importFileName, "shared", importCategory);
+                            }}
+                          />
+                          <span>
+                            <span className="block text-[13px] font-semibold" style={{ color: vars.navy }}>Shared collection</span>
+                            <span className="block text-[11px] mt-0.5" style={{ color: vars.g500 }}>Master-managed and available to every account's search and recommendations.</span>
+                          </span>
+                        </label>
+                      )}
+                      <label className="flex items-start gap-2 rounded-lg border p-3 cursor-pointer" style={{ borderColor: importCollectionScope === "workspace" ? vars.accent : vars.g200, background: importCollectionScope === "workspace" ? "rgba(31,116,143,0.06)" : "white" }}>
+                        <input
+                          type="radio"
+                          name="media-import-collection-scope"
+                          value="workspace"
+                          aria-label="Workspace private collection"
+                          checked={importCollectionScope === "workspace"}
+                          onChange={() => {
+                            setImportCollectionScope("workspace");
+                             if (importPayload && importFileName) void previewImport(importPayload, importFileName, "workspace", importCategory);
+                          }}
+                        />
+                        <span>
+                          <span className="block text-[13px] font-semibold" style={{ color: vars.navy }}>Workspace private</span>
+                          <span className="block text-[11px] mt-0.5" style={{ color: vars.g500 }}>Only available to this workspace and its permitted members.</span>
+                        </span>
+                      </label>
+                    </div>
+                  </fieldset>
                   <div>
                     <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>Category for imported outlets</label>
-                    <select value={importCategory} onChange={(e) => setImportCategory(e.target.value)} className="w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }}>
+                     <select value={importCategory} onChange={(e) => {
+                       const category = e.target.value;
+                       setImportCategory(category);
+                       // Category affects outlet reconciliation and therefore
+                       // invalidates the previous review token/outcomes.
+                       if (importPayload && importFileName) void previewImport(importPayload, importFileName, importCollectionScope, category);
+                     }} className="w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }}>
                       <option value="">No category</option>
                       {allCategories.map((category) => <option key={category} value={category}>{category}</option>)}
                     </select>
@@ -850,14 +1285,66 @@ function MediaDatabasePage() {
 
               {importPreview && !importResult && (
                 <div className="space-y-4">
+                   <div className="rounded-xl border px-4 py-3" style={{ borderColor: importPreview.collectionScope === "shared" ? vars.accent : vars.g200, background: importPreview.collectionScope === "shared" ? "rgba(31,116,143,0.06)" : vars.g50 }}>
+                     <div className="flex items-start gap-2">
+                       <ShieldCheck size={16} className="mt-0.5 shrink-0" color={vars.accent} />
+                       <div>
+                         <p className="text-[12px] font-bold" style={{ color: vars.navy }}>Import target: {importPreview.collectionScope === "shared" ? "Shared collection" : "Workspace private"}</p>
+                         <p className="text-[11px] mt-0.5" style={{ color: vars.g500 }}>
+                           Owner: {importPreview.owner || (importPreview.collectionScope === "shared" ? "Master" : session?.companyName || session?.username || "Current workspace")}
+                         </p>
+                         <p className="text-[11px] mt-1" style={{ color: vars.g500 }}>
+                           {importPreview.collectionScope === "shared" ? "This collection will be available to all accounts for search and recommendations." : "This collection will remain private to the active workspace."}
+                         </p>
+                       </div>
+                     </div>
+                     {importPreview.scopeInventory && Object.keys(importPreview.scopeInventory).length > 0 && (
+                       <div className="rounded-xl border px-4 py-3" style={{ borderColor: vars.g200 }}>
+                         <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: vars.g500 }}>Current target inventory</p>
+                         <div className="mt-2 flex flex-wrap gap-2">
+                           {Object.entries(importPreview.scopeInventory).map(([key, value]) => (
+                             typeof value === "object" && value !== null
+                               ? <span key={key} className="rounded-md bg-slate-50 px-2 py-1 text-[11px]" style={{ color: vars.g600 }}>{key}: {Object.entries(value).map(([nestedKey, nestedValue]) => `${nestedKey} ${nestedValue}`).join(", ")}</span>
+                               : <span key={key} className="rounded-md bg-slate-50 px-2 py-1 text-[11px]" style={{ color: vars.g600 }}>{key}: {String(value ?? "")}</span>
+                           ))}
+                         </div>
+                       </div>
+                     )}
+                     {(importPreview.recordTypeCounts || importPreview.sectorCounts) && (
+                       <div className="rounded-xl border px-4 py-3" style={{ borderColor: vars.g200 }}>
+                         <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: vars.g500 }}>Workbook dimensions</p>
+                         <div className="mt-2 grid sm:grid-cols-2 gap-3 text-[11px]" style={{ color: vars.g600 }}>
+                           {importPreview.recordTypeCounts && <div><span className="font-semibold">Record types:</span> {Object.entries(importPreview.recordTypeCounts).map(([key, value]) => `${key} ${value}`).join(", ")}</div>}
+                           {importPreview.sectorCounts && <div><span className="font-semibold">Sectors:</span> {Object.entries(importPreview.sectorCounts).map(([key, value]) => `${key} ${value}`).join(", ")}</div>}
+                         </div>
+                       </div>
+                     )}
+                     {importPreview.reviewToken && (
+                       <fieldset className="rounded-xl border p-4" style={{ borderColor: vars.gold, background: "rgba(201,160,78,0.06)" }}>
+                         <legend className="px-1 text-[11px] font-bold uppercase tracking-wide" style={{ color: vars.navy }}>Reviewer acknowledgement</legend>
+                         <label className="flex items-start gap-2 text-[12px]" style={{ color: vars.g600 }}>
+                           <input type="checkbox" aria-label="Acknowledge import target ownership" checked={importTargetAcknowledged} onChange={(event) => setImportTargetAcknowledged(event.target.checked)} />
+                           <span>I confirm that I own or am authorised to import into the server-resolved {importPreview.collectionScope === "shared" ? "shared Master" : "private workspace"} collection shown above.</span>
+                         </label>
+                         {Number(importPreview.conflicted ?? importPreview.conflicts ?? 0) > 0 && (
+                           <label className="flex items-start gap-2 mt-3 text-[12px]" style={{ color: vars.g600 }}>
+                             <input type="checkbox" aria-label="Acknowledge import conflicts" checked={importConflictsAcknowledged} onChange={(event) => setImportConflictsAcknowledged(event.target.checked)} />
+                             <span>I have reviewed the {importPreview.conflicted ?? importPreview.conflicts} conflicted row{(importPreview.conflicted ?? importPreview.conflicts) === 1 ? "" : "s"} and accept the reconciliation outcomes.</span>
+                           </label>
+                         )}
+                       </fieldset>
+                     )}
+                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
                       ["New", importPreview.new ?? importPreview.importableRows],
                       ["Refreshed", importPreview.refreshed ?? 0],
                       ["Unchanged", importPreview.unchanged ?? importPreview.duplicateRows],
                       ["Duplicate", importPreview.duplicate ?? importPreview.duplicateRows],
+                       ["Publications", importPreview.publicationRows ?? 0],
+                       ["Matched", importPreview.matchedExisting ?? 0],
                       ["Invalid", importPreview.invalid ?? importPreview.invalidRows],
-                      ["Conflicted", importPreview.conflicted ?? 0],
+                      ["Conflicted", importPreview.conflicted ?? importPreview.conflicts ?? 0],
                     ].map(([label, value]) => (
                       <div key={String(label)} className="rounded-xl border p-3" style={{ borderColor: vars.g200 }}>
                         <p className="text-[20px] font-semibold" style={{ color: vars.navy }}>{value}</p>
@@ -869,7 +1356,7 @@ function MediaDatabasePage() {
                     <div className="rounded-xl border overflow-hidden" style={{ borderColor: vars.g200 }}>
                       <div className="px-4 py-2 text-[11px] font-bold uppercase tracking-wide" style={{ background: vars.g50, color: vars.g500 }}>Preview</div>
                       {importPreview.sample.map((row) => (
-                        <div key={row.sourceRow} className="px-4 py-2 border-t grid grid-cols-[1fr_1fr] gap-3 text-[12px]" style={{ borderColor: vars.g100 }}>
+                         <div key={`${row.sheetName || ""}-${row.sourceRow}`} className="px-4 py-2 border-t grid grid-cols-[1fr_1fr] gap-3 text-[12px]" style={{ borderColor: vars.g100 }}>
                           <span style={{ color: vars.navy }}>{`${row.firstName} ${row.lastName}`.trim() || row.email}</span>
                           <span style={{ color: vars.g500 }}>{row.outletName}{row.role ? ` · ${row.role}` : ""}</span>
                         </div>
@@ -880,10 +1367,16 @@ function MediaDatabasePage() {
                     <details className="rounded-xl border px-4 py-3" style={{ borderColor: vars.g200 }}>
                       <summary className="text-[12px] font-semibold cursor-pointer" style={{ color: vars.navy }}>Review skipped rows</summary>
                       <div className="mt-2 space-y-1">
-                        {importPreview.errors.map((error) => <p key={`${error.row}-${error.message}`} className="text-[11px]" style={{ color: vars.g500 }}>Row {error.row}: {error.message}</p>)}
+                         {importPreview.errors.map((error) => <p key={`${error.sheetName || ""}-${error.row}-${error.message}`} className="text-[11px]" style={{ color: vars.g500 }}>{error.sheetName ? `${error.sheetName} · ` : ""}Row {error.row}: {error.message}</p>)}
                       </div>
                     </details>
                   )}
+                   {importOutcomesWithErrors(importPreview.rowOutcomes, importPreview.errors).length ? (
+                     <div className="flex items-center justify-between gap-3 rounded-xl border px-4 py-3" style={{ borderColor: vars.g200 }}>
+                       <p className="text-[11px]" style={{ color: vars.g500 }}>The reconciliation worker returned {importOutcomesWithErrors(importPreview.rowOutcomes, importPreview.errors).length} row outcomes. The download contains source row and status only, not contact details.</p>
+                       <button onClick={() => downloadRowOutcomes(importOutcomesWithErrors(importPreview.rowOutcomes, importPreview.errors))} className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Download outcomes</button>
+                     </div>
+                   ) : null}
                 </div>
               )}
 
@@ -892,16 +1385,17 @@ function MediaDatabasePage() {
                   <CheckCircle2 size={30} className="mx-auto mb-2" color={vars.accent} />
                   <p className="text-[16px] font-semibold" style={{ color: vars.navy }}>Import complete</p>
                   <p className="text-[12px] mt-2" style={{ color: vars.g500 }}>
-                    Added {importResult.contactsCreated} contacts and {importResult.outletsCreated} outlets. Skipped {importResult.duplicatesSkipped} duplicates.
+                     Added {importResult.contactsCreated} contacts and {importResult.outletsCreated} outlets. Processed {importResult.publicationsProcessed ?? 0} publications. Refreshed {importResult.refreshed ?? 0}; unchanged {importResult.unchanged ?? 0}; skipped {importResult.duplicatesSkipped} duplicates.
                   </p>
+                   {importResult.rowOutcomes?.length ? <button onClick={() => downloadRowOutcomes(importResult.rowOutcomes)} className="mt-3 inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Download row outcomes</button> : null}
                 </div>
               )}
             </div>
             <div className="px-6 py-4 border-t flex justify-end gap-2" style={{ borderColor: vars.g200 }}>
               <button onClick={() => setShowImportModal(false)} className="px-4 py-2 rounded-lg text-[13px] font-semibold border" style={{ borderColor: vars.g200, color: vars.g500 }}>{importResult ? "Close" : "Cancel"}</button>
               {importPreview && !importResult && (
-                <button onClick={() => void importContacts()} disabled={importBusy || importPreview.importableRows === 0} className="px-5 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent, opacity: importBusy || importPreview.importableRows === 0 ? 0.5 : 1 }}>
-                  {importBusy ? "Importing..." : `Import ${importPreview.importableRows} contacts`}
+                  <button onClick={() => void importContacts()} disabled={importBusy || !importPlanHasWork(importPreview) || Boolean(importPreview.reviewToken && (!importTargetAcknowledged || (Number(importPreview.conflicted ?? importPreview.conflicts ?? 0) > 0 && !importConflictsAcknowledged)))} className="px-5 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent, opacity: importBusy || !importPlanHasWork(importPreview) || Boolean(importPreview.reviewToken && (!importTargetAcknowledged || (Number(importPreview.conflicted ?? importPreview.conflicts ?? 0) > 0 && !importConflictsAcknowledged))) ? 0.5 : 1 }}>
+                   {importBusy ? "Importing..." : importPreview.importableRows > 0 ? `Import ${importPreview.importableRows} contacts` : importPreview.publicationRows ? `Import ${importPreview.publicationRows} publications` : "Apply refresh plan"}
                 </button>
               )}
             </div>
@@ -970,14 +1464,17 @@ function MediaDatabasePage() {
                 <div className="rounded-xl border p-4" style={{ borderColor: vars.g200, background: vars.g50 }}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <div className="flex items-center gap-2"><span className="text-[12px] font-bold" style={{ color: vars.navy }}>Public source health</span>{sourceBadge(showContactProfile)}</div>
+                         <div className="flex items-center gap-2"><span className="text-[12px] font-bold" style={{ color: vars.navy }}>Public source health</span><span className="text-[10px] uppercase tracking-wide" style={{ color: vars.g500 }}>Page verification</span>{sourceBadge(showContactProfile)}</div>
                       <p className="text-[11px] mt-1" style={{ color: vars.g500 }}>
                         {!showContactProfile.sourceUrl ? "No public source is attached to this contact."
                           : showContactProfile.sourceCheck ? `Last checked ${new Date(showContactProfile.sourceCheck.checkedAt).toLocaleString()}`
                             : "This source has not been checked yet."}
                       </p>
+                         {showContactProfile.sourceUrl && <p className="text-[11px] mt-1 break-all" style={{ color: vars.g600 }}>
+                           Source URL: <a href={showContactProfile.sourceUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>{showContactProfile.sourceUrl}</a>
+                         </p>}
                     </div>
-                    {showContactProfile.sourceUrl && <button onClick={() => void recheckSource(showContactProfile)} disabled={sourceCheckingId === showContactProfile.id} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}><RefreshCw size={13} className={sourceCheckingId === showContactProfile.id ? "animate-spin" : ""} />Check source now</button>}
+                    {canManageCollectionItem(showContactProfile, isMaster, canWriteMediaDatabase, session?.username) && showContactProfile.sourceUrl && <button onClick={() => void recheckSource(showContactProfile)} disabled={sourceCheckingId === showContactProfile.id} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}><RefreshCw size={13} className={sourceCheckingId === showContactProfile.id ? "animate-spin" : ""} />Check source now</button>}
                   </div>
                   {sourceActionError && <p className="text-[11px] mt-3" style={{ color: vars.red }}>{sourceActionError}</p>}
                   {showContactProfile.sourceCheck?.outcome === "unavailable" && <p className="text-[12px] mt-3 text-red-700">{showContactProfile.sourceCheck.errorCode === "page_missing" ? "The saved page could not be found." : "The saved page could not be reached."} Your contact details have not been changed.</p>}
@@ -988,11 +1485,36 @@ function MediaDatabasePage() {
                         {difference.kind === "removed" && !difference.observedValue ? `The saved ${difference.field} is no longer shown on the source.`
                           : <>{difference.storedValue || "(blank)"} → {difference.observedValue}</>}
                       </div>)}
-                      {!showContactProfile.sourceCheck.reviewedAt && showContactProfile.sourceCheck.differences.some((difference) => difference.supported && difference.observedValue) && <button onClick={() => void approveSourceUpdates(showContactProfile)} disabled={sourceCheckingId === showContactProfile.id} className="px-3 py-2 rounded-lg text-white text-[12px] font-semibold" style={{ background: vars.accent }}>Accept supported updates</button>}
+                      {canManageCollectionItem(showContactProfile, isMaster, canWriteMediaDatabase, session?.username) && !showContactProfile.sourceCheck.reviewedAt && showContactProfile.sourceCheck.differences.some((difference) => difference.supported && difference.observedValue) && <button onClick={() => void approveSourceUpdates(showContactProfile)} disabled={sourceCheckingId === showContactProfile.id} className="px-3 py-2 rounded-lg text-white text-[12px] font-semibold" style={{ background: vars.accent }}>Accept supported updates</button>}
                     </div>
                   )}
                 </div>
               </div>
+              {(showContactProfile.sourceRef || profileImportFilename || profileImportSheet || profileImportRow) && (
+                <div className="px-5 pt-3">
+                  <div className="rounded-xl border p-4" style={{ borderColor: vars.g200, background: "#FFFBEB" }}>
+                    <p className="text-[12px] font-bold" style={{ color: vars.navy }}>Workbook assertion</p>
+                    <p className="text-[11px] mt-1" style={{ color: vars.g500 }}>Imported workbook values are recorded separately from later page verification. They are not evidence that the linked page currently shows the same details.</p>
+                    <dl className="mt-3 grid sm:grid-cols-2 gap-x-4 gap-y-2 text-[12px]" style={{ color: vars.g600 }}>
+                      {showContactProfile.sourceRef && <div><dt className="font-semibold">Source reference</dt><dd>{showContactProfile.sourceRef}</dd></div>}
+                      {profileImportFilename && <div><dt className="font-semibold">Workbook</dt><dd>{profileImportFilename}</dd></div>}
+                      {profileImportSheet && <div><dt className="font-semibold">Sheet</dt><dd>{profileImportSheet}</dd></div>}
+                      {profileImportRow && <div><dt className="font-semibold">Workbook row</dt><dd>{profileImportRow}</dd></div>}
+                    </dl>
+                  </div>
+                </div>
+              )}
+              {showContactProfile.sourceCheck && (
+                <div className="px-5 pt-3">
+                  <div className="rounded-xl border p-4" style={{ borderColor: vars.g200, background: "#F8FAFC" }}>
+                    <p className="text-[12px] font-bold" style={{ color: vars.navy }}>Page check evidence</p>
+                    <p className="text-[11px] mt-1" style={{ color: vars.g500 }}>Observed values below come from the cited page check at {new Date(showContactProfile.sourceCheck.checkedAt).toLocaleString()}; they do not rewrite workbook assertions without review.</p>
+                    {showContactProfile.sourceCheck.observedEvidence.excerpt && <p className="mt-2 text-[12px]" style={{ color: vars.g600 }}>{showContactProfile.sourceCheck.observedEvidence.excerpt}</p>}
+                    {showContactProfile.sourceCheck.observedEvidence.observedRole && <p className="mt-1 text-[12px]" style={{ color: vars.g600 }}>Observed role: {showContactProfile.sourceCheck.observedEvidence.observedRole}</p>}
+                    {showContactProfile.sourceCheck.observedEvidence.observedEmails.length > 0 && <p className="mt-1 text-[12px]" style={{ color: vars.g600 }}>Observed email values: {showContactProfile.sourceCheck.observedEvidence.observedEmails.join(", ")}</p>}
+                  </div>
+                </div>
+              )}
               <RecommendationCard
                 item={{
                   rank: 0,
@@ -1001,10 +1523,10 @@ function MediaDatabasePage() {
                   contact: showContactProfile,
                 }}
                 isShortlist={true}
-                onEdit={() => {
-                  setShowContactProfile(null);
-                  openEditContact(showContactProfile);
-                }}
+                 onEdit={canManageCollectionItem(showContactProfile, isMaster, canWriteMediaDatabase, session?.username) ? () => {
+                   setShowContactProfile(null);
+                   openEditContact(showContactProfile);
+                 } : undefined}
                 showMatchScore={false}
               />
             </div>

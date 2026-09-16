@@ -6,7 +6,7 @@ import { loadArchive, useContentStore } from "../lib/contentStore";
 import * as IntakeForm from "../IntakeForm";
 import { getExactTargetPhrases as getCanonicalExactTargetPhrases, normaliseExactTargetPhrases, type ExactTargetPhrase } from "../lib/exactTargetPhrases";
 import { SummaryRow } from "./shared";
-import { RecommendationCard, LiveDiscoveryCard, type Contact, type Recommendation, type Decision, type LiveDiscovery } from "./JournalistComponents";
+import { RecommendationCard, LiveDiscoveryCard, isSendableContactEmail, type Contact, type Recommendation, type Decision, type LiveDiscovery } from "./JournalistComponents";
 import { MediaOutreachPanel } from "./MediaOutreachPanel";
 
 
@@ -133,6 +133,62 @@ function dedupeRecommendations(rawItems: unknown[]): Recommendation[] {
     seen.add(id);
     return true;
   });
+}
+
+export function sanitizeSpreadsheetCell(value: unknown): string {
+  const text = String(value ?? "");
+  return /^[\t\r\n ]*[=+\-@]/.test(text) ? `'${text}` : text;
+}
+
+function researchCsvCell(value: unknown): string {
+  return `"${sanitizeSpreadsheetCell(value).replace(/"/g, '""')}"`;
+}
+
+function exportDate(value: string | null | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString().split("T")[0];
+}
+
+export const SHORTLIST_EXPORT_COLUMNS = [
+  "First Name", "Last Name", "Role", "Email", "Email Status", "Phone", "Mobile",
+  "Outlet", "Category", "Country", "Publication Reach", "Beats", "Sectors",
+  "Geography", "Language", "Seniority", "Editorial Status", "LinkedIn URL",
+  "Source URL", "Source Reference", "Publication Authority", "Journalist Authority",
+  "Confidence", "Last Verified", "Source Status", "Lifecycle Status", "Notes", "Review Notes",
+] as const;
+
+export function shortlistExportRow(contact: Contact): string[] {
+  return [
+    contact.firstName,
+    contact.lastName,
+    contact.role,
+    contact.email,
+    contact.email ? (isSendableContactEmail(contact.email) ? "Sendable format" : "Review - not sendable") : "",
+    contact.phone,
+    contact.mobile,
+    contact.outletName,
+    contact.outletCategory,
+    contact.outletCountry,
+    contact.publicationReach || contact.outletReachBand,
+    (contact.beats || []).join("; "),
+    (contact.sectors || []).join("; "),
+    contact.geography,
+    contact.language,
+    contact.seniority,
+    contact.editorialStatus,
+    contact.linkedinUrl,
+    contact.sourceUrl,
+    contact.sourceRef,
+    contact.publicationAuthority,
+    contact.journalistAuthority,
+    contact.confidence || contact.confidenceLevel,
+    exportDate(contact.lastVerifiedAt),
+    contact.sourceStatus,
+    contact.lifecycleStatus,
+    contact.notes,
+    contact.reviewNotes,
+  ].map((value) => String(value ?? ""));
 }
 
 function MediaResearchPage() {
@@ -443,11 +499,10 @@ function MediaResearchPage() {
   const groupedKeys = new Set(liveGroups.flatMap((group) => group.items.map((item) => item.candidateKey)));
   liveGroups.push({ label: "Other or global", items: liveItems.filter((item) => !groupedKeys.has(item.candidateKey)) });
   const exportAccepted = (format: "xls" | "doc") => {
-    const rows = accepted.map((c) => [c.firstName, c.lastName, c.role, c.email, c.phone, c.outletName || "", c.outletCategory || "", (c.beats || []).join("; "), c.notes]);
     const title = "Accepted Media Contacts";
     const content = format === "xls"
-      ? [["First name", "Last name", "Role", "Email", "Phone", "Outlet", "Category", "Beats", "Notes"], ...rows].map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\r\n")
-      : `<!doctype html><html><body><h1>${title}</h1><table border="1"><tr><th>Name</th><th>Role</th><th>Email</th><th>Outlet</th><th>Category</th><th>Beats</th></tr>${accepted.map((c) => `<tr><td>${escapeHtml(`${c.firstName} ${c.lastName}`)}</td><td>${escapeHtml(c.role)}</td><td>${escapeHtml(c.email)}</td><td>${escapeHtml(c.outletName || "")}</td><td>${escapeHtml(c.outletCategory || "")}</td><td>${escapeHtml((c.beats || []).join(", "))}</td></tr>`).join("")}</table></body></html>`;
+      ? [SHORTLIST_EXPORT_COLUMNS, ...accepted.map(shortlistExportRow)].map((row) => row.map(researchCsvCell).join(",")).join("\r\n")
+      : `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body><h1>${title}</h1><table border="1"><tr>${SHORTLIST_EXPORT_COLUMNS.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>${accepted.map((contact) => `<tr>${shortlistExportRow(contact).map((value) => `<td>${escapeHtml(value)}</td>`).join("")}</tr>`).join("")}</table></body></html>`;
     const blob = new Blob([content], { type: format === "xls" ? "text/csv;charset=utf-8;" : "application/msword" });
     const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `${title}.${format === "xls" ? "csv" : "doc"}`; link.click(); URL.revokeObjectURL(url);
   };
