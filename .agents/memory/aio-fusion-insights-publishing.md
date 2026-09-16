@@ -9,6 +9,12 @@ Published Insights content is authoritative in PostgreSQL, while the static fron
 
 **How to apply:** Publish the API artifact before rebuilding the web artifact when editorial changes must be included in prerendered HTML. If the API cannot be reached during build, the build intentionally uses the checked-in story snapshot rather than emitting empty pages.
 
+Public audience repositioning must not broaden business-buyer research into consumer claims or silently rewrite factual pullquotes. Preserve those quotations pending editorial approval, even when surrounding promotional copy becomes audience-neutral.
+
+**Why:** The request to remove narrow website positioning explicitly excluded changing quotations and expanding the scope of research evidence.
+
+**How to apply:** Keep stable article URLs and use explicit, exact-value CMS updates alongside checked-in copy changes; leave independently edited CMS fields for editorial review rather than applying a blanket replacement.
+
 The Insights CMS allows existing platform admins plus users with an exact `@aiofusion.ai` email that is verified and linked to Google or Microsoft. Enforce this capability on the API and expose only the resulting server decision to the frontend.
 
 **Why:** Email text alone is not proof that the company controls the identity, and a frontend-only guard would leave editorial APIs exposed.

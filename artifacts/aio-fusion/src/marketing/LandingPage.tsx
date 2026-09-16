@@ -164,10 +164,10 @@ export default function LandingPageC({
                 <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Generative Engine Optimisation</span>
               </div>
               <h1 className="text-5xl md:text-6xl lg:text-[4.5rem] leading-[1.04] mb-8" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-                The AI Authority Platform<br />for <span style={{ color: accent }}>B2B PR & Marketing Teams</span>
+                The AI Authority Platform<br />for <span style={{ color: accent }}>PR & Marketing Teams</span>
               </h1>
               <p className="text-[15px] md:text-base max-w-xl leading-[1.7] font-light mb-8" style={{ color: vars.g600 }}>
-                Drive B2B sales and measure your brand's visibility across AI search engines. AIO Fusion is built specifically for PR agencies and in-house communications teams to track, optimise, and report on generative engine performance.
+                Support sales growth and measure your brand's visibility across AI search engines. AIO Fusion is built specifically for PR agencies and in-house communications teams to track, optimise, and report on generative engine performance.
               </p>
               <div className="flex flex-wrap items-center gap-3">
                 <a
@@ -236,7 +236,7 @@ export default function LandingPageC({
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
           <div className="max-w-3xl mb-12">
             <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: vars.teal }}>How it works</span>
-            <h2 className="text-4xl md:text-5xl mt-3 mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>The cost-effective B2B PR technology for the age of AI.</h2>
+            <h2 className="text-4xl md:text-5xl mt-3 mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Cost-effective PR technology for the age of AI.</h2>
             <p className="text-[15px] font-light leading-[1.85]" style={{ color: vars.g600 }}>Feed your business messaging, PR content and marketing plans into AIO Fusion and receive visibility diagnostics, planning advice, optimised content creation and measurement across it all.</p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -328,7 +328,7 @@ export default function LandingPageC({
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              { img: blogTile1, tag: "Guide", title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", excerpt: "What is AIO? And is PR really the new SEO?", url: "https://simpaticopraiauthorityguide.carrd.co/", external: true, accent: vars.teal },
+              { img: blogTile1, tag: "Guide", title: "A Marketer's Guide to Winning AI Authority in 2026", excerpt: "What is AIO? And is PR really the new SEO?", url: "https://simpaticopraiauthorityguide.carrd.co/", external: true, accent: vars.teal },
               { img: article1Img, tag: "Article", title: "PR professionals should not see AI as a threat", excerpt: "Why AI will elevate the role of PR and marketing professionals, not replace them.", url: `${base}insights/pr-professionals-not-threat`, external: false, accent: accent },
               { img: article2Img, tag: "Article", title: "Why thought leadership is the engine of AI visibility", excerpt: "AI systems draw on third-party authority signals. Thought leadership and earned media can help a brand become easier to recognise and cite.", url: `${base}insights/thought-leadership-engine-ai-visibility`, external: false, accent: vars.gold },
             ].map((a) => (

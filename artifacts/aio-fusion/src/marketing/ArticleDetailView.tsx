@@ -185,7 +185,7 @@ export default function ArticleDetailView({
       { href: "../for-agencies", label: "GEO software for PR agencies" },
     ],
     "ai-proves-pr-drives-sales": [
-      { href: "ai-changing-b2b-visibility", label: "How AI is changing B2B visibility" },
+      { href: "ai-changing-b2b-visibility", label: "How AI is changing brand visibility" },
       { href: "thought-leadership-engine-ai-visibility", label: "Why thought leadership drives AI visibility" },
     ],
   };

@@ -18,6 +18,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import LandingPageC from "./marketing/LandingPage";
 import ForInhousePage from "./marketing/ForInhousePage";
@@ -182,194 +183,235 @@ function buildSitemap(lastmod: string, articleSlugs: string[]): string {
 // ---------------------------------------------------------------------------
 // Main prerender logic
 // ---------------------------------------------------------------------------
-const distPublic = path.join(process.cwd(), "dist/public");
-const templatePath = path.join(distPublic, "index.html");
-
-if (!fs.existsSync(templatePath)) {
-  console.error("❌  dist/public/index.html not found - run vite build first");
-  process.exit(1);
+export interface PrerenderOptions {
+  /** Override the build output directory for a controlled local fixture. */
+  distPublic?: string;
+  /** Use a known snapshot instead of making a network request. */
+  publishedInsights?: PublicInsight[];
+  /** Set to null to guarantee that a test never performs an API lookup. */
+  canonicalDomain?: string | null;
+  /** Keep generated dates deterministic in regression tests. */
+  lastmod?: string;
 }
 
-const template = fs.readFileSync(templatePath, "utf-8");
-const lastmod = new Date().toISOString().slice(0, 10);
-
-let publishedInsights: PublicInsight[] = [];
-const configuredDomain = process.env.CANONICAL_DOMAIN?.replace(/^https?:\/\//, "").replace(/\/+$/, "");
-if (configuredDomain) {
-  try {
-    const response = await fetch(`https://${configuredDomain}/api/insights`, {
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (response.ok) {
-      publishedInsights = await response.json() as PublicInsight[];
-      globalThis.__AIO_PRERENDER_INSIGHTS__ = publishedInsights;
-      console.log(`  ✓  Loaded ${publishedInsights.length} published Insights stories`);
-    }
-  } catch {
-    console.warn("  !  Published Insights API unavailable; using the checked-in SEO snapshot");
-  }
+export interface PrerenderResult {
+  routesWritten: number;
+  errors: number;
+  articleSlugs: string[];
 }
 
-const articleSlugs = publishedInsights.length
-  ? publishedInsights.filter((article) => !article.externalUrl && article.body.length > 0).map((article) => article.slug)
-  : ARTICLE_SLUGS;
+export async function runPrerender(options: PrerenderOptions = {}): Promise<PrerenderResult> {
+  const distPublic = options.distPublic ?? path.join(process.cwd(), "dist/public");
+  const templatePath = path.join(distPublic, "index.html");
 
-let ok = 0;
-let errors = 0;
-
-// Helper to write a pre-rendered file
-function writeRoute(outPath: string, html: string): void {
-  fs.mkdirSync(path.dirname(outPath), { recursive: true });
-  fs.writeFileSync(outPath, html, "utf-8");
-  console.log(`  ✓  ${outPath.replace(distPublic, "")}`);
-  ok++;
-}
-
-// Assert the emitted HTML is a real pre-rendered page, not the empty shell.
-// A silently-shell-only page is the exact "search engines see nothing" failure
-// this guard exists to prevent, so treat it as fatal.
-function assertRealPage(slug: string, html: string, meta: PageMeta | ArticleMeta): void {
-  const label = slug === "" ? "landing" : slug;
-  if (html.includes('<div id="root"></div>')) {
-    console.error(`  ✗  Route "${label}" produced shell-only HTML (empty #root)`);
-    errors++;
-    return;
-  }
-  if (!html.includes("<title>") || html.includes("<title></title>")) {
-    console.error(`  ✗  Route "${label}" is missing a <title>`);
-    errors++;
-    return;
-  }
-  if (!html.includes(`href="${meta.canonical}"`)) {
-    console.error(`  ✗  Route "${label}" is missing its canonical link (${meta.canonical})`);
-    errors++;
-    return;
-  }
-  if (!html.includes('name="robots" content="index, follow"')) {
-    console.error(`  ✗  Route "${label}" is missing the robots index,follow tag`);
-    errors++;
-  }
-}
-
-// Render every canonical public route. Never skip a definition because of
-// missing metadata or a missing component: both are fatal SEO regressions.
-// The static deployment has no history fallback, so authenticated deep links
-// also need a concrete app-shell file. React takes over routing after load.
-writeRoute(path.join(distPublic, "admin", "index.html"), template);
-
-for (const { view, slug } of PUBLIC_PAGE_DEFINITIONS) {
-  const meta: PageMeta = PAGE_META[view];
-  if (!meta) {
-    console.error(`  ✗  No page metadata for "${view}"`);
-    errors++;
-    continue;
+  if (!fs.existsSync(templatePath)) {
+    throw new Error("❌  dist/public/index.html not found - run vite build first");
   }
 
-  const el = buildElement(view === "landing" ? "" : view);
-  if (!el) {
-    console.error(`  ✗  No component for public route "${view}"`);
-    errors++;
-    continue;
-  }
+  const template = fs.readFileSync(templatePath, "utf-8");
+  const lastmod = options.lastmod ?? new Date().toISOString().slice(0, 10);
 
-  let bodyHtml = "";
-  try {
-    bodyHtml = renderToStaticMarkup(el);
-  } catch (err) {
-    console.error(`  ✗  Error rendering public route "${view}":`, err);
-    errors++;
-    continue;
-  }
-
-  const finalHtml = injectIntoTemplate(template, bodyHtml, buildHeadTags(meta));
-  assertRealPage(slug, finalHtml, meta);
-
-  if (slug === "") {
-    // Landing page overwrites the shell index.html in-place
-    writeRoute(path.join(distPublic, "index.html"), finalHtml);
+  let publishedInsights: PublicInsight[] = [];
+  const configuredDomain = (Object.prototype.hasOwnProperty.call(options, "canonicalDomain")
+    ? options.canonicalDomain
+    : process.env.CANONICAL_DOMAIN)
+    ?.replace(/^https?:\/\//, "")
+    .replace(/\/+$/, "");
+  const hasControlledSnapshot = Object.prototype.hasOwnProperty.call(options, "publishedInsights");
+  if (hasControlledSnapshot) {
+    publishedInsights = options.publishedInsights ?? [];
+    globalThis.__AIO_PRERENDER_INSIGHTS__ = publishedInsights;
   } else {
-    writeRoute(path.join(distPublic, slug, "index.html"), finalHtml);
-  }
-}
-
-// Render each complete article
-for (const articleSlug of articleSlugs) {
-  const published = publishedInsights.find((article) => article.slug === articleSlug);
-  const meta: ArticleMeta | undefined = published ? {
-    articleTitle: published.title,
-    excerpt: published.excerpt,
-    title: published.seoTitle || published.title,
-    description: published.seoDescription || published.excerpt,
-    canonical: published.canonicalUrl || `https://${configuredDomain || "aiofusion.ai"}/insights/${published.slug}`,
-    ogTitle: published.title,
-    ogDescription: published.excerpt,
-    ogType: "article",
-    datePublished: published.datePublished || undefined,
-    dateModified: published.dateModified || published.datePublished || undefined,
-    jsonLd: {
-      "@context": "https://schema.org",
-      "@type": "Article",
-      headline: published.title,
-      description: published.excerpt,
-      image: published.coverImageUrl || undefined,
-      mainEntityOfPage: published.canonicalUrl || undefined,
-      author: { "@type": "Organization", name: "AIO Fusion" },
-      publisher: { "@type": "Organization", name: "AIO Fusion" },
-    },
-  } : ARTICLE_META[articleSlug];
-  if (!meta) {
-    console.error(`  ✗  No article metadata for "${articleSlug}"`);
-    errors++;
-    continue;
+    delete globalThis.__AIO_PRERENDER_INSIGHTS__;
+    if (configuredDomain) {
+      try {
+        const response = await fetch(`https://${configuredDomain}/api/insights`, {
+          signal: AbortSignal.timeout(15_000),
+        });
+        if (response.ok) {
+          publishedInsights = await response.json() as PublicInsight[];
+          globalThis.__AIO_PRERENDER_INSIGHTS__ = publishedInsights;
+          console.log(`  ✓  Loaded ${publishedInsights.length} published Insights stories`);
+        }
+      } catch {
+        console.warn("  !  Published Insights API unavailable; using the checked-in SEO snapshot");
+      }
+    }
   }
 
-  const el = buildElement("insights", articleSlug);
-  if (!el) {
-    console.error(`  ✗  No component for article "${articleSlug}"`);
-    errors++;
-    continue;
+  const articleSlugs = publishedInsights.length
+    ? publishedInsights.filter((article) => !article.externalUrl && article.body.length > 0).map((article) => article.slug)
+    : ARTICLE_SLUGS;
+
+  let ok = 0;
+  let errors = 0;
+
+  // Helper to write a pre-rendered file
+  function writeRoute(outPath: string, html: string): void {
+    fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    fs.writeFileSync(outPath, html, "utf-8");
+    console.log(`  ✓  ${outPath.replace(distPublic, "")}`);
+    ok++;
   }
 
-  let bodyHtml = "";
-  try {
-    bodyHtml = renderToStaticMarkup(el);
-  } catch (err) {
-    console.error(`  ✗  Error rendering article "${articleSlug}":`, err);
-    errors++;
-    continue;
+  // Assert the emitted HTML is a real pre-rendered page, not the empty shell.
+  // A silently-shell-only page is the exact "search engines see nothing" failure
+  // this guard exists to prevent, so treat as fatal SEO regression.
+  function assertRealPage(slug: string, html: string, meta: PageMeta | ArticleMeta): void {
+    const label = slug === "" ? "landing" : slug;
+    if (html.includes('<div id="root"></div>')) {
+      console.error(`  ✗  Route "${label}" produced shell-only HTML (empty #root)`);
+      errors++;
+      return;
+    }
+    if (!html.includes("<title>") || html.includes("<title></title>")) {
+      console.error(`  ✗  Route "${label}" is missing a <title>`);
+      errors++;
+      return;
+    }
+    if (!html.includes(`href="${meta.canonical}"`)) {
+      console.error(`  ✗  Route "${label}" is missing its canonical link (${meta.canonical})`);
+      errors++;
+      return;
+    }
+    if (!html.includes('name="robots" content="index, follow"')) {
+      console.error(`  ✗  Route "${label}" is missing the robots index,follow tag`);
+      errors++;
+    }
   }
 
-  const finalHtml = injectIntoTemplate(template, bodyHtml, buildHeadTags(meta));
-  assertRealPage(`insights/${articleSlug}`, finalHtml, meta);
-  const escapedArticleTitle = escHtml(meta.articleTitle);
-  if (!finalHtml.includes(escapedArticleTitle)) {
-    console.error(`  ✗  Article "${articleSlug}" is missing its unique visible title`);
-    errors++;
-  }
-  if (!finalHtml.includes("<article") && !finalHtml.includes("article-body")) {
-    console.error(`  ✗  Article "${articleSlug}" is missing its article body`);
-    errors++;
-  }
-  if (!finalHtml.includes('aria-label="Breadcrumb"')) {
-    console.error(`  ✗  Article "${articleSlug}" is missing visible breadcrumbs`);
-    errors++;
-  }
-  if (!finalHtml.includes("Continue exploring AI visibility")) {
-    console.error(`  ✗  Article "${articleSlug}" is missing related-reading links`);
-    errors++;
-  }
-  writeRoute(path.join(distPublic, "insights", articleSlug, "index.html"), finalHtml);
-}
+  // Render every canonical public route. Never skip a definition because of
+  // missing metadata or a missing component: both are fatal SEO regressions.
+  // The static deployment has no history fallback, so authenticated deep links
+  // also need a concrete app-shell file. React takes over routing after load.
+  writeRoute(path.join(distPublic, "admin", "index.html"), template);
 
-// Write sitemap.xml
-const sitemapPath = path.join(distPublic, "sitemap.xml");
-fs.writeFileSync(sitemapPath, buildSitemap(lastmod, articleSlugs), "utf-8");
-console.log(`  ✓  /sitemap.xml  (${PUBLIC_ROUTES.length + articleSlugs.length} URLs, lastmod ${lastmod})`);
+  for (const { view, slug } of PUBLIC_PAGE_DEFINITIONS) {
+    const meta: PageMeta = PAGE_META[view];
+    if (!meta) {
+      console.error(`  ✗  No page metadata for "${view}"`);
+      errors++;
+      continue;
+    }
 
-// Summary
-if (errors > 0) {
-  console.error(`\nPrerender completed with ${errors} error(s). ${ok} route(s) written.`);
-  process.exit(1);
-} else {
+    const el = buildElement(view === "landing" ? "" : view);
+    if (!el) {
+      console.error(`  ✗  No component for public route "${view}"`);
+      errors++;
+      continue;
+    }
+
+    let bodyHtml = "";
+    try {
+      bodyHtml = renderToStaticMarkup(el);
+    } catch (err) {
+      console.error(`  ✗  Error rendering public route "${view}":`, err);
+      errors++;
+      continue;
+    }
+
+    const finalHtml = injectIntoTemplate(template, bodyHtml, buildHeadTags(meta));
+    assertRealPage(slug, finalHtml, meta);
+
+    if (slug === "") {
+      // Landing page overwrites the shell index.html in-place
+      writeRoute(path.join(distPublic, "index.html"), finalHtml);
+    } else {
+      writeRoute(path.join(distPublic, slug, "index.html"), finalHtml);
+    }
+  }
+
+  // Render each complete article
+  for (const articleSlug of articleSlugs) {
+    const published = publishedInsights.find((article) => article.slug === articleSlug);
+    const meta: ArticleMeta | undefined = published ? {
+      articleTitle: published.title,
+      excerpt: published.excerpt,
+      title: published.seoTitle || published.title,
+      description: published.seoDescription || published.excerpt,
+      canonical: published.canonicalUrl || `https://${configuredDomain || "aiofusion.ai"}/insights/${published.slug}`,
+      ogTitle: published.title,
+      ogDescription: published.excerpt,
+      ogType: "article",
+      datePublished: published.datePublished || undefined,
+      dateModified: published.dateModified || published.datePublished || undefined,
+      jsonLd: {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        headline: published.title,
+        description: published.excerpt,
+        image: published.coverImageUrl || undefined,
+        mainEntityOfPage: published.canonicalUrl || undefined,
+        author: { "@type": "Organization", name: "AIO Fusion" },
+        publisher: { "@type": "Organization", name: "AIO Fusion" },
+      },
+    } : ARTICLE_META[articleSlug];
+    if (!meta) {
+      console.error(`  ✗  No article metadata for "${articleSlug}"`);
+      errors++;
+      continue;
+    }
+
+    const el = buildElement("insights", articleSlug);
+    if (!el) {
+      console.error(`  ✗  No component for article "${articleSlug}"`);
+      errors++;
+      continue;
+    }
+
+    let bodyHtml = "";
+    try {
+      bodyHtml = renderToStaticMarkup(el);
+    } catch (err) {
+      console.error(`  ✗  Error rendering article "${articleSlug}":`, err);
+      errors++;
+      continue;
+    }
+
+    const finalHtml = injectIntoTemplate(template, bodyHtml, buildHeadTags(meta));
+    assertRealPage(`insights/${articleSlug}`, finalHtml, meta);
+    const escapedArticleTitle = escHtml(meta.articleTitle);
+    if (!finalHtml.includes(escapedArticleTitle)) {
+      console.error(`  ✗  Article "${articleSlug}" is missing its unique visible title`);
+      errors++;
+    }
+    if (!finalHtml.includes("<article") && !finalHtml.includes("article-body")) {
+      console.error(`  ✗  Article "${articleSlug}" is missing its article body`);
+      errors++;
+    }
+    if (!finalHtml.includes('aria-label="Breadcrumb"')) {
+      console.error(`  ✗  Article "${articleSlug}" is missing visible breadcrumbs`);
+      errors++;
+    }
+    if (!finalHtml.includes("Continue exploring AI visibility")) {
+      console.error(`  ✗  Article "${articleSlug}" is missing related-reading links`);
+      errors++;
+    }
+    writeRoute(path.join(distPublic, "insights", articleSlug, "index.html"), finalHtml);
+  }
+
+  // Write sitemap.xml
+  const sitemapPath = path.join(distPublic, "sitemap.xml");
+  fs.writeFileSync(sitemapPath, buildSitemap(lastmod, articleSlugs), "utf-8");
+  console.log(`  ✓  /sitemap.xml  (${PUBLIC_ROUTES.length + articleSlugs.length} URLs, lastmod ${lastmod})`);
+
+  // Summary
+  if (errors > 0) {
+    throw new Error(`Prerender completed with ${errors} error(s). ${ok} route(s) written.`);
+  }
   console.log(`\nPrerender complete - ${ok} routes written, sitemap updated.`);
+  return { routesWritten: ok, errors, articleSlugs };
+}
+
+const runningAsScript = process.argv[1]
+  ? pathToFileURL(process.argv[1]).href === import.meta.url
+  : false;
+
+if (runningAsScript) {
+  try {
+    await runPrerender();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  }
 }

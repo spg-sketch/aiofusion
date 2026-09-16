@@ -52,18 +52,18 @@ const FALLBACK_INSIGHTS: PublicInsight[] = [
   {
     id: "ext-guide",
     slug: "ext-guide",
-    title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026",
-    excerpt: "What is AIO? And is PR really the new SEO? Cut through the hype around AI's impact on B2B marketing.",
+    title: "A Marketer's Guide to Winning AI Authority in 2026",
+    excerpt: "What is AIO? And is PR really the new SEO? Explore AI's impact on marketing.",
     tag: "Guide",
     externalUrl: "https://simpaticopraiauthorityguide.carrd.co/",
     datePublished: "2026-07-15",
     dateModified: "2026-08-07",
     body: [],
     coverImageUrl: "/images/insights/blog-tile-1.webp",
-    coverImageAlt: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026",
-    seoTitle: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026",
+    coverImageAlt: "A Marketer's Guide to Winning AI Authority in 2026",
+    seoTitle: "A Marketer's Guide to Winning AI Authority in 2026",
     seoDescription: "What is AIO? And is PR really the new SEO?",
-    focusKeyphrase: "B2B AI authority",
+    focusKeyphrase: "AI authority",
     canonicalUrl: "https://simpaticopraiauthorityguide.carrd.co/",
     status: "published",
   },
@@ -182,7 +182,7 @@ export default function InsightsPage(props: {
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: vars.g500 }}>
         {isGuidance
           ? "How-to articles and videos for using the AIO Fusion platform: set-up, Authority Reports, Optimiser, Media Research and more."
-          : "Practical thinking on generative engine optimisation (GEO), AI visibility, and the future of B2B PR and marketing. Filter to Guidance for platform how-to content."}
+          : "Practical thinking on generative engine optimisation (GEO), AI visibility, and the future of PR and marketing. Filter to Guidance for platform how-to content."}
       </p>
       {!isGuidance && (
         <p className="text-[14px] font-light leading-[1.8] mb-6" style={{ color: vars.g500 }}>

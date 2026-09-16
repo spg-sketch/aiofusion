@@ -97,7 +97,7 @@ export const PAGE_META: Record<PublicPageMetaKey, PageMeta> = {
         name: "AIO Fusion",
         url: BASE,
         description:
-          "GEO (Generative Engine Optimisation) platform for PR agencies and B2B communications teams",
+          "GEO (Generative Engine Optimisation) platform for PR agencies and business communications teams",
       },
       {
         "@context": "https://schema.org",
@@ -156,7 +156,7 @@ export const PAGE_META: Record<PublicPageMetaKey, PageMeta> = {
   insights: {
     title: "GEO Insights and AI Visibility Articles | AIO Fusion",
     description:
-      "Expert articles on generative engine optimisation, AI visibility, B2B PR and the future of search. Written by PR and GEO practitioners.",
+      "Expert articles on generative engine optimisation, AI visibility, PR for business audiences and the future of search. Written by PR and GEO practitioners.",
     canonical: `${BASE}/insights`,
     ogType: "website",
     jsonLd: {
@@ -300,22 +300,22 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     },
   },
   "battle-b2b-ai-authority": {
-    articleTitle: "The battle for B2B AI Authority has begun",
-    title: "The battle for B2B AI Authority has begun | AIO Fusion Insights",
+    articleTitle: "The battle for AI authority has begun",
+    title: "The battle for AI authority has begun | AIO Fusion Insights",
     description:
-      "Generative AI is becoming part of B2B research and supplier discovery. Learn why PR now shapes how brands are represented.",
+      "Generative AI is becoming part of business research and supplier discovery. Learn why PR now shapes how brands are represented.",
     canonical: `${BASE}/insights/battle-b2b-ai-authority`,
     ogType: "article",
     excerpt:
-      "Generative AI is becoming part of B2B research and supplier discovery. Learn why PR now shapes how brands are represented.",
+      "Generative AI is becoming part of business research and supplier discovery. Learn why PR now shapes how brands are represented.",
     datePublished: "2026-07-15",
     dateModified: "2026-08-07",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",
-      headline: "The battle for B2B AI Authority has begun",
+      headline: "The battle for AI authority has begun",
       description:
-        "Generative AI is becoming part of B2B research and supplier discovery. Learn why PR now shapes how brands are represented.",
+        "Generative AI is becoming part of business research and supplier discovery. Learn why PR now shapes how brands are represented.",
       url: `${BASE}/insights/battle-b2b-ai-authority`,
       image: OG_IMAGE,
       author: { "@type": "Organization", name: "AIO Fusion", url: BASE },
@@ -359,24 +359,24 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     },
   },
   "ai-changing-b2b-visibility": {
-    articleTitle: "AI Is Changing the Rules of B2B Visibility",
+    articleTitle: "AI Is Changing the Rules of Visibility",
     title:
-      "AI Is Changing the Rules of B2B Visibility: Here's What Actually Matters Now | AIO Fusion Insights",
+      "AI Is Changing the Rules of Visibility: Here's What Actually Matters Now | AIO Fusion Insights",
     description:
-      "AI-generated answers often rely on third-party sources when describing markets and suppliers. Learn what matters for B2B visibility now.",
+      "AI-generated answers often rely on third-party sources when describing markets and suppliers. Learn what matters for visibility now.",
     canonical: `${BASE}/insights/ai-changing-b2b-visibility`,
     ogType: "article",
     excerpt:
-      "AI-generated answers often rely on third-party sources when describing markets and suppliers. Learn what matters for B2B visibility now.",
+      "AI-generated answers often rely on third-party sources when describing markets and suppliers. Learn what matters for visibility now.",
     datePublished: "2026-07-15",
     dateModified: "2026-08-07",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",
       headline:
-        "AI Is Changing the Rules of B2B Visibility: Here's What Actually Matters Now",
+        "AI Is Changing the Rules of Visibility: Here's What Actually Matters Now",
       description:
-        "AI-generated answers often rely on third-party sources when describing markets and suppliers. Learn what matters for B2B visibility now.",
+        "AI-generated answers often rely on third-party sources when describing markets and suppliers. Learn what matters for visibility now.",
       url: `${BASE}/insights/ai-changing-b2b-visibility`,
       image: OG_IMAGE,
       author: { "@type": "Organization", name: "AIO Fusion", url: BASE },
@@ -391,9 +391,9 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
   },
   "ai-proves-pr-drives-sales": {
     articleTitle:
-      "Will AI finally prove that B2B PR drives sales through earned media awareness?",
+      "Will AI finally prove that PR drives sales through earned media awareness?",
     title:
-      "Will AI finally prove that B2B PR drives sales through earned media awareness? | AIO Fusion Insights",
+      "Will AI finally prove that PR drives sales through earned media awareness? | AIO Fusion Insights",
     description:
       "The attribution problem that has haunted PR for decades is about to be solved, and AI is the reason why.",
     canonical: `${BASE}/insights/ai-proves-pr-drives-sales`,
@@ -406,7 +406,7 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
       "@context": "https://schema.org",
       "@type": "Article",
       headline:
-        "Will AI finally prove that B2B PR drives sales through earned media awareness?",
+        "Will AI finally prove that PR drives sales through earned media awareness?",
       description:
         "The attribution problem that has haunted PR for decades is about to be solved, and AI is the reason why.",
       url: `${BASE}/insights/ai-proves-pr-drives-sales`,

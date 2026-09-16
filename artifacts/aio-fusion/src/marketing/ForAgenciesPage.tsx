@@ -8,7 +8,7 @@ export default function ForAgenciesPage(props: { onLogin: () => void; onBack: ()
     <MarketingPage title="AIO and content marketing automation software for PR agencies" eyebrow={<><Users size={12} /> For PR Agencies</> as any} {...props}>
       <PageHead meta={PAGE_META["for-agencies"]} />
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(16,43,54,0.75)" }}>
-        Elevate your agency capability for the AI era with tailored, measurable GEO strategies for each client. Our B2B platform enhances your team and service performance helping you harness the power of generative answer engines.
+        Elevate your agency capability for the AI era with tailored, measurable GEO strategies for each client. Our platform helps your team strengthen client services and harness the power of generative answer engines.
       </p>
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(16,43,54,0.75)" }}>
         Run every client programme on a single platform built for the AI age. Optimise every piece of content you develop from press releases to awards entries, speed up new content development, score AI authority across your programme, store all client content in one place and measure and predict the impact of your work.

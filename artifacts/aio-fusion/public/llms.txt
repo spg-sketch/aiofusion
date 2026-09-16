@@ -1,6 +1,6 @@
 # AIO Fusion
 
-> AIO Fusion is a GEO (Generative Engine Optimisation) platform that tracks, scores and grows a brand's authority and visibility across AI search and answer engines such as ChatGPT and Claude. It is built for PR agencies and B2B communications teams, both in-house and agency side, to become the source that AI models cite and recommend.
+> AIO Fusion is a GEO (Generative Engine Optimisation) platform that tracks, scores and grows a brand's authority and visibility across AI search and answer engines such as ChatGPT and Claude. It helps PR and marketing teams, both in-house and agency side, become the source that AI models cite and recommend.
 
 AIO Fusion helps brands understand how they are seen by AI answer engines and gives them the tools to improve that visibility. It measures how often and how favourably a brand is cited by large language models, audits a website's readiness for AI citation, and guides the planning, creation and optimisation of PR and marketing content so it is more likely to be surfaced and quoted by AI.
 

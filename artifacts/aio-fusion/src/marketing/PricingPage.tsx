@@ -48,7 +48,7 @@ export default function PricingPage({
       key: "inhouse",
       name: "Standard",
       sub: "In-House",
-      tagline: "For B2B and B2C in-house teams building AI authority for a single brand.",
+      tagline: "For in-house teams building AI authority for a single brand",
       annualTotal: 4000,
       monthly: 333,
       quarterly: 4600,

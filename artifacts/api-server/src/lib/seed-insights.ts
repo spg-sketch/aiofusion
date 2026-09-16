@@ -31,6 +31,11 @@ const STATIC_MEDIA = [
   "blog-tile-3",
 ];
 
+/**
+ * Insert the checked-in fallback stories that are missing from a database.
+ * Existing rows are intentionally untouched. Content migrations belong in an
+ * explicit script, never in this bootstrap or in a render path.
+ */
 export async function seedInsights(): Promise<void> {
   const domain = (process.env["CANONICAL_DOMAIN"] || "aiofusion.ai")
     .replace(/^https?:\/\//, "")
@@ -77,8 +82,8 @@ export async function seedInsights(): Promise<void> {
     .values({
       id: "ext-guide",
       slug: "ext-guide",
-      title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026",
-      excerpt: "What is AIO? And is PR really the new SEO? Cut through the hype around AI's impact on B2B marketing.",
+      title: "A Marketer's Guide to Winning AI Authority in 2026",
+      excerpt: "What is AIO? And is PR really the new SEO? Explore AI's impact on marketing.",
       tag: "Guide",
       externalUrl: "https://simpaticopraiauthorityguide.carrd.co/",
       datePublished: "2026-07-15",
@@ -86,10 +91,10 @@ export async function seedInsights(): Promise<void> {
       body: [],
       coverMediaId: "blog-tile-1",
       coverImageUrl: "/images/insights/blog-tile-1.webp",
-      coverImageAlt: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026",
-      seoTitle: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026",
-      seoDescription: "What is AIO? And is PR really the new SEO? Cut through the hype around AI's impact on B2B marketing.",
-      focusKeyphrase: "B2B AI authority",
+      coverImageAlt: "A Marketer's Guide to Winning AI Authority in 2026",
+      seoTitle: "A Marketer's Guide to Winning AI Authority in 2026",
+      seoDescription: "What is AIO? And is PR really the new SEO?",
+      focusKeyphrase: "AI authority",
       canonicalUrl: "https://simpaticopraiauthorityguide.carrd.co/",
       status: "published",
       publishedAt: new Date("2026-07-15T00:00:00Z"),
