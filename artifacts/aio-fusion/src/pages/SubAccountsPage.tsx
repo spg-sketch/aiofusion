@@ -37,6 +37,7 @@ function SubAccountsPage({
   initialSection,
   deleteReauthResult,
   checkoutResult,
+  checkoutSessionId,
   onSectionChange,
   backToAgency,
   onOpenProject,
@@ -57,6 +58,8 @@ function SubAccountsPage({
   /** Result captured before App removes the provider callback query string. */
   deleteReauthResult?: string | null;
   checkoutResult?: "success" | "cancelled" | null;
+  /** Stripe session id captured before App removes the provider callback query string. */
+  checkoutSessionId?: string | null;
   /** "Back to my agency account" control, present while an agency user is working inside a client account. */
   backToAgency?: React.ReactNode;
   /** Reports section changes so the parent can mirror them into the URL/history (refresh + Back support). */
@@ -1472,7 +1475,7 @@ function SubAccountsPage({
         {/* BILLING DETAILS (billing email + VAT) - owner/admin/billing members only */}
         {section === "billing" && canSeeBilling && (
           <>
-            <SubscriptionCard checkoutResult={checkoutResult} />
+            <SubscriptionCard checkoutResult={checkoutResult} checkoutSessionId={checkoutSessionId} />
             <BillingDetailsCard />
           </>
         )}

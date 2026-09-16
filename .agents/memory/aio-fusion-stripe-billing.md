@@ -5,6 +5,14 @@ description: Stripe connection quirks, webhook secret location, entitlement/tier
 
 # Stripe billing foundation (subscriptions + per-project action tiers)
 
+## Payment recovery evidence
+
+Treat checkout acknowledgement, subscription activation, and complete Billing details as separate checks.
+
+**Why:** a staging checkout was acknowledged and activated while its renewal date remained empty. Stripe returned item-level billing periods, not the legacy subscription-level period. The historical delivery failure was absent from available logs, so a signing-secret mismatch could not be established as its cause.
+
+**How to apply:** verify the existing transaction against persisted entitlement and renewal data. Inspect actual payloads and delivery responses; local webhook tests do not establish deployed delivery success.
+
 - **Connection API key names**: the Replit Stripe connection exposes the API key at `settings.secret` (NOT `settings.secret_key`) and the publishable key at `settings.publishable`. There is **no webhook secret** in the connection settings.
 - **Connection environment selection**: Replit can return both Stripe records in one response: sandbox is normally `environment: development`, live is `environment: production`. Never use `items[0]`. Staging/development accepts only test keys and production only live keys.
 - **Published staging limitation**: Replit exposes only its live credential slot to a published deployment and rejects sandbox keys in that slot. A staging deployment must use the protected `STRIPE_STAGING_SECRET_KEY` override, validated as `sk_test_`/`rk_test_`; production must ignore it.
@@ -68,3 +76,8 @@ The completion webhook conditional UPDATE must allow: (a) first purchase (null s
 - Treat an "instance" as one additional independent project workspace for another brand, client, or programme.
 - **Why:** customers may also use "instance" to mean extra environments or parallel runtime workloads inside one project, but that is a separate capacity need and should not be bundled into project packs.
 - **How to apply:** describe Standard, Premium, and Max packs as independent project workspaces. Do not introduce an instance-capacity add-on until a confirmed customer requirement calls for multiple environments or parallel workloads within one existing project.
+
+## Paid onboarding confirmation
+- Paid onboarding should arrive at Billing with a visible server-verified acknowledgement, rather than leaving customers to find their subscription under another settings tab.
+- **Why:** the user completed a paid signup but interpreted the absence of confirmation, followed by an active subscription beside “Confirming payment…”, as an uncertain payment outcome.
+- **How to apply:** distinguish confirmation of the returned checkout from verification of an existing active subscription. A success URL alone proves neither; retain clear pending/error states and never require another purchase to resolve uncertainty.

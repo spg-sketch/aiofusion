@@ -99,7 +99,7 @@ describe("GuidedOnboardingPage", () => {
     expect(betaOption).toHaveAttribute("aria-pressed", "true");
     expect(paidOption).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(screen.getByRole("button", { name: /^Continue$/i }));
-    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onComplete).toHaveBeenCalledWith("profile"));
     expect(screen.queryByText("Create your first project")).not.toBeInTheDocument();
     expect(screen.queryByText("Billing and payment")).not.toBeInTheDocument();
   });
@@ -182,7 +182,7 @@ describe("GuidedOnboardingPage", () => {
     expect(screen.getByText("11 April 2099")).toBeInTheDocument();
     expect(screen.getByText(/your next renewal is in/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /continue to my account/i }));
-    await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
+    await waitFor(() => expect(onComplete).toHaveBeenCalledWith("billing"));
   });
 
   it("reconciles a successful checkout return before showing the thank-you state", async () => {

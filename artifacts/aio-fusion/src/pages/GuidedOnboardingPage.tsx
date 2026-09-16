@@ -46,7 +46,7 @@ export function GuidedOnboardingPage({
 }: {
   onSignOut: () => void;
   onRoleChanged: (role: "agency" | "client") => void;
-  onComplete: () => Promise<{ ok: boolean; error?: string }>;
+  onComplete: (destinationSection?: "profile" | "billing") => Promise<{ ok: boolean; error?: string }>;
   checkoutResult?: "success" | "cancelled" | null;
   checkoutSessionId?: string | null;
 }) {
@@ -62,7 +62,10 @@ export function GuidedOnboardingPage({
   const complete = useCallback(async () => {
     setBusy(true);
     setError(null);
-    const result = await onComplete();
+    // A paid return has already been server-reconciled on this screen. Open
+    // the Account Settings billing section so the user sees the same
+    // server-backed active-subscription summary immediately after hand-off.
+    const result = await onComplete(checkoutResult === "success" ? "billing" : "profile");
     if (!result.ok) {
       setError(result.error ?? "Could not finish account setup.");
       setBusy(false);

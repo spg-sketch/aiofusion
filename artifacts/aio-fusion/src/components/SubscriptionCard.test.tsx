@@ -1,5 +1,38 @@
-import { describe, expect, it } from "vitest";
-import { daysUntilRenewal, formatSubscriptionEnd } from "./SubscriptionCard";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { daysUntilRenewal, formatSubscriptionEnd, SubscriptionCard } from "./SubscriptionCard";
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+function activeSubscription() {
+  return {
+    status: "active",
+    plan: "agency",
+    frequency: "quarterly",
+    currentPeriodEnd: "2099-12-16T00:00:00.000Z",
+    entitled: true,
+    applicablePlan: "agency",
+    includedProjects: 3,
+    projectAllowance: 3,
+    projectsUsed: 0,
+    latestInvoiceUrl: null,
+    portalAvailable: true,
+    checkoutAvailable: true,
+    companyRecordComplete: true,
+    projects: [],
+    unassignedAddons: [],
+    tierPrices: {},
+    prices: {
+      annual: { yearlyTotal: 500 },
+      quarterly: { perQuarter: 150, yearlyTotal: 600 },
+    },
+    trial: { status: "used", startedAt: null, endsAt: null, daysRemaining: 0 },
+  };
+}
 
 describe("subscription renewal timing", () => {
   it("formats a valid period end and counts a partial day as one day", () => {
@@ -22,5 +55,80 @@ describe("subscription renewal timing", () => {
     expect(formatSubscriptionEnd("not-a-date")).toBeNull();
     expect(daysUntilRenewal(null, new Date("2027-04-10T00:00:00.000Z"))).toBeNull();
     expect(daysUntilRenewal("not-a-date", new Date("2027-04-10T00:00:00.000Z"))).toBeNull();
+  });
+});
+
+describe("paid checkout return hand-off", () => {
+  it("shows the server-verified payment summary in Account Settings", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/billing/subscription")) {
+        return { ok: true, json: async () => activeSubscription() } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/reconcile-checkout")) {
+        return { ok: true, status: 200, json: async () => ({ status: "confirmed" }) } as Response;
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SubscriptionCard checkoutResult="success" checkoutSessionId="cs_test_paid-return" />);
+
+    expect(await screen.findByTestId("payment-success-state")).toBeInTheDocument();
+    expect(screen.queryByTestId("payment-confirmation-pending")).not.toBeInTheDocument();
+    expect(screen.getByText(/your payment was successful and your subscription is now active/i)).toBeInTheDocument();
+
+    const reconcileCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).endsWith("/api/platform/billing/reconcile-checkout"),
+    );
+    expect(reconcileCall).toBeTruthy();
+    expect(reconcileCall?.[1]).toMatchObject({
+      method: "POST",
+      credentials: "include",
+      body: JSON.stringify({ sessionId: "cs_test_paid-return" }),
+    });
+  });
+
+  it("does not claim payment acceptance from the checkout URL flag alone", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/billing/subscription")) {
+        return { ok: true, json: async () => activeSubscription() } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/reconcile-checkout")) {
+        return {
+          ok: false,
+          status: 409,
+          json: async () => ({ error: "Payment is still being verified." }),
+        } as Response;
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<SubscriptionCard checkoutResult="success" checkoutSessionId="cs_test_unverified" />);
+
+    expect(await screen.findByText("Payment is still being verified.")).toBeInTheDocument();
+    expect(screen.queryByTestId("payment-success-state")).not.toBeInTheDocument();
+    expect(screen.getByTestId("payment-confirmation-pending")).toBeInTheDocument();
+  });
+
+  it("uses the server-backed active state for a standard checkout return without a session id", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/billing/subscription")) {
+        return { ok: true, json: async () => activeSubscription() } as Response;
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SubscriptionCard checkoutResult="success" />);
+
+    expect(await screen.findByText("Your subscription is active")).toBeInTheDocument();
+    expect(screen.getByText(/active subscription has been verified by aio fusion/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("payment-confirmation-pending")).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([input]) =>
+      String(input).endsWith("/api/platform/billing/reconcile-checkout"),
+    )).toBe(false);
   });
 });

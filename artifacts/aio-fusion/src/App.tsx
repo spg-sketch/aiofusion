@@ -650,7 +650,7 @@ function App() {
     }
   };
 
-  const completeAccountOnboarding = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
+  const completeAccountOnboarding = useCallback(async (destinationSection: "profile" | "billing" = "profile"): Promise<{ ok: boolean; error?: string }> => {
     try {
       const response = await fetch(`${apiBase()}/api/platform/onboarding/complete`, {
         method: "POST",
@@ -665,7 +665,7 @@ function App() {
     }
     setNeedsSetup(false);
     startTransition(() => {
-      setAccountSection("profile");
+      setAccountSection(destinationSection);
       setView("sub-accounts");
     });
     window.scrollTo(0, 0);
@@ -938,7 +938,9 @@ function App() {
 
   // Stripe Checkout return flag (/?checkout=success|cancelled). Captured once
   // on load, before the history-sync effect rewrites the URL and drops the
-  // query string, then handed to SubAccountsPage for the subscription card.
+  // query string, then handed to the onboarding and Account Settings billing
+  // cards. The session id is required to server-reconcile paid onboarding
+  // before showing a payment acknowledgement.
   const [checkoutResult] = useState<"success" | "cancelled" | null>(() => {
     const v = new URLSearchParams(window.location.search).get("checkout");
     return v === "success" || v === "cancelled" ? v : null;
@@ -1474,6 +1476,7 @@ function App() {
         initialSection={accountSection ?? undefined}
         deleteReauthResult={deleteReauthResult}
         checkoutResult={checkoutResult}
+        checkoutSessionId={checkoutSessionId}
         onSectionChange={(s) => setAccountSection(s)}
         session={session}
         onBack={() => {

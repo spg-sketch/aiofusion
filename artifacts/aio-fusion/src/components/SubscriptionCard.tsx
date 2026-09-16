@@ -165,8 +165,10 @@ function RenewalDetails({
 
 function PaymentSuccessState({
   info,
+  verifiedCheckout,
 }: {
   info: SubscriptionInfo;
+  verifiedCheckout: boolean;
 }) {
   const renewal = formatSubscriptionEnd(info.currentPeriodEnd);
 
@@ -179,10 +181,12 @@ function PaymentSuccessState({
       style={{ background: "#ECFDF5", border: "1px solid #A7F3D0" }}
     >
       <h3 className="aio-type-card-title" style={{ color: "#166534" }}>
-        Thank you for signing up to AIO Fusion
+        {verifiedCheckout ? "Thank you for signing up to AIO Fusion" : "Your subscription is active"}
       </h3>
       <p className="aio-type-supporting mt-1" style={{ color: "#166534" }}>
-        Your payment was successful and your subscription is now active.
+        {verifiedCheckout
+          ? "Your payment was successful and your subscription is now active."
+          : "Your active subscription has been verified by AIO Fusion."}
       </p>
       {renewal && (
         <p className="aio-type-supporting mt-1" style={{ color: "#166534" }}>
@@ -263,9 +267,24 @@ export function SubscriptionCard({
   ]);
 
   useEffect(() => {
-    if (!onboarding || checkoutResult !== "success" || checkoutConfirmed) return;
+    // A successful Checkout return can render this card either in the guided
+    // onboarding step or immediately afterwards in Account Settings. In both
+    // cases, only the server reconciliation response may turn the return flag
+    // into a payment acknowledgement. Do not leave Account Settings showing
+    // the generic "Confirming payment..." state when the paid onboarding hand-
+    // off has already mounted this card.
+    // Standard Account Settings checkouts historically return without a
+    // session id. Their server-backed subscription response is the source of
+    // truth; only onboarding returns with a session id use this explicit
+    // checkout reconciliation step.
+    if (checkoutResult !== "success" || checkoutConfirmed) return;
     if (!checkoutSessionId) {
-      setConfirmationError("The payment return link is incomplete. Use the retry button below or contact support if payment was taken.");
+      // Guided onboarding cannot safely advance without the session reference.
+      // A standard Account Settings return never included one, so let its
+      // server-backed subscription state render without a false warning.
+      if (onboarding) {
+        setConfirmationError("The payment return link is incomplete. Use the retry button below or contact support if payment was taken.");
+      }
       return;
     }
     let cancelled = false;
@@ -366,10 +385,10 @@ export function SubscriptionCard({
       <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
         <h2 className="aio-type-card-title mb-1" style={{ color: ink }}>Subscription</h2>
 
-        {checkoutResult === "success" && checkoutConfirmed && paidSubscription && (
-          <PaymentSuccessState info={info} />
+        {checkoutResult === "success" && paidSubscription && (checkoutConfirmed || !checkoutSessionId) && (
+          <PaymentSuccessState info={info} verifiedCheckout={checkoutConfirmed} />
         )}
-        {checkoutResult === "success" && (!checkoutConfirmed || !paidSubscription) && (
+        {checkoutResult === "success" && (checkoutSessionId || onboarding) && (!checkoutConfirmed || !paidSubscription) && (
           <div className="mb-5" data-testid="payment-confirmation-pending">
             <p className="aio-type-supporting" style={{ color: confirmationError ? "#991B1B" : vars.g600 }}>
               {confirmationError ?? (confirming ? "Securely confirming your completed Stripe checkout..." : "Confirming payment...")}

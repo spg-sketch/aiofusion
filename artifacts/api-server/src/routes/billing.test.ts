@@ -618,6 +618,32 @@ describe("stripe webhook handlers", () => {
     expect(company?.renewalReminderPeriodEnd).toBeNull();
   });
 
+  it("reads item-level renewal dates from current Stripe subscription payloads", async () => {
+    await seedWorkspace("item-renewal", "owner@item-renewal.test");
+    await db.update(platformCompaniesTable).set({
+      stripeCustomerId: "cus_item_renewal",
+      stripeSubscriptionId: "sub_item_renewal",
+      subscriptionStatus: "active",
+    }).where(eq(platformCompaniesTable.slug, "item-renewal"));
+    const periodEnd = 1_797_324_422;
+    const update = (items: unknown[]) => handleSubscriptionUpdated(
+      fakeEvent("evt_item_renewal", "customer.subscription.updated", {
+        id: "sub_item_renewal",
+        customer: "cus_item_renewal",
+        status: "active",
+        items: { data: items },
+      }),
+    );
+    await update([
+      { current_period_end: periodEnd + 86400 },
+      { current_period_end: periodEnd },
+      { current_period_end: -1 },
+    ]);
+    expect((await getBillingState("item-renewal"))?.currentPeriodEnd?.getTime()).toBe(periodEnd * 1000);
+    await update([{ current_period_end: 0 }, {}]);
+    expect((await getBillingState("item-renewal"))?.currentPeriodEnd?.getTime()).toBe(periodEnd * 1000);
+  });
+
   it("claimStripeEvent is idempotent per event id", async () => {
     expect(await claimStripeEvent("evt_claim_1")).toBe(true);
     expect(await claimStripeEvent("evt_claim_1")).toBe(false);

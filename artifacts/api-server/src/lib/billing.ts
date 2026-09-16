@@ -1202,7 +1202,19 @@ export async function handleSubscriptionUpdated(event: Stripe.Event): Promise<vo
     );
     return;
   }
-  const subscriptionPeriodEnd = (subscription as unknown as { current_period_end?: number }).current_period_end;
+  // Recent Stripe API versions put billing periods on subscription items.
+  // Keep older event payloads compatible; for multiple items the next renewal
+  // is the earliest valid item period end, not an arbitrary first item.
+  const validPeriodEnd = (value: unknown): value is number =>
+    typeof value === "number" && Number.isFinite(value) && value > 0
+    && Number.isFinite(new Date(value * 1000).getTime());
+  const legacyPeriodEnd = (subscription as unknown as { current_period_end?: number }).current_period_end;
+  const itemPeriodEnds = (subscription.items?.data ?? [])
+    .map((item) => item.current_period_end)
+    .filter(validPeriodEnd);
+  const subscriptionPeriodEnd = validPeriodEnd(legacyPeriodEnd)
+    ? legacyPeriodEnd
+    : itemPeriodEnds.length ? Math.min(...itemPeriodEnds) : null;
   const nextPeriodEnd = subscriptionPeriodEnd
     ? new Date(subscriptionPeriodEnd * 1000)
     : null;
