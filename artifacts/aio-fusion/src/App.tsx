@@ -634,15 +634,38 @@ function App() {
     })();
   });
 
-  const handleDeleteProject = (id: string) => {
+  const deleteProjectConfirmed = async (id: string) => {
+    const startedSession = deletionSessionRef.current;
+    const result = await deleteRemoteProject(id);
+    if (deletionSessionRef.current !== startedSession) {
+      return { ok: false, error: "Workspace changed. Refresh the project list before trying again." };
+    }
+    if (!result.ok) return result;
     const next = loadStoredProjects().filter((p) => p.id !== id);
     saveStoredProjects(next);
     setStoredProjects(next);
+    setKnownProjectIds(next.map((p) => p.id));
+    if (getActiveProjectId() === id) {
+      setActiveProjectId("");
+      setPendingAuditId(null);
+      setPendingDiagnosticId(null);
+      setPendingContentGeoId(null);
+      setPendingTechGeoId(null);
+    }
+    setActiveClient((current) => current?.id === id ? null : current);
     setClientLogos((prev) => {
       const { [id]: _removed, ...rest } = prev;
       return rest;
     });
-    void deleteRemoteProject(id);
+    return { ok: true };
+  };
+
+  // Existing archive callers remain fire-and-forget compatible, but failures
+  // now leave their project in place rather than pretending deletion succeeded.
+  const handleDeleteProject = (id: string) => {
+    void deleteProjectConfirmed(id).then((result) => {
+      if (!result.ok) window.alert(result.error);
+    });
   };
 
   const confirmCreateProject = async (name: string, logo?: string) => {
@@ -710,6 +733,8 @@ function App() {
     seedAdminIfEmpty();
     return getLocalSession();
   });
+  const deletionSessionRef = useRef(session);
+  deletionSessionRef.current = session;
   // True until the server has confirmed (or denied) the session via
   // bootstrapAuth(). Guards must not redirect while this is true - the session
   // state is still provisional (localStorage only) and may not yet reflect the
@@ -1455,7 +1480,7 @@ function App() {
     if (!session || session.role !== "admin") {
       return null;
     }
-    return <UsersAdminPage session={session} initialSection={accountSection ?? undefined} onSectionChange={setAccountSection} onBack={() => transitionToView("platform-home")} onAssignProjectOwner={handleAssignProjectOwner} onProjectCreated={() => { void resyncProjects(); }} onSupportAdmin={() => transitionToView("support-admin" as any)} onLeadsAdmin={() => transitionToView("leads-admin" as any)} onInsightsAdmin={() => transitionToView("insights-admin")} />;
+    return <UsersAdminPage session={session} initialSection={accountSection ?? undefined} onSectionChange={setAccountSection} onBack={() => transitionToView("platform-home")} onAssignProjectOwner={handleAssignProjectOwner} onDeleteProject={deleteProjectConfirmed} onProjectCreated={() => { void resyncProjects(); }} onSupportAdmin={() => transitionToView("support-admin" as any)} onLeadsAdmin={() => transitionToView("leads-admin" as any)} onInsightsAdmin={() => transitionToView("insights-admin")} />;
   }
   if (view === "insights-admin") {
     if (!session || session.insightsCmsAccess !== true) return null;

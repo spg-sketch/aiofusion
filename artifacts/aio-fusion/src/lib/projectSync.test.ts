@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { syncIntakeForProject, ensureDefaultIntakeMigrated, assertActiveProjectConsistency, setKnownProjectIds, assertActiveProjectConsistencyFromCache, auditAndRecoverLocalProjects } from "./projectSync";
+import { syncIntakeForProject, ensureDefaultIntakeMigrated, assertActiveProjectConsistency, setKnownProjectIds, assertActiveProjectConsistencyFromCache, auditAndRecoverLocalProjects, deleteRemoteProject, syncProjectsOnLoad } from "./projectSync";
 
 // A fully populated Set-Up blob (a real project's answers).
 const FULL = {
@@ -72,6 +72,56 @@ describe("syncIntakeForProject - blank can never overwrite populated", () => {
     await syncIntakeForProject("p1");
 
     expect(pushed).toHaveLength(0);
+  });
+});
+
+describe("confirmed project deletion", () => {
+  it.each([401, 403, 503, 500])("reports HTTP %s without changing the local list", async (status) => {
+    localStorage.setItem("aio.projects.v1", JSON.stringify([{ id: "keep", name: "Keep" }]));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: "Please retry" }), { status })));
+    expect(await deleteRemoteProject("keep")).toEqual({ ok: false, error: "Please retry" });
+    expect(JSON.parse(localStorage.getItem("aio.projects.v1")!)).toHaveLength(1);
+  });
+
+  it("reports network and malformed-success failures", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    expect(await deleteRemoteProject("network")).toMatchObject({ ok: false, error: expect.stringContaining("try again") });
+    vi.mocked(fetch).mockResolvedValue(new Response("<html>proxy</html>", { status: 200 }));
+    expect(await deleteRemoteProject("network")).toMatchObject({ ok: false });
+  });
+
+  it("targets only the exact ID and filters an older in-flight list response", async () => {
+    const rows = ["delete-exact", "keep-exact"].map((id) => ({
+      id, name: "Duplicate", data: { id, name: "Duplicate" }, logo: null, owner: "admin",
+    }));
+    localStorage.setItem("aio.projects.v1", JSON.stringify(rows.map((p) => p.data)));
+    let resolveList!: (response: Response) => void;
+    const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      if (init?.method === "POST") return new Response(JSON.stringify({ ok: true }));
+      return new Promise<Response>((resolve) => { resolveList = resolve; });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const loading = syncProjectsOnLoad();
+    expect(await deleteRemoteProject("delete-exact")).toEqual({ ok: true });
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({
+      credentials: "include", body: JSON.stringify({ id: "delete-exact" }),
+    });
+    resolveList(new Response(JSON.stringify({ projects: rows, deletedIds: [] })));
+    expect(await loading).toMatchObject({ projects: [{ id: "keep-exact" }] });
+    expect(JSON.parse(localStorage.getItem("aio.projects.v1")!)).toEqual([expect.objectContaining({ id: "keep-exact" })]);
+    // A later authoritative read can legitimately restore the same ID.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ projects: rows, deletedIds: [] }))));
+    expect(await syncProjectsOnLoad()).toMatchObject({
+      projects: [expect.objectContaining({ id: "keep-exact" }), expect.objectContaining({ id: "delete-exact" })],
+    });
+  });
+
+  it("drops a stale device copy on refresh without pushing it back", async () => {
+    localStorage.setItem("aio.projects.v1", JSON.stringify([{ id: "deleted-elsewhere", name: "Old" }]));
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ projects: [], deletedIds: ["deleted-elsewhere"] })));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await syncProjectsOnLoad()).toMatchObject({ projects: [] });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });
 

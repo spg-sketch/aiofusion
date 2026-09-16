@@ -207,14 +207,21 @@ function hydrateServerProject(sp: ServerProject, fallbackName = ""): StoredProje
 }
 
 async function pullProjects(): Promise<{ projects: ServerProject[]; deletedIds: string[] } | null | "unauthorized"> {
+  const invalidatedIds = new Set<string>();
+  pendingProjectReads.add(invalidatedIds);
   try {
     const resp = await fetch(`${apiBase()}/api/store/projects`, { credentials: "include" });
     if (resp.status === 401) return "unauthorized";
     if (!resp.ok) return null;
     const json = (await resp.json()) as { projects?: ServerProject[]; deletedIds?: string[] };
-    return { projects: json.projects ?? [], deletedIds: json.deletedIds ?? [] };
+    return {
+      projects: (json.projects ?? []).filter((p) => !invalidatedIds.has(p.id)),
+      deletedIds: [...new Set([...(json.deletedIds ?? []), ...invalidatedIds])],
+    };
   } catch {
     return null;
+  } finally {
+    pendingProjectReads.delete(invalidatedIds);
   }
 }
 
@@ -260,6 +267,18 @@ export async function pushProjectMeta(project: StoredProject, logo?: string | nu
 // assignment screen: it reports every browser-only record and whether it was
 // safely persisted before an owner can be changed.
 export async function auditAndRecoverLocalProjects(): Promise<
+  ProjectReconciliationAudit | null | "unauthorized"
+> {
+  const invalidatedIds = new Set<string>();
+  pendingProjectReads.add(invalidatedIds);
+  try {
+    return await recoverLocalProjects(invalidatedIds);
+  } finally {
+    pendingProjectReads.delete(invalidatedIds);
+  }
+}
+
+async function recoverLocalProjects(invalidatedIds: Set<string>): Promise<
   ProjectReconciliationAudit | null | "unauthorized"
 > {
   const server = await pullProjects();
@@ -352,22 +371,41 @@ export async function auditAndRecoverLocalProjects(): Promise<
     merged.push(hydrateServerProject(serverProject));
     if (serverProject.logo) mergedLogos[serverProject.id] = serverProject.logo;
   }
-  writeJson(PROJECTS_KEY, merged);
+  for (const id of invalidatedIds) {
+    delete mergedLogos[id];
+    activeIds.delete(id);
+  }
+  writeJson(PROJECTS_KEY, merged.filter((p) => !invalidatedIds.has(p.id)));
   writeJson(LOGOS_KEY, mergedLogos);
 
   return { serverProjectIds: [...activeIds], localOnly };
 }
 
-export async function deleteRemoteProject(id: string): Promise<void> {
+export type DeleteProjectResult = { ok: true } | { ok: false; error: string };
+
+// Invalidate only reads already in flight when deletion is confirmed. A later
+// authoritative fetch may legitimately contain a restored project.
+const pendingProjectReads = new Set<Set<string>>();
+
+export async function deleteRemoteProject(id: string): Promise<DeleteProjectResult> {
   try {
-    await fetch(`${apiBase()}/api/store/projects/delete`, {
+    const response = await fetch(`${apiBase()}/api/store/projects/delete`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({ id }),
     });
+    const body = await response.json().catch(() => null);
+    if (!response.ok || body?.ok !== true) {
+      return {
+        ok: false,
+        error: typeof body?.error === "string" ? body.error : "Could not confirm project deletion. Please try again.",
+      };
+    }
+    for (const invalidated of pendingProjectReads) invalidated.add(id);
+    return { ok: true };
   } catch {
-    /* noop */
+    return { ok: false, error: "Could not reach the server. Please try again." };
   }
 }
 

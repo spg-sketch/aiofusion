@@ -6,6 +6,8 @@ import {
   getVisibleUsernames,
   normUsername,
   getAccount,
+  isRestrictedMaster,
+  MASTER_OWNER_REQUIRED_MESSAGE,
 } from "../lib/platform-auth";
 import { intakeIsEmpty, dataIsEmpty } from "../lib/intake-guards";
 import {
@@ -543,6 +545,10 @@ router.post(
         return;
       }
       if (!guardProjectWrite(req, res)) return;
+      if (isRestrictedMaster(req.account!)) {
+        res.status(403).json({ error: MASTER_OWNER_REQUIRED_MESSAGE });
+        return;
+      }
       if (!inAssignedScope(req, id)) {
         res.status(403).json({ error: "You don't have access to this project." });
         return;
@@ -576,10 +582,19 @@ router.post(
           return;
         }
       }
-      await db
+      const deleted = await db
         .update(projectsTable)
         .set({ deletedAt: new Date() })
-        .where(scope ? and(eq(projectsTable.id, id), scope) : eq(projectsTable.id, id));
+        .where(scope ? and(eq(projectsTable.id, id), scope) : eq(projectsTable.id, id))
+        .returning({ id: projectsTable.id });
+      // The owner/scope check above is only a friendly early rejection. The
+      // scoped UPDATE is the authorization boundary: ownership can change
+      // between the read and this write. Never report success when the
+      // authorized row was no longer there (or no longer in scope).
+      if (deleted.length === 0) {
+        res.status(409).json({ error: "You cannot delete this project." });
+        return;
+      }
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to delete project" });

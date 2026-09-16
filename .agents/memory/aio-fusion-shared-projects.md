@@ -190,3 +190,13 @@ move an incomplete project or present a misleading review list.
 failure; hydrate the review list from server rows; require explicit project and
 target selection plus confirmation; retain pending recovery until every cached
 piece saves.
+
+## Master account project removal
+Treat inherited projects beneath Master Admin as projects, not evidence that
+deleted accounts have returned. Offer individual ID-bound removal rather than
+bulk cleanup; keep account deletion and project deletion separate.
+**Why:** account removal intentionally transfers projects to the acting admin,
+and the user explicitly prefers one-at-a-time confirmation to avoid removing
+the wrong data.
+**How to apply:** use the protected project soft-delete operation for those
+rows, never a name-based cleanup script or an account-deletion action.

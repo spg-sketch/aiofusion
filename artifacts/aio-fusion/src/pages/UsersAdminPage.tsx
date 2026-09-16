@@ -21,6 +21,12 @@ import { apiBase } from "../lib/contentAi";
 import { SubscriptionsAdminCard } from "../components/SubscriptionsAdminCard";
 import { pushProjectMeta } from "../lib/projectSync";
 import type { Client } from "../lib/projectTypes";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
 
 type ViewAccountTarget = {
   username: string;
@@ -34,6 +40,7 @@ export function UsersAdminPage({
   session,
   onBack,
   onAssignProjectOwner,
+  onDeleteProject,
   onProjectCreated,
   onSupportAdmin,
   onLeadsAdmin,
@@ -44,6 +51,7 @@ export function UsersAdminPage({
   session: LocalSession;
   onBack: () => void;
   onAssignProjectOwner: (id: string, owner: string) => Promise<{ ok: boolean; error?: string }>;
+  onDeleteProject?: (id: string) => Promise<{ ok: boolean; error?: string }>;
   onProjectCreated?: () => void;
   onSupportAdmin?: () => void;
   onLeadsAdmin?: () => void;
@@ -183,6 +191,41 @@ export function UsersAdminPage({
   const allProjects = useMemo(() => loadStoredProjects(), [tick]);
   const projectsByOwner = (username: string) =>
     allProjects.filter((p) => (p.owner || "").toLowerCase() === username.toLowerCase());
+
+  // Project deletion is deliberately kept separate from the account "Manage"
+  // menu. The parent owns the server mutation and local cache update; this page
+  // only confirms the exact project id, reports the result, and re-reads after
+  // success.
+  const [projectDeleteMenu, setProjectDeleteMenu] = useState<string | null>(null);
+  const [projectDeletePendingId, setProjectDeletePendingId] = useState<string | null>(null);
+  const [projectDeleteError, setProjectDeleteError] = useState<{ id: string; message: string } | null>(null);
+  const projectDeleteInFlightRef = useRef<string | null>(null);
+  const projectDeleteGenerationRef = useRef(0);
+  const projectDeleteIdentity = JSON.stringify({
+    username: session.username,
+    role: session.role,
+    userName: session.userName ?? null,
+    userEmail: session.userEmail ?? null,
+    companyName: session.companyName ?? null,
+    membershipRole: session.membershipRole ?? null,
+    projectAccess: session.projectAccess == null ? null : [...session.projectAccess].sort(),
+  });
+  const projectDeleteIdentityRef = useRef(projectDeleteIdentity);
+  if (projectDeleteIdentityRef.current !== projectDeleteIdentity) {
+    // This render is the first point at which a switched session/workspace is
+    // observable. Invalidate the old request before its promise can commit a
+    // result into the new workspace.
+    projectDeleteIdentityRef.current = projectDeleteIdentity;
+    projectDeleteGenerationRef.current += 1;
+    projectDeleteInFlightRef.current = null;
+  }
+  useEffect(() => {
+    setProjectDeleteMenu(null);
+    setProjectDeletePendingId(null);
+    setProjectDeleteError(null);
+    setTick((current) => current + 1);
+  }, [projectDeleteIdentity]);
+
   // Group accounts into a real parent-child tree (rather than a flat,
   // margin-indented list) so the master/agency/client hierarchy reads clearly:
   // each account's children render nested inside it, with a connecting rail.
@@ -830,6 +873,107 @@ export function UsersAdminPage({
     })();
   };
 
+  const canDeleteProject = (project: Client): boolean =>
+    session.role === "admin" &&
+    (session.membershipRole == null || session.membershipRole === "owner") &&
+    (session.projectAccess == null || session.projectAccess.includes(project.id)) &&
+    onDeleteProject !== undefined;
+
+  const projectWebsite = (project: Client): string | null => {
+    const metadata = project as Client & { website?: unknown; aiWebsite?: unknown; url?: unknown; domain?: unknown };
+    // Intake persists the project website as top-level `aiWebsite` under the
+    // project's namespaced key (aio.intake.v2::<id>). Read that production
+    // shape first; `website`/`url`/`domain` are only legacy/cache metadata.
+    try {
+      const raw = localStorage.getItem(`aio.intake.v2::${project.id}`);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { aiWebsite?: unknown };
+        if (typeof parsed.aiWebsite === "string" && parsed.aiWebsite.trim()) {
+          return parsed.aiWebsite.trim();
+        }
+      }
+    } catch {
+      // A malformed or unavailable intake cache must not prevent the delete
+      // confirmation from identifying the project by its stable id.
+    }
+    for (const value of [metadata.website, metadata.aiWebsite, metadata.url, metadata.domain]) {
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+    return null;
+  };
+
+  const projectDeleteConfirmation = (project: Client): string => {
+    const website = projectWebsite(project);
+    return [
+      `Delete project "${project.name}" from the Master Admin account?`,
+      `Website: ${website || "Not available"}`,
+      `ID: ${project.id}`,
+      "All accounts and other projects will be untouched.",
+    ].join("\n");
+  };
+
+  const handleProjectDelete = (project: Client, requireConfirmation = true) => {
+    if (!onDeleteProject || !canDeleteProject(project)) return;
+    // This ref is the synchronous guard. State alone would allow two clicks
+    // before React has had a chance to commit the disabled state.
+    if (projectDeleteInFlightRef.current !== null) return;
+    if (requireConfirmation && !window.confirm(projectDeleteConfirmation(project))) {
+      setProjectDeleteMenu(null);
+      return;
+    }
+
+    const identity = projectDeleteIdentityRef.current;
+    const generation = projectDeleteGenerationRef.current;
+    const deleteProject = onDeleteProject;
+    projectDeleteInFlightRef.current = project.id;
+    setProjectDeleteMenu(null);
+    setProjectDeletePendingId(project.id);
+    setProjectDeleteError(null);
+
+    void (async () => {
+      try {
+        const result = await deleteProject(project.id);
+        // A workspace switch invalidates every result from the previous
+        // session. Do not show its error or refresh the new workspace.
+        if (
+          projectDeleteIdentityRef.current !== identity ||
+          projectDeleteGenerationRef.current !== generation
+        ) return;
+        if (!result.ok) {
+          setProjectDeleteError({
+            id: project.id,
+            message: result.error || "Could not delete this project. Please try again.",
+          });
+          return;
+        }
+        // The parent removes the server row and local cache only after success.
+        // Re-reading through tick keeps the page honest without deleting data
+        // itself or affecting any account/other project.
+        refresh();
+      } catch (error) {
+        if (
+          projectDeleteIdentityRef.current !== identity ||
+          projectDeleteGenerationRef.current !== generation
+        ) return;
+        setProjectDeleteError({
+          id: project.id,
+          message: error instanceof Error && error.message
+            ? error.message
+            : "Could not delete this project. Please try again.",
+        });
+      } finally {
+        if (
+          projectDeleteIdentityRef.current === identity &&
+          projectDeleteGenerationRef.current === generation &&
+          projectDeleteInFlightRef.current === project.id
+        ) {
+          projectDeleteInFlightRef.current = null;
+          setProjectDeletePendingId(null);
+        }
+      }
+    })();
+  };
+
   const handleDelete = (username: string) => {
     if (!confirm(`Delete user '${username}'? This cannot be undone.`)) return;
     void (async () => {
@@ -1206,7 +1350,7 @@ export function UsersAdminPage({
                 ) : (
                   <div className="flex flex-col mt-1.5 rounded-lg overflow-hidden" style={{ border: `1px solid ${vars.g200}` }}>
                     {visible.map((p, i) => (
-                      <div key={p.id} style={{ background: i % 2 === 0 ? "white" : vars.g100 + "60", borderTop: i > 0 ? `1px solid ${vars.g200}` : undefined }}>
+                       <div key={p.id} className="relative" style={{ background: i % 2 === 0 ? "white" : vars.g100 + "60", borderTop: i > 0 ? `1px solid ${vars.g200}` : undefined }}>
                         <div className="flex flex-wrap items-center gap-2 px-2.5 py-1.5">
                           <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[8px] font-bold text-white shrink-0" style={{ background: p.color }}>{p.initials}</span>
                            <span className="aio-type-meta truncate" style={{ color: ink }}>{p.name}</span>
@@ -1227,7 +1371,64 @@ export function UsersAdminPage({
                               </option>
                             ))}
                           </select>
+                           {canDeleteProject(p) && (
+                             <DropdownMenu
+                               open={projectDeleteMenu === p.id}
+                               onOpenChange={(open) => setProjectDeleteMenu(open ? p.id : null)}
+                             >
+                               <DropdownMenuTrigger asChild>
+                                 <button
+                                   type="button"
+                                   aria-label={`Project actions for ${p.name} (${p.id})`}
+                                   disabled={projectDeletePendingId !== null}
+                                   className="w-7 h-7 rounded-full flex items-center justify-center transition-all hover:bg-black/5 disabled:opacity-40"
+                                   style={{ border: `1.5px solid ${vars.g200}`, color: vars.g500 }}
+                                 >
+                                   <MoreVertical size={13} />
+                                 </button>
+                               </DropdownMenuTrigger>
+                               <DropdownMenuContent
+                                 align="end"
+                                 sideOffset={4}
+                                 aria-label={`Project actions for ${p.name}`}
+                                 className="w-40 rounded-xl"
+                                 style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 12px 32px -8px rgba(16,43,54,0.22)" }}
+                               >
+                                 <DropdownMenuItem
+                                   onSelect={() => handleProjectDelete(p)}
+                                   disabled={projectDeletePendingId === p.id}
+                                   className="aio-type-supporting gap-2.5 px-3.5 py-2 text-left"
+                                   style={{ color: accent }}
+                                 >
+                                   {projectDeletePendingId === p.id
+                                     ? <Loader2 size={13} className="animate-spin" />
+                                     : <Trash2 size={13} />}
+                                   {projectDeletePendingId === p.id ? "Deleting…" : "Delete project"}
+                                 </DropdownMenuItem>
+                               </DropdownMenuContent>
+                             </DropdownMenu>
+                           )}
                         </div>
+                         {projectDeletePendingId === p.id && (
+                           <div role="status" className="flex items-center gap-1.5 px-2.5 pb-1.5 -mt-0.5 text-[10px]" style={{ color: vars.g500 }}>
+                             <Loader2 size={10} className="animate-spin" /> Deleting project…
+                           </div>
+                         )}
+                         {projectDeleteError?.id === p.id && (
+                           <div role="alert" className="flex flex-wrap items-center gap-2 px-2.5 pb-1.5 -mt-0.5">
+                             <span className="text-[10px] font-semibold" style={{ color: accent }}>{projectDeleteError.message}</span>
+                             <button
+                               type="button"
+                               onClick={() => handleProjectDelete(p, false)}
+                               disabled={projectDeletePendingId !== null}
+                               aria-label={`Retry deleting project ${p.name}`}
+                               className="aio-button aio-button--compact"
+                               style={{ color: accent, borderColor: `${accent}60`, background: "white" }}
+                             >
+                               <Repeat size={10} /> Retry delete project
+                             </button>
+                           </div>
+                         )}
                         {(auditLocks[p.id] ?? []).map((lk) => (
                           <div key={lk.auditType} className="flex items-center gap-2 px-2.5 pb-1.5 -mt-0.5">
                             <Lock size={10} style={{ color: vars.g400 }} />

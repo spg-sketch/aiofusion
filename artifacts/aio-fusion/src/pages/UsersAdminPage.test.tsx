@@ -66,7 +66,7 @@ afterEach(() => {
 // Import component AFTER mocks
 // ---------------------------------------------------------------------------
 import { UsersAdminPage } from "./UsersAdminPage";
-import type { User } from "../lib/auth";
+import type { User, Session } from "../lib/auth";
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -542,5 +542,244 @@ describe("UsersAdminPage - URL-backed section prop", () => {
         projectId: null,
       });
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Project-row delete action
+// ---------------------------------------------------------------------------
+
+type DeleteProjectResult = { ok: boolean; error?: string };
+
+function renderProjectDeletePage(
+  projects: Array<Record<string, unknown>>,
+  session: Session = ADMIN_SESSION,
+  onDeleteProject?: (id: string) => Promise<DeleteProjectResult>,
+) {
+  mockGetLocalUsers.mockReturnValue([mkUser("client-one")]);
+  mockLoadStoredProjects.mockReturnValue(projects);
+  return render(
+    <UsersAdminPage
+      session={session}
+      initialSection="agencies"
+      onBack={() => {}}
+      onAssignProjectOwner={async () => ({ ok: true })}
+      onDeleteProject={onDeleteProject}
+    />,
+  );
+}
+
+async function openProjectDeleteMenu(name: string, id: string) {
+  fireEvent.keyDown(screen.getByRole("button", { name: `Project actions for ${name} (${id})` }), {
+    key: "ArrowDown",
+  });
+  return screen.findByRole("menuitem", { name: "Delete project" });
+}
+
+describe("UsersAdminPage - project-row delete action", () => {
+  it("binds duplicate project names to the exact row id and includes name, website, id, and Master Admin in confirmation", async () => {
+    const onDeleteProject = vi.fn().mockResolvedValue({ ok: true as const });
+    const projects = [
+      { id: "project-a", name: "Same Name", website: "first.example", owner: "client-one" },
+      { id: "project-b", name: "Same Name", website: "second.example", owner: "client-one" },
+    ];
+    renderProjectDeletePage(projects, ADMIN_SESSION, onDeleteProject);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    fireEvent.click(await openProjectDeleteMenu("Same Name", "project-b"));
+
+    await waitFor(() => expect(onDeleteProject).toHaveBeenCalledWith("project-b"));
+    expect(onDeleteProject).toHaveBeenCalledOnce();
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('Delete project "Same Name" from the Master Admin account?'));
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining("Website: second.example"));
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining("ID: project-b"));
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining("All accounts and other projects will be untouched."));
+  });
+
+  it("uses the production namespaced intake aiWebsite in the confirmation", async () => {
+    const projectId = "production-shaped-project";
+    localStorage.setItem(`aio.intake.v2::${projectId}`, JSON.stringify({
+      formData: {
+        "4.1": "Production Company",
+        "6.2": "https://homepage.example",
+      },
+      duals: {},
+      dualLists: {},
+      stringLists: {},
+      spokespeople: [],
+      products: [],
+      productQueries: [],
+      businessCategories: [],
+      audienceCategories: [],
+      mediaCategories: [],
+      intakeStatus: "Accepted",
+      acceptedAt: "2026-01-01T00:00:00.000Z",
+      aiWebsite: "https://canonical.example",
+      confirmedEntity: null,
+    }));
+    try {
+      const onDeleteProject = vi.fn().mockResolvedValue({ ok: true as const });
+      renderProjectDeletePage([
+        { id: projectId, name: "Production Company", owner: "client-one" },
+      ], ADMIN_SESSION, onDeleteProject);
+      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+      fireEvent.click(await openProjectDeleteMenu("Production Company", projectId));
+
+      expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining("Website: https://canonical.example"));
+      expect(confirmSpy).not.toHaveBeenCalledWith(expect.stringContaining("Website: https://homepage.example"));
+      expect(onDeleteProject).not.toHaveBeenCalled();
+    } finally {
+      localStorage.removeItem(`aio.intake.v2::${projectId}`);
+    }
+  });
+
+  it("does nothing when the confirmation is cancelled", async () => {
+    const onDeleteProject = vi.fn().mockResolvedValue({ ok: true as const });
+    renderProjectDeletePage([
+      { id: "cancel-project", name: "Cancel Me", owner: "client-one" },
+    ], ADMIN_SESSION, onDeleteProject);
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    fireEvent.click(await openProjectDeleteMenu("Cancel Me", "cancel-project"));
+
+    expect(onDeleteProject).not.toHaveBeenCalled();
+    expect(screen.queryByRole("menuitem", { name: "Delete project" })).not.toBeInTheDocument();
+    expect(screen.getByText("Projects (1)")).toBeInTheDocument();
+  });
+
+  it("rereads project rows and counts after the parent removes the project successfully", async () => {
+    let projects: Array<Record<string, unknown>> = [
+      { id: "remove-project", name: "Remove Me", owner: "client-one" },
+      { id: "keep-project", name: "Keep Me", owner: "client-one" },
+    ];
+    const onDeleteProject = vi.fn(async (id: string) => {
+      projects = projects.filter((project) => project.id !== id);
+      return { ok: true as const };
+    });
+    renderProjectDeletePage(projects, ADMIN_SESSION, onDeleteProject);
+    mockLoadStoredProjects.mockImplementation(() => projects);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    fireEvent.click(await openProjectDeleteMenu("Remove Me", "remove-project"));
+
+    await waitFor(() => expect(screen.getByText("Projects (1)")).toBeInTheDocument());
+    expect(screen.getByText("Keep Me")).toBeInTheDocument();
+    expect(screen.queryByText("Remove Me")).not.toBeInTheDocument();
+    expect(onDeleteProject).toHaveBeenCalledWith("remove-project");
+  });
+
+  it("shows a retryable row error and retries the same project id", async () => {
+    let projects: Array<Record<string, unknown>> = [
+      { id: "retry-project", name: "Retry Me", owner: "client-one" },
+    ];
+    const onDeleteProject = vi.fn()
+      .mockResolvedValueOnce({ ok: false as const, error: "Server refused the deletion." })
+      .mockImplementationOnce(async (id: string) => {
+        projects = projects.filter((project) => project.id !== id);
+        return { ok: true as const };
+      });
+    renderProjectDeletePage(projects, ADMIN_SESSION, onDeleteProject);
+    mockLoadStoredProjects.mockImplementation(() => projects);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    fireEvent.click(await openProjectDeleteMenu("Retry Me", "retry-project"));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Server refused the deletion."));
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry deleting project Retry Me" }));
+
+    await waitFor(() => expect(screen.queryByText("Projects (1)")).not.toBeInTheDocument());
+    expect(onDeleteProject).toHaveBeenNthCalledWith(2, "retry-project");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("locks duplicate submissions while the parent request is pending", async () => {
+    let resolveDelete!: (result: DeleteProjectResult) => void;
+    const onDeleteProject = vi.fn().mockImplementation(() => new Promise<DeleteProjectResult>((resolve) => {
+      resolveDelete = resolve;
+    }));
+    renderProjectDeletePage([
+      { id: "pending-project", name: "Pending Me", owner: "client-one" },
+    ], ADMIN_SESSION, onDeleteProject);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    fireEvent.click(await openProjectDeleteMenu("Pending Me", "pending-project"));
+    await waitFor(() => expect(onDeleteProject).toHaveBeenCalledOnce());
+    expect(screen.getByRole("status")).toHaveTextContent("Deleting project");
+
+    const pendingActionTrigger = screen.getByRole("button", { name: "Project actions for Pending Me (pending-project)" });
+    expect(pendingActionTrigger).toBeDisabled();
+    fireEvent.click(pendingActionTrigger);
+    expect(onDeleteProject).toHaveBeenCalledOnce();
+
+    resolveDelete({ ok: false, error: "Try again." });
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Try again."));
+  });
+
+  const protectedSessionFixtures: Array<[string, Session]> = [
+    ["viewer membership", { ...ADMIN_SESSION, membershipRole: "viewer" as const }],
+    ["billing membership", { ...ADMIN_SESSION, membershipRole: "billing" as const }],
+    ["admin membership", { ...ADMIN_SESSION, membershipRole: "admin" as const }],
+    ["content membership", { ...ADMIN_SESSION, membershipRole: "content" as const }],
+    ["non-admin session", { username: "client-one", role: "agency" as const }],
+    ["project not in projectAccess", { ...ADMIN_SESSION, projectAccess: ["another-project"] }],
+  ];
+
+  it.each(protectedSessionFixtures)("hides project delete actions for %s", async (_label, session) => {
+    const onDeleteProject = vi.fn().mockResolvedValue({ ok: true as const });
+    renderProjectDeletePage([
+      { id: "protected-project", name: "Protected", owner: "client-one" },
+    ], session, onDeleteProject);
+
+    await waitFor(() => expect(screen.getByText("Protected")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /Project actions for Protected/ })).not.toBeInTheDocument();
+    expect(onDeleteProject).not.toHaveBeenCalled();
+  });
+
+  it("resets pending state on a workspace switch and ignores a late result from the old workspace", async () => {
+    let resolveOldDelete!: (result: DeleteProjectResult) => void;
+    const onDeleteProject = vi.fn()
+      .mockImplementationOnce(() => new Promise<DeleteProjectResult>((resolve) => {
+        resolveOldDelete = resolve;
+      }))
+      .mockResolvedValue({ ok: true as const });
+    let projects: Array<Record<string, unknown>> = [
+      { id: "old-project", name: "Old Workspace Project", owner: "client-one" },
+    ];
+    const workspaceOneSession: Session = { ...ADMIN_SESSION, companyName: "Workspace One" };
+    const firstRender = renderProjectDeletePage(
+      projects,
+      workspaceOneSession,
+      onDeleteProject,
+    );
+    mockLoadStoredProjects.mockImplementation(() => projects);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    fireEvent.click(await openProjectDeleteMenu("Old Workspace Project", "old-project"));
+    await waitFor(() => expect(onDeleteProject).toHaveBeenCalledOnce());
+
+    projects = [{ id: "new-project", name: "New Workspace Project", owner: "client-one" }];
+    firstRender.rerender(
+      <UsersAdminPage
+        session={{ ...ADMIN_SESSION, companyName: "Workspace Two" }}
+        initialSection="agencies"
+        onBack={() => {}}
+        onAssignProjectOwner={async () => ({ ok: true })}
+        onDeleteProject={onDeleteProject}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("New Workspace Project")).toBeInTheDocument();
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    });
+    resolveOldDelete({ ok: false, error: "Old workspace response." });
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+
+    // The reset also releases the old synchronous lock, so the new workspace
+    // can submit its own project without waiting for the stale request.
+    fireEvent.click(await openProjectDeleteMenu("New Workspace Project", "new-project"));
+    await waitFor(() => expect(onDeleteProject).toHaveBeenCalledWith("new-project"));
+    expect(onDeleteProject).toHaveBeenCalledTimes(2);
   });
 });
