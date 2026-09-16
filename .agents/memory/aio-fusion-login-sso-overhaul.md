@@ -10,6 +10,9 @@ description: Schema, API, and frontend patterns for email verification, account 
 - **Nullable columns mean no migration for existing accounts; NULL always treated as "already done".**
 
 ## Email verification (password signup only)
+New signup provisioning must be atomic and must never reuse the general identity upsert. Recovery must distinguish explicit unverified password signups from legacy NULL identities.
+**Why:** general upserts can attach credentials to existing invited/SSO users; treating arbitrary verification rows as fresh-signup evidence can force legacy workspaces through onboarding.
+**How to apply:** preserve legacy NULL semantics, bind verification to its exact owner workspace, and reject authentication when verification status cannot be established.
 1. Signup → no session, returns `{ needsVerification: true }`, sends token email.
 2. Token link → marks used, sets emailVerified + setupComplete=false, issues session, redirects `/?needs_setup=true`.
 3. Errors → `/?verify_status=expired|invalid|error` — PlatformHomePage detects and shows resend UI.

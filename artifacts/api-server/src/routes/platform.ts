@@ -75,6 +75,9 @@ import {
   getPlatformSessionAccount,
   makeIpHint,
   ensurePlatformUser,
+  createFreshPlatformSignup,
+  PlatformSignupConflictError,
+  emailVerificationTargetKey,
   getUserByEmail,
   getUserByGoogleId,
   getUserByCompanySlug,
@@ -1132,6 +1135,9 @@ function clientIp(req: Request): string | undefined {
     ?? req.socket.remoteAddress ?? undefined;
 }
 
+const UNVERIFIED_EMAIL_LOGIN_ERROR =
+  "Please verify your email address before signing in. Check your inbox for the verification link.";
+
 router.post("/platform/login", loginLimiter, async (req: Request, res: Response) => {
   try {
     // Accept either a username or an email in the `username` field so that
@@ -1163,6 +1169,16 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
       ? await getUserByEmail(identifier)
       : await getUserByCompanySlug(identifier);
     if (newUser && newUser.passwordHash && verifyPassword(password, newUser.passwordHash)) {
+      // NULL remains the legacy/SSO value. Only an explicit false from the
+      // password-signup flow blocks authentication.
+      if (newUser.emailVerified === false) {
+        res.status(403).json({
+          error: UNVERIFIED_EMAIL_LOGIN_ERROR,
+          needsVerification: true,
+          email: newUser.email,
+        });
+        return;
+      }
       // Credential verified via platform_users. Resolve company for status check.
       const membership = await pickLoginMembership(newUser.id);
       const companySlug = membership?.companySlug ?? normUsername(identifier);
@@ -1206,6 +1222,20 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
       await recordLoginFailure(identifier);
       res.status(401).json({ error: "Incorrect username or password." });
       return;
+    }
+    // A legacy account may have been backfilled into platform_users after the
+    // password signup. Respect an explicit pending-verification marker there,
+    // while continuing to allow NULL (legacy/SSO) identities.
+    if (account.email) {
+      const legacyUser = await getUserByEmail(account.email);
+      if (legacyUser?.emailVerified === false) {
+        res.status(403).json({
+          error: UNVERIFIED_EMAIL_LOGIN_ERROR,
+          needsVerification: true,
+          email: legacyUser.email,
+        });
+        return;
+      }
     }
     // Block archived accounts (soft-deactivated via platform_meta flag).
     const [archivedRow] = await db
@@ -1629,7 +1659,7 @@ router.delete("/platform/mfa/trusted-devices/:id", requirePlatformAuth, async (r
 
 // --- Self-serve sign-up (public, no auth required) --------------------------
 //
-// Creates a new active agency account and logs the user in immediately.
+// Creates a new active agency account and sends an email-verification link.
 // A username is auto-derived from the company name; the admin receives an
 // email notification of the new sign-up via sendNewSignupAlert.
 
@@ -1680,8 +1710,10 @@ router.post("/platform/signup", loginLimiter, async (req: Request, res: Response
       discountInvite = looked.invite;
     }
 
-    // Email must be unique.
-    if (await emailExists(email)) {
+    // Email must not identify either a legacy account or an existing human
+    // identity. The transaction below repeats this check and relies on the
+    // platform_users unique constraint for concurrent signups.
+    if (await emailExists(email) || await getUserByEmail(email)) {
       res.status(409).json({ error: "An account with that email already exists. Try signing in instead." });
       return;
     }
@@ -1696,69 +1728,49 @@ router.post("/platform/signup", loginLimiter, async (req: Request, res: Response
       .slice(0, 24)
       .replace(/^-+|-+$/g, "") || "account";
 
-    let username = baseSlug;
-    let attempt = 0;
-    while (await getAccount(username)) {
-      attempt++;
-      username = `${baseSlug}-${attempt}`;
-    }
-
-    // Store display name in platform_meta so it shows up everywhere company
-    // names are rendered without requiring a schema change.
-    const displayNameKey = `account:profile:${username}`;
-    const displayNameValue = JSON.stringify({ displayName: companyName, ownerName: name });
-
     const ph = hashPassword(password);
-    await db.insert(platformAccountsTable).values({
-      username,
-      passwordHash: ph,
-      role: "agency",
-      email,
-      website: website || null,
-      status: "active",
-    });
-
-    await db
-      .insert(platformMetaTable)
-      .values({ key: displayNameKey, value: displayNameValue })
-      .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: displayNameValue } });
-
-    // Create the human user record and link it to the new company account.
-    let userId: string | undefined;
-    let activeCompanyId: string | undefined;
-    try {
-      userId = await ensurePlatformUser({
-        email,
-        name,
-        passwordHash: ph,
-        companyUsername: username,
-        membershipRole: "owner",
-      });
-      const company = await getCompanyBySlug(username);
-      activeCompanyId = company?.id;
-    } catch {
-      // Non-fatal: the platform_accounts row already exists so login will work.
-    }
-
-    // New password signup: require email verification before creating a session.
-    // The user gets a 24-hour link; clicking it creates their session and routes
-    // them to the account-type selection screen.
     const verifyToken = crypto.randomBytes(32).toString("hex");
-    if (userId) {
+    let username = baseSlug;
+    let signup: { userId: string; companyId: string } | undefined;
+    for (let attempt = 0; attempt < 100 && !signup; attempt++) {
+      username = attempt === 0 ? baseSlug : `${baseSlug}-${attempt}`;
       try {
-        await db.insert(platformEmailVerificationsTable).values({
-          token: verifyToken,
-          userId,
-          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        signup = await createFreshPlatformSignup({
+          email,
+          name,
+          passwordHash: ph,
+          companyUsername: username,
+          companyName,
+          website,
+          verificationToken: verifyToken,
         });
-        await db
-          .update(platformUsersTable)
-          .set({ emailVerified: false })
-          .where(eq(platformUsersTable.id, userId));
       } catch (err) {
-        logger.error({ err }, "signup: failed to create verification token");
+        if (err instanceof PlatformSignupConflictError && err.conflict === "username") {
+          continue;
+        }
+        // A concurrent request can win the platform_users unique constraint
+        // after the preflight check. Its transaction has rolled this attempt
+        // back; surface the same duplicate response rather than retrying with
+        // a second account.
+        if (
+          (err instanceof PlatformSignupConflictError && err.conflict === "email")
+          || await getUserByEmail(email)
+          || await emailExists(email)
+        ) {
+          res.status(409).json({ error: "An account with that email already exists. Try signing in instead." });
+          return;
+        }
+        logger.error({ err, username, email }, "signup: atomic provisioning failed");
+        res.status(500).json({ error: "Sign-up failed. Please try again." });
+        return;
       }
     }
+    if (!signup) {
+      logger.error({ email, baseSlug }, "signup: could not allocate a unique workspace name");
+      res.status(500).json({ error: "Sign-up failed. Please try again." });
+      return;
+    }
+    const { userId } = signup;
 
     // Redeem the discount invite: mark it used, stamp the account's discount
     // record (checkout attaches the coupon server-side), and pre-set the
@@ -1770,26 +1782,10 @@ router.post("/platform/signup", loginLimiter, async (req: Request, res: Response
         await applyInviteAccountType(username, discountInvite.accountType);
       } catch (err) {
         logger.error({ err, username }, "signup: discount invite redemption failed");
-        // Roll back the partially created account so the person can retry
-        // (otherwise the email is stuck behind a duplicate-account 409).
-        try {
-          await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, username));
-          if (userId) {
-            await db.delete(platformEmailVerificationsTable).where(eq(platformEmailVerificationsTable.userId, userId));
-            const remaining = await db
-              .select()
-              .from(platformMembershipsTable)
-              .where(eq(platformMembershipsTable.userId, userId));
-            if (remaining.length === 0) {
-              await db.delete(platformUsersTable).where(eq(platformUsersTable.id, userId));
-            }
-          }
-          await db.delete(platformMetaTable).where(eq(platformMetaTable.key, displayNameKey));
-          await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, username));
-        } catch (cleanupErr) {
-          logger.error({ cleanupErr, username }, "signup: rollback after failed invite redemption failed");
-        }
-        res.status(400).json({ error: "This invitation link has already been used." });
+        // The identity/workspace transaction is intentionally not undone here:
+        // it cannot safely compensate after commit. The account remains
+        // unverified and no session is issued.
+        res.status(400).json({ error: "This invitation link could not be applied. Please contact support." });
         return;
       }
     }
@@ -1851,34 +1847,144 @@ router.get("/platform/verify-email", async (req: Request, res: Response) => {
       res.redirect(`${origin}/?verify_status=expired`);
       return;
     }
-    // Mark token consumed
-    await db
+
+    // Resolve the owner's workspace before consuming the token. The signup
+    // identity owns exactly one freshly-created account, but explicitly tying
+    // the verification to the owner membership + matching account email keeps
+    // a later workspace membership from becoming an accidental target.
+    const [verificationUser] = await db
+      .select({
+        email: platformUsersTable.email,
+        emailVerified: platformUsersTable.emailVerified,
+        passwordHash: platformUsersTable.passwordHash,
+        googleId: platformUsersTable.googleId,
+        microsoftId: platformUsersTable.microsoftId,
+      })
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.id, row.userId))
+      .limit(1);
+    const ownerEmail = verificationUser?.email?.trim().toLowerCase();
+    if (!ownerEmail) {
+      res.redirect(`${origin}/?verify_status=error`);
+      return;
+    }
+    const [targetMeta] = await db
+      .select({ value: platformMetaTable.value })
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, emailVerificationTargetKey(token)))
+      .limit(1);
+    let target: { userId: string; companyId: string; companySlug: string } | null = null;
+    if (targetMeta) {
+      try {
+        const parsed = JSON.parse(targetMeta.value) as {
+          userId?: unknown;
+          companyId?: unknown;
+          companySlug?: unknown;
+        } | null;
+        if (
+          !parsed
+          || typeof parsed !== "object"
+          || typeof parsed.userId !== "string"
+          || typeof parsed.companyId !== "string"
+          || typeof parsed.companySlug !== "string"
+          || parsed.userId !== row.userId
+        ) {
+          res.redirect(`${origin}/?verify_status=error`);
+          return;
+        }
+        target = {
+          userId: parsed.userId,
+          companyId: parsed.companyId,
+          companySlug: normUsername(parsed.companySlug),
+        };
+      } catch {
+        res.redirect(`${origin}/?verify_status=error`);
+        return;
+      }
+    }
+
+    const memberships = await db
+      .select({
+        companySlug: platformMembershipsTable.companySlug,
+        companyId: platformMembershipsTable.companyId,
+        setupComplete: platformCompaniesTable.setupComplete,
+      })
+      .from(platformMembershipsTable)
+      .innerJoin(
+        platformCompaniesTable,
+        eq(platformMembershipsTable.companyId, platformCompaniesTable.id),
+      )
+      .innerJoin(
+        platformAccountsTable,
+        eq(platformMembershipsTable.companySlug, platformAccountsTable.username),
+      )
+      .where(and(
+        eq(platformMembershipsTable.userId, row.userId),
+        eq(platformMembershipsTable.role, "owner"),
+        sql`lower(${platformAccountsTable.email}) = ${ownerEmail}`,
+        isNull(platformAccountsTable.parent),
+        ...(target
+          ? [
+              eq(platformMembershipsTable.companyId, target.companyId),
+              eq(platformMembershipsTable.companySlug, target.companySlug),
+            ]
+          : []),
+      ))
+      .orderBy(desc(platformMembershipsTable.createdAt));
+    // New signups carry an exact server-owned target. Historical tokens have
+    // no metadata, so fail closed if their owner identity has become
+    // ambiguous instead of silently selecting an arbitrary workspace.
+    const mem = target ? memberships[0] : memberships.length === 1 ? memberships[0] : undefined;
+    if (!mem) {
+      res.redirect(`${origin}/?verify_status=error`);
+      return;
+    }
+    const historicalSignupRepair =
+      target == null
+      && verificationUser.emailVerified === false
+      && verificationUser.passwordHash != null
+      && verificationUser.googleId == null
+      && verificationUser.microsoftId == null;
+
+    // Claim the token atomically so concurrent clicks cannot both create a
+    // first session.
+    const [claimed] = await db
       .update(platformEmailVerificationsTable)
       .set({ usedAt: new Date() })
-      .where(eq(platformEmailVerificationsTable.token, token));
-    // Mark user verified
+      .where(and(
+        eq(platformEmailVerificationsTable.token, token),
+        isNull(platformEmailVerificationsTable.usedAt),
+      ))
+      .returning({ token: platformEmailVerificationsTable.token });
+    if (!claimed) {
+      res.redirect(`${origin}/?verify_status=expired`);
+      return;
+    }
+
+    // Mark user verified.
     await db
       .update(platformUsersTable)
       .set({ emailVerified: true })
       .where(eq(platformUsersTable.id, row.userId));
-    // Resolve the company that owns this user
-    const [mem] = await db
-      .select({ companySlug: platformMembershipsTable.companySlug, companyId: platformMembershipsTable.companyId })
-      .from(platformMembershipsTable)
-      .where(eq(platformMembershipsTable.userId, row.userId))
-      .limit(1);
-    if (!mem) { res.redirect(`${origin}/?verify_status=error`); return; }
-    // Mark the company as needing account-type selection (new signup gate)
-    await db
-      .update(platformCompaniesTable)
-      .set({ setupComplete: false })
-      .where(eq(platformCompaniesTable.id, mem.companyId));
+
+    // New signup/resend tokens carry an explicit target. A historical token
+    // may repair only in the narrow, proven-false password-signup case above;
+    // arbitrary legacy/SSO/invited verification rows never repair NULL.
+    if (target || historicalSignupRepair) {
+      await db
+        .update(platformCompaniesTable)
+        .set({ setupComplete: false })
+        .where(and(
+          eq(platformCompaniesTable.id, mem.companyId),
+          isNull(platformCompaniesTable.setupComplete),
+        ));
+    }
     // Issue the first session
     const rawIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
       ?? req.socket.remoteAddress;
     const sid = await createSignedInSession(mem.companySlug, rawIp, row.userId, mem.companyId);
     setPlatformCookie(res, sid);
-    res.redirect(`${origin}/?needs_setup=true`);
+    res.redirect(`${origin}/?needs_setup=${target != null || historicalSignupRepair || mem.setupComplete === false}`);
   } catch (err) {
     logger.error({ err }, "verify-email: unexpected error");
     res.redirect(`${origin}/?verify_status=error`);
@@ -1891,15 +1997,48 @@ router.post("/platform/resend-verification", loginLimiter, async (req: Request, 
     const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
     if (email) {
       const user = await getUserByEmail(email);
-      if (user && user.emailVerified !== true) {
-        await db
-          .delete(platformEmailVerificationsTable)
-          .where(eq(platformEmailVerificationsTable.userId, user.id));
+      if (user && user.emailVerified === false) {
         const token = crypto.randomBytes(32).toString("hex");
-        await db.insert(platformEmailVerificationsTable).values({
-          token,
-          userId: user.id,
-          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        await db.transaction(async (tx) => {
+          await tx
+            .delete(platformEmailVerificationsTable)
+            .where(eq(platformEmailVerificationsTable.userId, user.id));
+          await tx.insert(platformEmailVerificationsTable).values({
+            token,
+            userId: user.id,
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          });
+          const ownerWorkspaces = await tx
+            .select({
+              companyId: platformMembershipsTable.companyId,
+              companySlug: platformMembershipsTable.companySlug,
+            })
+            .from(platformMembershipsTable)
+            .innerJoin(
+              platformCompaniesTable,
+              eq(platformMembershipsTable.companyId, platformCompaniesTable.id),
+            )
+            .innerJoin(
+              platformAccountsTable,
+              eq(platformMembershipsTable.companySlug, platformAccountsTable.username),
+            )
+            .where(and(
+              eq(platformMembershipsTable.userId, user.id),
+              eq(platformMembershipsTable.role, "owner"),
+              sql`lower(${platformAccountsTable.email}) = ${email}`,
+              isNull(platformAccountsTable.parent),
+            ))
+            .limit(2);
+          if (ownerWorkspaces.length === 1) {
+            await tx.insert(platformMetaTable).values({
+              key: emailVerificationTargetKey(token),
+              value: JSON.stringify({
+                userId: user.id,
+                companyId: ownerWorkspaces[0]!.companyId,
+                companySlug: ownerWorkspaces[0]!.companySlug,
+              }),
+            });
+          }
         });
         const verifyUrl = `${getAppBaseUrl()}/api/platform/verify-email?token=${token}`;
         void sendVerificationEmail({ toEmail: email, toName: user.name || email, verifyUrl });
@@ -3564,6 +3703,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
         googleId: googleId || null,
         companyUsername: username,
         membershipRole: "owner",
+        companySetupComplete: false,
       });
       const company = await getCompanyBySlug(username);
       newActiveCompanyId = company?.id;
@@ -3574,8 +3714,14 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
     if (newUserId) {
       try { await db.update(platformUsersTable).set({ emailVerified: true }).where(eq(platformUsersTable.id, newUserId)); } catch { /* non-fatal */ }
     }
+    // ensurePlatformUser sets this explicitly for a new SSO workspace. Keep
+    // the idempotent update as a repair for rows created by an older build.
     if (newActiveCompanyId) {
-      try { await db.update(platformCompaniesTable).set({ setupComplete: false }).where(eq(platformCompaniesTable.id, newActiveCompanyId)); } catch { /* non-fatal */ }
+      try {
+        await db.update(platformCompaniesTable)
+          .set({ setupComplete: false })
+          .where(and(eq(platformCompaniesTable.id, newActiveCompanyId), isNull(platformCompaniesTable.setupComplete)));
+      } catch { /* non-fatal */ }
     }
     if (newUserId) await maybeImportGoogleAvatar(newUserId, username, false, userInfo.picture);
     void sendNewSignupAlert({ name: displayName, email: userInfo.email, companyName: null, username, method: "google" });
@@ -3928,12 +4074,24 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
     await db.insert(platformMetaTable).values({ key: `account:profile:${username}`, value: JSON.stringify({ ownerName: displayName }) }).onConflictDoUpdate({ target: platformMetaTable.key, set: { value: JSON.stringify({ ownerName: displayName }) } });
     let newUserId: string | undefined; let newActiveCompanyId: string | undefined;
     try {
-      newUserId = await ensurePlatformUser({ email: msEmail, name: displayName, companyUsername: username, membershipRole: "owner" });
+      newUserId = await ensurePlatformUser({
+        email: msEmail,
+        name: displayName,
+        companyUsername: username,
+        membershipRole: "owner",
+        companySetupComplete: false,
+      });
       await linkMicrosoftId(newUserId, microsoftId);
       const co = await getCompanyBySlug(username); newActiveCompanyId = co?.id;
     } catch { /* non-fatal */ }
     if (newUserId) { try { await db.update(platformUsersTable).set({ emailVerified: true }).where(eq(platformUsersTable.id, newUserId)); } catch { /* non-fatal */ } }
-    if (newActiveCompanyId) { try { await db.update(platformCompaniesTable).set({ setupComplete: false }).where(eq(platformCompaniesTable.id, newActiveCompanyId)); } catch { /* non-fatal */ } }
+    if (newActiveCompanyId) {
+      try {
+        await db.update(platformCompaniesTable)
+          .set({ setupComplete: false })
+          .where(and(eq(platformCompaniesTable.id, newActiveCompanyId), isNull(platformCompaniesTable.setupComplete)));
+      } catch { /* non-fatal */ }
+    }
     void sendNewSignupAlert({ name: displayName, email: msEmail, companyName: null, username, method: "microsoft" });
     // Discount invite: redeem any discount token carried across the OAuth
     // round-trip in the discount-invite cookie. Fail-soft.

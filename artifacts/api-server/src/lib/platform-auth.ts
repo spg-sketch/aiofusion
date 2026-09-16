@@ -8,6 +8,7 @@ import {
   platformUsersTable,
   platformMembershipsTable,
   platformMetaTable,
+  platformEmailVerificationsTable,
 } from "@workspace/db";
 import { and, eq, ne, desc, sql, isNull, inArray } from "drizzle-orm";
 import { logger } from "./logger";
@@ -281,6 +282,9 @@ export async function ensurePlatformCompany(opts: {
   email?: string | null;
   website?: string | null;
   status?: string;
+  // Opt-in setup gate for fresh organic signups. Omitted preserves legacy NULL
+  // semantics for backfills and existing-account logins.
+  setupComplete?: boolean | null;
 }): Promise<string> {
   const slug = normUsername(opts.slug);
   const role = opts.role ?? "agency";
@@ -295,6 +299,7 @@ export async function ensurePlatformCompany(opts: {
       email: opts.email ?? null,
       website: opts.website ?? null,
       status,
+      ...(opts.setupComplete !== undefined ? { setupComplete: opts.setupComplete } : {}),
     })
     .onConflictDoUpdate({
       target: platformCompaniesTable.slug,
@@ -309,6 +314,7 @@ export async function ensurePlatformCompany(opts: {
         ...(opts.maxSeats !== undefined ? { maxSeats: opts.maxSeats } : {}),
         ...(opts.email != null ? { email: opts.email } : {}),
         ...(opts.website != null ? { website: opts.website } : {}),
+        ...(opts.setupComplete !== undefined ? { setupComplete: opts.setupComplete } : {}),
       },
     })
     .returning({ id: platformCompaniesTable.id });
@@ -328,7 +334,7 @@ export async function getUserByEmail(email: string): Promise<typeof platformUser
   const [row] = await db
     .select()
     .from(platformUsersTable)
-    .where(eq(platformUsersTable.email, emailLower))
+    .where(sql`lower(${platformUsersTable.email}) = ${emailLower}`)
     .limit(1);
   return row ?? null;
 }
@@ -387,6 +393,8 @@ export async function ensurePlatformUser(opts: {
   companyEmail?: string | null;
   companyWebsite?: string | null;
   companyStatus?: string;
+  // Omitted means preserve legacy NULL setup semantics.
+  companySetupComplete?: boolean | null;
 }): Promise<string> {
   const emailLower = opts.email.trim().toLowerCase();
 
@@ -424,6 +432,7 @@ export async function ensurePlatformUser(opts: {
     email: opts.companyEmail,
     website: opts.companyWebsite,
     status: opts.companyStatus,
+    setupComplete: opts.companySetupComplete,
   });
 
   // 3. Upsert membership linking user ↔ company UUID.
@@ -438,6 +447,139 @@ export async function ensurePlatformUser(opts: {
     .onConflictDoNothing();
 
   return userId;
+}
+
+// Email-verification target metadata is server-owned and keyed by a hash, so
+// the raw token never becomes a queryable/persistent key. It lets verification
+// target the exact company created by a fresh signup without changing the
+// historical token table schema.
+export const EMAIL_VERIFICATION_TARGET_PREFIX = "email-verification-target:";
+export function emailVerificationTargetKey(token: string): string {
+  return `${EMAIL_VERIFICATION_TARGET_PREFIX}${crypto.createHash("sha256").update(token).digest("hex")}`;
+}
+
+export class PlatformSignupConflictError extends Error {
+  constructor(public readonly conflict: "email" | "username") {
+    super(`Platform signup ${conflict} conflict`);
+    this.name = "PlatformSignupConflictError";
+  }
+}
+
+/**
+ * Atomically create a brand-new organic password signup.
+ *
+ * This intentionally does not call ensurePlatformUser: that helper is an
+ * idempotent migration/login primitive and its email upsert could reuse an
+ * invited/SSO identity. Every row here is an INSERT in one transaction;
+ * database uniqueness errors roll the entire signup back.
+ */
+export async function createFreshPlatformSignup(opts: {
+  email: string;
+  name: string;
+  passwordHash: string;
+  companyUsername: string;
+  companyName: string;
+  website: string;
+  verificationToken: string;
+}): Promise<{ userId: string; companyId: string }> {
+  const email = opts.email.trim().toLowerCase();
+  const username = normUsername(opts.companyUsername);
+
+  return db.transaction(async (tx) => {
+    const [existingUser] = await tx
+      .select({ id: platformUsersTable.id })
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.email, email))
+      .limit(1);
+    if (existingUser) throw new PlatformSignupConflictError("email");
+
+    const [existingAccount] = await tx
+      .select({ username: platformAccountsTable.username })
+      .from(platformAccountsTable)
+      .where(sql`lower(${platformAccountsTable.email}) = ${email}`)
+      .limit(1);
+    if (existingAccount) throw new PlatformSignupConflictError("email");
+
+    const [existingSlug] = await tx
+      .select({ username: platformAccountsTable.username })
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, username))
+      .limit(1);
+    const [existingCompany] = await tx
+      .select({ id: platformCompaniesTable.id })
+      .from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, username))
+      .limit(1);
+    if (existingSlug || existingCompany) {
+      throw new PlatformSignupConflictError("username");
+    }
+
+    await tx.insert(platformAccountsTable).values({
+      username,
+      passwordHash: opts.passwordHash,
+      role: "agency",
+      email,
+      website: opts.website || null,
+      status: "active",
+    });
+
+    const [company] = await tx
+      .insert(platformCompaniesTable)
+      .values({
+        slug: username,
+        role: "agency",
+        email,
+        website: opts.website || null,
+        displayName: opts.companyName,
+        status: "active",
+        setupComplete: false,
+      })
+      .returning({ id: platformCompaniesTable.id });
+    if (!company) throw new Error("Fresh signup company was not created.");
+
+    const [user] = await tx
+      .insert(platformUsersTable)
+      .values({
+        email,
+        name: opts.name,
+        passwordHash: opts.passwordHash,
+        emailVerified: false,
+      })
+      .returning({ id: platformUsersTable.id });
+    if (!user) throw new Error("Fresh signup user was not created.");
+
+    await tx.insert(platformMembershipsTable).values({
+      userId: user.id,
+      companyId: company.id,
+      companySlug: username,
+      role: "owner",
+    });
+
+    await tx.insert(platformEmailVerificationsTable).values({
+      token: opts.verificationToken,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    });
+
+    const profileKey = `account:profile:${username}`;
+    await tx.insert(platformMetaTable).values({
+      key: profileKey,
+      value: JSON.stringify({ displayName: opts.companyName, ownerName: opts.name }),
+    }).onConflictDoUpdate({
+      target: platformMetaTable.key,
+      set: { value: JSON.stringify({ displayName: opts.companyName, ownerName: opts.name }) },
+    });
+    await tx.insert(platformMetaTable).values({
+      key: emailVerificationTargetKey(opts.verificationToken),
+      value: JSON.stringify({
+        userId: user.id,
+        companyId: company.id,
+        companySlug: username,
+      }),
+    });
+
+    return { userId: user.id, companyId: company.id };
+  });
 }
 
 // --- Accounts ---------------------------------------------------------------
@@ -510,7 +652,7 @@ export async function emailExists(email: string): Promise<boolean> {
   const [row] = await db
     .select({ username: platformAccountsTable.username })
     .from(platformAccountsTable)
-    .where(eq(platformAccountsTable.email, emailLower))
+    .where(sql`lower(${platformAccountsTable.email}) = ${emailLower}`)
     .limit(1);
   return !!row;
 }
@@ -836,6 +978,33 @@ export async function getPlatformSessionAccount(
       }
     } catch {
       // Non-fatal - skip version check on error; other guards still apply.
+    }
+  }
+
+  // Password signups remain unusable until their email verification link is
+  // consumed. NULL is intentionally allowed here for legacy and SSO identities
+  // (only false means "verification is explicitly pending").
+  if (row.userId) {
+    try {
+      const [userRow] = await db
+        .select({ emailVerified: platformUsersTable.emailVerified })
+        .from(platformUsersTable)
+        .where(eq(platformUsersTable.id, row.userId))
+        .limit(1);
+      if (userRow?.emailVerified === false) {
+        await deletePlatformSession(row.sid);
+        return null;
+      }
+    } catch {
+      // A user-bound session cannot be proven safe when its verification state
+      // is unavailable. Fail closed rather than allowing an unverified session
+      // to continue during a transient database failure.
+      try {
+        await deletePlatformSession(row.sid);
+      } catch {
+        // The request is still rejected even if cleanup is unavailable.
+      }
+      return null;
     }
   }
 

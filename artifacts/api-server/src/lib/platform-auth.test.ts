@@ -35,6 +35,7 @@ const mock = vi.hoisted(() => {
 
   // For session_version checks: userId → { sessionVersion }
   const usersById = new Map<string, { id: string; sessionVersion: number }>();
+  let emailVerificationLookupError = false;
 
   type FullAccountRow = {
     username: string; passwordHash: string; role: string; parent: string | null;
@@ -57,6 +58,14 @@ const mock = vi.hoisted(() => {
           return {
             where: (pred: { __eq?: string }) => ({
               limit: () => {
+                if (
+                  emailVerificationLookupError
+                  && _projection
+                  && typeof _projection === "object"
+                  && "emailVerified" in _projection
+                ) {
+                  return Promise.reject(new Error("verification lookup unavailable"));
+                }
                 const val = pred.__eq;
                 if (!val) return Promise.resolve([]);
                 // Support lookup by id (for session_version checks) and by email.
@@ -191,7 +200,21 @@ const mock = vi.hoisted(() => {
     }),
   };
 
-  return { accountRows, usersByEmail, usersById, companiesBySlug, companiesById, memberships, sessionRows, fullAccountRows, db };
+  return {
+    accountRows,
+    usersByEmail,
+    usersById,
+    companiesBySlug,
+    companiesById,
+    memberships,
+    sessionRows,
+    fullAccountRows,
+    emailVerificationLookupError: {
+      get value() { return emailVerificationLookupError; },
+      set value(next: boolean) { emailVerificationLookupError = next; },
+    },
+    db,
+  };
 });
 
 vi.mock("@workspace/db", () => ({
@@ -465,6 +488,7 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
     mock.sessionRows.clear();
     mock.fullAccountRows.clear();
     mock.companiesById.clear();
+    mock.emailVerificationLookupError.value = false;
   });
 
   it("returns null for an unknown session id", async () => {
@@ -512,6 +536,30 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
     expect(result!.role).toBe("agency");
     expect(result!.userId).toBe("user-uuid-001");
     expect(result!.activeCompanyId).toBe(companyId);
+  });
+
+  it("fails closed when a user-bound email verification lookup errors", async () => {
+    const companyId = "company-uuid-verification-error";
+    mock.companiesById.set(companyId, {
+      id: companyId,
+      slug: "verification-error-agency",
+      role: "agency",
+      parentSlug: null,
+      maxSeats: null,
+      status: "active",
+    });
+    mock.sessionRows.set("verification-error-sid", {
+      sid: "verification-error-sid",
+      username: "verification-error-agency",
+      userId: "user-uuid-verification-error",
+      activeCompanyId: companyId,
+      expiresAt: FUTURE,
+      ipHint: null,
+      createdAt: new Date(),
+    });
+    mock.emailVerificationLookupError.value = true;
+
+    expect(await getPlatformSessionAccount("verification-error-sid")).toBeNull();
   });
 
   it("falls back to platform_accounts when activeCompanyId points to a missing company row", async () => {

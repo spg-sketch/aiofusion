@@ -259,9 +259,16 @@ import {
   platformMetaTable,
   platformMembershipsTable,
   platformSessionsTable,
+  platformEmailVerificationsTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { hashPassword, getPrimaryMembership, getPlatformSessionId, getPlatformSessionAccount } from "../lib/platform-auth";
+import {
+  hashPassword,
+  getPrimaryMembership,
+  getPlatformSessionId,
+  getPlatformSessionAccount,
+  createPlatformSession,
+} from "../lib/platform-auth";
 import platformRouter from "./platform";
 
 // ---------------------------------------------------------------------------
@@ -626,6 +633,236 @@ describe("POST /api/platform/signup", () => {
     expect(memberships[0]!.userId).toBe(users[0]!.id);
   });
 
+  it("gates the fresh workspace before verification and targets the owner company", async () => {
+    const { status, body } = await signup({
+      name: "Verified Owner",
+      email: EMAIL,
+      companyName: "Verified Workspace",
+      website: "https://example.com",
+      password: "supersecure123",
+    });
+    expect(status).toBe(201);
+    expect(body.needsVerification).toBe(true);
+
+    const [account] = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.email, EMAIL));
+    const [user] = await db
+      .select()
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.email, EMAIL));
+    const [company] = await db
+      .select()
+      .from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, account!.username));
+    const [membership] = await db
+      .select()
+      .from(platformMembershipsTable)
+      .where(eq(platformMembershipsTable.userId, user!.id));
+
+    // The setup gate is established at provisioning time, not deferred to
+    // verification, and the membership points at this exact company UUID.
+    expect(company!.setupComplete).toBe(false);
+    expect(user!.emailVerified).toBe(false);
+    expect(membership!.companyId).toBe(company!.id);
+    expect(membership!.companySlug).toBe(account!.username);
+
+    const blocked = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: EMAIL, password: "supersecure123" }),
+    });
+    expect(blocked.status).toBe(403);
+    expect((await blocked.json() as { needsVerification?: boolean }).needsVerification).toBe(true);
+    expect(blocked.headers.get("set-cookie")).toBeNull();
+
+    // Sessions issued by the pre-fix path cannot keep an unverified account
+    // active after the deployment.
+    const staleSid = await createPlatformSession(account!.username, null, user!.id, company!.id);
+    expect(await getPlatformSessionAccount(staleSid)).toBeNull();
+
+    const [verification] = await db
+      .select()
+      .from(platformEmailVerificationsTable)
+      .where(eq(platformEmailVerificationsTable.userId, user!.id));
+    const verified = await fetch(
+      `${baseUrl}/api/platform/verify-email?token=${verification!.token}`,
+      { redirect: "manual" },
+    );
+    expect(verified.status).toBe(302);
+    expect(verified.headers.get("location")).toContain("needs_setup=true");
+
+    const [verifiedUser] = await db
+      .select()
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.id, user!.id));
+    const [verifiedCompany] = await db
+      .select()
+      .from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.id, company!.id));
+    expect(verifiedUser!.emailVerified).toBe(true);
+    expect(verifiedCompany!.setupComplete).toBe(false);
+  });
+
+  it("does not repair legacy NULL setup from an arbitrary verification row", async () => {
+    const password = "affected-password";
+    const passwordHash = hashPassword(password);
+    const username = "affected-pre-fix";
+    await db.insert(platformAccountsTable).values({
+      username,
+      passwordHash,
+      role: "agency",
+      status: "active",
+      email: EMAIL,
+    });
+    const [company] = await db.insert(platformCompaniesTable).values({
+      slug: username,
+      role: "agency",
+      status: "active",
+      setupComplete: null,
+    }).returning();
+    const [user] = await db.insert(platformUsersTable).values({
+      email: EMAIL,
+      name: "Affected Owner",
+      passwordHash,
+      emailVerified: true,
+    }).returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: user!.id,
+      companyId: company!.id,
+      companySlug: username,
+      role: "owner",
+    });
+    await db.insert(platformEmailVerificationsTable).values({
+      token: "affected-verification-token",
+      userId: user!.id,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      usedAt: new Date(),
+    });
+
+    const login = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: EMAIL, password }),
+    });
+    expect(login.status).toBe(200);
+    const [unchanged] = await db.select().from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.id, company!.id));
+    expect(unchanged!.setupComplete).toBeNull();
+
+    // A legacy NULL setup value with no verification provenance remains NULL
+    // and does not become an onboarding account.
+    const legacyEmail = "legacy-null@example.com";
+    const legacyUsername = "legacy-null-account";
+    const legacyHash = hashPassword("legacy-password");
+    await db.insert(platformAccountsTable).values({
+      username: legacyUsername,
+      passwordHash: legacyHash,
+      role: "agency",
+      status: "active",
+      email: legacyEmail,
+    });
+    const [legacyUser] = await db.insert(platformUsersTable).values({
+      email: legacyEmail,
+      passwordHash: legacyHash,
+      emailVerified: null,
+    }).returning();
+    const legacyLogin = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: legacyEmail, password: "legacy-password" }),
+    });
+    expect(legacyLogin.status).toBe(200);
+    const resend = await fetch(`${baseUrl}/api/platform/resend-verification`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: legacyEmail }),
+    });
+    expect(resend.status).toBe(200);
+    const legacyVerifications = await db
+      .select()
+      .from(platformEmailVerificationsTable)
+      .where(eq(platformEmailVerificationsTable.userId, legacyUser!.id));
+    expect(legacyVerifications).toHaveLength(0);
+    const [legacyCompany] = await db.select().from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, legacyUsername));
+    expect(legacyCompany!.setupComplete).toBeNull();
+
+    await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, username));
+    await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, legacyUsername));
+    await db.delete(platformEmailVerificationsTable).where(eq(platformEmailVerificationsTable.userId, user!.id));
+    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, username));
+    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, legacyUsername));
+    await db.delete(platformUsersTable).where(eq(platformUsersTable.email, EMAIL));
+    await db.delete(platformUsersTable).where(eq(platformUsersTable.email, legacyEmail));
+    await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, username));
+    await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, legacyUsername));
+    await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, username));
+    await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, legacyUsername));
+  });
+
+  it("repairs the exact legacy false-verification signup when its original token is unused", async () => {
+    const password = "historical-password";
+    const passwordHash = hashPassword(password);
+    const username = "historical-false-token";
+    await db.insert(platformAccountsTable).values({
+      username,
+      passwordHash,
+      role: "agency",
+      status: "active",
+      email: EMAIL,
+    });
+    const [company] = await db.insert(platformCompaniesTable).values({
+      slug: username,
+      role: "agency",
+      status: "active",
+      setupComplete: null,
+    }).returning();
+    const [user] = await db.insert(platformUsersTable).values({
+      email: EMAIL,
+      name: "Historical Owner",
+      passwordHash,
+      emailVerified: false,
+    }).returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: user!.id,
+      companyId: company!.id,
+      companySlug: username,
+      role: "owner",
+    });
+    await db.insert(platformEmailVerificationsTable).values({
+      token: "historical-original-token",
+      userId: user!.id,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    const verified = await fetch(
+      `${baseUrl}/api/platform/verify-email?token=historical-original-token`,
+      { redirect: "manual" },
+    );
+    expect(verified.status).toBe(302);
+    expect(verified.headers.get("location")).toContain("needs_setup=true");
+
+    const [verifiedCompany] = await db
+      .select()
+      .from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.id, company!.id));
+    const [verifiedUser] = await db
+      .select()
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.id, user!.id));
+    expect(verifiedCompany!.setupComplete).toBe(false);
+    expect(verifiedUser!.emailVerified).toBe(true);
+
+    await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, username));
+    await db.delete(platformEmailVerificationsTable).where(eq(platformEmailVerificationsTable.userId, user!.id));
+    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, username));
+    await db.delete(platformUsersTable).where(eq(platformUsersTable.id, user!.id));
+    await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.id, company!.id));
+    await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, username));
+  });
+
   it("returns 409 when the email is already registered", async () => {
     await signup({
       name: "Dave Duplicate",
@@ -642,6 +879,40 @@ describe("POST /api/platform/signup", () => {
       password: "supersecure123",
     });
     expect(status).toBe(409);
+  });
+
+  it("returns 409 for an existing platform_users identity without creating an account", async () => {
+    await db.insert(platformUsersTable).values({
+      email: EMAIL,
+      name: "Existing SSO Identity",
+      emailVerified: true,
+    });
+    const { status } = await signup({
+      name: "Duplicate Identity",
+      email: EMAIL,
+      companyName: "Should Not Exist",
+      website: "https://example.com",
+      password: "supersecure123",
+    });
+    expect(status).toBe(409);
+    expect(await db.select().from(platformAccountsTable).where(eq(platformAccountsTable.email, EMAIL))).toHaveLength(0);
+  });
+
+  it("atomically rolls back the losing concurrent signup", async () => {
+    const body = {
+      name: "Concurrent Owner",
+      email: EMAIL,
+      companyName: "Concurrent Workspace",
+      website: "https://example.com",
+      password: "supersecure123",
+    };
+    const results = await Promise.all([signup(body), signup(body)]);
+    expect(results.map((result) => result.status).sort()).toEqual([201, 409]);
+    expect(await db.select().from(platformUsersTable).where(eq(platformUsersTable.email, EMAIL))).toHaveLength(1);
+    expect(await db.select().from(platformAccountsTable).where(eq(platformAccountsTable.email, EMAIL))).toHaveLength(1);
+    const [user] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.email, EMAIL));
+    expect(await db.select().from(platformMembershipsTable).where(eq(platformMembershipsTable.userId, user!.id))).toHaveLength(1);
+    expect(await db.select().from(platformEmailVerificationsTable).where(eq(platformEmailVerificationsTable.userId, user!.id))).toHaveLength(1);
   });
 
   it("returns 400 when required fields are missing", async () => {
