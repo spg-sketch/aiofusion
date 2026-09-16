@@ -6,6 +6,12 @@
 
 ## Overview
 
+### Visual review constraints
+
+- For brand guidelines and design review, the current site is the sole reference and the intended future live site. Do not introduce a separate production-site comparison or make environment separation a prerequisite for reviewing the guidelines. State any unverified screen coverage as an evidence limitation only.
+- Keep Project Hub unchanged. It is the approved visual reference, not a redesign target. Brand guidelines and consistency recommendations must protect its layout, controls, colours, typography and behaviour, including indirect changes through shared styles.
+- Brand guidelines are documentation proposals until approved for implementation. Do not apply them across the application automatically.
+
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
 
 ## Stack
@@ -116,28 +122,29 @@ Utility scripts package. Each script is a `.ts` file in `src/` with a correspond
 
 `scripts/src/seed-staging.ts` populates a staging database with representative accounts, projects, and audit records so testers always start from a known, realistic state.
 
-**When to run it:** After creating or resetting the staging deployment's database — typically whenever you want a clean test baseline.
+**When to run it:** Only when preparing dedicated staging review identities. It never resets existing accounts. The previous documented seed logins are retired and are not verified review credentials.
 
 **How to run it:**
 
 ```bash
-# If DATABASE_URL is already set in the environment (e.g. inside Replit):
+# Requires STAGING_REVIEW_PASSWORD, BETA_DATABASE_URL and
+# PRODUCTION_DATABASE_URL in Secrets. Never paste their values into commands.
+# DATABASE_URL must exactly match the authorised BETA_DATABASE_URL.
 pnpm --filter @workspace/scripts run seed-staging
-
-# Or with an explicit staging URL:
-DATABASE_URL=<staging-database-url> pnpm --filter @workspace/scripts run seed-staging
 ```
 
 **What it creates:**
 
 | Type | Details |
 |---|---|
-| Agency account | username: `seed-staging-agency` / password: `Staging-Agency-2026!` |
-| Client account | username: `seed-staging-client` / password: `Staging-Client-2026!` (child of agency) |
-| Projects | Greenleaf Sustainability, FinBridge Capital (owned by agency); HealthNext Diagnostics (owned by client) |
-| Audit records | One Earned Media audit + one GEO diagnostic per project |
+| Agency Partner | `staging-review-agency`; password held only in `STAGING_REVIEW_PASSWORD` |
+| Direct Client | `staging-review-client`; top-level workspace with no agency parent; password held only in `STAGING_REVIEW_PASSWORD` |
+| Master | Not created by this script. Requires an authorised existing staging Master identity and normal MFA. Never substitute an arbitrary account with an `admin` role or reset a real account. |
+| Optional projects and audits | Set `STAGING_REVIEW_INCLUDE_DATA=1` to include representative data for the dedicated review workspaces. |
 
-The script is **idempotent** — running it multiple times is safe; existing rows are left untouched. It also includes a safety guard that refuses to run if `DATABASE_URL` looks like a production URL (override with `SEED_STAGING_FORCE=1` if needed).
+The script fails closed before connecting unless the target exactly matches `BETA_DATABASE_URL` and differs from the production database host/path. There is no force override. Identity creation is insert-only and transactional; existing dedicated identities must match the expected structure and supplied password or the script stops without resetting them.
+
+**Verification status:** The new seed has not been run and three-role staging Hub/Settings navigation has not been confirmed. Workspace fixtures in `scripts/settings-button-review.cjs` are isolated component previews, not evidence of real staging authentication. `tests/admin-impersonation.spec.ts` is a mutating impersonation test, not a read-only review-access check; do not run it against published staging or production to obtain screenshots. Keep credentials, session cookies and MFA values in Secrets only.
 
 ---
 

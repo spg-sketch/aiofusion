@@ -1,0 +1,330 @@
+@layer base {
+  .brand-review-preview,
+  .brand-review-preview * {
+    box-sizing: border-box;
+  }
+
+  .brand-review-preview {
+    min-height: 100vh;
+    color: #1c1c1c;
+    background: #0a1628;
+    font-family:
+      Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .brand-review-preview button,
+  .brand-review-preview input,
+  .brand-review-preview textarea,
+  .brand-review-preview select {
+    font: inherit;
+  }
+
+  .brand-review-preview :is(a, button, input, select, textarea):focus-visible {
+    outline: 3px solid #f59e0b !important;
+    outline-offset: 3px;
+  }
+}
+
+.brand-review-preview__banner {
+  width: min(100% - 2rem, 72rem);
+  margin: 0 auto;
+  padding: 0.55rem 0.9rem;
+  color: #fbe3ed;
+  background: rgba(200, 73, 122, 0.16);
+  border: 1px solid rgba(251, 227, 237, 0.3);
+  border-top: 0;
+  border-radius: 0 0 0.7rem 0.7rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.brand-review-preview-banner {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 20000;
+  border: 1px solid rgba(16, 43, 54, 0.14);
+  border-radius: 999px;
+  padding: 5px 10px;
+  color: rgba(16, 43, 54, 0.62);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 3px 14px rgba(16, 43, 54, 0.1);
+  font: 600 10px/1.2 Inter, system-ui, sans-serif;
+  letter-spacing: 0.03em;
+  pointer-events: none;
+}
+
+.brand-review-proposal {
+  position: fixed;
+  z-index: 19999;
+  right: 16px;
+  bottom: 44px;
+  width: min(330px, calc(100vw - 32px));
+  padding: 14px 16px 15px;
+  border: 1px solid rgba(10, 22, 40, 0.16);
+  border-left: 3px solid #c8497a;
+  border-radius: 12px;
+  color: #0a1628;
+  background: rgba(251, 246, 236, 0.96);
+  box-shadow: 0 14px 36px -22px rgba(10, 22, 40, 0.42);
+  font-family: Inter, system-ui, sans-serif;
+  backdrop-filter: blur(10px);
+}
+
+.brand-review-proposal__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.brand-review-proposal__head strong {
+  color: #c8497a;
+  font-size: 11px;
+}
+
+.brand-review-proposal ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.brand-review-proposal li {
+  position: relative;
+  padding-left: 13px;
+  color: #26313d;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.42;
+}
+
+.brand-review-proposal li::before {
+  position: absolute;
+  top: 0.48em;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #c8497a;
+  content: "";
+}
+
+.brand-review-preview--home .aio-marketing-guideline {
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.brand-review-preview--home .aio-marketing-display {
+  max-width: 760px;
+  font-size: clamp(2.5rem, 5vw, 3.75rem) !important;
+  line-height: 1.05 !important;
+  letter-spacing: -0.022em;
+}
+
+.brand-review-preview--home .aio-marketing-login {
+  min-height: 44px;
+  border: 1px solid #102b36;
+  border-radius: 8px !important;
+}
+
+.brand-review-preview--home .aio-marketing-cta {
+  min-height: 44px;
+  border-radius: 8px !important;
+  color: #102b36 !important;
+  background: #fbf6ec;
+  box-shadow: inset 0 0 0 1px rgba(16, 43, 54, 0.2);
+}
+
+.brand-review-preview--home .aio-marketing-cta:hover {
+  background: #f4eadb !important;
+}
+
+.brand-review-preview--settings .aio-account-settings :is(button, input, select, textarea):focus-visible {
+  outline: 3px solid #f59e0b !important;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 2px #0a1628;
+}
+
+@media (max-width: 640px) {
+  .brand-review-proposal {
+    right: 10px;
+    bottom: 39px;
+    width: min(310px, calc(100vw - 20px));
+    padding: 11px 13px;
+  }
+
+  .brand-review-proposal li {
+    font-size: 10px;
+  }
+}
+
+.brand-review-preview .aio-type-page-title,
+.brand-review-preview .aio-type-section-title,
+.brand-review-preview .aio-type-card-title {
+  font-family: Alice, Georgia, "Times New Roman", serif;
+  color: #0a1628;
+  text-wrap: balance;
+}
+
+.brand-review-preview .aio-type-page-title {
+  font-size: clamp(2rem, 4vw, 3.125rem);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+}
+
+.brand-review-preview .aio-type-section-title {
+  font-size: clamp(1.375rem, 2vw, 1.5rem);
+  line-height: 1.25;
+}
+
+.brand-review-preview .aio-type-card-title {
+  font-size: 1.125rem;
+  line-height: 1.35;
+}
+
+.brand-review-preview .aio-type-body {
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+
+.brand-review-preview .aio-type-supporting {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: #475569;
+}
+
+.brand-review-preview .aio-button {
+  display: inline-flex;
+  min-height: 2.75rem;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+  padding: 0.625rem 1.125rem;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 0.8125rem;
+  line-height: 1.25;
+  font-weight: 700;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    filter 180ms ease,
+    transform 180ms ease;
+}
+
+.brand-review-preview .aio-button > svg {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
+.brand-review-preview .aio-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.brand-review-preview .aio-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.brand-review-preview .aio-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.brand-review-preview .aio-button--primary {
+  background: #c8497a;
+  color: #fff;
+}
+
+.brand-review-preview .aio-button--secondary {
+  background: #0a1628;
+  color: #fff;
+}
+
+.brand-review-preview .aio-button--outline {
+  border-color: #cbd5e1;
+  background: #fff;
+  color: #0a1628;
+}
+
+.brand-review-preview .aio-button--text {
+  min-height: 2.25rem;
+  padding: 0.375rem 0.5rem;
+  background: transparent;
+  color: #334155;
+}
+
+.brand-review-preview .aio-button--compact {
+  min-height: 2.25rem;
+  border-radius: 0.625rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+}
+
+.brand-review-preview .aio-button--destructive {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #fff;
+}
+
+.brand-review-preview .aio-pop-in {
+  animation: brand-review-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1)
+    backwards;
+}
+
+.brand-review-preview .aio-indeterminate-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 45%;
+  border-radius: 9999px;
+  animation: brand-review-indeterminate 1.15s ease-in-out infinite;
+}
+
+@keyframes brand-review-indeterminate {
+  0% {
+    left: -45%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+@keyframes brand-review-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-review-preview *,
+  .brand-review-preview *::before,
+  .brand-review-preview *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}

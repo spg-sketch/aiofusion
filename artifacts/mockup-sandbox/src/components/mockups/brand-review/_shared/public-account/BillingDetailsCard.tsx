@@ -1,0 +1,1 @@
+export function BillingDetailsCard(_props: any) { return <div className="rounded-2xl border border-slate-200 bg-white p-6"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Billing details</p><p className="mt-2 text-sm text-slate-600">Illustrative billing information form for the preview.</p></div>; }

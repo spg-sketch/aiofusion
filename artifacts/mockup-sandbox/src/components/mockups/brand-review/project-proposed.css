@@ -1,0 +1,160 @@
+.brand-review-preview--setup,
+.brand-review-preview--report {
+  --aio-navy: #0a1628;
+  --aio-ink: #102b36;
+  --aio-raspberry: #c8497a;
+  --aio-cool: #f8fafc;
+  --aio-line: #d9e2ec;
+  --aio-muted: #475569;
+  background: var(--aio-navy);
+  color: var(--aio-ink);
+}
+
+.brand-review-preview--setup > div:not(.brand-review-preview__banner),
+.brand-review-preview--report > div:not(.brand-review-preview__banner) {
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.brand-review-preview--setup :is(h1, h2, h3),
+.brand-review-preview--report :is(h1, h2, h3) {
+  font-family: Alice, Georgia, "Times New Roman", serif !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.015em;
+}
+
+.brand-review-preview--setup p,
+.brand-review-preview--report p,
+.brand-review-preview--setup label,
+.brand-review-preview--report label {
+  line-height: 1.6;
+}
+
+/* Project Set-Up remains the only preview where the pale raspberry subsection
+   groupers are retained. The treatment is tightened, rather than repeated. */
+.brand-review-preview--setup .rounded-2xl.border-2.overflow-hidden {
+  border-color: rgba(217, 226, 236, 0.9) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 16px 34px -28px rgba(10, 22, 40, 0.54);
+}
+
+.brand-review-preview--setup .rounded-2xl.border-2.overflow-hidden > :first-child {
+  padding: 28px 32px !important;
+  background: #fbf1f0 !important;
+}
+
+.brand-review-preview--setup .rounded-2xl.border-2.overflow-hidden > :last-child {
+  padding: 32px !important;
+}
+
+.brand-review-preview--setup input,
+.brand-review-preview--setup textarea,
+.brand-review-preview--setup select,
+.brand-review-preview--report input,
+.brand-review-preview--report select {
+  min-height: 44px;
+  border-radius: 12px !important;
+  border-color: var(--aio-line) !important;
+  color: var(--aio-ink);
+  font-size: 14px !important;
+  line-height: 1.45;
+}
+
+.brand-review-preview--setup textarea {
+  border-radius: 12px !important;
+  border-color: var(--aio-line) !important;
+  color: var(--aio-ink);
+  font-size: 14px !important;
+  line-height: 1.65;
+}
+
+.brand-review-preview--setup button,
+.brand-review-preview--report button {
+  min-height: 44px;
+  border-radius: 12px !important;
+  font-family: Inter, system-ui, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+.brand-review-preview--setup button:has(svg:only-child),
+.brand-review-preview--report button:has(svg:only-child) {
+  min-height: 36px;
+  min-width: 36px;
+}
+
+.brand-review-preview--setup :is(a, button, input, select, textarea):focus-visible,
+.brand-review-preview--report :is(a, button, input, select, textarea):focus-visible {
+  outline: 3px solid #f59e0b !important;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 2px var(--aio-navy) !important;
+}
+
+.brand-review-preview--setup .space-y-6 > div > .rounded-xl.border,
+.brand-review-preview--setup .space-y-3 > .rounded-xl.border {
+  border-color: var(--aio-line) !important;
+  border-radius: 12px !important;
+}
+
+/* Reports are deliberately cooler and quieter. They do not inherit the
+   Project Set-Up pink-wash subsection device. */
+.brand-review-preview--report > div:not(.brand-review-preview__banner) {
+  padding-bottom: 4rem;
+}
+
+.brand-review-preview--report .rounded-2xl.border {
+  border-color: var(--aio-line) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 14px 32px -28px rgba(10, 22, 40, 0.5);
+}
+
+.brand-review-preview--report .rounded-2xl.border > .rounded-xl {
+  border-radius: 12px !important;
+}
+
+.brand-review-preview--report .rounded-2xl.border p,
+.brand-review-preview--report .rounded-xl.border p {
+  color: var(--aio-muted);
+}
+
+.brand-review-preview--report .brand-review-score-summary h2,
+.brand-review-preview--report .brand-review-score-summary p {
+  color: #ffffff !important;
+}
+
+.brand-review-preview--report .grid.grid-cols-2.sm\:grid-cols-5 {
+  gap: 8px !important;
+  padding: 8px !important;
+  border-radius: 16px !important;
+}
+
+.brand-review-preview--report .grid.grid-cols-2.sm\:grid-cols-5 > button {
+  min-height: 44px;
+  border-radius: 10px !important;
+}
+
+.brand-review-preview--report .grid.grid-cols-2.md\:grid-cols-3.lg\:grid-cols-6 > div {
+  min-height: 128px;
+  border-width: 1px !important;
+  border-color: var(--aio-line) !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+}
+
+.brand-review-preview--report .grid.grid-cols-2.md\:grid-cols-3.lg\:grid-cols-6 > div:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 10px 24px -20px rgba(10, 22, 40, 0.52) !important;
+}
+
+@media (max-width: 640px) {
+  .brand-review-preview--setup .rounded-2xl.border-2.overflow-hidden > :first-child,
+  .brand-review-preview--setup .rounded-2xl.border-2.overflow-hidden > :last-child {
+    padding: 20px !important;
+  }
+
+  .brand-review-preview--setup button,
+  .brand-review-preview--report button {
+    min-height: 44px;
+  }
+}

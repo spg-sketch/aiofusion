@@ -268,3 +268,31 @@ mtime_ms = 1789543872723
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/547903b5-51e9-4780-b296-fd171d6532f2/e5961bbb-a682-4d03-be40-847e65aa12ac"
 storage_version_token = "1789543894014219"
 content_type = "text/html"
+
+[[outputs]]
+id = "ST6V9EfetOMkQgiFAkMcB"
+uri = "file://docs/brand/aio-fusion-brand-guidelines.html"
+type = "text"
+title = "Brand guidelines and consistency audit"
+description = "Proposed guidelines with Project Hub unchanged, section priorities and clear evidence limits."
+logical_id = "84b18209-78d0-4bcb-9519-3330304dfc12"
+content_hash = "sha256:3374f2969973a33bcfb87709a0dc1fc6c2278fc82cb9f0ef8c6f042a72bf8b5c"
+size = 217764
+mtime_ms = 1789546483625
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/84b18209-78d0-4bcb-9519-3330304dfc12/b386c2d7-7098-4748-8916-b289fcc8eb86"
+storage_version_token = "1789546521863005"
+content_type = "text/html"
+
+[[outputs]]
+id = "PYnyDNcAOXxPbK_nR23jQ"
+uri = "file://docs/brand/aio-fusion-brand-guidelines.pdf"
+type = "pdf"
+title = "Corrected brand guidelines PDF"
+description = "Print layout corrected and all 14 pages visually checked for clipping. Authenticated staging review remains pending."
+logical_id = "f2154515-2216-400c-b6f6-288880aa30ab"
+content_hash = "sha256:bf0ed153c7f32dc6d195dc1e2abf59df346c9bcb557974dae4254faf73e7da2f"
+size = 413284
+mtime_ms = 1789546491445
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/f2154515-2216-400c-b6f6-288880aa30ab/54b46863-da76-463a-a79f-99075056209c"
+storage_version_token = "1789546522522492"
+content_type = "application/pdf"

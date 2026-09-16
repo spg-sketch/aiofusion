@@ -1,0 +1,464 @@
+@import url("https://fonts.googleapis.com/css2?family=Alice&family=Inter:wght@400;500;600;700&display=swap");
+
+.aio-account-settings {
+  --settings-ink: #0a1628;
+  --settings-muted: #17212b;
+  --settings-line: #dce9e9;
+  --settings-pink: #c8497a;
+  --settings-pink-soft: #fbe3ed;
+  font-family: "Inter", system-ui, sans-serif;
+  color: var(--settings-ink);
+  background:
+    radial-gradient(circle at 88% 7%, rgba(215, 239, 235, 0.72), transparent 25rem),
+    #f5faf9 !important;
+}
+
+.aio-account-settings *,
+.aio-account-settings *::before,
+.aio-account-settings *::after {
+  box-sizing: border-box;
+}
+
+.aio-account-settings button:not(.aio-button) {
+  font: inherit;
+}
+
+.aio-account-settings h1,
+.aio-account-settings h2,
+.aio-account-settings h3 {
+  font-family: "Alice", Georgia, serif !important;
+}
+
+.settings-header {
+  padding: 20px 32px !important;
+  background: rgba(251, 253, 252, 0.9) !important;
+  border-color: var(--settings-line) !important;
+  backdrop-filter: blur(12px);
+}
+
+.settings-header > * {
+  min-width: 0;
+}
+
+.settings-logo img {
+  width: auto;
+  height: 72px !important;
+}
+
+.settings-header-context {
+  color: #26313d;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.settings-header-divider {
+  display: block;
+  width: 1px;
+  height: 28px;
+  background: var(--settings-line);
+}
+
+.settings-back-button {
+  background: var(--settings-pink) !important;
+  color: #fff !important;
+  transition: filter 0.22s ease, transform 0.22s ease;
+}
+
+.settings-back-button:hover {
+  filter: brightness(1.1);
+}
+
+.settings-main {
+  padding-top: 64px !important;
+  padding-bottom: 72px !important;
+}
+
+.settings-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(32px, 7vw, 96px);
+  margin-bottom: 44px !important;
+  padding-bottom: 36px;
+  border-bottom: 1px solid var(--settings-line);
+}
+
+.settings-intro h1 {
+  flex: 0 0 auto;
+  color: var(--settings-ink) !important;
+}
+
+.settings-intro h1:not(.aio-type-page-title) {
+  font-size: clamp(2rem, 4vw, 3.125rem) !important;
+  line-height: 1.12 !important;
+}
+
+.settings-intro p {
+  width: min(100%, 540px);
+  max-width: 540px !important;
+  margin-top: 0 !important;
+  color: var(--settings-muted) !important;
+}
+
+.settings-intro p:not(.aio-type-body):not(.aio-type-supporting) {
+  font-size: 15px !important;
+  line-height: 1.7 !important;
+}
+
+.settings-layout {
+  gap: 40px !important;
+}
+
+.settings-nav {
+  width: 220px !important;
+  top: 24px !important;
+}
+
+.settings-nav > div {
+  margin-bottom: 28px !important;
+}
+
+.settings-nav > div > p {
+  color: #26313d !important;
+  margin-bottom: 10px !important;
+}
+
+.settings-nav-button {
+  min-height: 48px;
+  padding: 10px 12px !important;
+  gap: 12px !important;
+  color: var(--settings-ink) !important;
+  font-weight: 600 !important;
+  transition: color 0.2s ease, background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.settings-nav ul {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.settings-project-action {
+  min-height: 34px;
+}
+
+.settings-nav-button:hover {
+  transform: translateX(3px);
+  background: #fff3f7 !important;
+  color: var(--settings-ink) !important;
+  box-shadow: inset 0 0 0 1px #f1c5d6;
+}
+
+.settings-nav-button-active {
+  background: var(--settings-pink-soft) !important;
+  color: var(--settings-ink) !important;
+  font-weight: 700 !important;
+  box-shadow: inset 3px 0 0 var(--settings-pink);
+}
+
+.settings-nav-button-active:hover {
+  background: var(--settings-pink-soft) !important;
+}
+
+.settings-nav-icon {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: white !important;
+}
+
+.settings-nav-icon-pink {
+  background: var(--settings-pink) !important;
+}
+
+.settings-nav-icon-navy {
+  background: #0a1628 !important;
+}
+
+.settings-george-card {
+  margin-top: 36px;
+  padding: 16px;
+  border: 1px solid #f1c5d6;
+  border-radius: 12px;
+  background: #fff5f8;
+}
+
+.settings-george-card .settings-george-title {
+  margin: 0;
+  color: var(--settings-ink) !important;
+}
+
+.settings-george-card .settings-george-title:not(.aio-type-eyebrow) {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.settings-george-card > p:not(.settings-george-title) {
+  margin: 8px 0 0;
+  color: var(--settings-muted) !important;
+}
+
+.settings-george-card > p:not(.settings-george-title):not(.aio-type-body):not(.aio-type-supporting) {
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.settings-george-card > button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 16px;
+  border: 0;
+  border-radius: 12px;
+  color: white;
+  background: var(--settings-pink);
+  cursor: pointer;
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+
+.settings-george-card > button:not(.aio-button) {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 10px 12px;
+}
+
+.settings-george-card > button:hover {
+  filter: brightness(1.1);
+}
+
+.settings-george-card > button:active {
+  transform: scale(0.98);
+}
+
+.settings-george-mobile-button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+  border: 0;
+  border-radius: 12px;
+  color: white;
+  background: var(--settings-pink);
+}
+
+.settings-george-mobile-button:not(.aio-button) {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 11px 14px;
+}
+
+.settings-mobile-nav-button {
+  min-height: 42px;
+  color: var(--settings-ink) !important;
+  background: #fbfdfc !important;
+  border-color: var(--settings-line) !important;
+}
+
+.settings-mobile-nav-button .settings-nav-icon {
+  width: 26px;
+  height: 26px;
+  flex-basis: 26px;
+  border-radius: 7px;
+}
+
+.settings-mobile-nav-button-active {
+  color: white !important;
+  background: var(--settings-pink) !important;
+  border-color: var(--settings-pink) !important;
+}
+
+.settings-content {
+  min-width: 0;
+}
+
+.settings-content > .rounded-2xl {
+  border-color: var(--settings-line) !important;
+  border-radius: 16px !important;
+  padding: 36px !important;
+  box-shadow: 0 15px 40px -30px rgba(13, 69, 86, 0.4) !important;
+}
+
+.settings-content > .rounded-2xl > h2:not(.aio-type-section-title) {
+  font-size: 24px !important;
+  line-height: 1.25 !important;
+  color: var(--settings-ink) !important;
+}
+
+.settings-card {
+  border-color: var(--settings-line) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 15px 40px -30px rgba(13, 69, 86, 0.4) !important;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+
+.settings-card:hover {
+  box-shadow: 0 18px 34px -24px rgba(13, 69, 86, 0.46) !important;
+}
+
+.settings-card h2:not(.aio-type-section-title) {
+  font-size: 24px !important;
+  line-height: 1.25 !important;
+  color: var(--settings-ink) !important;
+}
+
+.settings-card-account-type,
+.settings-card-profile {
+  padding: 36px !important;
+}
+
+.settings-account-option {
+  min-height: 150px;
+  border-color: #e2e8f0 !important;
+  background: #fbfdfc !important;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease, background-color 0.22s ease;
+}
+
+.settings-account-option:hover {
+  transform: translateY(-2px);
+  border-color: #e3a2bb !important;
+  box-shadow: 0 16px 30px -20px rgba(13, 69, 86, 0.48);
+}
+
+.settings-account-option-selected {
+  border-color: var(--settings-pink) !important;
+  background: #fdf0f5 !important;
+  box-shadow: 0 0 0 1px var(--settings-pink) !important;
+}
+
+.settings-account-icon {
+  color: white !important;
+}
+
+.settings-account-icon-agency {
+  background: #0a1628 !important;
+}
+
+.settings-account-icon-client {
+  background: var(--settings-pink) !important;
+}
+
+.settings-account-option p,
+.settings-card-profile p {
+  color: var(--settings-muted) !important;
+}
+
+.settings-account-option span {
+  color: var(--settings-ink);
+}
+
+.settings-alert {
+  border-radius: 16px !important;
+}
+
+/* Ensure ordinary billing action pills match the standardized styles */
+.aio-account-settings .settings-content .aio-button.rounded-full {
+  border-radius: 0.75rem !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+.aio-account-settings .settings-content .aio-button--compact.rounded-full {
+  border-radius: 0.625rem !important;
+}
+
+@media (min-width: 801px) and (max-width: 1023px) {
+  .settings-layout {
+    flex-direction: row !important;
+  }
+
+  .settings-nav {
+    display: block !important;
+  }
+
+  .settings-mobile-nav {
+    display: none !important;
+  }
+}
+
+@media (max-width: 800px) {
+  .settings-header {
+    padding: 16px 20px !important;
+  }
+
+  .settings-logo img {
+    height: 60px !important;
+  }
+
+  .settings-main {
+    padding: 40px 24px 48px !important;
+  }
+
+  .settings-intro {
+    display: block;
+    margin-bottom: 28px !important;
+    padding-bottom: 28px;
+  }
+
+  .settings-intro-description {
+    margin-top: 18px !important;
+  }
+
+  .settings-layout {
+    display: block !important;
+  }
+
+  .settings-nav {
+    position: static !important;
+    width: auto !important;
+    margin-bottom: 22px;
+  }
+
+  .settings-mobile-nav {
+    margin-bottom: 22px;
+  }
+
+  .settings-card-account-type,
+  .settings-card-profile {
+    padding: 28px 24px !important;
+  }
+
+  .settings-content > .rounded-2xl {
+    padding: 28px 24px !important;
+  }
+
+  .settings-card-account-type .grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .settings-card-profile .flex.items-center.gap-3.flex-1 {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 520px) {
+  .settings-header {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .settings-logo img {
+    height: 52px !important;
+  }
+
+  .settings-main {
+    padding-right: 16px !important;
+    padding-left: 16px !important;
+  }
+
+  .settings-card-account-type,
+  .settings-card-profile {
+    padding: 24px 20px !important;
+  }
+}
