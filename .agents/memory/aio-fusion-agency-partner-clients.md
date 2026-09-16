@@ -7,10 +7,22 @@ Clients whose parent account role is "agency" are permanently managed: they neve
 
 **Why:** Product decision for agency partner resellers; hiding a UI control is not enforcement — direct API calls (caller-supplied password on create, self-targeted password set, forgot-password links) are the real attack surface.
 
-**How to apply:** Any new credential-issuance path (password set/change, forgot/reset links, access grant, invites) must consult the server-side partner-client predicate for the TARGET, including self-targeted requests; creation must discard caller-supplied passwords; forgot-password must stay enumeration-safe (ok:true) while issuing nothing. Legacy parents with role "user" deliberately keep the old grant/welcome flows. Known gap tracked separately: pre-existing partner clients with leftover passwords can still log in.
+**How to apply:** Any new credential-issuance or session-entry path must consult the hierarchy for the TARGET, including self-targeted requests and existing sessions. Migrated children may have role "user", not "client", so checking only canonical child roles misses legacy credentials. Legacy parents with role "user" deliberately keep the old grant/welcome flows. Authorized management requires a live original operator session with permission to manage the target.
 
-**Agency UX rule:** Present these records as managed clients, not client login accounts. Do not show last-sign-in status or credential actions. Keep no-project clients in Clients only, never as placeholder cards in the Project Hub. Use one consistent "Go to client" action regardless of project count: open the sole project directly, or open the client's Project Hub when there are zero or several. Listed project names also open that project directly. The Hub contains real projects only. Direct client users keep their own Profile, Sign-in & security, Billing, and Team account settings.
+**Agency UX rule:** Present these records as managed clients, not client login accounts. Creation and "Open Project Hub" always open the client's hub, including when it has exactly one project. Only explicit project links open individual projects. This supersedes the earlier sole-project auto-open convention. Direct client users retain independent account settings.
 
 **Why:** Agency users work on behalf of clients and should not pass through a client-account settings screen to reach project work. The server-side session swap remains the security boundary, but the visible journey should feel like opening a managed client project, not logging in as another person.
 
-**Billing rule:** Managed client records do not consume plan capacity; project workspaces do. Before entering a no-project managed client, check the agency billing root's effective project allowance. If it is full, keep the user in the agency workspace and open Billing, because managed client workspaces have no billing access.
+**Billing rule:** Managed client records and hub entry do not consume capacity. Enforce agency-root allowances on project creation, never on opening a hub. Capacity handling must return to agency billing, not client billing.
+
+**Why:** A full plan must not prevent reading an existing client's workspace; only creating a project consumes a slot.
+
+**Transition recovery rule:** A failed response can arrive after the server has switched the cookie. Reconcile the server-confirmed workspace and original operator before retrying a session transition; local handoff/reload failures must not perform another switch.
+
+**Why:** Blind retries can be rejected as nested impersonation and leave the old UI displaying a different server session.
+
+**Handoff compatibility:** Agency and Master administration share the reload destination contract but not the same product behavior: agency row actions always open the hub, while Master "View account" retains sole-project auto-open.
+
+**Why:** Tightening the handoff consumer without updating every producer previously broke Master navigation despite passing agency-only tests.
+
+**How to apply:** When changing the handoff contract, search every writer and include a producer-to-consumer regression rather than asserting hand-crafted payloads alone.

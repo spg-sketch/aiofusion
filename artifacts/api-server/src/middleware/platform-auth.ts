@@ -5,6 +5,9 @@ import {
   getPlatformSessionId,
   getPlatformSessionAccount,
   getCompanyBySlug,
+  getImpersonationStashId,
+  normalizeRole,
+  canManage,
   type PlatformAccount,
 } from "../lib/platform-auth";
 import { getBetaTrialSummary, getBillingState, isEntitled, resolveBillingSlug } from "../lib/billing";
@@ -46,7 +49,34 @@ export async function resolvePlatformAccount(
 ): Promise<void> {
   const sid = getPlatformSessionId(req);
   if (sid) {
-    const account = (await getPlatformSessionAccount(sid)) ?? undefined;
+    // A managed client session is valid only when the browser is currently
+    // viewing that client on behalf of a live agency/master session.  Resolve
+    // and validate the stash *against the viewed target* before allowing the
+    // target through; merely presenting any live admin/agency stash cookie must
+    // not restore client access.
+    let allowAgencyPartnerClient = false;
+    const stashSid = getImpersonationStashId(req);
+    if (stashSid && stashSid !== sid) {
+      try {
+        const original = await getPlatformSessionAccount(stashSid);
+        if (
+          original
+          && (normalizeRole(original.role) === "admin" || normalizeRole(original.role) === "agency")
+        ) {
+          // This candidate resolution is only used to identify the target for
+          // the hierarchy authorization check. If the check fails, the normal
+          // resolver below runs without the exception and invalidates a
+          // managed target session.
+          const viewed = await getPlatformSessionAccount(sid, {
+            allowAgencyPartnerClient: true,
+          });
+          allowAgencyPartnerClient = !!viewed && await canManage(original, viewed.username);
+        }
+      } catch {
+        allowAgencyPartnerClient = false;
+      }
+    }
+    const account = (await getPlatformSessionAccount(sid, { allowAgencyPartnerClient })) ?? undefined;
     req.account = account;
 
     if (account) {

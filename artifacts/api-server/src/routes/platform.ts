@@ -52,6 +52,7 @@ import {
   USERNAME_RE,
   getAccount,
   getAccountByIdentifier,
+  isAgencyPartnerClient,
   emailExists,
   getVisibleUsernames,
   canManage,
@@ -472,7 +473,9 @@ async function isManaged(username: string): Promise<boolean> {
 }
 
 // Pick the workspace a signing-in human should land in: their most recent
-// membership whose company is NOT a managed (access-disabled) client account.
+// membership whose company is NOT a managed (access-disabled) client account
+// and is not an agency/partner client. The hierarchy-derived check is needed
+// because older partner rows may not have the managed metadata flag.
 // Falls back to the primary membership when every workspace is managed, so
 // the downstream managed check still rejects the login with a clear error.
 async function pickLoginMembership(
@@ -480,14 +483,16 @@ async function pickLoginMembership(
 ): Promise<typeof platformMembershipsTable.$inferSelect | null> {
   const primary = await getPrimaryMembership(userId);
   if (!primary) return null;
-  if (!(await isManaged(primary.companySlug))) return primary;
+  if (!(await isManaged(primary.companySlug))
+    && !(await isAgencyPartnerClient(primary.companySlug))) return primary;
   const mems = await db
     .select()
     .from(platformMembershipsTable)
     .where(eq(platformMembershipsTable.userId, userId))
     .orderBy(desc(platformMembershipsTable.createdAt));
   for (const m of mems) {
-    if (!(await isManaged(m.companySlug))) return m;
+    if (!(await isManaged(m.companySlug))
+      && !(await isAgencyPartnerClient(m.companySlug))) return m;
   }
   return primary;
 }
@@ -685,10 +690,22 @@ async function getAccountOwnerContact(username: string): Promise<{ email: string
 // Who is signed in (or null). Drives the client's view of the current session.
 router.get("/platform/me", async (req: Request, res: Response) => {
   let impersonating: { by: string; byRole: string } | null = null;
+  // The active account is the viewed workspace, but identity fields describe
+  // the human who authenticated. During an authorized agency/master
+  // impersonation those must come from the stashed operator session rather
+  // than from the managed client's legacy account row.
+  let impersonationOperator: NonNullable<Request["account"]> | null = null;
   const stashSid = getImpersonationStashId(req);
-  if (req.account && stashSid) {
+  if (req.account && stashSid && stashSid !== getPlatformSessionId(req)) {
     const adminAccount = await getPlatformSessionAccount(stashSid);
-    if (adminAccount) impersonating = { by: adminAccount.username, byRole: adminAccount.role };
+    if (
+      adminAccount
+      && (normalizeRole(adminAccount.role) === "admin" || normalizeRole(adminAccount.role) === "agency")
+      && await canManage(adminAccount, req.account.username)
+    ) {
+      impersonationOperator = adminAccount;
+      impersonating = { by: adminAccount.username, byRole: adminAccount.role };
+    }
   }
   let googleLinked = false;
   let microsoftLinked = false;
@@ -707,6 +724,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
   let signedInUserName: string | null = null;
   let signedInUserEmail: string | null = null;
   let activeCompanyName: string | null = null;
+  let sessionIdentityCompanyName: string | null = null;
   let workspaceNameNeedsReview = false;
   let organicWorkspace = false;
   let resolvedUser: typeof platformUsersTable.$inferSelect | null = null;
@@ -786,6 +804,47 @@ router.get("/platform/me", async (req: Request, res: Response) => {
       } catch { /* fail closed: do not show an uncertain prompt */ }
     }
   }
+  sessionIdentityCompanyName = activeCompanyName || accountDisplayName;
+  // Keep the viewed account above for account/workspace data, but expose the
+  // original operator as the authenticated identity while impersonating. This
+  // prevents the client from treating a managed client's contact/credential
+  // owner as the signed-in person.
+  if (impersonationOperator) {
+    sessionIdentityCompanyName = null;
+    try {
+      let operatorUser: typeof platformUsersTable.$inferSelect | null = null;
+      if (impersonationOperator.userId) {
+        const [user] = await db
+          .select()
+          .from(platformUsersTable)
+          .where(eq(platformUsersTable.id, impersonationOperator.userId))
+          .limit(1);
+        operatorUser = user ?? null;
+      }
+      if (!operatorUser) {
+        const operatorAccount = await getAccount(normUsername(impersonationOperator.username));
+        if (operatorAccount?.email) operatorUser = await getUserByEmail(operatorAccount.email);
+        signedInUserEmail = operatorUser?.email?.trim() || operatorAccount?.email?.trim() || null;
+      } else {
+        signedInUserEmail = operatorUser.email?.trim() || null;
+      }
+      signedInUserName = operatorUser?.name?.trim() || impersonationOperator.username;
+      const operatorCompany = await getCompanyBySlug(normUsername(impersonationOperator.username));
+      activeCompanyName = operatorCompany?.displayName?.trim() || null;
+      if (!activeCompanyName) {
+        const [operatorProfile] = await db
+          .select()
+          .from(platformMetaTable)
+          .where(eq(platformMetaTable.key, profileKey(normUsername(impersonationOperator.username))))
+          .limit(1);
+        activeCompanyName = parseDisplayName(operatorProfile?.value) ?? null;
+      }
+      sessionIdentityCompanyName = activeCompanyName;
+    } catch {
+      // Keep the already-resolved viewed-account data if operator lookup is
+      // unavailable; the authorization boundary remains enforced by middleware.
+    }
+  }
   const accountWithGoogle = req.account
     ? {
         ...req.account,
@@ -859,9 +918,10 @@ router.get("/platform/me", async (req: Request, res: Response) => {
       ? {
           userName: signedInUserName,
           userEmail: signedInUserEmail,
-          companyName: activeCompanyName
-            || accountDisplayName
-            || (normalizeRole(req.account.role) === "admin" ? "Master" : req.account.username),
+          companyName: sessionIdentityCompanyName
+            || (normalizeRole((impersonationOperator ?? req.account).role) === "admin"
+              ? "Master"
+              : (impersonationOperator ?? req.account).username),
         }
       : null,
     // Returned for client-side intake prefill. The client performs its own
@@ -933,10 +993,14 @@ async function finishLoginOrChallenge(
   rawIp: string | undefined,
   trustedDeviceCookie?: string,
 ): Promise<void> {
-  // Managed (access-disabled) client accounts cannot be signed into at all -
-  // the agency works on the client's behalf via "View account" instead.
-  if (await isManaged(identity.username)) {
-    res.status(403).json({ error: MANAGED_LOGIN_ERROR });
+  // Managed (access-disabled) and agency/partner client accounts cannot be
+  // signed into at all - the agency works on the client's behalf via "View
+  // account" instead.
+  const agencyPartnerClient = await isAgencyPartnerClient(identity.username);
+  if (agencyPartnerClient || await isManaged(identity.username)) {
+    res.status(403).json({
+      error: agencyPartnerClient ? AGENCY_PARTNER_CLIENT_MESSAGE : MANAGED_LOGIN_ERROR,
+    });
     return;
   }
   const workspaceMfaApplies = await workspaceMfaAppliesToIdentity(identity);
@@ -1012,8 +1076,11 @@ async function completeMfaLogin(
   extra?: Record<string, unknown>,
 ): Promise<void> {
   // Access may have been revoked between the password check and the MFA code.
-  if (await isManaged(payload.u)) {
-    res.status(403).json({ error: MANAGED_LOGIN_ERROR });
+  const agencyPartnerClient = await isAgencyPartnerClient(payload.u);
+  if (agencyPartnerClient || await isManaged(payload.u)) {
+    res.status(403).json({
+      error: agencyPartnerClient ? AGENCY_PARTNER_CLIENT_MESSAGE : MANAGED_LOGIN_ERROR,
+    });
     return;
   }
   // The MFA token is only a transport hint. Recompute eligibility after the
@@ -1050,9 +1117,10 @@ async function finishOauthLoginOrChallenge(
   origin: string,
   identity: LoginIdentity,
 ): Promise<void> {
-  // Managed (access-disabled) client accounts cannot be signed into via SSO
-  // either - reuse the suspended redirect so the frontend shows a clear error.
-  if (await isManaged(identity.username)) {
+  // Managed (access-disabled) and agency/partner client accounts cannot be
+  // signed into via SSO either - use the managed redirect so the frontend
+  // shows a clear error.
+  if (await isAgencyPartnerClient(identity.username) || await isManaged(identity.username)) {
     res.redirect(`${origin}/?oauth_status=managed`);
     return;
   }
@@ -1194,6 +1262,10 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
           return;
         }
         if (acct.status === "suspended") { res.status(403).json({ error: await suspendedLoginMessage(acct.username) }); return; }
+        if (await isAgencyPartnerClient(acct.username)) {
+          res.status(403).json({ error: AGENCY_PARTNER_CLIENT_MESSAGE });
+          return;
+        }
         let activeCompanyId: string | undefined;
         try {
           const company = await getCompanyBySlug(acct.username);
@@ -1249,6 +1321,10 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
     }
     if (account.status === "suspended") {
       res.status(403).json({ error: await suspendedLoginMessage(account.username) });
+      return;
+    }
+    if (await isAgencyPartnerClient(account.username)) {
+      res.status(403).json({ error: AGENCY_PARTNER_CLIENT_MESSAGE });
       return;
     }
     // Ensure a platform_users row exists and is linked to this account, then
@@ -1312,6 +1388,10 @@ router.post("/platform/mfa/setup", loginLimiter, async (req: Request, res: Respo
       res.status(401).json({ error: "Sign in first to set up two-factor authentication." });
       return;
     }
+      if (await isAgencyPartnerClient(username)) {
+        res.status(403).json({ error: AGENCY_PARTNER_CLIENT_MESSAGE });
+        return;
+      }
     const existing = await getMfaState(username);
     if (existing?.enabled) {
       res.status(409).json({ error: "Two-factor authentication is already enabled on this account." });
@@ -1937,6 +2017,10 @@ router.get("/platform/verify-email", async (req: Request, res: Response) => {
     const mem = target ? memberships[0] : memberships.length === 1 ? memberships[0] : undefined;
     if (!mem) {
       res.redirect(`${origin}/?verify_status=error`);
+      return;
+    }
+    if (await isAgencyPartnerClient(mem.companySlug)) {
+      res.redirect(`${origin}/?verify_status=managed`);
       return;
     }
     const historicalSignupRepair =
@@ -3142,6 +3226,9 @@ async function handleSsoInvite(
     await getInviteInvalidReason(token);
     return `/?oauth_status=error&oauth_msg=invite_invalid`;
   }
+  if (await isAgencyPartnerClient(invite.companySlug)) {
+    return `/?oauth_status=managed`;
+  }
   if (invite.email.toLowerCase() !== profile.email.toLowerCase()) {
     // The invite is bound to a specific email address; a different SSO account
     // must not be able to claim it.
@@ -3289,7 +3376,11 @@ router.get("/platform/auth/google", (req: Request, res: Response) => {
 });
 
 // Link Google to an existing logged-in account.
-router.get("/platform/auth/google/link", requirePlatformAuth, (req: Request, res: Response) => {
+router.get("/platform/auth/google/link", requirePlatformAuth, async (req: Request, res: Response) => {
+  if (req.account && await isAgencyPartnerClient(req.account.username)) {
+    res.status(403).json({ error: AGENCY_PARTNER_CLIENT_MESSAGE });
+    return;
+  }
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) {
     res.status(503).json({ error: "Google Sign-In is not configured." });
@@ -3496,6 +3587,10 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
         res.redirect(`${origin}/?link_google=error`);
         return;
       }
+      if (await isAgencyPartnerClient(linkAccount.username)) {
+        res.redirect(`${origin}/?link_google=error`);
+        return;
+      }
       const [linkUser] = await db
         .select()
         .from(platformUsersTable)
@@ -3581,6 +3676,10 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
             res.redirect(`${origin}/?oauth_status=suspended`);
             return;
           }
+          if (await isAgencyPartnerClient(account.username)) {
+            res.redirect(`${origin}/?oauth_status=managed`);
+            return;
+          }
           // Active - link googleId to user record then create session.
           let userId: string | undefined;
           let activeCompanyId: string | undefined;
@@ -3631,6 +3730,10 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
     if (existing) {
       if (existing.status === "suspended") {
         res.redirect(`${origin}/?oauth_status=suspended`);
+        return;
+      }
+      if (await isAgencyPartnerClient(existing.username)) {
+        res.redirect(`${origin}/?oauth_status=managed`);
         return;
       }
       // Active legacy account - ensure user/company rows, then create session.
@@ -3766,7 +3869,7 @@ const MICROSOFT_TOKEN_ENDPOINT = "https://login.microsoftonline.com/common/oauth
 const MICROSOFT_GRAPH_ME = "https://graph.microsoft.com/v1.0/me";
 const MS_STATE_COOKIE = "aio_ms_state";
 
-router.get("/platform/auth/microsoft", (req: Request, res: Response) => {
+router.get("/platform/auth/microsoft", async (req: Request, res: Response) => {
   const clientId = process.env.MICROSOFT_CLIENT_ID;
   const origin = getFrontendOrigin(req);
   if (!clientId) {
@@ -3774,6 +3877,16 @@ router.get("/platform/auth/microsoft", (req: Request, res: Response) => {
     return;
   }
   const action = typeof req.query.action === "string" ? req.query.action : "login";
+  if (action === "link") {
+    if (!req.account) {
+      res.redirect(`${origin}/?oauth_status=error&oauth_msg=not_signed_in`);
+      return;
+    }
+    if (await isAgencyPartnerClient(req.account.username)) {
+      res.status(403).json({ error: AGENCY_PARTNER_CLIENT_MESSAGE });
+      return;
+    }
+  }
   const state = `${action}:${crypto.randomBytes(16).toString("hex")}`;
   const redirect_uri = `${getAppBaseUrl()}/api/platform/auth/microsoft/callback`;
   const params = new URLSearchParams({
@@ -3944,6 +4057,10 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
     // session cookie that the browser carries alongside the POST.
     if (action === "link") {
       if (!req.account) { res.redirect(`${origin}/?oauth_status=error&oauth_msg=not_signed_in`); return; }
+      if (await isAgencyPartnerClient(req.account.username)) {
+        res.redirect(`${origin}/?oauth_status=managed`);
+        return;
+      }
       const conflictUser = await getUserByMicrosoftId(microsoftId);
       if (conflictUser) {
         const acc = await getAccount(normUsername(req.account.username));
@@ -3997,6 +4114,7 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
         const account = await getAccount(membership.companySlug);
         if (account) {
           if (account.status === "suspended") { res.redirect(`${origin}/?oauth_status=suspended`); return; }
+          if (await isAgencyPartnerClient(account.username)) { res.redirect(`${origin}/?oauth_status=managed`); return; }
           let userId: string | undefined; let activeCompanyId: string | undefined;
           let co: Awaited<ReturnType<typeof getCompanyBySlug>> = null;
           try {
@@ -4025,6 +4143,7 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
         const account = await getAccount(membership.companySlug);
         if (account) {
           if (account.status === "suspended") { res.redirect(`${origin}/?oauth_status=suspended`); return; }
+          if (await isAgencyPartnerClient(account.username)) { res.redirect(`${origin}/?oauth_status=managed`); return; }
           let userId: string | undefined; let activeCompanyId: string | undefined;
           let co: Awaited<ReturnType<typeof getCompanyBySlug>> = null;
           try {
@@ -4047,6 +4166,7 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
     const [legacyMs] = await db.select().from(platformAccountsTable).where(ilike(platformAccountsTable.email, msEmail)).limit(1);
     if (legacyMs) {
       if (legacyMs.status === "suspended") { res.redirect(`${origin}/?oauth_status=suspended`); return; }
+      if (await isAgencyPartnerClient(legacyMs.username)) { res.redirect(`${origin}/?oauth_status=managed`); return; }
       let userId: string | undefined; let activeCompanyId: string | undefined;
       let co: Awaited<ReturnType<typeof getCompanyBySlug>> = null;
       try {
@@ -4530,6 +4650,10 @@ router.post(
         res.status(404).json({ error: INVITE_INVALID_MESSAGES[reason], reason });
         return;
       }
+      if (await isAgencyPartnerClient(invite.companySlug)) {
+        res.status(403).json({ error: AGENCY_PARTNER_CLIENT_MESSAGE });
+        return;
+      }
       // Email-bound: the signed-in user's email must match the invited email.
       if (normalizedEmail !== invite.email.trim().toLowerCase()) {
         res.status(403).json({
@@ -4706,8 +4830,11 @@ router.post(
       }
       // Managed (access-disabled) client workspaces cannot be entered by
       // multi-workspace humans either - only the agency's "View account".
-      if (await isManaged(mem.companySlug)) {
-        res.status(403).json({ error: MANAGED_LOGIN_ERROR });
+      const agencyPartnerClient = await isAgencyPartnerClient(mem.companySlug);
+      if (agencyPartnerClient || await isManaged(mem.companySlug)) {
+        res.status(403).json({
+          error: agencyPartnerClient ? AGENCY_PARTNER_CLIENT_MESSAGE : MANAGED_LOGIN_ERROR,
+        });
         return;
       }
       const rawIp =
@@ -4790,17 +4917,6 @@ router.get(
     }
   },
 );
-
-// Whether the target account is a client whose parent is an agency/partner
-// account. Such clients are permanently managed: billing sits entirely with
-// the agency, the client is never given sign-in credentials, and the
-// password/access routes refuse to create a credential for them.
-async function isAgencyPartnerClient(target: string): Promise<boolean> {
-  const acc = await getAccount(normUsername(target));
-  if (!acc || normalizeRole(acc.role) !== "client" || !acc.parent) return false;
-  const parent = await getAccount(normUsername(acc.parent));
-  return !!parent && normalizeRole(parent.role) === "agency";
-}
 
 export const AGENCY_PARTNER_CLIENT_MESSAGE =
   "This client is managed by your agency - agency partner client accounts are always managed and never have their own sign-in.";

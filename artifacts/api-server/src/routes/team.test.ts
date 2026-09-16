@@ -340,7 +340,12 @@ import {
   projectsTable,
 } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
-import { hashPassword, createPlatformSession, PLATFORM_COOKIE } from "../lib/platform-auth";
+import {
+  hashPassword,
+  createPlatformSession,
+  PLATFORM_COOKIE,
+  PLATFORM_IMPERSONATION_STASH_COOKIE,
+} from "../lib/platform-auth";
 import { PROJECT_TEAM_SEATS } from "../lib/team-invites";
 import { resolvePlatformAccount } from "../middleware/platform-auth";
 import platformRouter from "./platform";
@@ -371,13 +376,17 @@ let baseUrl: string;
 
 async function api(
   path: string,
-  opts: { method?: string; body?: unknown; sid?: string } = {},
+  opts: { method?: string; body?: unknown; sid?: string; stashSid?: string } = {},
 ): Promise<{ status: number; json: any; setCookie: string | null }> {
+  const cookies = [
+    opts.sid ? `${PLATFORM_COOKIE}=${opts.sid}` : null,
+    opts.stashSid ? `${PLATFORM_IMPERSONATION_STASH_COOKIE}=${opts.stashSid}` : null,
+  ].filter(Boolean).join("; ");
   const res = await fetch(`${baseUrl}${path}`, {
     method: opts.method ?? (opts.body !== undefined ? "POST" : "GET"),
     headers: {
       "content-type": "application/json",
-      ...(opts.sid ? { cookie: `${PLATFORM_COOKIE}=${opts.sid}` } : {}),
+      ...(cookies ? { cookie: cookies } : {}),
     },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
@@ -2311,17 +2320,44 @@ describe("direct-client teams", () => {
   });
 
   it("agency-managed partner clients have no team at all - list, invite and every mutation endpoint", async () => {
-    await seedWorkspace("managing-agency", "owner@managing.test", "agency");
+    // Use the same live parent-stash + target-cookie shape as a real
+    // view-as session. This lets the target resolve while the team route's
+    // managed-client guard still returns its intended 403.
+    const { sid: parentSid } = await seedWorkspace("managing-agency", "owner@managing.test", "agency");
     const { sid } = await seedWorkspace("managed-client", "owner@managed.test", "client", "managing-agency");
 
-    expect((await api("/api/platform/team", { sid })).status).toBe(403);
-    const invite = await api("/api/platform/team/invite", { sid, body: { email: "c@managed.test", role: "content" } });
+    expect((await api("/api/platform/team", { sid, stashSid: parentSid })).status).toBe(403);
+    const invite = await api("/api/platform/team/invite", {
+      sid,
+      stashSid: parentSid,
+      body: { email: "c@managed.test", role: "content" },
+    });
     expect(invite.status).toBe(403);
     // Mutation endpoints are gated too - stale team state stays frozen.
-    expect((await api("/api/platform/team/invites/some-token/resend", { sid, body: {} })).status).toBe(403);
-    expect((await api("/api/platform/team/invites/some-token/revoke", { sid, body: {} })).status).toBe(403);
-    expect((await api("/api/platform/team/members/00000000-0000-0000-0000-000000000000", { sid, method: "PATCH", body: { role: "content" } })).status).toBe(403);
-    expect((await api("/api/platform/team/members/00000000-0000-0000-0000-000000000000/remove", { sid, body: {} })).status).toBe(403);
+    expect(
+      (await api("/api/platform/team/invites/some-token/resend", { sid, stashSid: parentSid, body: {} })).status,
+    ).toBe(403);
+    expect(
+      (await api("/api/platform/team/invites/some-token/revoke", { sid, stashSid: parentSid, body: {} })).status,
+    ).toBe(403);
+    expect(
+      (await api("/api/platform/team/members/00000000-0000-0000-0000-000000000000", {
+        sid,
+        stashSid: parentSid,
+        method: "PATCH",
+        body: { role: "content" },
+      })).status,
+    ).toBe(403);
+    expect(
+      (await api("/api/platform/team/members/00000000-0000-0000-0000-000000000000/remove", {
+        sid,
+        stashSid: parentSid,
+        body: {},
+      })).status,
+    ).toBe(403);
+
+    const legacySid = await createPlatformSession("managed-client", null, null, null);
+    expect((await api("/api/platform/team", { sid: legacySid })).status).toBe(401);
   });
 
   it("resend accepts account-role invites now that direct clients use the full team model", async () => {

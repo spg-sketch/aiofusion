@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
   TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
@@ -21,6 +21,15 @@ import { apiBase } from "../lib/contentAi";
 import { SubscriptionsAdminCard } from "../components/SubscriptionsAdminCard";
 import { pushProjectMeta } from "../lib/projectSync";
 import type { Client } from "../lib/projectTypes";
+
+type ViewAccountTarget = {
+  username: string;
+  projectId: string | null;
+  returnSection: string;
+  originalUsername: string;
+};
+type ViewAccountRetry = ViewAccountTarget & { switched: boolean; uncertain: boolean };
+
 export function UsersAdminPage({
   session,
   onBack,
@@ -350,6 +359,8 @@ export function UsersAdminPage({
   // ── View account (support impersonation) ─────────────────────────────
   const [impersonatingUsername, setImpersonatingUsername] = useState<string | null>(null);
   const [impersonateError, setImpersonateError] = useState<string | null>(null);
+  const [viewAccountRetry, setViewAccountRetry] = useState<ViewAccountRetry | null>(null);
+  const viewAccountLockRef = useRef(false);
 
   // ── Per-row "Manage" overflow menu + projects expand/collapse ─────────
   // Secondary actions (Name/Password/Role/Seat cap/Sessions/Delete) live
@@ -367,35 +378,171 @@ export function UsersAdminPage({
       return next;
     });
   };
-  const handleViewAccount = (username: string) => {
-    setImpersonateError(null);
-    setImpersonatingUsername(username);
+  const clearViewAccountHandoff = () => {
     try {
-      sessionStorage.setItem("aio:master-account-return", JSON.stringify({ section }));
-      const ownedProjects = projectsByOwner(username);
-      sessionStorage.setItem(
-        "aio:open-client-projects",
-        JSON.stringify({ projectId: ownedProjects.length === 1 ? ownedProjects[0]!.id : null }),
-      );
+      sessionStorage.removeItem("aio:master-account-return");
+      sessionStorage.removeItem("aio:open-client-projects");
+    } catch { /* session storage may be unavailable in a privacy-restricted browser */ }
+  };
+
+  const completeViewAccount = (target: ViewAccountTarget) => {
+    sessionStorage.setItem("aio:master-account-return", JSON.stringify({ section: target.returnSection }));
+    sessionStorage.setItem(
+      "aio:open-client-projects",
+      JSON.stringify({ username: target.username, projectId: target.projectId }),
+    );
+    window.location.replace("/");
+  };
+
+  type ViewAccountReconciliation = "matched" | "mismatch" | "unavailable";
+  const reconcileViewAccount = async (target: ViewAccountTarget): Promise<ViewAccountReconciliation> => {
+    try {
+      const response = await fetch(`${apiBase()}/api/platform/me`, { credentials: "include" });
+      if (!response.ok) return "unavailable";
+      const data = await response.json() as {
+        account?: { username?: string } | null;
+        impersonating?: { by?: string } | null;
+      };
+      const accountUsername = data.account?.username?.trim().toLowerCase();
+      const operatorUsername = data.impersonating?.by?.trim().toLowerCase();
+      if (
+        accountUsername === target.username.trim().toLowerCase() &&
+        operatorUsername === target.originalUsername.trim().toLowerCase()
+      ) {
+        return "matched";
+      }
+      return "mismatch";
     } catch {
-      // Navigation still works if storage is unavailable.
+      return "unavailable";
     }
-    void serverImpersonate(username)
-      .then((result) => {
-        if (!result.ok) {
-          setImpersonateError(result.error);
-          setImpersonatingUsername(null);
+  };
+
+  const showViewAccountFailure = (
+    target: ViewAccountTarget,
+    error: unknown,
+    switched: boolean,
+    uncertain = !switched,
+  ) => {
+    if (!switched) clearViewAccountHandoff();
+    const message = error instanceof Error
+      ? error.message
+      : typeof error === "string" && error
+        ? error
+        : "Failed to view this account.";
+    setImpersonateError(message);
+    setImpersonatingUsername(null);
+    setViewAccountRetry({ ...target, switched, uncertain });
+    viewAccountLockRef.current = false;
+  };
+
+  const navigateToViewAccount = async (
+    username: string,
+    originalUsername = session.username,
+    returnSection: string = section,
+  ) => {
+    if (viewAccountLockRef.current) return false;
+    const ownedProjects = projectsByOwner(username);
+    const target: ViewAccountTarget = {
+      username,
+      projectId: ownedProjects.length === 1 ? ownedProjects[0]!.id : null,
+      returnSection,
+      originalUsername,
+    };
+    viewAccountLockRef.current = true;
+    setImpersonateError(null);
+    setViewAccountRetry(null);
+    setImpersonatingUsername(username);
+    clearViewAccountHandoff();
+
+    let switched = false;
+    try {
+      const result = await serverImpersonate(username);
+      if (!result.ok) {
+        const reconciliation = await reconcileViewAccount(target);
+        if (reconciliation === "matched") {
+          switched = true;
+          completeViewAccount(target);
+          return true;
+        }
+        showViewAccountFailure(target, result.error, false, true);
+        return false;
+      }
+      switched = true;
+      completeViewAccount(target);
+      return true;
+    } catch (error) {
+      if (!switched) {
+        const reconciliation = await reconcileViewAccount(target);
+        if (reconciliation === "matched") {
+          switched = true;
+          try {
+            completeViewAccount(target);
+            return true;
+          } catch (recoveryError) {
+            showViewAccountFailure(target, recoveryError, true, false);
+            return false;
+          }
+        }
+      }
+      showViewAccountFailure(target, error, switched);
+      return false;
+    }
+  };
+
+  const handleRetryViewAccount = () => {
+    if (viewAccountLockRef.current || !viewAccountRetry) return;
+    const target = viewAccountRetry;
+    if (!target.switched) {
+      if (!target.uncertain) {
+        void navigateToViewAccount(target.username, target.originalUsername, target.returnSection);
+        return;
+      }
+
+      // An impersonation request can set the cookie before its response is
+      // lost. Reconcile every uncertain retry before issuing another switch.
+      viewAccountLockRef.current = true;
+      setImpersonateError(null);
+      setViewAccountRetry(null);
+      setImpersonatingUsername(target.username);
+      void reconcileViewAccount(target).then((reconciliation) => {
+        if (reconciliation === "matched") {
+          try {
+            completeViewAccount(target);
+          } catch (error) {
+            showViewAccountFailure(target, error, true, false);
+          }
           return;
         }
-        // App.tsx consumes aio:open-client-projects after the reload, skips the
-        // viewed account's platform/login screen, and opens its sole project
-        // directly (or its project hub when there is no unambiguous target).
-        window.location.replace("/");
-      })
-      .catch(() => {
-        setImpersonateError("Failed to view this account.");
-        setImpersonatingUsername(null);
+        if (reconciliation === "unavailable") {
+          showViewAccountFailure(
+            target,
+            "We could not confirm the account switch. Try again.",
+            false,
+            true,
+          );
+          return;
+        }
+        viewAccountLockRef.current = false;
+        void navigateToViewAccount(target.username, target.originalUsername, target.returnSection);
       });
+      return;
+    }
+
+    // The server session is already the target account. Retry only storage
+    // handoff and reload; do not create a nested impersonation.
+    viewAccountLockRef.current = true;
+    setImpersonateError(null);
+    setViewAccountRetry(null);
+    setImpersonatingUsername(target.username);
+    try {
+      completeViewAccount(target);
+    } catch (error) {
+      showViewAccountFailure(target, error, true, false);
+    }
+  };
+
+  const handleViewAccount = (username: string) => {
+    void navigateToViewAccount(username);
   };
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -1527,6 +1674,25 @@ export function UsersAdminPage({
                       : `Support (${supportOutstandingCount} ${supportOutstandingCount === 1 ? "ticket" : "tickets"} outstanding)`}
                   </button>
                 )}
+              </div>
+            )}
+
+            {impersonateError && viewAccountRetry && (
+              <div
+                role="alert"
+                className="flex flex-wrap items-center gap-3 rounded-xl px-4 py-3"
+                style={{ background: "rgba(200,73,122,0.07)", border: `1px solid ${accent}40` }}
+              >
+                <p className="aio-type-supporting flex-1 min-w-[220px]" style={{ color: accent }}>{impersonateError}</p>
+                <button
+                  type="button"
+                  onClick={handleRetryViewAccount}
+                  disabled={impersonatingUsername !== null}
+                  className="aio-button aio-button--outline aio-button--compact"
+                  style={{ color: accent, borderColor: `${accent}60` }}
+                >
+                  <Repeat size={12} /> Retry view account
+                </button>
               </div>
             )}
             

@@ -374,7 +374,12 @@ vi.mock("../lib/stripe-client", () => ({
 import { db, platformAccountsTable, platformCompaniesTable, platformUsersTable, platformMembershipsTable, platformMetaTable, projectsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
-import { hashPassword, createPlatformSession, PLATFORM_COOKIE } from "../lib/platform-auth";
+import {
+  hashPassword,
+  createPlatformSession,
+  PLATFORM_COOKIE,
+  PLATFORM_IMPERSONATION_STASH_COOKIE,
+} from "../lib/platform-auth";
 import { resolvePlatformAccount } from "../middleware/platform-auth";
 import billingRouter from "./billing";
 import {
@@ -408,13 +413,17 @@ let baseUrl: string;
 
 async function api(
   path: string,
-  opts: { method?: string; body?: unknown; sid?: string } = {},
+  opts: { method?: string; body?: unknown; sid?: string; stashSid?: string } = {},
 ): Promise<{ status: number; json: any }> {
+  const cookies = [
+    opts.sid ? `${PLATFORM_COOKIE}=${opts.sid}` : null,
+    opts.stashSid ? `${PLATFORM_IMPERSONATION_STASH_COOKIE}=${opts.stashSid}` : null,
+  ].filter(Boolean).join("; ");
   const res = await fetch(`${baseUrl}${path}`, {
     method: opts.method ?? (opts.body !== undefined ? "POST" : "GET"),
     headers: {
       "content-type": "application/json",
-      ...(opts.sid ? { cookie: `${PLATFORM_COOKIE}=${opts.sid}` } : {}),
+      ...(cookies ? { cookie: cookies } : {}),
     },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
@@ -945,13 +954,30 @@ describe("billing routes", () => {
   });
 
   it("blocks agency-managed partner clients from all billing routes", async () => {
-    await seedWorkspace("managing-agency", "owner@magency.test");
+    // A managed client session is rejected unless it is the target of a
+    // currently-live parent view-as session. Keep the parent session in the
+    // stash cookie so these assertions exercise the billing guards (403),
+    // rather than middleware's unauthenticated 401.
+    const { sid: parentSid } = await seedWorkspace("managing-agency", "owner@magency.test");
     const { sid } = await seedWorkspace("managed-client", "owner@mclient.test", {
       accountRole: "client",
       parent: "managing-agency",
     });
-    expect((await api("/api/platform/billing/subscription", { sid })).status).toBe(403);
-    expect((await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } })).status).toBe(403);
+    expect(
+      (await api("/api/platform/billing/subscription", { sid, stashSid: parentSid })).status,
+    ).toBe(403);
+    expect(
+      (await api("/api/platform/billing/checkout", {
+        sid,
+        stashSid: parentSid,
+        body: { frequency: "annual" },
+      })).status,
+    ).toBe(403);
+
+    // A legacy target session without a live parent stash is intentionally
+    // invalidated at the auth boundary, so protected routes return 401.
+    const legacySid = await createPlatformSession("managed-client", null, null, null);
+    expect((await api("/api/platform/billing/subscription", { sid: legacySid })).status).toBe(401);
   });
 
   it("blocks viewer/content members from billing routes", async () => {
@@ -1803,14 +1829,31 @@ describe("portal and invoices", () => {
     expect((await api("/api/platform/billing/project-checkout", { sid, body: { tier: "max" } })).status).toBe(403);
     expect((await api("/api/platform/billing/project-tier", { sid, body: { projectId: "x", tier: "max" } })).status).toBe(403);
 
-    await seedWorkspace("guard-agency", "owner@guardagency.test");
+    const { sid: parentSid } = await seedWorkspace("guard-agency", "owner@guardagency.test");
     const managed = await seedWorkspace("guard-managed", "owner@guardmanaged.test", {
       accountRole: "client",
       parent: "guard-agency",
     });
-    expect((await api("/api/platform/billing/portal", { sid: managed.sid, method: "POST" })).status).toBe(403);
-    expect((await api("/api/platform/billing/invoices", { sid: managed.sid })).status).toBe(403);
-    expect((await api("/api/platform/billing/project-checkout", { sid: managed.sid, body: { tier: "max" } })).status).toBe(403);
+    expect(
+      (await api("/api/platform/billing/portal", {
+        sid: managed.sid,
+        stashSid: parentSid,
+        method: "POST",
+      })).status,
+    ).toBe(403);
+    expect(
+      (await api("/api/platform/billing/invoices", { sid: managed.sid, stashSid: parentSid })).status,
+    ).toBe(403);
+    expect(
+      (await api("/api/platform/billing/project-checkout", {
+        sid: managed.sid,
+        stashSid: parentSid,
+        body: { tier: "max" },
+      })).status,
+    ).toBe(403);
+
+    const legacySid = await createPlatformSession("guard-managed", null, null, null);
+    expect((await api("/api/platform/billing/invoices", { sid: legacySid })).status).toBe(401);
   });
 
   it("subscription payload includes usage, projects and tier prices", async () => {

@@ -19,6 +19,7 @@ import {
   getVisibleUsernames as getVisibleLocalUsernames,
   serverLogin,
   serverLogout,
+  serverExitImpersonation,
   serverAssignOwner,
   serverGetSessions,
   refreshAccountsCache,
@@ -587,13 +588,45 @@ function App() {
     };
   }, [resyncProjects]);
 
+  const openProjectBilling = async () => {
+    if (session?.agencyManagedClient) {
+      const navigateToAgencyBilling = () => {
+        sessionStorage.removeItem("aio:open-client-projects");
+        window.location.replace(appBase() + "?aio_exit_impersonation=1&account_section=billing");
+      };
+      const reconcileExit = async () => {
+        if (!agencyImpersonatedBy) return false;
+        const response = await fetch(`${apiBase()}/api/platform/me`, { credentials: "include" });
+        if (!response.ok) return false;
+        const me = await response.json();
+        if (me.account?.username !== agencyImpersonatedBy || me.impersonating) return false;
+        navigateToAgencyBilling();
+        return true;
+      };
+      try {
+        const result = await serverExitImpersonation();
+        if (!result.ok) {
+          if (await reconcileExit()) return;
+          window.alert(result.error || "Could not return to your agency. Use Back to my agency account to retry.");
+          return;
+        }
+        navigateToAgencyBilling();
+      } catch {
+        try { if (await reconcileExit()) return; } catch { /* leave the current page recoverable */ }
+        window.alert("Could not return to your agency billing. Use Back to my agency account to retry.");
+      }
+      return;
+    }
+    setAccountSection("billing");
+    transitionToView("sub-accounts");
+  };
+
   const beginCreateProject = () => requireSessionThen(() => {
     void (async () => {
       if (session?.role !== "admin") {
         const allowance = await fetchProjectAllowance();
         if (allowance?.atLimit) {
-          setAccountSection("billing");
-          transitionToView("sub-accounts");
+          await openProjectBilling();
           return;
         }
       }
@@ -646,6 +679,7 @@ function App() {
         pushResult.error ??
           "You've reached your project allowance. Add another project workspace from the Billing section of your account settings.",
       );
+      await openProjectBilling();
       return;
     }
   };
@@ -733,9 +767,8 @@ function App() {
   }, [storedProjects, session]);
 
   // "Client projects" shortcut (agency partners): SubAccountsPage stashes a
-  // flag in sessionStorage before the impersonation reload. Once the session
-  // is confirmed, land on the projects hub - and when the client has exactly
-  // one project, open it directly as soon as the sync makes it visible.
+  // workspace-bound destination before the authorized transition reload.
+  // Row actions always open the hub; only explicit project links open a project.
   const pendingClientProjectId = useRef<string | null>(null);
   // The shortcut is clicked from the account settings page, whose URL carries
   // ?account_section=clients. That param survives the impersonation reload and
@@ -751,21 +784,17 @@ function App() {
     } catch { /* non-fatal */ }
     if (raw === null) return;
     try {
-      const parsed = JSON.parse(raw) as { projectId?: string | null };
+      const parsed = JSON.parse(raw) as { username?: string; projectId?: string | null };
+      if (!parsed || parsed.username !== session.username) return;
       pendingClientProjectId.current = typeof parsed.projectId === "string" ? parsed.projectId : null;
     } catch {
       pendingClientProjectId.current = null;
+      return;
     }
-    // Only neutralise the "clients" section leftover from the page the
-    // shortcut was clicked on - a genuine email deep link to another section
-    // (security, billing...) must still navigate even if a stale stash exists.
-    setAccountSection((prev) => {
-      if (prev === "clients") {
-        suppressAccountSectionNav.current = true;
-        return null;
-      }
-      return prev;
-    });
+    suppressAccountSectionNav.current = true;
+    setAccountSection(null);
+    setActiveClient(null);
+    setActiveProjectId(null);
     transitionToView("platform");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, session]);
@@ -870,7 +899,7 @@ function App() {
   const reloadPendingInvites = useCallback(() => {
     const username = session?.username ?? null;
     const generation = ++inviteRequestGeneration.current;
-    if (!username) {
+    if (!username || session?.agencyManagedClient) {
       setPendingInvites([]);
       setPendingInvitesError(null);
       setPendingInvitesLoading(false);
@@ -889,7 +918,7 @@ function App() {
         setPendingInvitesError(r.error ?? "Failed to load invitations.");
       }
     });
-  }, [session?.username]);
+  }, [session?.username, session?.agencyManagedClient]);
   useEffect(() => {
     // Invalidate all in-flight responses and immediately remove data that
     // belonged to the prior identity before loading this identity's invites.

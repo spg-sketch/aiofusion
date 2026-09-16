@@ -22,6 +22,7 @@ import {
   incrementSessionVersion,
   getCompanyBySlug,
   getAccount,
+  isAgencyPartnerClient,
   normalizeRole,
   getVisibleUsernames,
   type MembershipRole,
@@ -1375,6 +1376,10 @@ router.get("/platform/invite/:token", async (req: Request, res: Response) => {
       res.status(404).json({ error: INVITE_INVALID_MESSAGES[reason], reason });
       return;
     }
+    if (await isAgencyPartnerClient(invite.companySlug)) {
+      res.status(403).json({ error: "This account is managed by its agency and does not accept direct team sign-ins." });
+      return;
+    }
     // Owner is never an invitation role, including rows created by older or
     // corrupted code paths. Promotion is only for an existing member.
     if (normalizeMembershipRole(invite.role) === "owner") {
@@ -1458,6 +1463,10 @@ router.post("/platform/invite/accept", loginLimiter, async (req: Request, res: R
     if (!invite) {
       const reason = await getInviteInvalidReason(token);
       res.status(404).json({ error: INVITE_INVALID_MESSAGES[reason], reason });
+      return;
+    }
+    if (await isAgencyPartnerClient(invite.companySlug)) {
+      res.status(403).json({ error: "This account is managed by its agency and does not accept direct team sign-ins." });
       return;
     }
     if (normalizeMembershipRole(invite.role) === "owner") {

@@ -317,7 +317,12 @@ import {
   platformPasswordResetsTable,
 } from "@workspace/db";
 import { eq, like } from "drizzle-orm";
-import { hashPassword, verifyPassword } from "../lib/platform-auth";
+import {
+  hashPassword,
+  verifyPassword,
+  createPlatformSession,
+  getPlatformSessionAccount,
+} from "../lib/platform-auth";
 import { resolvePlatformAccount } from "../middleware/platform-auth";
 import platformRouter from "./platform";
 
@@ -334,8 +339,7 @@ function buildApp() {
   return app;
 }
 
-async function startServer(): Promise<{ server: Server; baseUrl: string }> {
-  const app = buildApp();
+async function startServer(app = buildApp()): Promise<{ server: Server; baseUrl: string }> {
   return new Promise((resolve) => {
     const server = app.listen(0, () => {
       const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -1092,10 +1096,11 @@ describe("POST /api/platform/accounts/access", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Agency partner clients: permanently managed. Clients whose PARENT account
+// Agency partner clients: permanently managed. Children whose PARENT account
 // has role "agency" (Agency/Partner) can never be given sign-in access, never
 // have a password set by their parent, and are always created as managed
-// regardless of what the request body says.
+// regardless of what the request body says. The legacy "user" child role is
+// covered alongside the canonical "client" role.
 // ---------------------------------------------------------------------------
 describe("agency partner clients are permanently managed", () => {
   let server: Server;
@@ -1123,6 +1128,8 @@ describe("agency partner clients are permanently managed", () => {
 
   afterEach(async () => {
     await stopServer(server);
+    await db.delete(platformSessionsTable).where(like(platformSessionsTable.sid, "ap-%"));
+    await db.delete(platformSessionsTable).where(like(platformSessionsTable.username, "ap-%"));
     const [contactUser] = await db
       .select()
       .from(platformUsersTable)
@@ -1382,6 +1389,157 @@ describe("agency partner clients are permanently managed", () => {
       .where(eq(platformUsersTable.id, u!.id))
       .limit(1);
     expect(verifyPassword("OldPass12345", userRow!.passwordHash!)).toBe(true);
+  });
+
+  it("legacy password login is refused without relying on the managed flag", async () => {
+    const res = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: PARTNER_CLIENT, password: "ClientPass123" }),
+    });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error?: string }).error).toMatch(/managed by your agency/i);
+    expect(
+      await db.select().from(platformSessionsTable).where(eq(platformSessionsTable.username, PARTNER_CLIENT)),
+    ).toHaveLength(0);
+  });
+
+  it("platform_users password login is refused for a partner client without the managed flag", async () => {
+    const [user] = await db
+      .insert(platformUsersTable)
+      .values({ email: PARTNER_CONTACT, passwordHash: hashPassword("ClientPass123"), emailVerified: true })
+      .returning();
+    const [company] = await db
+      .insert(platformCompaniesTable)
+      .values({ slug: PARTNER_CLIENT, role: "client", status: "active" })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: user!.id,
+      companyId: company!.id,
+      companySlug: PARTNER_CLIENT,
+      role: "owner",
+    });
+
+    const res = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: PARTNER_CONTACT, password: "ClientPass123" }),
+    });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error?: string }).error).toMatch(/managed by your agency/i);
+    expect(
+      await db.select().from(platformSessionsTable).where(eq(platformSessionsTable.username, PARTNER_CLIENT)),
+    ).toHaveLength(0);
+  });
+
+  it("leftover partner-client sessions are rejected, while an explicitly authorized view can resolve them", async () => {
+    const sid = await createPlatformSession(PARTNER_CLIENT);
+    expect(await getPlatformSessionAccount(sid)).toBeNull();
+
+    const viewedSid = await createPlatformSession(PARTNER_CLIENT);
+    const viewed = await getPlatformSessionAccount(viewedSid, { allowAgencyPartnerClient: true });
+    expect(viewed?.username).toBe(PARTNER_CLIENT);
+    expect(viewed?.role).toBe("client");
+  });
+
+  it("legacy user-role children of an agency are also refused login and session resolution", async () => {
+    await db
+      .update(platformAccountsTable)
+      .set({ role: "user" })
+      .where(eq(platformAccountsTable.username, PARTNER_CLIENT));
+
+    const login = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: PARTNER_CLIENT, password: "ClientPass123" }),
+    });
+    expect(login.status).toBe(403);
+    expect(((await login.json()) as { error?: string }).error).toMatch(/managed by your agency/i);
+
+    const sid = await createPlatformSession(PARTNER_CLIENT);
+    expect(await getPlatformSessionAccount(sid)).toBeNull();
+  });
+
+  it("/platform/me identifies the agency operator during an authorized view-as session", async () => {
+    await db.insert(platformSessionsTable).values({
+      sid: "ap-operator-sid",
+      username: PARTNER,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+    const res = await fetch(`${baseUrl}/api/platform/me`, {
+      headers: {
+        "x-test-account": JSON.stringify({ username: PARTNER_CLIENT, role: "client", userId: null }),
+        cookie: "aio_admin_sid=ap-operator-sid",
+      },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      account?: { username?: string };
+      sessionIdentity?: { userName?: string; userEmail?: string | null };
+      impersonating?: { by?: string };
+    };
+    expect(body.account?.username).toBe(PARTNER_CLIENT);
+    expect(body.impersonating?.by).toBe(PARTNER);
+    expect(body.sessionIdentity?.userName).toBe(PARTNER);
+    expect(body.sessionIdentity?.userEmail).toBeNull();
+  });
+
+  it("real middleware requires the stash actor to manage the cookie target", async () => {
+    await stopServer(server);
+    const actualMiddleware = await vi.importActual<typeof import("../middleware/platform-auth")>(
+      "../middleware/platform-auth",
+    );
+    const probeApp = express();
+    probeApp.use(cookieParser());
+    probeApp.use(actualMiddleware.resolvePlatformAccount);
+    probeApp.get("/probe", (req, res) => {
+      res.json({ username: req.account?.username ?? null });
+    });
+    ({ server, baseUrl } = await startServer(probeApp));
+
+    await db.insert(platformAccountsTable).values({
+      username: "ap-unrelated-agency",
+      passwordHash: hashPassword("unrelatedpass1"),
+      role: "agency",
+      status: "active",
+    });
+    await db.insert(platformSessionsTable).values([
+      {
+        sid: "ap-authorized-actor",
+        username: PARTNER,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+      {
+        sid: "ap-authorized-target",
+        username: PARTNER_CLIENT,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+      {
+        sid: "ap-unrelated-actor",
+        username: "ap-unrelated-agency",
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+      {
+        sid: "ap-unrelated-target",
+        username: PARTNER_CLIENT,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    ]);
+
+    const authorized = await fetch(`${baseUrl}/probe`, {
+      headers: { cookie: "aio_sid=ap-authorized-target; aio_admin_sid=ap-authorized-actor" },
+    });
+    expect(authorized.status).toBe(200);
+    expect(((await authorized.json()) as { username?: string }).username).toBe(PARTNER_CLIENT);
+
+    const unrelated = await fetch(`${baseUrl}/probe`, {
+      headers: { cookie: "aio_sid=ap-unrelated-target; aio_admin_sid=ap-unrelated-actor" },
+    });
+    expect(unrelated.status).toBe(200);
+    expect(((await unrelated.json()) as { username?: string }).username).toBeNull();
+    expect(
+      await db.select().from(platformSessionsTable).where(eq(platformSessionsTable.sid, "ap-unrelated-target")),
+    ).toHaveLength(0);
   });
 
   it("GET /platform/me reports agencyManagedClient=true for the client and false for the parent", async () => {

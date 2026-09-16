@@ -424,7 +424,123 @@ describe("UsersAdminPage - URL-backed section prop", () => {
     fireEvent.click(screen.getByRole("button", { name: "View account" }));
     await waitFor(() => expect(mockServerImpersonate).toHaveBeenCalledWith("client-one"));
     expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({
+      username: "client-one",
       projectId: "project-one",
+    });
+  });
+
+  it.each([
+    ["no projects", []],
+    ["multiple projects", [
+      { id: "project-one", name: "Project One", owner: "client-one" },
+      { id: "project-two", name: "Project Two", owner: "client-one" },
+    ]],
+  ])("writes a hub handoff with a null projectId for %s", async (_label, projects) => {
+    mockGetLocalUsers.mockReturnValue([
+      { ...mkUser("admin"), role: "admin" },
+      { ...mkUser("client-one"), role: "client" },
+    ]);
+    mockLoadStoredProjects.mockReturnValue(projects);
+    render(
+      <UsersAdminPage
+        session={ADMIN_SESSION}
+        initialSection="clients"
+        onBack={() => {}}
+        onAssignProjectOwner={async () => ({ ok: true })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "View account" }));
+    await waitFor(() => expect(mockServerImpersonate).toHaveBeenCalledWith("client-one"));
+    await waitFor(() => {
+      expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({
+        username: "client-one",
+        projectId: null,
+      });
+    });
+  });
+
+  it("reconciles a response-lost View account switch before writing the handoff", async () => {
+    sessionStorage.setItem("aio:master-account-return", JSON.stringify({ section: "agencies" }));
+    sessionStorage.setItem("aio:open-client-projects", JSON.stringify({ username: "old-client", projectId: "old-project" }));
+    mockGetLocalUsers.mockReturnValue([
+      { ...mkUser("admin"), role: "admin" },
+      { ...mkUser("client-one"), role: "client" },
+    ]);
+    mockLoadStoredProjects.mockReturnValue([]);
+    mockServerImpersonate.mockRejectedValueOnce(new Error("Response lost after switch"));
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      if (String(input).includes("/api/platform/me")) {
+        return new Response(JSON.stringify({
+          account: { username: "client-one" },
+          impersonating: { by: "admin" },
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ rows: [] }), { status: 200 });
+    });
+
+    render(
+      <UsersAdminPage
+        session={ADMIN_SESSION}
+        initialSection="clients"
+        onBack={() => {}}
+        onAssignProjectOwner={async () => ({ ok: true })}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "View account" }));
+
+    await waitFor(() => expect(mockServerImpersonate).toHaveBeenCalledOnce());
+    await waitFor(() => {
+      expect(JSON.parse(sessionStorage.getItem("aio:master-account-return")!)).toEqual({ section: "clients" });
+      expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({
+        username: "client-one",
+        projectId: null,
+      });
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("keeps an unavailable View account reconciliation retryable before another impersonation", async () => {
+    mockGetLocalUsers.mockReturnValue([
+      { ...mkUser("admin"), role: "admin" },
+      { ...mkUser("client-one"), role: "client" },
+    ]);
+    mockLoadStoredProjects.mockReturnValue([]);
+    mockServerImpersonate.mockRejectedValueOnce(new Error("Response lost after switch"));
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      if (String(input).includes("/api/platform/me")) return new Response("", { status: 503 });
+      return new Response(JSON.stringify({ rows: [] }), { status: 200 });
+    });
+
+    render(
+      <UsersAdminPage
+        session={ADMIN_SESSION}
+        initialSection="clients"
+        onBack={() => {}}
+        onAssignProjectOwner={async () => ({ ok: true })}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "View account" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Response lost after switch"));
+    expect(sessionStorage.getItem("aio:open-client-projects")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry view account" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("could not confirm the account switch"));
+    expect(mockServerImpersonate).toHaveBeenCalledOnce();
+
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      if (String(input).includes("/api/platform/me")) {
+        return new Response(JSON.stringify({ account: { username: "admin" }, impersonating: null }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ rows: [] }), { status: 200 });
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Retry view account" }));
+    await waitFor(() => expect(mockServerImpersonate).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({
+        username: "client-one",
+        projectId: null,
+      });
     });
   });
 });

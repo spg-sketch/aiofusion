@@ -25,6 +25,13 @@ import "./SubAccountsPage.css";
 import { type Session as LocalSession, type User as LocalUser, type Role, getSubAccounts as getLocalSubAccounts, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverSetSeatCap, refreshAccountsCache, serverImpersonate, serverSwitchToMaster, serverChangeAccountType, serverSetClientAccess, canCreateSubAccounts } from "../lib/auth";
 /** Section ids for the left-hand settings navigation. */
 type SettingsSection = "profile" | "security" | "billing" | "team" | "clients" | "archived" | "assign";
+type NavigationTarget = {
+  username: string;
+  projectId: string | null;
+  openProjectHub: boolean;
+  originalUsername: string;
+};
+type NavigationRetry = NavigationTarget & { switched: boolean; uncertain: boolean };
 
 function SubAccountsPage({
   session,
@@ -74,7 +81,6 @@ function SubAccountsPage({
   const accent = "#C8497A";
   const accentSoft = "#FBE3ED";
   const [tick, setTick] = useState(0);
-  const [checkingAllowanceFor, setCheckingAllowanceFor] = useState<string | null>(null);
   const [projectAllowanceSummary, setProjectAllowanceSummary] = useState<{ used: number; total: number } | null>(null);
   const [reconciliationAudit, setReconciliationAudit] = useState<ProjectReconciliationAudit | null>(null);
   const [reconciliationError, setReconciliationError] = useState<string | null>(null);
@@ -109,7 +115,7 @@ function SubAccountsPage({
       label: "My Account",
       items: [
         { id: "profile" as const, label: "Profile & workspace", icon: User },
-        ...(onSignOut ? [{ id: "security" as const, label: "Sign-in & security", icon: ShieldCheck }] : []),
+        ...(onSignOut && !session.agencyManagedClient ? [{ id: "security" as const, label: "Sign-in & security", icon: ShieldCheck }] : []),
         ...(canSeeBilling ? [{ id: "billing" as const, label: "Billing details", icon: FileText }] : []),
         ...(canSeeTeam ? [{ id: "team" as const, label: "Team members", icon: Users }] : []),
       ],
@@ -205,6 +211,11 @@ function SubAccountsPage({
   const [newLogoDataUrl, setNewLogoDataUrl] = useState<string | null>(null);
   const [logoProcessing, setLogoProcessing] = useState(false);
   const [addingClient, setAddingClient] = useState(false);
+  const [navigationRetry, setNavigationRetry] = useState<NavigationRetry | null>(null);
+  // A switch changes the server session before the browser reloads. Keep a
+  // lock while that transition is in flight so a double click cannot start a
+  // second switch (or overwrite the first handoff).
+  const navigationLockRef = useRef(false);
   // Guards against a slow earlier image load overwriting a later selection.
   const logoRequestRef = useRef(0);
 
@@ -654,6 +665,7 @@ function SubAccountsPage({
     e.preventDefault();
     setAddError(null);
     setAddSuccess(null);
+    setNavigationRetry(null);
     const companyName = newCompanyName.trim();
     if (!companyName) { setAddError("Enter the client's company name."); return; }
     let website = newWebsite.trim();
@@ -676,16 +688,20 @@ function SubAccountsPage({
     const effectiveManaged = isAgencyPartner || newManaged;
     setAddingClient(true);
     void (async () => {
-      const result = await serverAddUser(usernameSuggestion, effectiveManaged ? "" : newPassword, "client", companyName, {
-        website,
-        contactName: newContactName.trim(),
-        contactEmail,
-        autoUsername: true,
-        ...(newLogoDataUrl ? { logoDataUrl: newLogoDataUrl } : {}),
-        ...(effectiveManaged ? { managed: true } : {}),
-      });
-      setAddingClient(false);
-      if (result.ok) {
+      try {
+        const result = await serverAddUser(usernameSuggestion, effectiveManaged ? "" : newPassword, "client", companyName, {
+          website,
+          contactName: newContactName.trim(),
+          contactEmail,
+          autoUsername: true,
+          ...(newLogoDataUrl ? { logoDataUrl: newLogoDataUrl } : {}),
+          ...(effectiveManaged ? { managed: true } : {}),
+        });
+        if (!result.ok) {
+          setAddError(result.error);
+          return;
+        }
+
         // welcomeLinkCreated === false means the account exists but the
         // set-password link could not be issued - warn instead of implying
         // the client received a working sign-in link.
@@ -694,7 +710,7 @@ function SubAccountsPage({
           `Created ${isAgencyPartner ? "Client Project" : "client account"} '${result.username}' for ${companyName}.` +
           (effectiveManaged
             ? (isAgencyPartner
-                ? " Use 'Client projects' to work on their behalf."
+                ? " Opening Project Hub."
                 : " This is a managed account - the client has not been given sign-in access. Use 'View account' to work on their behalf.")
             : linkFailed
               ? ` However, a set-password link could not be created for ${contactEmail}. Any email they receive will not include a sign-in link - use 'Grant access' on the account, or share a password with them directly.`
@@ -708,61 +724,217 @@ function SubAccountsPage({
         setNewManaged(false);
         setNewLogoDataUrl(null);
         refresh();
-      } else {
-        setAddError(result.error);
+
+        // Agency clients are workspaces managed by the agency, not separate
+        // client logins. The server-returned username is authoritative (the
+        // server may have had to make the suggested username unique), so use
+        // it for the authorized workspace transition and open its empty hub.
+        if (isAgencyPartner) {
+          await handleOpenClientProjects(result.username, null);
+        }
+      } catch (error) {
+        setAddError(error instanceof Error ? error.message : "Failed to create the client account.");
+      } finally {
+        setAddingClient(false);
       }
     })();
   };
 
-  const handleEnterAccount = (username: string) => {
+  const clearClientProjectHandoff = () => {
+    try {
+      sessionStorage.removeItem("aio:open-client-projects");
+    } catch { /* session storage may be unavailable in a privacy-restricted browser */ }
+  };
+
+  const restoreBaseUrlBeforeReload = () => {
+    const baseUrl = import.meta.env.BASE_URL || "/";
+    window.history.replaceState(window.history.state, "", baseUrl);
+  };
+
+  const completeNavigation = (target: NavigationTarget) => {
+    if (target.openProjectHub) {
+      sessionStorage.setItem(
+        "aio:open-client-projects",
+        JSON.stringify({ username: target.username, projectId: target.projectId }),
+      );
+      restoreBaseUrlBeforeReload();
+    }
+    window.location.reload();
+  };
+
+  type TransitionReconciliation = "matched" | "mismatch" | "unavailable";
+  const reconcileTransition = async (target: NavigationTarget): Promise<TransitionReconciliation> => {
+    try {
+      const response = await fetch(`${apiBase()}/api/platform/me`, { credentials: "include" });
+      if (!response.ok) return "unavailable";
+      const data = await response.json() as {
+        account?: { username?: string } | null;
+        impersonating?: { by?: string } | null;
+      };
+      const accountUsername = data.account?.username?.trim().toLowerCase();
+      const operatorUsername = data.impersonating?.by?.trim().toLowerCase();
+      if (
+        accountUsername === target.username.trim().toLowerCase() &&
+        operatorUsername === target.originalUsername.trim().toLowerCase()
+      ) {
+        return "matched";
+      }
+      return "mismatch";
+    } catch {
+      return "unavailable";
+    }
+  };
+
+  const showNavigationFailure = (
+    target: NavigationTarget,
+    error: unknown,
+    switched: boolean,
+    uncertain = !switched,
+  ) => {
+    // A failed server request must never leave a previous workspace target
+    // waiting to be consumed. Once the switch itself succeeded, preserve the
+    // new handoff so retry can finish locally without another impersonation.
+    if (!switched) clearClientProjectHandoff();
+    const message = error instanceof Error
+      ? error.message
+      : typeof error === "string" && error
+        ? error
+        : "Failed to enter this account.";
+    setEnterError(message);
+    setEnteringUsername(null);
+    setNavigationRetry({ ...target, switched, uncertain });
+    navigationLockRef.current = false;
+  };
+
+  /**
+   * Switches into an account and, for an agency client, leaves App a
+   * one-time project-hub handoff. The handoff is deliberately written only
+   * after the authorized server transition succeeds. Clearing it first keeps
+   * an earlier workspace target from being replayed after a failed request.
+   */
+  const navigateToAccount = async (
+    username: string,
+    projectId: string | null,
+    openProjectHub: boolean,
+    originalUsername = session.username,
+  ) => {
+    if (navigationLockRef.current) return false;
+    const target: NavigationTarget = { username, projectId, openProjectHub, originalUsername };
+    navigationLockRef.current = true;
     setEnterError(null);
+    setNavigationRetry(null);
     setEnteringUsername(username);
-    void serverImpersonate(username)
-      .then((result) => {
-        if (!result.ok) {
-          setEnterError(result.error);
-          setEnteringUsername(null);
+    clearClientProjectHandoff();
+
+    let switched = false;
+    try {
+      const result = await serverImpersonate(username);
+      if (!result.ok) {
+        const reconciliation = await reconcileTransition(target);
+        if (reconciliation === "matched") {
+          switched = true;
+          completeNavigation(target);
+          return true;
+        }
+        showNavigationFailure(target, result.error, false, true);
+        return false;
+      }
+      switched = true;
+      completeNavigation(target);
+      return true;
+    } catch (error) {
+      if (!switched) {
+        const reconciliation = await reconcileTransition(target);
+        if (reconciliation === "matched") {
+          switched = true;
+          try {
+            completeNavigation(target);
+            return true;
+          } catch (recoveryError) {
+            showNavigationFailure(target, recoveryError, true, false);
+            return false;
+          }
+        }
+      }
+      showNavigationFailure(target, error, switched);
+      return false;
+    }
+  };
+
+  const handleRetryNavigation = () => {
+    if (navigationLockRef.current || !navigationRetry) return;
+    const target = navigationRetry;
+    if (!target.switched) {
+      if (!target.uncertain) {
+        void navigateToAccount(target.username, target.projectId, target.openProjectHub, target.originalUsername);
+        return;
+      }
+
+      // A failed request may have switched the server cookie before its
+      // response was lost. Reconcile first on every retry. Only a confirmed
+      // mismatch authorises another serverImpersonate request.
+      navigationLockRef.current = true;
+      setEnterError(null);
+      setNavigationRetry(null);
+      setEnteringUsername(target.username);
+      void reconcileTransition(target).then((reconciliation) => {
+        if (reconciliation === "matched") {
+          try {
+            completeNavigation(target);
+          } catch (error) {
+            showNavigationFailure(target, error, true, false);
+          }
           return;
         }
-        window.location.reload();
-      })
-      .catch(() => {
-        setEnterError("Failed to enter this account.");
-        setEnteringUsername(null);
+        if (reconciliation === "unavailable") {
+          showNavigationFailure(
+            target,
+            "We could not confirm the workspace switch. Try again.",
+            false,
+            true,
+          );
+          return;
+        }
+        navigationLockRef.current = false;
+        void navigateToAccount(target.username, target.projectId, target.openProjectHub, target.originalUsername);
       });
+      return;
+    }
+
+    // The server session is already the target workspace. Only retry the
+    // handoff/history/reload steps; calling serverImpersonate again here can
+    // incorrectly attempt a nested switch from inside the client session.
+    navigationLockRef.current = true;
+    setEnterError(null);
+    setNavigationRetry(null);
+    setEnteringUsername(target.username);
+    try {
+      completeNavigation(target);
+    } catch (error) {
+      showNavigationFailure(target, error, true);
+    }
+  };
+
+  const handleEnterAccount = (username: string) => {
+    void navigateToAccount(username, null, false);
   };
 
   // Agency partner shortcut: enter the client's workspace and land on their
-  // projects. A specific target opens directly; otherwise the project hub is
-  // shown so the agency can start the first project or choose between several.
-  // The target is stashed in sessionStorage and consumed by App.tsx after reload.
+  // Project Hub. A specific project chip can still request a direct project.
+  // App consumes the one-time handoff after the successful session reload.
   const handleOpenClientProjects = async (username: string, projectId?: string | null) => {
-    // Existing projects never consume another slot. Starting a first project
-    // must be checked while still in the agency workspace because managed
-    // client workspaces deliberately have no billing access of their own.
-    if (!projectId) {
-      setCheckingAllowanceFor(username);
-      const allowance = await fetchProjectAllowance();
-      setCheckingAllowanceFor(null);
-      if (allowance?.atLimit) {
-        selectSection("billing");
-        return;
-      }
-    }
-    try {
-      sessionStorage.setItem(
-        "aio:open-client-projects",
-        JSON.stringify({ projectId: projectId ?? null }),
-      );
-    } catch { /* non-fatal - lands on the project list instead */ }
-    handleEnterAccount(username);
+    await navigateToAccount(username, projectId ?? null, true);
   };
 
   const handleArchive = (username: string, archive: boolean) => {
     const accountTerm = isAgencyPartner ? "client project" : "client account";
-    const msg = archive
-      ? `Archive ${accountTerm} '${username}'? They will not be able to sign in until restored. Their projects remain visible to you.`
-      : `Restore ${accountTerm} '${username}'? They will be able to sign in again.`;
+    const msg = isAgencyPartner
+      ? archive
+        ? `Archive ${accountTerm} '${username}'? Their projects remain visible to you and can be restored later.`
+        : `Restore ${accountTerm} '${username}'? Their projects will be available in your agency workspace again.`
+      : archive
+        ? `Archive ${accountTerm} '${username}'? They will not be able to sign in until restored. Their projects remain visible to you.`
+        : `Restore ${accountTerm} '${username}'? They will be able to sign in again.`;
     if (!confirm(msg)) return;
     void (async () => {
       const result = await serverArchiveUser(username, archive);
@@ -773,7 +945,10 @@ function SubAccountsPage({
 
   const handleDelete = (username: string) => {
     const accountTerm = isAgencyPartner ? "client project" : "client account";
-    if (!confirm(`Delete ${accountTerm} '${username}'? They will no longer be able to sign in. Their projects are kept and stay visible to you.`)) return;
+    const message = isAgencyPartner
+      ? `Delete ${accountTerm} '${username}'? Their projects are kept and stay visible to you.`
+      : `Delete ${accountTerm} '${username}'? They will no longer be able to sign in. Their projects are kept and stay visible to you.`;
+    if (!confirm(message)) return;
     // Reassign the deleted account's projects to the parent first, so they
     // remain visible after the account (and its place in the user graph) is
     // gone. Visibility is derived from current ownership, so an orphaned owner
@@ -973,6 +1148,24 @@ function SubAccountsPage({
           </div>
 
           <div className="settings-content flex-1 min-w-0 w-full">
+        {enterError && navigationRetry && (
+          <div
+            role="alert"
+            className="mb-6 flex flex-wrap items-center gap-3 rounded-xl px-4 py-3"
+            style={{ background: "rgba(200,73,122,0.07)", border: `1px solid ${accent}40` }}
+          >
+            <p className="aio-type-supporting flex-1 min-w-[220px]" style={{ color: accent }}>{enterError}</p>
+            <button
+              type="button"
+              onClick={handleRetryNavigation}
+              disabled={enteringUsername !== null}
+              className="aio-button aio-button--outline aio-button--compact"
+              style={{ color: accent, borderColor: `${accent}60` }}
+            >
+              <Repeat size={12} /> {navigationRetry.openProjectHub ? "Retry navigation to Project Hub" : "Retry navigation to account"}
+            </button>
+          </div>
+        )}
 
         {section === "profile" && (<>
         {/* ACCOUNT TYPE */}
@@ -1464,7 +1657,7 @@ function SubAccountsPage({
         )}
 
         {/* SIGN-IN & SECURITY (sessions, 2FA, password, deletion) */}
-        {section === "security" && onSignOut && (
+        {section === "security" && onSignOut && !session.agencyManagedClient && (
           <AccountSecurityCard
             session={session}
             onSignOut={onSignOut}
@@ -1693,23 +1886,19 @@ function SubAccountsPage({
                       <div className="flex items-center gap-2 flex-wrap sm:pl-[52px]">
                         <button
                           onClick={() => (isAgencyPartner
-                            ? void handleOpenClientProjects(u.username, owned.length === 1 ? owned[0].id : null)
+                            ? void handleOpenClientProjects(u.username, null)
                             : handleEnterAccount(u.username))}
-                          disabled={enteringUsername === u.username || checkingAllowanceFor === u.username}
+                          disabled={enteringUsername === u.username}
                           className="aio-button aio-button--primary aio-button--compact text-white"
                           style={{ background: accent, opacity: enteringUsername === u.username ? 0.7 : 1 }}
                         >
-                          {enteringUsername === u.username || checkingAllowanceFor === u.username
+                          {enteringUsername === u.username
                             ? <Loader2 size={13} className="animate-spin" />
-                            : isAgencyPartner && owned.length === 0
-                            ? <Plus size={13} />
                             : isAgencyPartner
                             ? <FolderOpen size={13} />
                             : <LogIn size={13} />}
-                          {checkingAllowanceFor === u.username
-                            ? "Checking allowance"
-                            : isAgencyPartner
-                            ? "Go to Client Project"
+                          {isAgencyPartner
+                            ? "Open Project Hub"
                             : u.managed
                             ? "Open account"
                             : "Login as client"}
@@ -1788,9 +1977,6 @@ function SubAccountsPage({
                         </button>
                       </div>
                     </div>
-                    {enterError && enteringUsername === null && (
-                      <p className="aio-type-supporting mt-2 sm:pl-[52px]" style={{ color: accent }}>{enterError}</p>
-                    )}
                     {editingProfile && (
                       <form onSubmit={handleSaveClientProfile} className="mt-3 flex flex-wrap items-center gap-2 sm:pl-[52px]">
                         <input
@@ -1912,7 +2098,9 @@ function SubAccountsPage({
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
             <div className="px-6 py-4 border-b" style={{ borderColor: vars.g200 }}>
                <h2 className="aio-type-section-title" style={{ color: vars.g400 }}>{isAgencyPartner ? "Archived Client Projects" : "Archived clients"} ({archivedSubAccounts.length})</h2>
-               <p className="aio-type-supporting mt-0.5" style={{ color: vars.g400 }}>These accounts cannot sign in. Their projects remain visible to you.</p>
+               <p className="aio-type-supporting mt-0.5" style={{ color: vars.g400 }}>
+                 {isAgencyPartner ? "These Client Projects are archived. Their projects remain visible to you." : "These accounts cannot sign in. Their projects remain visible to you."}
+               </p>
             </div>
             <ul className="divide-y" style={{ borderColor: vars.g200 }}>
               {archivedSubAccounts.map((u) => {

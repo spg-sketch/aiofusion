@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor, cleanup, configure, fireEvent, act, within } from "@testing-library/react";
+import { UsersAdminPage } from "./pages/UsersAdminPage";
 
 // Full-App render spans several async cycles (bootstrapAuth, lazy chunks,
 // Suspense); raise the waitFor budget so slow CI runners don't flake.
@@ -18,6 +19,15 @@ configure({ asyncUtilTimeout: 5000 });
 vi.mock("./lib/contentAi", async (importOriginal) => {
   const mod = await importOriginal<typeof import("./lib/contentAi")>();
   return { ...mod, apiBase: () => "" };
+});
+
+const mockServerExitImpersonation = vi.hoisted(() => vi.fn());
+vi.mock("./lib/auth", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("./lib/auth")>();
+  return {
+    ...mod,
+    serverExitImpersonation: (...args: unknown[]) => mockServerExitImpersonation(...args),
+  };
 });
 
 function makeResponse(body: unknown, status = 200) {
@@ -39,6 +49,64 @@ function agencyMeResponse() {
   });
 }
 
+function clientMeResponse({
+  username = "client-289",
+  agencyManagedClient = false,
+  impersonating = null,
+}: {
+  username?: string;
+  agencyManagedClient?: boolean;
+  impersonating?: { by: string; byRole?: string } | null;
+} = {}) {
+  return makeResponse({
+    account: { username, role: "client" },
+    impersonating,
+    setupComplete: true,
+    hasPassword: true,
+    emailVerified: true,
+    masterOwner: false,
+    ...(agencyManagedClient ? { agencyManagedClient: true } : {}),
+    accountProfile: { displayName: "Client 289", website: "client.example" },
+  });
+}
+
+function stubClientAppFetch({
+  username = "client-289",
+  agencyManagedClient = false,
+  impersonating = null,
+  projects = [],
+  atLimit = false,
+  pushLimitReached = false,
+}: {
+  username?: string;
+  agencyManagedClient?: boolean;
+  impersonating?: { by: string; byRole?: string } | null;
+  projects?: unknown[];
+  atLimit?: boolean;
+  pushLimitReached?: boolean;
+} = {}) {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/api/platform/me")) {
+      return clientMeResponse({ username, agencyManagedClient, impersonating });
+    }
+    if (url.includes("/api/store/projects/upsert")) {
+      return makeResponse(pushLimitReached
+        ? { error: "Project allowance reached.", limitReached: true }
+        : { ok: true }, pushLimitReached ? 409 : 200);
+    }
+    if (url.includes("/api/store/projects")) {
+      return makeResponse({ projects, deletedIds: [] });
+    }
+    if (url.includes("/api/platform/billing/subscription")) {
+      return makeResponse(atLimit
+        ? { projectsUsed: 3, projectAllowance: 3 }
+        : { projectsUsed: 0, projectAllowance: 3 });
+    }
+    return makeResponse({ error: "unavailable" }, 404);
+  }));
+}
+
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class {
     observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
@@ -56,6 +124,7 @@ beforeEach(() => {
     }));
   }
   document.elementFromPoint = () => null;
+  Element.prototype.scrollTo = () => {};
 
   // Authenticated agency session; every other endpoint fails closed (the
   // settings page still renders its nav and section shells without data).
@@ -70,6 +139,7 @@ beforeEach(() => {
 
   localStorage.clear();
   sessionStorage.clear();
+  mockServerExitImpersonation.mockReset();
 });
 
 afterEach(() => {
@@ -270,5 +340,272 @@ describe("GEOrge support from account settings", () => {
     await waitFor(() => {
       expect(screen.queryByText("GEO Support Assistant")).toBeNull();
     });
+  });
+});
+
+describe("client-project handoff after agency navigation", () => {
+  it.each([
+    ["malformed JSON", "not-json"],
+    ["the legacy project-only shape", JSON.stringify({ projectId: null })],
+    ["a different client username", JSON.stringify({ username: "another-client", projectId: null })],
+  ])("ignores %s and keeps the old settings URL on settings", async (_label, handoff) => {
+    stubClientAppFetch();
+    sessionStorage.setItem("aio:open-client-projects", handoff);
+
+    await renderAppAt("/?account_section=clients");
+
+    await waitFor(() => {
+      expect(screen.getByText("Account type")).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("heading", { name: /project hub/i })).toBeNull();
+  });
+
+  it("opens the matching client hub even when the old settings URL is still present", async () => {
+    stubClientAppFetch({ username: "client-289", agencyManagedClient: true });
+    sessionStorage.setItem(
+      "aio:open-client-projects",
+      JSON.stringify({ username: "client-289", projectId: null }),
+    );
+
+    await renderAppAt("/?account_section=clients");
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /project hub/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Account type")).toBeNull();
+    expect(sessionStorage.getItem("aio:open-client-projects")).toBeNull();
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/api/platform/my-invites"))).toBe(false);
+    expect(screen.queryByText(/could not load team invitations/i)).toBeNull();
+  });
+
+  it("opens an explicit matching project directly from the handoff", async () => {
+    const project = {
+      id: "project-289",
+      name: "Client 289 Launch",
+      sector: "Technology",
+      initials: "C2",
+      color: "#1A647B",
+      contentCount: 0,
+      avgScore: 0,
+      scoreTrend: 0,
+      activePlans: 0,
+      lastActive: "",
+      recentActivity: "",
+      owner: "client-289",
+    };
+    stubClientAppFetch({
+      projects: [{
+        id: project.id,
+        name: project.name,
+        data: project,
+        logo: null,
+        owner: project.owner,
+        updatedAt: null,
+      }],
+    });
+    sessionStorage.setItem(
+      "aio:open-client-projects",
+      JSON.stringify({ username: "client-289", projectId: project.id }),
+    );
+
+    await renderAppAt("/?account_section=clients");
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: project.name })).toBeInTheDocument();
+    });
+    expect(screen.getByText("Authority Dashboard")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /project hub/i })).toBeNull();
+  });
+
+  it("round-trips the real UsersAdmin View account producer into an explicit project", async () => {
+    const project = {
+      id: "project-admin-handoff",
+      name: "Admin Handoff Launch",
+      sector: "Technology",
+      initials: "AH",
+      color: "#1A647B",
+      contentCount: 0,
+      avgScore: 0,
+      scoreTrend: 0,
+      activePlans: 0,
+      lastActive: "",
+      recentActivity: "",
+      owner: "client-one",
+    };
+    localStorage.setItem(
+      "aio.auth.users.v3",
+      JSON.stringify([
+        { username: "admin", password: "", role: "admin", createdAt: 1 },
+        { username: "client-one", password: "", role: "client", createdAt: 2 },
+      ]),
+    );
+    localStorage.setItem("aio.projects.v1", JSON.stringify([project]));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/platform/accounts/client-one/impersonate")) {
+        return makeResponse({ account: { username: "client-one", role: "client" } });
+      }
+      if (url.endsWith("/api/platform/accounts")) {
+        return makeResponse({
+          accounts: [
+            { username: "admin", role: "admin" },
+            { username: "client-one", role: "client" },
+          ],
+        });
+      }
+      if (url.includes("/api/platform/admin/master-owners")) {
+        return makeResponse({ usernames: [] });
+      }
+      if (url.includes("/api/platform/admin/staging-test-reset")) {
+        return makeResponse({ enabled: false });
+      }
+      return makeResponse({ rows: [] });
+    }));
+
+    const originalLocation = window.location;
+    let redirectedTo: string | undefined;
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...originalLocation, replace: (url: string) => { redirectedTo = url; } },
+    });
+    try {
+      render(
+        <UsersAdminPage
+          session={{ username: "admin", role: "admin" }}
+          initialSection="clients"
+          onBack={() => {}}
+          onAssignProjectOwner={async () => ({ ok: true })}
+        />,
+      );
+      fireEvent.click(await screen.findByRole("button", { name: "View account" }));
+
+      await waitFor(() => {
+        expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({
+          username: "client-one",
+          projectId: project.id,
+        });
+      });
+      expect(redirectedTo).toBe("/");
+    } finally {
+      Object.defineProperty(window, "location", { writable: true, value: originalLocation });
+      cleanup();
+    }
+
+    stubClientAppFetch({
+      username: "client-one",
+      projects: [{
+        id: project.id,
+        name: project.name,
+        data: project,
+        logo: null,
+        owner: project.owner,
+        updatedAt: null,
+      }],
+      impersonating: { by: "admin", byRole: "admin" },
+    });
+    await renderAppAt("/");
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: project.name })).toBeInTheDocument();
+    });
+    expect(screen.getByText("Authority Dashboard")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /project hub/i })).toBeNull();
+  });
+
+  it("sends an agency-managed client back to its own agency billing when capacity is full", async () => {
+    stubClientAppFetch({
+      agencyManagedClient: true,
+      impersonating: { by: "acme-agency", byRole: "agency" },
+      atLimit: true,
+    });
+    mockServerExitImpersonation.mockResolvedValue({
+      ok: true,
+      session: { username: "acme-agency", role: "agency" },
+    });
+    sessionStorage.setItem(
+      "aio:open-client-projects",
+      JSON.stringify({ username: "client-289", projectId: null }),
+    );
+    await renderAppAt("/?account_section=clients");
+    await screen.findByRole("heading", { name: /project hub/i });
+
+    let lastReplace: string | undefined;
+    const originalLocation = window.location;
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...originalLocation, replace: (url: string) => { lastReplace = url; } },
+    });
+    try {
+      fireEvent.click(screen.getByRole("button", { name: /start a new piece of work/i }));
+
+      await waitFor(() => {
+        expect(mockServerExitImpersonation).toHaveBeenCalledTimes(1);
+        expect(lastReplace).toBe(
+          `${import.meta.env.BASE_URL}?aio_exit_impersonation=1&account_section=billing`,
+        );
+      });
+    } finally {
+      Object.defineProperty(window, "location", { writable: true, value: originalLocation });
+    }
+  });
+
+  it("also sends an agency-managed client to agency billing when project creation loses a capacity race", async () => {
+    stubClientAppFetch({ agencyManagedClient: true, atLimit: false, pushLimitReached: true });
+    mockServerExitImpersonation.mockResolvedValue({
+      ok: true,
+      session: { username: "acme-agency", role: "agency" },
+    });
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    sessionStorage.setItem(
+      "aio:open-client-projects",
+      JSON.stringify({ username: "client-289", projectId: null }),
+    );
+    await renderAppAt("/?account_section=clients");
+    await screen.findByRole("heading", { name: /project hub/i });
+
+    const originalLocation = window.location;
+    let lastReplace: string | undefined;
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...originalLocation, replace: (url: string) => { lastReplace = url; } },
+    });
+    try {
+      fireEvent.click(screen.getByRole("button", { name: /start a new piece of work/i }));
+      fireEvent.change(await screen.findByLabelText("Project name"), { target: { value: "Race Project" } });
+      fireEvent.click(screen.getByRole("button", { name: /create & set up/i }));
+
+      await waitFor(() => {
+        expect(mockServerExitImpersonation).toHaveBeenCalledTimes(1);
+        expect(lastReplace).toBe(
+          `${import.meta.env.BASE_URL}?aio_exit_impersonation=1&account_section=billing`,
+        );
+      });
+      expect(alertSpy).toHaveBeenCalledWith("Project allowance reached.");
+    } finally {
+      Object.defineProperty(window, "location", { writable: true, value: originalLocation });
+    }
+  });
+
+  it("alerts and does not open client billing when returning to the agency fails", async () => {
+    stubClientAppFetch({ agencyManagedClient: true, atLimit: true });
+    mockServerExitImpersonation.mockResolvedValue({
+      ok: false,
+      error: "The agency session has expired.",
+    });
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    sessionStorage.setItem(
+      "aio:open-client-projects",
+      JSON.stringify({ username: "client-289", projectId: null }),
+    );
+    await renderAppAt("/?account_section=clients");
+    await screen.findByRole("heading", { name: /project hub/i });
+
+    fireEvent.click(screen.getByRole("button", { name: /start a new piece of work/i }));
+
+    await waitFor(() => {
+      expect(mockServerExitImpersonation).toHaveBeenCalledTimes(1);
+      expect(alertSpy).toHaveBeenCalledWith("The agency session has expired.");
+    });
+    expect(screen.queryByRole("heading", { name: /company and billing information/i })).toBeNull();
   });
 });

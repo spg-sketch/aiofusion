@@ -645,6 +645,22 @@ export async function getAccountByIdentifier(identifier: string): Promise<Accoun
   return rowToAccount(row);
 }
 
+// Agency/partner client workspaces are permanently managed by their parent
+// agency.  This is deliberately derived from the hierarchy rather than the
+// account:managed metadata flag: older rows (and rows created before the flag
+// existed) must have the same no-login boundary.
+export async function isAgencyPartnerClient(username: string): Promise<boolean> {
+  const account = await getAccount(normUsername(username));
+  // Before the agency/client split, migrated children were stored with the
+  // generic "user" role. Keep those rows under an agency on the same managed
+  // boundary as canonical client rows; do not classify nested agencies or
+  // master/admin children as partner clients.
+  const childRole = normalizeRole(account?.role);
+  if (!account || (childRole !== "client" && childRole !== "user") || !account.parent) return false;
+  const parent = await getAccount(normUsername(account.parent));
+  return !!parent && normalizeRole(parent.role) === "agency";
+}
+
 // Check whether an email is already registered (for sign-up uniqueness check).
 export async function emailExists(email: string): Promise<boolean> {
   const emailLower = email.trim().toLowerCase();
@@ -945,9 +961,12 @@ export async function createSignedInSession(
 // + platform_memberships as the primary source of truth when the session
 // carries userId/activeCompanyId; falls back to platform_accounts for legacy
 // sessions or when the new tables have no data for the account.
-// Expired or unknown sessions return null and are cleaned up.
+// Expired or unknown sessions return null and are cleaned up. Agency/partner
+// client sessions are also invalidated here unless the request-aware
+// impersonation middleware explicitly authorizes a view-as resolution.
 export async function getPlatformSessionAccount(
   sid: string,
+  options?: { allowAgencyPartnerClient?: boolean },
 ): Promise<PlatformAccount | null> {
   if (!sid) return null;
   const [row] = await db
@@ -1033,6 +1052,16 @@ export async function getPlatformSessionAccount(
         await deletePlatformSession(sid);
         return null;
       }
+      // Agency/partner clients are permanently managed even when the
+      // account:managed flag is absent.  The only exception is a session
+      // explicitly authorized by the request-aware impersonation middleware.
+      if (
+        !options?.allowAgencyPartnerClient
+        && await isAgencyPartnerClient(company.slug)
+      ) {
+        await deletePlatformSession(sid);
+        return null;
+      }
       // Resolve the user's membership within this workspace so fine-grained
       // role rules (viewer read-only, content assigned-projects-only, billing
       // invoices-only) can be enforced downstream. Legacy sessions without a
@@ -1074,6 +1103,13 @@ export async function getPlatformSessionAccount(
   // Legacy fallback: resolve from platform_accounts (the original auth record).
   const account = await getAccount(row.username);
   if (!account || account.status === "suspended") {
+    await deletePlatformSession(sid);
+    return null;
+  }
+  if (
+    !options?.allowAgencyPartnerClient
+    && await isAgencyPartnerClient(account.username)
+  ) {
     await deletePlatformSession(sid);
     return null;
   }
