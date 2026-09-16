@@ -206,11 +206,11 @@ function hydrateServerProject(sp: ServerProject, fallbackName = ""): StoredProje
   };
 }
 
-async function pullProjects(): Promise<{ projects: ServerProject[]; deletedIds: string[] } | null | "unauthorized"> {
+async function pullProjects(signal?: AbortSignal): Promise<{ projects: ServerProject[]; deletedIds: string[] } | null | "unauthorized"> {
   const invalidatedIds = new Set<string>();
   pendingProjectReads.add(invalidatedIds);
   try {
-    const resp = await fetch(`${apiBase()}/api/store/projects`, { credentials: "include" });
+    const resp = await fetch(`${apiBase()}/api/store/projects`, { credentials: "include", signal });
     if (resp.status === 401) return "unauthorized";
     if (!resp.ok) return null;
     const json = (await resp.json()) as { projects?: ServerProject[]; deletedIds?: string[] };
@@ -237,12 +237,17 @@ export type ProjectReconciliationAudit = {
   }>;
 };
 
-export async function pushProjectMeta(project: StoredProject, logo?: string | null): Promise<PushProjectResult> {
+export async function pushProjectMeta(
+  project: StoredProject,
+  logo?: string | null,
+  options: { signal?: AbortSignal } = {},
+): Promise<PushProjectResult> {
   try {
     const res = await fetch(`${apiBase()}/api/store/projects/upsert`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
+      signal: options.signal,
       body: JSON.stringify({
         id: project.id,
         name: typeof project.name === "string" ? project.name : "",
@@ -458,12 +463,15 @@ async function fetchRemoteIntake(id: string): Promise<{ intake: unknown; updated
 // up any project that only exists locally (so nothing is ever lost), drop any
 // project that was deleted elsewhere, and return the merged result so the hub
 // can re-render. localStorage is updated as the local cache.
-export async function syncProjectsOnLoad(): Promise<
+export async function syncProjectsOnLoad(options: { signal?: AbortSignal } = {}): Promise<
   { projects: StoredProject[]; logos: Record<string, string> } | null | "unauthorized"
 > {
-  const server = await pullProjects();
+  const server = await pullProjects(options.signal);
   if (server === "unauthorized") return "unauthorized"; // session expired
   if (!server) return null; // offline or API unavailable - keep local only
+  // A session/workspace switch superseded this pull. It must not merge the
+  // previous identity's response into browser caches.
+  if (options.signal?.aborted) return null;
 
   const localProjects = readJson<StoredProject[]>(PROJECTS_KEY, []);
   const localLogos = readJson<Record<string, string>>(LOGOS_KEY, {});
@@ -509,13 +517,13 @@ export async function syncProjectsOnLoad(): Promise<
       const nameWorthSaving = !!hydratedName && hydratedName !== GENERIC_PROJECT_NAME;
       const repairRecord = !serverRecordHealthy && nameWorthSaving;
       if (repairRecord || (!sp.logo && localLogos[lp.id])) {
-        void pushProjectMeta(hydrated, sp.logo ?? localLogos[lp.id] ?? null);
+        void pushProjectMeta(hydrated, sp.logo ?? localLogos[lp.id] ?? null, { signal: options.signal });
       }
     } else {
       // Local only: keep it and push it up so other devices get it.
       merged.push(lp);
       if (localLogos[lp.id]) mergedLogos[lp.id] = localLogos[lp.id];
-      void pushProjectMeta(lp, localLogos[lp.id]);
+      void pushProjectMeta(lp, localLogos[lp.id], { signal: options.signal });
     }
   }
 
@@ -526,6 +534,7 @@ export async function syncProjectsOnLoad(): Promise<
     if (sp.logo) mergedLogos[sp.id] = sp.logo;
   }
 
+  if (options.signal?.aborted) return null;
   writeJson(PROJECTS_KEY, merged);
   writeJson(LOGOS_KEY, mergedLogos);
   return { projects: merged, logos: mergedLogos };

@@ -45,6 +45,36 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Public routes are prerendered into #root for crawlers. OAuth, reset,
+      // checkout, and account email links share that root URL but are not
+      // marketing pages. Replace the static marketing markup before the module
+      // loads so an auth callback never flashes or hydrates the wrong page.
+      (function () {
+        var authKeys = [
+          "oauth_status", "link_google", "needs_setup", "verify_status", "reset_token",
+          "discount_invite", "delete_reauth", "aio_exit_impersonation", "aio_switched_master",
+          "aio_switched_workspace", "aio_session_expired", "account_section", "checkout"
+        ];
+        var params = new URLSearchParams(window.location.search);
+        if (!authKeys.some(function (key) { return params.has(key); })) return;
+        var root = document.getElementById("root");
+        if (!root) return;
+        root.setAttribute("data-auth-redirect", "true");
+        root.innerHTML =
+          '<div role="status" aria-label="Loading sign in" style="min-height:100vh;background:#fff;color:#0a1628;font-family:Inter,sans-serif">' +
+            '<div style="background:#1A647B;height:86px"></div>' +
+            '<div style="max-width:1280px;margin:0 auto;padding:40px 24px">' +
+              '<div style="height:28px;width:145px;border-radius:999px;background:#C8497A;margin-bottom:20px"></div>' +
+              '<div style="background:#1A647B;border-radius:16px;padding:64px 24px;text-align:center;color:#fff;box-shadow:0 8px 24px -12px rgba(26,100,123,.35)">' +
+                '<span style="display:inline-block;width:22px;height:22px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;vertical-align:middle;margin-right:12px;animation:aio-auth-spin .8s linear infinite"></span>' +
+                'Preparing secure sign in…' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+      })();
+    </script>
+    <style>@keyframes aio-auth-spin { to { transform: rotate(360deg); } }</style>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

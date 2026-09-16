@@ -60,6 +60,29 @@ describe("GuidedOnboardingPage", () => {
     expect(screen.getByLabelText("Company website")).toHaveValue("https://acme.example");
   });
 
+  it("reuses App's authoritative profile without requesting /me again", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/onboarding")) {
+        return response({ state: { step: "workspace_basics" } });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <GuidedOnboardingPage
+        accountProfile={{ displayName: "Acme Corp", website: "https://acme.example" }}
+        onSignOut={vi.fn()}
+        onRoleChanged={vi.fn()}
+        onComplete={vi.fn(async () => ({ ok: true }))}
+      />,
+    );
+
+    expect(await screen.findByLabelText("Company name")).toHaveValue("Acme Corp");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/platform/onboarding");
+  });
+
   it("keeps focus while typing into the company details fields", async () => {
     vi.stubGlobal("fetch", vi.fn()
       .mockResolvedValueOnce(response({ state: { step: "workspace_basics" } }))

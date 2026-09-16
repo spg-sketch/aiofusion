@@ -321,6 +321,60 @@ describe("browser Back restores the previous settings section (popstate)", () =>
     });
     expect(screen.queryByText("Add a client")).toBeNull();
   });
+
+  it("raw delete-reauth callback history restores the Security section", async () => {
+    await renderAppAt("/?account_section=profile");
+    await waitFor(() => expect(screen.getByText("Your profile")).toBeInTheDocument());
+
+    act(() => {
+      window.history.replaceState(null, "", "/?delete_reauth=expired");
+      window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /sign-in & security/i })).toBeInTheDocument();
+    });
+  });
+
+  it("Back home then Forward normalized account_section=security reopens Security", async () => {
+    await renderAppAt("/?account_section=security");
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /sign-in & security/i })).toBeInTheDocument();
+    });
+
+    // Browser Back arrives at the public/home history entry.
+    act(() => {
+      const homeState = {
+        __aioNav: true,
+        view: "landing",
+        currentPage: "dashboard",
+        insightsArticleId: null,
+        accountSection: "security",
+      };
+      window.history.replaceState(homeState, "", "/");
+      window.dispatchEvent(new PopStateEvent("popstate", { state: homeState }));
+    });
+    await act(async () => {});
+
+    // Browser Forward returns to the normalized account URL. Keep the
+    // previously-selected section in state to reproduce the same-section case
+    // that otherwise leaves Platform Home mounted.
+    act(() => {
+      const state = {
+        __aioNav: true,
+        view: "platform-home",
+        currentPage: "dashboard",
+        insightsArticleId: null,
+        accountSection: "security",
+      };
+      window.history.replaceState(state, "", "/?account_section=security");
+      window.dispatchEvent(new PopStateEvent("popstate", { state }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /sign-in & security/i })).toBeInTheDocument();
+    });
+  });
 });
 
 describe("GEOrge support from account settings", () => {

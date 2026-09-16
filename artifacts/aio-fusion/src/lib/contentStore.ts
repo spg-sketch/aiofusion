@@ -128,7 +128,9 @@ export function useContentStore(): number {
 
 // Load all content for this session from the server. Fires
 // `aio:content-store-changed` when done so all subscribed components refresh.
-export async function initContentStore(): Promise<void> {
+export async function initContentStore(options: { signal?: AbortSignal } = {}): Promise<void> {
+  const { signal } = options;
+  if (signal?.aborted) return;
   // Always reset caches before fetching so that switching accounts on the
   // same browser never leaks one account's data into another's view.
   _archiveCache = null;
@@ -138,10 +140,11 @@ export async function initContentStore(): Promise<void> {
   notifyContentStore();
   try {
     const [archRes, planRes, cfgRes] = await Promise.all([
-      fetch(`${apiBase()}/api/store/archive`,       { credentials: "include" }),
-      fetch(`${apiBase()}/api/store/planner`,        { credentials: "include" }),
-      fetch(`${apiBase()}/api/store/scoring-config`, { credentials: "include" }),
+      fetch(`${apiBase()}/api/store/archive`,       { credentials: "include", signal }),
+      fetch(`${apiBase()}/api/store/planner`,        { credentials: "include", signal }),
+      fetch(`${apiBase()}/api/store/scoring-config`, { credentials: "include", signal }),
     ]);
+    if (signal?.aborted) return;
     if (archRes.status === 401 || planRes.status === 401 || cfgRes.status === 401) {
       _contentStoreState = { ..._contentStoreState, status: "authentication-error" };
       return;
@@ -150,10 +153,14 @@ export async function initContentStore(): Promise<void> {
       _contentStoreState = { ..._contentStoreState, status: "network-error" };
       return;
     }
-    _archiveCache = (await archRes.json()).items ?? [];
-    _plannerCache = (await planRes.json()).items ?? [];
+    const archive = await archRes.json();
+    const planner = await planRes.json();
+    if (signal?.aborted) return;
+    _archiveCache = archive.items ?? [];
+    _plannerCache = planner.items ?? [];
     if (cfgRes.ok) {
       const raw = (await cfgRes.json()).config as Partial<ScoringConfig> | null;
+      if (signal?.aborted) return;
       _scoringCache = raw
         ? { ...DEFAULT_SCORING, ...raw,
             statusMultipliers: { ...DEFAULT_SCORING.statusMultipliers, ...(raw.statusMultipliers ?? {}) },
@@ -163,6 +170,7 @@ export async function initContentStore(): Promise<void> {
     }
     _contentStoreState = { ..._contentStoreState, status: "ready" };
   } catch {
+    if (signal?.aborted) return;
     _contentStoreState = { ..._contentStoreState, status: "network-error" };
   } finally {
     notifyContentStore();
@@ -203,7 +211,9 @@ function runMutation<T>(queue: Promise<void>, setQueue: (next: Promise<void>) =>
 // One-time migration: upload any data still only in this browser's localStorage
 // to the server, then purge the localStorage keys so they cannot be uploaded
 // again under a different account's session.
-export async function migrateLocalStorageContentToServer(): Promise<void> {
+export async function migrateLocalStorageContentToServer(options: { signal?: AbortSignal } = {}): Promise<void> {
+  const { signal } = options;
+  if (signal?.aborted) return;
   try { if (localStorage.getItem(CONTENT_STORE_MIGRATED_KEY)) return; } catch { return; }
   try {
     const keys: string[] = [];
@@ -222,9 +232,11 @@ export async function migrateLocalStorageContentToServer(): Promise<void> {
         const projectId = key.includes("::") ? key.split("::").pop()! : "default";
         const items: ArchiveItem[] = JSON.parse(localStorage.getItem(key) || "[]");
         for (const item of items) {
+          if (signal?.aborted) return;
           if (item.id.startsWith("seed-")) continue;
           await fetch(`${apiBase()}/api/store/archive`, {
             method: "POST", credentials: "include",
+            signal,
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ...item, projectId }),
           });
@@ -234,8 +246,10 @@ export async function migrateLocalStorageContentToServer(): Promise<void> {
         const projectId = key.includes("::") ? key.split("::").pop()! : "default";
         const items: PlannerProject[] = JSON.parse(localStorage.getItem(key) || "[]");
         for (const item of items) {
+          if (signal?.aborted) return;
           await fetch(`${apiBase()}/api/store/planner`, {
             method: "POST", credentials: "include",
+            signal,
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ...item, projectId }),
           });
@@ -243,14 +257,17 @@ export async function migrateLocalStorageContentToServer(): Promise<void> {
       }
       const rawCfg = localStorage.getItem("aio.scoring.v1");
       if (rawCfg) {
+        if (signal?.aborted) return;
         await fetch(`${apiBase()}/api/store/scoring-config`, {
           method: "PUT", credentials: "include",
+          signal,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ config: JSON.parse(rawCfg) }),
         });
       }
     }
 
+    if (signal?.aborted) return;
     // Always purge legacy localStorage keys after this check, whether or not
     // we migrated - keeping them risks a future account picking them up.
     for (const key of keys.filter((k) =>

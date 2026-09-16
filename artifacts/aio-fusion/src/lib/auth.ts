@@ -329,12 +329,13 @@ const apiBase = () => (import.meta.env.DEV ? `https://${window.location.host}` :
 
 type ServerAccount = { username: string; role: Role; parent?: string; displayName?: string; archived?: boolean; mfaEnabled?: boolean; managed?: boolean; agencyManaged?: boolean; lastSignInAt?: string; website?: string };
 
-async function postJson(path: string, body?: unknown): Promise<{ ok: boolean; status: number; json: any }> {
+async function postJson(path: string, body?: unknown, signal?: AbortSignal): Promise<{ ok: boolean; status: number; json: any }> {
   try {
     const resp = await fetch(`${apiBase()}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
+      signal,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     let json: any = null;
@@ -369,12 +370,13 @@ function cacheAccounts(accounts: ServerAccount[]): void {
   saveUsers(users);
 }
 
-export async function refreshAccountsCache(): Promise<boolean> {
+export async function refreshAccountsCache(signal?: AbortSignal): Promise<boolean> {
   try {
-    const resp = await fetch(`${apiBase()}/api/platform/accounts`, { credentials: "include" });
+    const resp = await fetch(`${apiBase()}/api/platform/accounts`, { credentials: "include", signal });
     if (!resp.ok) return false;
     const json = (await resp.json()) as { accounts?: ServerAccount[] };
     if (!Array.isArray(json.accounts)) return false;
+    if (signal?.aborted) return false;
     cacheAccounts(json.accounts);
     return true;
   } catch {
@@ -387,15 +389,18 @@ export async function refreshAccountsCache(): Promise<boolean> {
 // admin may run it (the server enforces this too), and only the admin's browser
 // holds the accounts worth carrying over. Must run BEFORE refreshAccountsCache,
 // while the local cache still holds the original accounts and their passwords.
-async function runMigrationIfNeeded(role: Role): Promise<void> {
+async function runMigrationIfNeeded(role: Role, signal?: AbortSignal): Promise<void> {
   if (role !== "admin") return;
   try {
-    const statusResp = await fetch(`${apiBase()}/api/platform/status`, { credentials: "include" });
+    if (signal?.aborted) return;
+    const statusResp = await fetch(`${apiBase()}/api/platform/status`, { credentials: "include", signal });
     if (!statusResp.ok) return;
     const status = (await statusResp.json()) as { migrated?: boolean };
+    if (signal?.aborted) return;
     if (status.migrated) return;
     const localUsers = getUsers().filter((u) => u.password);
-    await postJson("/api/platform/migrate", { users: localUsers });
+    if (signal?.aborted) return;
+    await postJson("/api/platform/migrate", { users: localUsers }, signal);
   } catch {
     /* best-effort; the server stays the source of truth */
   }
@@ -419,12 +424,13 @@ export async function serverLogin(
 }
 
 async function finishLogin(json: any): Promise<{ ok: true; session: Session; needsSetup?: boolean }> {
-  let session: Session = { username: json.account.username, role: json.account.role };
+  // The login response establishes a cookie, but it is not the authority for
+  // setup, membership or workspace routing. App.tsx immediately performs one
+  // guarded /me bootstrap before it exposes an authenticated destination.
+  // Keeping this small also prevents password/MFA sign-in from fetching /me
+  // once here and once again in that hand-off.
+  const session: Session = { username: json.account.username, role: json.account.role };
   setSession(session);
-  session = await hydrateSessionIdentity(session);
-  setSession(session);
-  await runMigrationIfNeeded(session.role);
-  await refreshAccountsCache();
   return { ok: true, session, needsSetup: json.needsSetup === true };
 }
 
@@ -471,22 +477,113 @@ export type AccountProfile = {
   website: string | null;
   workspaceNameNeedsReview?: boolean;
 };
-export async function bootstrapAuth(): Promise<{
+export type AuthBootstrap = {
   session: Session | null;
   needsSetup?: boolean;
   hasPassword?: boolean;
   accountProfile?: AccountProfile | null;
   workspaces?: WorkspaceInfo[];
-}> {
+  impersonating?: Impersonation | null;
+  /**
+   * A human-readable failure only for an unavailable authority. An
+   * unauthorized response is a normal signed-out result and intentionally
+   * does not disclose a stale cached identity.
+   */
+  error?: string;
+};
+
+export const AUTHORITY_TIMEOUT_MS = 8_000;
+
+async function fetchAuthoritativeMe(externalSignal?: AbortSignal): Promise<
+  | { ok: true; payload: unknown }
+  | { ok: false; status?: number; timedOut: boolean }
+> {
+  // One retry handles a transient wake-up/network hiccup, while the race keeps
+  // a hung fetch mock, proxy, or connection from leaving the auth UI spinning
+  // forever. A failed authority check is always treated as signed out.
+  let timedOut = false;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let externalAbort: (() => void) | undefined;
+    const withDeadline = async <T,>(work: Promise<T>): Promise<T> => {
+      try {
+        return await Promise.race([
+          work,
+          new Promise<never>((_, reject) => {
+            if (!externalSignal) return;
+            externalAbort = () => {
+              controller.abort();
+              reject(new Error("Session check was superseded."));
+            };
+            if (externalSignal.aborted) externalAbort();
+            else externalSignal.addEventListener("abort", externalAbort, { once: true });
+          }),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+              timedOut = true;
+              controller.abort();
+              reject(new Error("Session check timed out."));
+            }, AUTHORITY_TIMEOUT_MS);
+          }),
+        ]);
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+        timer = undefined;
+        if (externalSignal && externalAbort) externalSignal.removeEventListener("abort", externalAbort);
+        externalAbort = undefined;
+      }
+    };
+    try {
+      const response = await withDeadline(fetch(`${apiBase()}/api/platform/me`, {
+          credentials: "include",
+          cache: "no-store",
+          signal: controller.signal,
+        }));
+      // Authentication denials are authoritative and should never be retried.
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403 || attempt === 1) {
+          return { ok: false, status: response.status, timedOut: false };
+        }
+        continue;
+      }
+      // A response is not authoritative until its body has been read and
+      // parsed. Apply the same bounded deadline to a stalled body stream.
+      const payload = await withDeadline(response.json());
+      return { ok: true, payload };
+    } catch {
+      if (attempt === 1) return { ok: false, timedOut };
+    }
+  }
+  return { ok: false, timedOut };
+}
+
+export async function bootstrapAuth(options: { signal?: AbortSignal } = {}): Promise<AuthBootstrap> {
   let session: Session | null = null;
   let needsSetup = false;
   let hasPassword: boolean | undefined;
   let accountProfile: AccountProfile | null = null;
   let workspaces: WorkspaceInfo[] = [];
+  let impersonating: Impersonation | null = null;
+  const authority = await fetchAuthoritativeMe(options.signal);
+  if (!authority.ok) {
+    if (authority.status === 401 || authority.status === 403) {
+      return { session: null, needsSetup, hasPassword, accountProfile, workspaces, impersonating };
+    }
+    return {
+      session: null,
+      needsSetup,
+      hasPassword,
+      accountProfile,
+      workspaces,
+      impersonating,
+      error: authority.timedOut
+        ? "We could not verify your session in time. Please try again."
+        : "We could not verify your session. Check your connection and try again.",
+    };
+  }
   try {
-    const meResp = await fetch(`${apiBase()}/api/platform/me`, { credentials: "include" });
-    if (meResp.ok) {
-      const me = (await meResp.json()) as {
+      const me = authority.payload as {
         account?: ServerAccount | null;
         impersonating?: Impersonation | null;
         setupComplete?: boolean | null;
@@ -518,14 +615,14 @@ export async function bootstrapAuth(): Promise<{
           ...(me.agencyManagedClient ? { agencyManagedClient: true } : {}),
           insightsCmsAccess: me.insightsCmsAccess === true,
         };
-        setSession(session);
         // setupComplete === false (not null, not true) means the user signed up
         // but hasn't chosen Agency/Partner vs Client yet.
         if (me.setupComplete === false && me.onboarding) needsSetup = true;
         hasPassword = me.hasPassword;
         // Only expose profile data when this is a direct account-owner session:
         // impersonation or team-member sessions must not prefill foreign data.
-        const isImpersonating = !!me.impersonating;
+        impersonating = me.impersonating ?? null;
+        const isImpersonating = !!impersonating;
         const isMember = !!acct.membershipRole;
         if (!isImpersonating && !isMember && me.accountProfile) {
           accountProfile = {
@@ -534,21 +631,27 @@ export async function bootstrapAuth(): Promise<{
           };
         }
         if (Array.isArray(me.workspaces)) workspaces = me.workspaces;
-      } else {
-        clearSession();
       }
-    }
   } catch {
-    /* offline: fall back to whatever the cache holds */
-    session = getSession();
-    // accountProfile stays null - we can't safely prefill from cache alone
+    // A malformed response cannot authorize a cached browser session.
+    return {
+      session: null,
+      needsSetup,
+      hasPassword,
+      accountProfile,
+      workspaces,
+      impersonating,
+      error: "We could not verify your session. Please try again.",
+    };
   }
 
   if (session) {
-    await runMigrationIfNeeded(session.role);
-    await refreshAccountsCache();
+    // These are cache-only maintenance tasks. Do not make access to an
+    // authenticated destination wait for them; App's normal project sync
+    // refreshes accounts after authority has resolved.
+    void runMigrationIfNeeded(session.role, options.signal);
   }
-  return { session, needsSetup, hasPassword, accountProfile, workspaces };
+  return { session, needsSetup, hasPassword, accountProfile, workspaces, impersonating };
 }
 
 export async function serverGetWorkspaces(): Promise<WorkspaceInfo[]> {
@@ -901,7 +1004,9 @@ export async function serverSignUp(data: {
   // Fallback: auto-login path (kept for forward compat)
   const session: Session = { username: json.username, role: json.role ?? "agency" };
   setSession(session);
-  await refreshAccountsCache();
+  // As with password/MFA login, App.tsx must first verify the new cookie via
+  // /me. Its post-authority project sync refreshes this cache once, so doing
+  // it here would only duplicate registration hand-off work.
   return { ok: true, session };
 }
 

@@ -196,6 +196,9 @@ describe("accountProfile - boot path via bootstrapAuth", () => {
   it("agency session: intake shows agency context note (not brand note)", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (String(url).includes("/api/platform/me")) return agencyMeResponse();
+      if (String(url).includes("/api/store/projects")) {
+        return makeResponse({ projects: [], deletedIds: [] });
+      }
       return makeResponse(unauthorizedBody, 401);
     }));
 
@@ -335,6 +338,9 @@ describe("accountProfile - logout clears profile (stale-profile regression)", ()
     // Boot as a brand client so accountProfile is populated by bootstrapAuth.
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (String(url).includes("/api/platform/me")) return brandMeResponse();
+      if (String(url).includes("/api/store/projects")) {
+        return makeResponse({ projects: [], deletedIds: [] });
+      }
       return makeResponse(unauthorizedBody, 401);
     }));
 

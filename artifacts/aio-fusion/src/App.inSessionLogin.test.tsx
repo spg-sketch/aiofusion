@@ -37,11 +37,19 @@ vi.mock("./pages/PlatformHomePage", async () => ({
   }) => {
     if (!session) {
       return (
-        <button
-          onClick={() => onLoginSuccess({ username: "mybrand", role: "client" })}
-        >
-          Mock sign in
-        </button>
+        <div>
+          <button
+            onClick={() => onLoginSuccess({ username: "mybrand", role: "client" })}
+          >
+            Mock sign in
+          </button>
+          <button
+            onClick={() => onLoginSuccess({ username: "mybrand", role: "client" })}
+          >
+            Mock MFA success
+          </button>
+          <button onClick={onSignOut}>Mock sign out</button>
+        </div>
       );
     }
     return (
@@ -264,8 +272,84 @@ describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () =
     { timeout: 8000 });
   }, 40000);
 
+  it("MFA success is provisional until one authoritative /me check, then reaches the project destination", async () => {
+    let meCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (String(url).includes("/api/platform/me")) {
+        meCalls += 1;
+        return meCalls === 1 ? unauth() : brandMeResponse();
+      }
+      if (String(url).includes("/api/store/projects")) return makeResponse({ projects: [], deletedIds: [] });
+      if (String(url).includes("/api/platform/accounts")) return makeResponse({ accounts: [] });
+      return unauth();
+    }));
+    window.history.replaceState({}, "", "/?oauth_status=ok");
+    const { default: App } = await import("./App");
+    render(<App />);
+
+    await screen.findByText("Mock MFA success");
+    fireEvent.click(screen.getByText("Mock MFA success"));
+
+    await screen.findByText("Project Hub");
+    expect(meCalls).toBe(2); // anonymous initial bootstrap + exactly one MFA authority hand-off
+  });
+
+  it("does not revive an identity when sign-out wins a delayed authority hand-off", async () => {
+    let resolveMe!: (response: Response) => void;
+    let meCalls = 0;
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
+      if (String(url).includes("/api/platform/me")) {
+        meCalls += 1;
+        if (meCalls === 1) return Promise.resolve(unauth());
+        return new Promise<Response>((resolve) => { resolveMe = resolve; });
+      }
+      return Promise.resolve(unauth());
+    }));
+    window.history.replaceState({}, "", "/?oauth_status=ok");
+    const { default: App } = await import("./App");
+    render(<App />);
+
+    await screen.findByText("Mock sign in");
+    fireEvent.click(screen.getByText("Mock sign in"));
+    fireEvent.click(screen.getByText("Mock sign out"));
+    await act(async () => { resolveMe(brandMeResponse()); });
+
+    await waitFor(() => expect(screen.queryByText("Project Hub")).not.toBeInTheDocument());
+    expect(screen.getByText("Mock sign in")).toBeInTheDocument();
+  });
+
+  it("does not start project/account resync from focus while a login authority check is pending", async () => {
+    let resolveMe!: (response: Response) => void;
+    let meCalls = 0;
+    let projectCalls = 0;
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
+      if (String(url).includes("/api/platform/me")) {
+        meCalls += 1;
+        if (meCalls === 1) return Promise.resolve(unauth());
+        return new Promise<Response>((resolve) => { resolveMe = resolve; });
+      }
+      if (String(url).includes("/api/store/projects")) {
+        projectCalls += 1;
+        return Promise.resolve(makeResponse({ projects: [], deletedIds: [] }));
+      }
+      return Promise.resolve(unauth());
+    }));
+    window.history.replaceState({}, "", "/?oauth_status=ok");
+    const { default: App } = await import("./App");
+    render(<App />);
+
+    await screen.findByText("Mock sign in");
+    fireEvent.click(screen.getByText("Mock sign in"));
+    window.dispatchEvent(new Event("focus"));
+    expect(projectCalls).toBe(0);
+
+    await act(async () => { resolveMe(brandMeResponse()); });
+    await screen.findByText("Project Hub");
+  });
+
   it("does not flash Project Hub while a slow setup-status check redirects a new client to onboarding", async () => {
     let loggedIn = false;
+    let meRequests = 0;
     let resolveSetupCheck!: (response: Response) => void;
     const delayedSetupCheck = new Promise<Response>((resolve) => {
       resolveSetupCheck = resolve;
@@ -274,6 +358,7 @@ describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () =
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       const urlStr = String(url);
       if (urlStr.includes("/api/platform/me")) {
+        meRequests += 1;
         return loggedIn ? delayedSetupCheck : unauth();
       }
       if (urlStr.includes("/api/store/projects")) {
@@ -308,5 +393,8 @@ describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () =
 
     expect(await screen.findByText("Guided onboarding", {}, { timeout: 8000 })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Project Hub/i })).not.toBeInTheDocument();
+    // Initial anonymous bootstrap + the post-credential authoritative check.
+    // The provisional identity must not start a second competing /me request.
+    expect(meRequests).toBe(2);
   }, 20000);
 });

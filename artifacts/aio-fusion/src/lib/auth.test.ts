@@ -7,6 +7,11 @@ import {
   saveUsers,
   bootstrapAuth,
   clearWorkspaceScopedCaches,
+  setSession,
+  getSession,
+  serverLogin,
+  serverSignUp,
+  AUTHORITY_TIMEOUT_MS,
   type Session,
 } from "./auth";
 
@@ -161,6 +166,111 @@ describe("bootstrapAuth - accountProfile server→client path", () => {
 
     expect(result.session?.username).toBe("someagency");
     expect(result.accountProfile).toBeNull();
+  });
+
+  it("does not mutate a cached session after a timed-out authority retry", async () => {
+    vi.useFakeTimers();
+    setSession({ username: "cached-user", role: "client" });
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const resultPromise = bootstrapAuth();
+    await vi.advanceTimersByTimeAsync(AUTHORITY_TIMEOUT_MS);
+    await vi.advanceTimersByTimeAsync(AUTHORITY_TIMEOUT_MS);
+    const result = await resultPromise;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.session).toBeNull();
+    expect(result.error).toMatch(/could not verify your session in time/i);
+    // Cache ownership belongs to App's generation-gated hand-off. The pure
+    // bootstrap result never clears or revives identity while a newer request
+    // may be in flight.
+    expect(getSession()).toEqual({ username: "cached-user", role: "client" });
+    vi.useRealTimers();
+  });
+
+  it("applies the authority deadline to a stalled /me response body as well as headers", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: () => new Promise<unknown>(() => {}),
+    } as unknown as Response));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const resultPromise = bootstrapAuth();
+    await vi.advanceTimersByTimeAsync(AUTHORITY_TIMEOUT_MS);
+    await vi.advanceTimersByTimeAsync(AUTHORITY_TIMEOUT_MS);
+    const result = await resultPromise;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.session).toBeNull();
+    expect(result.error).toMatch(/could not verify your session in time/i);
+    vi.useRealTimers();
+  });
+
+  it("does not fetch /me during credential acceptance; the hand-off bootstraps it once", async () => {
+    let meRequests = 0;
+    let accountCacheRequests = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/login")) {
+        return new Response(JSON.stringify({
+          account: { username: "newbrand", role: "client" },
+          needsSetup: true,
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.endsWith("/api/platform/me")) {
+        meRequests += 1;
+        return new Response(JSON.stringify({
+          account: { username: "newbrand", role: "client" },
+          setupComplete: false,
+          onboarding: { step: "account_type" },
+          hasPassword: true,
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.endsWith("/api/platform/accounts")) accountCacheRequests += 1;
+      return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+    }));
+
+    const accepted = await serverLogin("newbrand", "correct-password");
+    expect(accepted.ok).toBe(true);
+    expect(meRequests).toBe(0);
+    expect(accountCacheRequests).toBe(0);
+
+    const bootstrapped = await bootstrapAuth();
+    expect(bootstrapped.session?.username).toBe("newbrand");
+    expect(bootstrapped.needsSetup).toBe(true);
+    expect(meRequests).toBe(1);
+    expect(accountCacheRequests).toBe(0);
+  });
+
+  it("does not refresh accounts during auto-login registration before authority bootstrap", async () => {
+    let meRequests = 0;
+    let accountCacheRequests = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/signup")) {
+        return new Response(JSON.stringify({ username: "newbrand", role: "client" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.endsWith("/api/platform/me")) meRequests += 1;
+      if (url.endsWith("/api/platform/accounts")) accountCacheRequests += 1;
+      return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+    }));
+
+    const result = await serverSignUp({
+      name: "New Brand",
+      email: "newbrand@example.test",
+      companyName: "New Brand",
+      password: "safe-password",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(meRequests).toBe(0);
+    expect(accountCacheRequests).toBe(0);
   });
 });
 

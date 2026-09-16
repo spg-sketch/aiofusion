@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, waitFor, cleanup, configure } from "@testing-library/react";
+import { act, render, screen, waitFor, cleanup, configure } from "@testing-library/react";
 
 // The rendering chain for these tests spans several async cycles:
 // App mounts (view="landing") → effect sets view="platform-home" → lazy
@@ -132,6 +132,20 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
       ).toBeInTheDocument();
     });
     expect(window.location.search).toBe("");
+  });
+
+  it("re-captures OAuth state when Back/Forward lands on a raw callback query", async () => {
+    await renderAppAt("/?oauth_status=error&oauth_msg=not_configured");
+    await screen.findByText("Google Sign-In is not enabled on this server.");
+
+    await act(async () => {
+      window.history.pushState(null, "", "/?oauth_status=error&oauth_msg=invalid_state");
+      window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("The sign-in session expired. Please try again.")).toBeInTheDocument();
+    });
   });
 
   it("oauth_status=suspended shows the suspension message", async () => {

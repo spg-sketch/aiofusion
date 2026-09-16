@@ -14,7 +14,8 @@ import {
   type WorkspaceInfo,
   type PendingMyInvite,
   seedAdminIfEmpty,
-  getSession as getLocalSession,
+  setSession as setCachedSession,
+  clearSession as clearCachedSession,
   getUsers as getLocalUsers,
   getVisibleUsernames as getVisibleLocalUsernames,
   serverLogin,
@@ -34,7 +35,6 @@ import { PendingInvitesBanner } from "./components/PendingInvitesBanner";
 import type { AcceptedInvitation } from "./components/InvitationResult";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { BackToAgencyLink } from "./components/BackToAgencyLink";
-import { getImpersonationState } from "./lib/auth";
 import { isInsightsAdminPath } from "./lib/adminRoute";
 import { vars } from "./marketing/vars";
 import { PUBLIC_PAGE_DEFINITIONS } from "./marketing/pageMeta";
@@ -143,6 +143,7 @@ import { Sidebar } from "./components/Sidebar";
 import { GeorgeSupport } from "./components/GeorgeSupport";
 import ClientSelectorPage from "./pages/ClientSelectorPage";
 import { RouteLoading } from "./components/RouteLoading";
+import { AuthPageLoading } from "./components/AuthPageLoading";
 import { preloadRoute, scheduleIdlePreloads, type RoutePreloader } from "./lib/routePreloading";
 
 const routePreloadingEnabled = import.meta.env.MODE !== "test";
@@ -398,6 +399,37 @@ function directViewFromLocation(): PublicView | "insights-admin" | null {
   return publicViewFromLocation();
 }
 
+const AUTH_REDIRECT_QUERY_KEYS = [
+    "oauth_status",
+    "link_google",
+    "needs_setup",
+    "verify_status",
+    "reset_token",
+    "discount_invite",
+    "delete_reauth",
+    "aio_exit_impersonation",
+    "aio_switched_master",
+    "aio_switched_workspace",
+    "aio_session_expired",
+    "account_section",
+    "checkout",
+  ] as const;
+
+function resolveAuthenticationRedirect(search = window.location.search) {
+  const params = new URLSearchParams(search);
+  const isAuthRedirect = AUTH_REDIRECT_QUERY_KEYS.some((key) => params.has(key));
+  return {
+    isAuthRedirect,
+    oauthRedirectParams: ["oauth_status", "link_google", "verify_status", "delete_reauth"].some((key) => params.has(key))
+      ? search
+      : null,
+  };
+}
+
+function isAuthenticationLanding(): boolean {
+  return resolveAuthenticationRedirect().isAuthRedirect;
+}
+
 function viewToUrl(v: string, insightsArticleId?: string | null): string {
   if (v === "insights-admin") return appBase() + "admin";
   if (v === "insights" && insightsArticleId) {
@@ -408,7 +440,16 @@ function viewToUrl(v: string, insightsArticleId?: string | null): string {
 
 
 function App() {
-  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "insights-admin" | "sub-accounts" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security" | "privacy-policy" | "terms-conditions">(() => directViewFromLocation() ?? "landing");
+  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "insights-admin" | "sub-accounts" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security" | "privacy-policy" | "terms-conditions">(() =>
+    isAuthenticationLanding() ? "platform-home" : (directViewFromLocation() ?? "landing"),
+  );
+  // One owner for every in-flight authority/cache request. Identity changes
+  // abort this scope before any new session can begin.
+  const authRequestGeneration = useRef(0);
+  const authRequestAbort = useRef(new AbortController());
+  const refreshAuthoritativeSession = useRef<() => void>(() => {});
+  const confirmedSessionRef = useRef<LocalSession | null>(null);
+  const authLoadingRef = useRef(true);
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
   // Lazy route chunks can take a moment on their first visit. Navigation is a
@@ -510,23 +551,29 @@ function App() {
   // again whenever the tab regains focus, so a project a colleague created on
   // another device shows up without a manual page reload.
   const resyncProjects = useCallback(async () => {
+    // Background focus/visibility timers must never probe project/account
+    // endpoints while the cookie authority check is unresolved or signed out.
+    if (authLoadingRef.current || !confirmedSessionRef.current) return;
     // Refresh the cached accounts list in the same breath so the managed
     // Clients section stays current across devices. Runs in parallel with the
     // project sync and keeps the existing cache on any failure.
-    const [result] = await Promise.all([syncProjectsOnLoad(), refreshAccountsCache()]);
+    const generation = authRequestGeneration.current;
+    const signal = authRequestAbort.current.signal;
+    const [result] = await Promise.all([syncProjectsOnLoad({ signal }), refreshAccountsCache(signal)]);
+    if (signal.aborted || generation !== authRequestGeneration.current) return;
     if (result === "unauthorized") {
       // Server session has expired mid-use. Re-check with /api/platform/me;
       // if it confirms the session is gone, clear local state and redirect
       // to the login screen so the user can re-authenticate.
-      const { session: s } = await bootstrapAuth();
-      setSessionState(s);
+      refreshAuthoritativeSession.current();
       return;
     }
     if (result) {
       // Claim any ownerless project the sync just pulled down (e.g. a legacy
       // NULL-owned row) before showing the list, so it is attributed to the
       // master instead of silently vanishing.
-      await migrateAssignOwnerlessToAdmin();
+      await migrateAssignOwnerlessToAdmin({ signal });
+      if (signal.aborted || generation !== authRequestGeneration.current) return;
       const merged = loadStoredProjects() as unknown as Client[];
       setStoredProjects(merged);
       setClientLogos(result.logos);
@@ -542,15 +589,33 @@ function App() {
 
   useEffect(() => {
     migrateLegacyIntakeToProject();
-    void migrateAssignOwnerlessToAdmin();
     setStoredProjects(loadStoredProjects());
-    // Reconcile the session with the server (the real authority): this validates
-    // the session cookie, runs the one-time account migration, and refreshes the
-    // cached account list. Then sync the shared store so this login sees every
-    // project it may see, on every device. Local-only projects are pushed up.
+    // Reconcile the session with the server (the real authority) before any
+    // protected destination becomes reachable. Cache migration/account refresh
+    // happens only in the normal post-authority project sync.
     void (async () => {
-      const { session: s, needsSetup: bootNeedsSetup, hasPassword: bootHasPassword, workspaces: ws, accountProfile: ap } = await bootstrapAuth();
+      const generation = ++authRequestGeneration.current;
+      const signal = authRequestAbort.current.signal;
+      setAuthError(null);
+      const {
+        session: s,
+        needsSetup: bootNeedsSetup,
+        hasPassword: bootHasPassword,
+        workspaces: ws,
+        accountProfile: ap,
+        impersonating,
+        error,
+      } = await bootstrapAuth({ signal });
+      // A logout, a newer sign-in, or a workspace change may have happened
+      // while /me was in flight. Never let that older authority reply revive
+      // an identity or its setup destination.
+      if (signal.aborted || generation !== authRequestGeneration.current) return;
+      if (s) setCachedSession(s);
+      else clearCachedSession();
+      confirmedSessionRef.current = s;
       setSessionState(s);
+      setAuthError(error ?? null);
+      setAgencyImpersonatedBy(impersonating?.byRole === "agency" ? impersonating.by : null);
       if (ws && ws.length > 0) setWorkspaces(ws);
       // The server is authoritative here. A stale ?needs_setup=1 callback URL
       // must not keep an already-configured client trapped on the setup page.
@@ -562,8 +627,12 @@ function App() {
         setAccountProfile(ap);
       }
       setAuthLoading(false);
-      await migrateLocalStorageContentToServer();
-      await initContentStore();
+      authLoadingRef.current = false;
+      if (!s) return;
+      await migrateLocalStorageContentToServer({ signal });
+      if (generation !== authRequestGeneration.current) return;
+      await initContentStore({ signal });
+      if (generation !== authRequestGeneration.current) return;
       await resyncProjects();
     })();
   }, [resyncProjects]);
@@ -731,7 +800,9 @@ function App() {
   const [session, setSessionState] = useState<LocalSession | null>(() => {
     if (typeof window === "undefined") return null;
     seedAdminIfEmpty();
-    return getLocalSession();
+    // Browser storage is a convenience cache only. Do not render it while the
+    // httpOnly-cookie authority check is unresolved.
+    return null;
   });
   const deletionSessionRef = useRef(session);
   deletionSessionRef.current = session;
@@ -740,6 +811,7 @@ function App() {
   // state is still provisional (localStorage only) and may not yet reflect the
   // real cookie state.
   const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   // True when the user is signed in but hasn't chosen Agency/Partner vs Client yet
   // (new organic signups via password or SSO).
   const [needsSetup, setNeedsSetup] = useState(false);
@@ -757,6 +829,60 @@ function App() {
   // accounts: the agency's name, used by the BackToAgencyLink control that
   // replaced the old full-width impersonation banner for this case.
   const [agencyImpersonatedBy, setAgencyImpersonatedBy] = useState<string | null>(null);
+
+  const beginAuthoritativeHandoff = useCallback((provisional: LocalSession | null) => {
+    authRequestAbort.current.abort();
+    authRequestAbort.current = new AbortController();
+    const generation = ++authRequestGeneration.current;
+    const signal = authRequestAbort.current.signal;
+    setSessionExpiredNotice(undefined);
+    setGeorgeAnonOpen(false);
+    setAuthError(null);
+    setAuthLoading(true);
+    authLoadingRef.current = true;
+    // Never publish a provisional identity to app effects (invites,
+    // impersonation, project sync) while /me is pending. In addition to
+    // preventing access leakage, this prevents those effects from issuing a
+    // competing /me request against the same newly-established cookie.
+    void provisional;
+    clearCachedSession();
+    confirmedSessionRef.current = null;
+    setSessionState(null);
+    setNeedsSetup(false);
+    setHasPassword(undefined);
+    setAccountProfile(null);
+    void (async () => {
+      const {
+        session: confirmedSession,
+        needsSetup: eligible,
+        hasPassword: confirmedHasPassword,
+        workspaces: confirmedWorkspaces,
+        accountProfile: confirmedProfile,
+        impersonating,
+        error,
+      } = await bootstrapAuth({ signal });
+      if (signal.aborted || generation !== authRequestGeneration.current) return;
+      if (confirmedSession) setCachedSession(confirmedSession);
+      else clearCachedSession();
+      confirmedSessionRef.current = confirmedSession;
+      setSessionState(confirmedSession);
+      setNeedsSetup(eligible === true);
+      setWorkspaces(confirmedWorkspaces ?? []);
+      setAuthError(error ?? null);
+      setAgencyImpersonatedBy(impersonating?.byRole === "agency" ? impersonating.by : null);
+      if (confirmedHasPassword !== undefined) setHasPassword(confirmedHasPassword);
+      if (confirmedProfile && confirmedSession && (confirmedSession.role === "client" || confirmedSession.role === "agency")) {
+        setAccountProfile(confirmedProfile);
+      }
+      setAuthLoading(false);
+      authLoadingRef.current = false;
+      if (!confirmedSession) return;
+      await initContentStore({ signal });
+      if (signal.aborted || generation !== authRequestGeneration.current) return;
+      await resyncProjects();
+    })();
+  }, [resyncProjects]);
+  refreshAuthoritativeSession.current = () => beginAuthoritativeHandoff(null);
   // Pending team invites addressed to the signed-in user's email.
   const [pendingInvites, setPendingInvites] = useState<PendingMyInvite[]>([]);
   const [pendingInvitesLoading, setPendingInvitesLoading] = useState(false);
@@ -770,16 +896,6 @@ function App() {
   inviteRequestUsername.current = session?.username ?? null;
   // True when the user has dismissed the invite banner for this page session.
   const [inviteBannerDismissed, setInviteBannerDismissed] = useState(false);
-
-  // Detect the agency-working-in-client-account case once per page load.
-  useEffect(() => {
-    if (!session || session.role === "admin") { setAgencyImpersonatedBy(null); return; }
-    let cancelled = false;
-    void getImpersonationState().then((imp) => {
-      if (!cancelled) setAgencyImpersonatedBy(imp?.byRole === "agency" ? imp.by : null);
-    });
-    return () => { cancelled = true; };
-  }, [session?.username, session?.role]);
 
   // Only show the projects this account is allowed to see. Admins see every
   // project; a normal account sees its own plus any belonging to its client
@@ -989,6 +1105,10 @@ function App() {
       return null;
     }
   });
+  // A raw auth callback can deliberately re-open the section already selected
+  // before navigation (e.g. Security → delete re-auth → Security). Keep a
+  // revision so that semantic redirect is not lost to unchanged state values.
+  const [authRedirectRevision, setAuthRedirectRevision] = useState(0);
 
   // Stripe Checkout return flag (/?checkout=success|cancelled). Captured once
   // on load, before the history-sync effect rewrites the URL and drops the
@@ -1038,10 +1158,9 @@ function App() {
   // this, the MFA challenge token from an SSO login is lost and the user just
   // sees the plain sign-in form again.
   const [oauthRedirectParams, setOauthRedirectParams] = useState<string | null>(() => {
-    const s = window.location.search;
-    return /(?:^|[?&])(?:oauth_status|link_google|verify_status)=/.test(s) ? s : null;
+    return resolveAuthenticationRedirect().oauthRedirectParams;
   });
-  const [deleteReauthResult] = useState<string | null>(
+  const [deleteReauthResult, setDeleteReauthResult] = useState<string | null>(
     () => new URLSearchParams(window.location.search).get("delete_reauth"),
   );
 
@@ -1053,18 +1172,11 @@ function App() {
   // land on the login form with an explanatory notice.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (
-      params.has("oauth_status") ||
-      params.has("needs_setup") ||
-      params.has("verify_status") ||
-      params.has("reset_token") ||
-      params.has("discount_invite") ||
-      params.has("aio_exit_impersonation") ||
-      params.has("aio_switched_master") ||
-      params.has("aio_switched_workspace")
-    ) {
+    const redirect = resolveAuthenticationRedirect();
+    setOauthRedirectParams(redirect.oauthRedirectParams);
+    if (redirect.isAuthRedirect) {
       warmRoute(loadPlatformHomePage);
-      startTransition(() => setView("platform-home"));
+      setView("platform-home");
     }
     // needs_setup is only a routing hint. bootstrapAuth and /platform/me are
     // authoritative, so a stale callback URL can never restart setup.
@@ -1079,14 +1191,14 @@ function App() {
       // is not signed in yet, the sub-accounts guard sends them to the login
       // page and accountSectionPending re-navigates after sign-in.
       warmRoute(loadPlatformHomePage);
-      startTransition(() => setView("platform-home"));
+      setView("platform-home");
     }
     if (params.has("aio_session_expired")) {
       setSessionExpiredNotice(
         "Your admin session expired while in view-as mode. Please sign in again.",
       );
       warmRoute(loadPlatformHomePage);
-      startTransition(() => setView("platform-home"));
+      setView("platform-home");
     }
   }, []);
 
@@ -1176,17 +1288,36 @@ function App() {
         : (targetView === "insights" ? articleIdFromLocation() : null);
       const targetAccountSection = s && s.__aioNav
         ? (s.accountSection ?? null)
-        : new URLSearchParams(window.location.search).get("account_section");
+        : (() => {
+            const params = new URLSearchParams(window.location.search);
+            return params.get("account_section") ?? (params.has("delete_reauth") ? "security" : null);
+          })();
+      const redirect = resolveAuthenticationRedirect();
+      // History entries for raw auth callbacks must be interpreted the same
+      // way as initial load. This also restores a consumed OAuth/link result
+      // when the user navigates Back/Forward to that entry.
+      setOauthRedirectParams(redirect.oauthRedirectParams);
+      setDeleteReauthResult(new URLSearchParams(window.location.search).get("delete_reauth"));
+      if (redirect.isAuthRedirect) {
+        accountSectionNavDone.current = false;
+        setAuthRedirectRevision((revision) => revision + 1);
+      }
+      const resolvedTargetView = redirect.isAuthRedirect ? "platform-home" as typeof view : targetView;
       // Only apply (and arm the skip guard) when something actually changes,
       // otherwise the guard could stay armed and swallow the next real push.
-      if (targetView !== viewRef.current || targetPage !== pageRef.current || targetArticleId !== insightsArticleIdRef.current || targetAccountSection !== accountSectionRef.current) {
+      if (resolvedTargetView !== viewRef.current || targetPage !== pageRef.current || targetArticleId !== insightsArticleIdRef.current || targetAccountSection !== accountSectionRef.current) {
         skipHistoryPush.current = true;
-        startTransition(() => {
-          setView(targetView);
+        const applyPopNavigation = () => {
+          setView(resolvedTargetView);
           setCurrentPage(targetPage);
           setInsightsArticleId(targetArticleId);
           setAccountSection(targetAccountSection);
-        });
+        };
+        // An auth callback replaces a public page with a security boundary.
+        // Do not defer that swap: a transition may keep marketing content
+        // painted while the cold Platform Home chunk is still pending.
+        if (redirect.isAuthRedirect) applyPopNavigation();
+        else startTransition(applyPopNavigation);
       }
       window.scrollTo(0, 0);
     };
@@ -1210,7 +1341,7 @@ function App() {
     } else {
       transitionToView("sub-accounts");
     }
-  }, [accountSection, authLoading, session]);
+  }, [accountSection, authLoading, session, authRedirectRevision]);
 
   // Access guard for the protected admin pages. Done in an effect (not during
   // render) and as a history-replacing redirect so Back does not loop back
@@ -1238,8 +1369,17 @@ function App() {
   useEffect(() => { saveClientLogos(clientLogos); }, [clientLogos]);
 
   const handleSignOut = () => {
+    // Invalidate a still-settling /me reply before clearing UI state.
+    authRequestAbort.current.abort();
+    authRequestAbort.current = new AbortController();
+    authRequestGeneration.current += 1;
     void serverLogout();
+    clearCachedSession();
     setSessionState(null);
+    setAuthLoading(false);
+    confirmedSessionRef.current = null;
+    authLoadingRef.current = false;
+    setAuthError(null);
     setNeedsSetup(false);
     setAccountProfile(null);
     setActiveClient(null);
@@ -1288,14 +1428,20 @@ function App() {
     }
   };
 
-  const enterPlatform = () => transitionToView("platform-home");
+  const enterPlatform = () => {
+    warmRoute(loadPlatformHomePage);
+    // Enter the auth destination synchronously. Its local Suspense boundary
+    // keeps the sign-in shell visible while a cold chunk arrives instead of
+    // retaining a marketing page during the transition.
+    setView("platform-home");
+  };
   const openAccountSettings = () => {
     setAccountSection("profile");
     transitionToView("sub-accounts");
     window.scrollTo(0, 0);
   };
 
-  const isAuthed = !!session;
+  const isAuthed = !authLoading && !!session;
 
   // Team-invite landing page (/?invite=<token>) - full-page gate, shown before
   // any auth flow. The invitee sets a password or continues with SSO, then the
@@ -1313,14 +1459,6 @@ function App() {
         />
       </Suspense>
     );
-  }
-
-  // A successful login establishes a provisional client session before the
-  // server-authoritative setup status has been rehydrated. Keep authenticated
-  // destinations hidden during that short window so a slower /platform/me
-  // response cannot flash Project Hub or Account Settings before onboarding.
-  if (authLoading && session) {
-    return <RouteLoading fullScreen />;
   }
 
   // Billing team members see invoices/billing only - no project data or tools.
@@ -1342,6 +1480,7 @@ function App() {
       <GuidedOnboardingPage
         checkoutResult={checkoutResult}
         checkoutSessionId={checkoutSessionId}
+        accountProfile={accountProfile}
         onRoleChanged={(role) => {
           setSessionState({ ...session, role });
           void refreshAccountsCache();
@@ -1400,45 +1539,20 @@ function App() {
   }
   if (view === "platform-home") {
     return (
-      <>
+      <Suspense fallback={<AuthPageLoading />}>
         {inviteBannerNode}
         <div data-testid="platform-home-banner-offset" className="min-w-0 max-w-full overflow-x-hidden" style={{ marginTop: "var(--banner-h, 0px)" }}>
           <PlatformHomePage
             backToAgency={agencyImpersonatedBy ? <BackToAgencyLink agencyName={agencyImpersonatedBy} light /> : undefined}
-            session={session}
+            // During a successful credential hand-off the local session is
+            // provisional. Keep it out of PlatformHome until /me confirms it.
+            session={authLoading ? null : session}
+            authPending={authLoading}
+            authError={authError}
+            onRetryAuthentication={() => beginAuthoritativeHandoff(null)}
             oauthRedirectParams={oauthRedirectParams}
             onOauthParamsConsumed={() => setOauthRedirectParams(null)}
-            onLoginSuccess={(s) => {
-              setSessionExpiredNotice(undefined);
-              setGeorgeAnonOpen(false);
-              setAuthLoading(true);
-              setSessionState(s);
-              setNeedsSetup(false);
-              setHasPassword(undefined);
-              setAccountProfile(null);
-              // Rehydrate the complete server-authoritative session before
-              // rendering any authenticated destination. This makes in-session
-              // login follow the same guarded path as a fresh page load.
-              void bootstrapAuth().then(({
-                session: confirmedSession,
-                needsSetup: eligible,
-                hasPassword: confirmedHasPassword,
-                workspaces: confirmedWorkspaces,
-                accountProfile: confirmedProfile,
-              }) => {
-                const nextSession = confirmedSession ?? s;
-                setSessionState(nextSession);
-                setNeedsSetup(eligible === true);
-                setWorkspaces(confirmedWorkspaces ?? []);
-                if (confirmedHasPassword !== undefined) setHasPassword(confirmedHasPassword);
-                if (confirmedProfile && (nextSession.role === "client" || nextSession.role === "agency")) {
-                  setAccountProfile(confirmedProfile);
-                }
-              }).finally(() => {
-                setAuthLoading(false);
-                void initContentStore().then(() => resyncProjects());
-              });
-            }}
+            onLoginSuccess={beginAuthoritativeHandoff}
             onSignOut={handleSignOut}
             onManageUsers={() => {
               if (session?.role === "admin") {
@@ -1473,7 +1587,7 @@ function App() {
           />
         )}
         {namingProject && <CreateProjectModal onCancel={() => setNamingProject(false)} onCreate={confirmCreateProject} />}
-      </>
+      </Suspense>
     );
   }
   if (view === "users-admin") {
@@ -1517,11 +1631,11 @@ function App() {
     if (!session) {
       return null;
     }
-    const handleRoleChanged = async (newRole: import("./lib/auth").Role) => {
+    const handleRoleChanged = async (_newRole: import("./lib/auth").Role) => {
       // Re-sync the authoritative session from the server so all role-dependent
-      // UI (dashboard tabs, project limits, etc.) reflects the new type.
-      const { session: s } = await bootstrapAuth();
-      setSessionState(s ?? { ...session, role: newRole });
+      // UI (dashboard tabs, project limits, etc.) reflects the new type. The
+      // shared hand-off owns generation/abort/cache commits.
+      refreshAuthoritativeSession.current();
     };
     return (
       <>

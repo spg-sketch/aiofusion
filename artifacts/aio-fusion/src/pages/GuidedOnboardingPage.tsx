@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, Check, Loader2, CreditCard, Play, AlertTriangle, AlertCircle } from "lucide-react";
 import AccountTypeSelectPage from "./AccountTypeSelectPage";
 import { FocusedOnboardingShell } from "./FocusedOnboardingShell";
@@ -43,12 +43,16 @@ export function GuidedOnboardingPage({
   onComplete,
   checkoutResult,
   checkoutSessionId,
+  accountProfile,
 }: {
   onSignOut: () => void;
   onRoleChanged: (role: "agency" | "client") => void;
   onComplete: (destinationSection?: "profile" | "billing") => Promise<{ ok: boolean; error?: string }>;
   checkoutResult?: "success" | "cancelled" | null;
   checkoutSessionId?: string | null;
+  /** Captured from App's authoritative /me bootstrap. Reusing it prevents a
+   * second /me request between login and the first onboarding step. */
+  accountProfile?: { displayName: string | null; website: string | null } | null;
 }) {
   const [state, setState] = useState<State | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -58,6 +62,8 @@ export function GuidedOnboardingPage({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activationSummary, setActivationSummary] = useState<SubscriptionActivationSummary | null>(null);
+  const loadGeneration = useRef(0);
+  const shouldLoadStandaloneProfile = accountProfile === undefined;
 
   const complete = useCallback(async () => {
     setBusy(true);
@@ -73,32 +79,48 @@ export function GuidedOnboardingPage({
   }, [onComplete]);
 
   const load = useCallback(async () => {
+    const generation = ++loadGeneration.current;
     setLoadError(null);
     try {
-      const [setupRes, meRes] = await Promise.all([
-        fetch(`${apiBase()}/api/platform/onboarding`, { credentials: "include", cache: "no-store" }),
-        fetch(`${apiBase()}/api/platform/me`, { credentials: "include", cache: "no-store" }),
-      ]);
+      const setupRes = await fetch(`${apiBase()}/api/platform/onboarding`, { credentials: "include", cache: "no-store" });
       const setup = await setupRes.json().catch(() => ({})) as { state?: State; error?: string };
       if (!setupRes.ok || !setup.state) throw new Error(setup.error ?? "Could not load account setup.");
+      if (generation !== loadGeneration.current) return;
       if (setup.state.step === "first_project") {
         await complete();
         return;
       }
       setState(setup.state);
-      if (meRes.ok) {
-        const me = await meRes.json() as {
-          accountProfile?: { displayName?: string | null; website?: string | null };
-        };
-        setDisplayName((current) => current || me.accountProfile?.displayName || "");
-        setWebsite((current) => current || me.accountProfile?.website || "");
+      // Standalone callers retain the older profile lookup. The App always
+      // passes null or a server-authoritative profile, so the login hand-off
+      // does not pay for a duplicate /me request.
+      if (shouldLoadStandaloneProfile) {
+        const meRes = await fetch(`${apiBase()}/api/platform/me`, { credentials: "include", cache: "no-store" });
+        if (generation !== loadGeneration.current) return;
+        if (meRes.ok) {
+          const me = await meRes.json() as {
+            accountProfile?: { displayName?: string | null; website?: string | null };
+          };
+          setDisplayName((current) => current || me.accountProfile?.displayName || "");
+          setWebsite((current) => current || me.accountProfile?.website || "");
+        }
       }
     } catch (cause) {
+      if (generation !== loadGeneration.current) return;
       setLoadError(cause instanceof Error ? cause.message : "Could not load account setup.");
     }
-  }, [complete]);
+  }, [complete, shouldLoadStandaloneProfile]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    return () => { loadGeneration.current += 1; };
+  }, [load]);
+
+  useEffect(() => {
+    if (!accountProfile) return;
+    setDisplayName((current) => current || accountProfile.displayName || "");
+    setWebsite((current) => current || accountProfile.website || "");
+  }, [accountProfile]);
 
   const handleAccessActivated = useCallback((summary: SubscriptionActivationSummary) => {
     if (checkoutResult === "success") {

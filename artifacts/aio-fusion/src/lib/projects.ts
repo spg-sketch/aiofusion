@@ -143,18 +143,25 @@ export function assignProjectOwner(id: string, owner: string): Client | null {
 // "disappearing again". Only the master's browser caches an admin-role account,
 // so only the master ever claims here, and the matching server-side coalesce
 // only fills a NULL owner (it never reassigns a real one), so the claim is safe.
-export async function migrateAssignOwnerlessToAdmin(): Promise<void> {
+export async function migrateAssignOwnerlessToAdmin(options: { signal?: AbortSignal } = {}): Promise<void> {
   try {
+    if (options.signal?.aborted) return;
     const ownerless = loadStoredProjects().filter((p) => !p.owner);
     if (!ownerless.length) return;
     const admin = getLocalUsers().find((u) => u.role === "admin");
     if (!admin) return; // only the master may claim ownerless projects
     for (const p of ownerless) {
+      if (options.signal?.aborted) return;
       const claimed = { ...p, owner: admin.username } as Client;
       // Persist the claim locally only once the shared store confirms it. A
       // transient push failure then leaves the project ownerless so it retries
       // on the next sync, rather than going NULL-owned on the server forever.
-      const result = await pushProjectMeta(claimed as unknown as Record<string, unknown> & { id: string });
+      const result = await pushProjectMeta(
+        claimed as unknown as Record<string, unknown> & { id: string },
+        undefined,
+        { signal: options.signal },
+      );
+      if (options.signal?.aborted) return;
       if (!result.ok) continue;
       const current = loadStoredProjects();
       const idx = current.findIndex((x) => x.id === p.id);

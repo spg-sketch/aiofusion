@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
   TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
@@ -60,6 +60,9 @@ function PlatformHomePage({
   onOauthParamsConsumed,
   backToAgency,
   discountInviteToken,
+  authPending = false,
+  authError,
+  onRetryAuthentication,
 }: {
   onCreateProject: () => void;
   onContinueToProjects: () => void;
@@ -93,6 +96,13 @@ function PlatformHomePage({
   /** Token from a discount-invite link (/?discount_invite=...). Captured by
    *  App before the history-sync effect strips the query string. */
   discountInviteToken?: string | null;
+  /** A credential was accepted, but its cookie/setup authority is still being
+   * verified. No authenticated data is rendered in this state. */
+  authPending?: boolean;
+  /** A failed authority check is surfaced in the sign-in layout, never as an
+   * authenticated fallback. */
+  authError?: string | null;
+  onRetryAuthentication?: () => void;
 }) {
   // Pre-fill the email and remember the method from the last successful
   // sign-in on this browser - kept across logout on purpose (never the
@@ -102,6 +112,8 @@ function PlatformHomePage({
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(initialNotice ?? null);
   const [mfaChallenge, setMfaChallenge] = useState<MfaChallenge | null>(null);
+  const loginInFlight = useRef(false);
+  const [loginLoading, setLoginLoading] = useState(false);
   // Sign-up form
   const [showSignup, setShowSignup] = useState(() => Boolean(discountInviteToken));
   // Discount invite (beta/VIP link). Looked up server-side so the signup form
@@ -150,6 +162,10 @@ function PlatformHomePage({
   const [resetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetDone, setResetDone] = useState(false);
+
+  useEffect(() => {
+    if (authError) setLoginError(authError);
+  }, [authError]);
 
   // Arriving from a password-reset email link (/?reset_token=...): the token
   // is captured by App.tsx before its history sync strips the query string and
@@ -272,7 +288,7 @@ function PlatformHomePage({
       setLoginError("This verification link is invalid. Please request a new one.");
       setSignupAwaitingVerification(true);
     }
-  }, []);
+  }, [oauthRedirectParams, onOauthParamsConsumed]);
 
   const handleSignup = (e: React.FormEvent) => {
     e.preventDefault();
@@ -456,6 +472,25 @@ function PlatformHomePage({
                     </button>
                   </>
                 )}
+            </div>
+          </div>
+        ) : authPending ? (
+          <div
+            data-testid="auth-session-handoff"
+            className="rounded-2xl p-6 sm:p-10 mb-6 sm:mb-8"
+            style={{ background: "#1A647B", boxShadow: "0 8px 24px -12px rgba(26,100,123,0.35)" }}
+            aria-live="polite"
+          >
+            <div className="max-w-md mx-auto py-8 text-center">
+              <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: "rgba(255,255,255,0.15)" }}>
+                <Loader2 size={28} className="animate-spin" color="white" />
+              </div>
+              <h2 className="text-[26px] font-bold mb-2" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
+                Signing you in
+              </h2>
+              <p className="text-[15px] leading-[1.7]" style={{ color: "rgba(255,255,255,0.8)" }}>
+                Confirming your account and setup details…
+              </p>
             </div>
           </div>
         ) : !session ? (
@@ -786,19 +821,29 @@ function PlatformHomePage({
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
+                    // State updates are asynchronous, so a ref is required to
+                    // make double Enter/click submits single-flight.
+                    if (loginInFlight.current) return;
+                    loginInFlight.current = true;
                     setLoginError(null);
+                    setLoginLoading(true);
                     void (async () => {
-                      const result = await serverLogin(username, password);
-                      if (result.ok) {
-                        saveLastSignIn({ email: username.trim(), method: "password" });
-                        setUsername("");
-                        setPassword("");
-                        onLoginSuccess(result.session);
-                      } else if ("mfa" in result) {
-                        setPassword("");
-                        setMfaChallenge(result.mfa);
-                      } else {
-                        setLoginError(result.error);
+                      try {
+                        const result = await serverLogin(username, password);
+                        if (result.ok) {
+                          saveLastSignIn({ email: username.trim(), method: "password" });
+                          setUsername("");
+                          setPassword("");
+                          onLoginSuccess(result.session);
+                        } else if ("mfa" in result) {
+                          setPassword("");
+                          setMfaChallenge(result.mfa);
+                        } else {
+                          setLoginError(result.error);
+                        }
+                      } finally {
+                        loginInFlight.current = false;
+                        setLoginLoading(false);
                       }
                     })();
                   }}
@@ -841,16 +886,27 @@ function PlatformHomePage({
                     </button>
                   </div>
                   {loginError && (
-                    <p className="text-[13px] font-semibold text-center py-2 px-3 rounded-xl" style={{ color: "white", background: "rgba(220,38,38,0.25)" }}>
-                      {loginError}
-                    </p>
+                    <div className="text-[13px] font-semibold text-center py-2 px-3 rounded-xl" style={{ color: "white", background: "rgba(220,38,38,0.25)" }} role="alert">
+                      <p>{loginError}</p>
+                      {authError && onRetryAuthentication && (
+                        <button
+                          type="button"
+                          data-testid="button-retry-authentication"
+                          onClick={onRetryAuthentication}
+                          className="mt-2 underline underline-offset-2 hover:opacity-80"
+                        >
+                          Retry session check
+                        </button>
+                      )}
+                    </div>
                   )}
                   <button
                     type="submit"
+                    disabled={loginLoading}
                     className="self-center w-full sm:w-auto sm:min-w-[220px] flex items-center justify-center gap-2 px-10 py-3.5 rounded-xl text-[14px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110 mt-1"
                     style={{ background: accent }}
                   >
-                    <LogIn size={16} /> Sign in
+                    {loginLoading ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />} {loginLoading ? "Signing in…" : "Sign in"}
                   </button>
                 </form>
                 {onOpenGeorge && (
