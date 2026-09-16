@@ -18,6 +18,13 @@ import {
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { InsightObjectStorage } from "../lib/insight-object-storage";
 import { canAccessInsightsCms } from "../lib/insights-cms-access";
+import {
+  addOrRemoveHomepagePin,
+  HomepagePinLimitError,
+  lockHomepagePins,
+  readHomepagePinnedIds,
+  writeHomepagePinnedIds,
+} from "../lib/insights-homepage-pins";
 
 const router = Router();
 const storage = new InsightObjectStorage();
@@ -88,14 +95,16 @@ async function validMediaReferences(
   return [...ids].every((id) => ALLOWED_IMAGE_TYPES.has(allowed.get(id) ?? ""));
 }
 
-async function serializeArticles(rows: InsightArticleRow[]) {
+async function serializeArticles(rows: InsightArticleRow[], pinnedIds?: string[]) {
   const media = await db
     .select()
     .from(insightMediaTable)
     .where(isNull(insightMediaTable.deletedAt));
   const byId = new Map(media.map((item) => [item.id, item]));
+  const homepagePins = new Set(pinnedIds ?? await readHomepagePinnedIds());
   return rows.map((row) => ({
     ...row,
+    pinned: homepagePins.has(row.id) && row.status === "published",
     coverImageUrl:
       (row.coverMediaId ? byId.get(row.coverMediaId)?.publicUrl : null) ?? null,
     body: (row.body as InsightBlock[]).map((block) => {
@@ -111,15 +120,17 @@ async function serializeArticles(rows: InsightArticleRow[]) {
 }
 
 router.get("/insights", async (_req, res) => {
+  const pinnedIds = await readHomepagePinnedIds();
   const rows = await db
     .select()
     .from(insightArticlesTable)
     .where(eq(insightArticlesTable.status, "published"))
     .orderBy(desc(insightArticlesTable.datePublished), desc(insightArticlesTable.createdAt));
-  res.json(await serializeArticles(rows));
+  res.json(await serializeArticles(rows, pinnedIds));
 });
 
 router.get("/insights/:slug", async (req, res) => {
+  const pinnedIds = await readHomepagePinnedIds();
   const [row] = await db
     .select()
     .from(insightArticlesTable)
@@ -132,16 +143,17 @@ router.get("/insights/:slug", async (req, res) => {
     res.status(404).json({ error: "Story not found" });
     return;
   }
-  res.json((await serializeArticles([row]))[0]);
+  res.json((await serializeArticles([row], pinnedIds))[0]);
 });
 
 router.get("/admin/insights", requirePlatformAuth, async (req, res) => {
   if (!requireInsightsAdmin(req, res)) return;
+  const pinnedIds = await readHomepagePinnedIds();
   const rows = await db
     .select()
     .from(insightArticlesTable)
     .orderBy(desc(insightArticlesTable.updatedAt));
-  res.json(await serializeArticles(rows));
+  res.json(await serializeArticles(rows, pinnedIds));
 });
 
 router.post("/admin/insights", requirePlatformAuth, async (req, res) => {
@@ -162,19 +174,36 @@ router.post("/admin/insights", requirePlatformAuth, async (req, res) => {
     return;
   }
   try {
-    const [row] = await db
-      .insert(insightArticlesTable)
-      .values({
-        ...input,
-        body,
-        coverImageUrl: null,
-        id: randomUUID(),
-        canonicalUrl: input.canonicalUrl || canonicalFor(input.slug),
-        publishedAt: input.status === "published" ? new Date() : null,
-      })
-      .returning();
-    res.status(201).json((await serializeArticles([row!]))[0]);
+    const id = randomUUID();
+    const row = await db.transaction(async (tx) => {
+      await lockHomepagePins(tx);
+      const pinnedIds = await readHomepagePinnedIds(tx);
+      const nextPinnedIds = addOrRemoveHomepagePin(
+        pinnedIds,
+        id,
+        input.status === "published" && input.pinned === true,
+      );
+      const { pinned: _pinned, ...articleInput } = input;
+      const [created] = await tx
+        .insert(insightArticlesTable)
+        .values({
+          ...articleInput,
+          body,
+          coverImageUrl: null,
+          id,
+          canonicalUrl: input.canonicalUrl || canonicalFor(input.slug),
+          publishedAt: input.status === "published" ? new Date() : null,
+        })
+        .returning();
+      await writeHomepagePinnedIds(tx, nextPinnedIds);
+      return created!;
+    });
+    res.status(201).json((await serializeArticles([row]))[0]);
   } catch (error) {
+    if (error instanceof HomepagePinLimitError) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
     req.log.warn({ err: error }, "Unable to create Insights story");
     res.status(409).json({ error: "A story with that slug already exists" });
   }
@@ -199,33 +228,56 @@ router.patch("/admin/insights/:id", requirePlatformAuth, async (req, res) => {
   }
   const idParam = req.params["id"];
   const articleId = Array.isArray(idParam) ? idParam[0] ?? "" : idParam ?? "";
-  const [existing] = await db
-    .select()
-    .from(insightArticlesTable)
-    .where(eq(insightArticlesTable.id, articleId))
-    .limit(1);
-  if (!existing) {
-    res.status(404).json({ error: "Story not found" });
-    return;
-  }
   try {
-    const [row] = await db
-      .update(insightArticlesTable)
-      .set({
-        ...input,
-        body,
-        coverImageUrl: null,
-        canonicalUrl: input.canonicalUrl || canonicalFor(input.slug),
-        updatedAt: new Date(),
-        publishedAt:
-          input.status === "published"
-            ? existing.publishedAt ?? new Date()
-            : existing.publishedAt,
-      })
-      .where(eq(insightArticlesTable.id, existing.id))
-      .returning();
-    res.json((await serializeArticles([row!]))[0]);
+    const row = await db.transaction(async (tx) => {
+      await lockHomepagePins(tx);
+      // Re-read after taking the singleton lock. A delete can commit between
+      // an unlocked preflight read and this transaction; in that case there
+      // is no article to update and, importantly, no pin metadata to write.
+      const [existing] = await tx
+        .select()
+        .from(insightArticlesTable)
+        .where(eq(insightArticlesTable.id, articleId))
+        .limit(1);
+      if (!existing) return null;
+
+      const pinnedIds = await readHomepagePinnedIds(tx);
+      const existingPinned = pinnedIds.includes(existing.id);
+      const requestedPinned = input.pinned === undefined ? existingPinned : input.pinned;
+      const nextPinnedIds = addOrRemoveHomepagePin(
+        pinnedIds,
+        existing.id,
+        input.status === "published" && requestedPinned === true,
+      );
+      const { pinned: _pinned, ...articleInput } = input;
+      const [updated] = await tx
+        .update(insightArticlesTable)
+        .set({
+          ...articleInput,
+          body,
+          coverImageUrl: null,
+          canonicalUrl: input.canonicalUrl || canonicalFor(input.slug),
+          updatedAt: new Date(),
+          publishedAt:
+            input.status === "published"
+              ? existing.publishedAt ?? new Date()
+              : existing.publishedAt,
+        })
+        .where(eq(insightArticlesTable.id, existing.id))
+        .returning();
+      await writeHomepagePinnedIds(tx, nextPinnedIds);
+      return updated!;
+    });
+    if (!row) {
+      res.status(404).json({ error: "Story not found" });
+      return;
+    }
+    res.json((await serializeArticles([row]))[0]);
   } catch (error) {
+    if (error instanceof HomepagePinLimitError) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
     req.log.warn({ err: error }, "Unable to update Insights story");
     res.status(409).json({ error: "A story with that slug already exists" });
   }
@@ -235,9 +287,14 @@ router.delete("/admin/insights/:id", requirePlatformAuth, async (req, res) => {
   if (!requireInsightsAdmin(req, res)) return;
   const idParam = req.params["id"];
   const articleId = Array.isArray(idParam) ? idParam[0] ?? "" : idParam ?? "";
-  await db
-    .delete(insightArticlesTable)
-    .where(eq(insightArticlesTable.id, articleId));
+  await db.transaction(async (tx) => {
+    await lockHomepagePins(tx);
+    const pinnedIds = await readHomepagePinnedIds(tx);
+    await tx
+      .delete(insightArticlesTable)
+      .where(eq(insightArticlesTable.id, articleId));
+    await writeHomepagePinnedIds(tx, addOrRemoveHomepagePin(pinnedIds, articleId, false));
+  });
   res.status(204).end();
 });
 

@@ -32,6 +32,7 @@ export interface InsightArticle {
   /** @nullable */
   canonicalUrl: string | null;
   status: string;
+  pinned: boolean;
   createdAt?: Date;
   updatedAt?: Date;
   /** @nullable */

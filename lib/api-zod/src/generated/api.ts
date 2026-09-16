@@ -130,6 +130,7 @@ export const ListPublishedInsightsResponseItem = zod.object({
   "focusKeyphrase": zod.string().nullable(),
   "canonicalUrl": zod.string().nullable(),
   "status": zod.string(),
+  "pinned": zod.boolean(),
   "createdAt": zod.date().optional(),
   "updatedAt": zod.date().optional(),
   "publishedAt": zod.date().nullish()
@@ -168,6 +169,7 @@ export const GetPublishedInsightResponse = zod.object({
   "focusKeyphrase": zod.string().nullable(),
   "canonicalUrl": zod.string().nullable(),
   "status": zod.string(),
+  "pinned": zod.boolean(),
   "createdAt": zod.date().optional(),
   "updatedAt": zod.date().optional(),
   "publishedAt": zod.date().nullish()
@@ -201,6 +203,7 @@ export const ListAdminInsightsResponseItem = zod.object({
   "focusKeyphrase": zod.string().nullable(),
   "canonicalUrl": zod.string().nullable(),
   "status": zod.string(),
+  "pinned": zod.boolean(),
   "createdAt": zod.date().optional(),
   "updatedAt": zod.date().optional(),
   "publishedAt": zod.date().nullish()
@@ -238,7 +241,8 @@ export const CreateAdminInsightBody = zod.object({
   "seoDescription": zod.string().nullish(),
   "focusKeyphrase": zod.string().nullish(),
   "canonicalUrl": zod.string().nullish(),
-  "status": zod.enum(['draft', 'published'])
+  "status": zod.enum(['draft', 'published']),
+  "pinned": zod.boolean().optional()
 })
 
 export const CreateAdminInsightResponse = zod.object({
@@ -265,6 +269,7 @@ export const CreateAdminInsightResponse = zod.object({
   "focusKeyphrase": zod.string().nullable(),
   "canonicalUrl": zod.string().nullable(),
   "status": zod.string(),
+  "pinned": zod.boolean(),
   "createdAt": zod.date().optional(),
   "updatedAt": zod.date().optional(),
   "publishedAt": zod.date().nullish()
@@ -305,7 +310,8 @@ export const UpdateAdminInsightBody = zod.object({
   "seoDescription": zod.string().nullish(),
   "focusKeyphrase": zod.string().nullish(),
   "canonicalUrl": zod.string().nullish(),
-  "status": zod.enum(['draft', 'published'])
+  "status": zod.enum(['draft', 'published']),
+  "pinned": zod.boolean().optional()
 })
 
 export const UpdateAdminInsightResponse = zod.object({
@@ -332,6 +338,7 @@ export const UpdateAdminInsightResponse = zod.object({
   "focusKeyphrase": zod.string().nullable(),
   "canonicalUrl": zod.string().nullable(),
   "status": zod.string(),
+  "pinned": zod.boolean(),
   "createdAt": zod.date().optional(),
   "updatedAt": zod.date().optional(),
   "publishedAt": zod.date().nullish()

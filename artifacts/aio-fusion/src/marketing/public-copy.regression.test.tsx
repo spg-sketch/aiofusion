@@ -8,10 +8,10 @@
  * an Insight. Authenticated product copy is deliberately out of scope here.
  */
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import LandingPage from "./LandingPage";
 import PricingPage from "./PricingPage";
-import InsightsPage from "./InsightsPage";
+import InsightsPage, { type PublicInsight } from "./InsightsPage";
 import ForAgenciesPage from "./ForAgenciesPage";
 import ForAgentsPage from "./ForAgentsPage";
 import { ARTICLE_META, PAGE_META } from "./pageMeta";
@@ -30,6 +30,7 @@ function textOf(element: Element | null): string {
 
 const noop = () => {};
 const marketingProps = { onLogin: noop, onBack: noop, onNavigate: noop, isAuthed: false };
+afterEach(() => { globalThis.__AIO_PRERENDER_INSIGHTS__ = undefined; });
 
 const EXPECTED_ARTICLE_IDS = [
   "pr-professionals-not-threat",
@@ -48,7 +49,14 @@ const EXPECTED_ARTICLE_IDS = [
 ] as const;
 
 describe("public homepage and pricing copy", () => {
-  it("keeps the exact homepage headline, presentation and discovery cards", () => {
+  it("keeps the homepage copy and renders the latest CMS discovery cards", () => {
+    globalThis.__AIO_PRERENDER_INSIGHTS__ = [
+      { id: "older", slug: "older", title: "Older CMS story", datePublished: "2026-01-01", status: "published", pinned: false },
+      { id: "latest", slug: "latest", title: "Latest CMS story", datePublished: "2026-09-16", status: "published", pinned: false },
+      { id: "second", slug: "second", title: "Second CMS story", datePublished: "2026-09-15", status: "published", pinned: false },
+      { id: "external", slug: "external", title: "External CMS story", datePublished: "2026-09-14", status: "published", pinned: false, externalUrl: "https://example.com/guide" },
+      { id: "draft", slug: "draft", title: "Draft CMS story", datePublished: "2026-09-17", status: "draft", pinned: false },
+    ] as PublicInsight[];
     const doc = documentFrom(renderToStaticMarkup(<LandingPage {...marketingProps} />));
     const headings = [...doc.querySelectorAll("h2")].map((heading) => textOf(heading));
     const insightCards = [...doc.querySelectorAll("section a h3")].map((heading) => textOf(heading));
@@ -60,14 +68,13 @@ describe("public homepage and pricing copy", () => {
       "Support sales growth and measure your brand's visibility across AI search engines. AIO Fusion is built specifically for PR agencies and in-house communications teams to track, optimise, and report on generative engine performance.",
     );
     expect(headings).toContain("Cost-effective PR technology for the age of AI.");
-    expect(insightCards).toContain("A Marketer's Guide to Winning AI Authority in 2026");
-    expect(insightCards).toContain("PR professionals should not see AI as a threat");
-    expect(insightCards).toContain("Why thought leadership is the engine of AI visibility");
+    expect(insightCards).toEqual(["Latest CMS story", "Second CMS story", "External CMS story"]);
+    expect(doc.querySelector('a[href$="insights/latest"]')).not.toBeNull();
     expect(
       [...doc.querySelectorAll("a")].some(
         (link) =>
           link.getAttribute("href") ===
-          "https://simpaticopraiauthorityguide.carrd.co/" &&
+          "https://example.com/guide" &&
           link.getAttribute("target") === "_blank" &&
           link.getAttribute("rel") === "noopener noreferrer",
       ),

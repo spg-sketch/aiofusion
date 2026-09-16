@@ -139,6 +139,7 @@ function createNewStory(): InsightArticleInput {
     body: template.body,
     coverImageAlt: '',
     status: 'draft',
+    pinned: false,
   };
 }
 
@@ -159,6 +160,7 @@ export function buildStoryPayload(
     tag: storyData.tag || 'Uncategorized',
     coverImageAlt: storyData.coverImageAlt || '',
     status,
+    pinned: status === 'published' && storyData.pinned === true,
   };
 }
 
@@ -318,6 +320,7 @@ function StoryEditor({ id, initialData, onSave, onDelete, getMediaUrl }: StoryEd
   const [tab, setTab] = useState<'content' | 'meta'>('content');
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [mediaTarget, setMediaTarget] = useState<'cover' | number | null>(null);
 
   // Reset data when ID changes (switching stories)
@@ -343,6 +346,7 @@ function StoryEditor({ id, initialData, onSave, onDelete, getMediaUrl }: StoryEd
 
   const handleSaveAction = async (status: 'draft' | 'published') => {
     setIsSaving(true);
+    setSaveError(null);
     try {
       const res = await onSave(data, status);
       if (res) {
@@ -350,13 +354,18 @@ function StoryEditor({ id, initialData, onSave, onDelete, getMediaUrl }: StoryEd
         setData(prev => ({
           ...prev,
           slug: res.slug,
-          status: res.status as 'draft' | 'published'
+          status: res.status as 'draft' | 'published',
+          pinned: res.pinned,
         }));
       }
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 3000);
     } catch (err: any) {
-      alert("Failed to save: " + (err.message || String(err)));
+      const responseData = err?.data ?? err?.response?.data;
+      const apiMessage = responseData && typeof responseData === 'object' && typeof responseData.error === 'string'
+        ? responseData.error
+        : null;
+      setSaveError(apiMessage || (err.message || String(err)));
     } finally {
       setIsSaving(false);
     }
@@ -439,6 +448,11 @@ function StoryEditor({ id, initialData, onSave, onDelete, getMediaUrl }: StoryEd
              : isSaved ? <span className="text-green-600 flex items-center gap-2"><Check size={14} /> Saved</span> 
              : <span className="text-gray-400 capitalize">{data.status}</span>}
           </div>
+          {saveError && (
+            <span role="alert" data-testid="status-save-error" className="max-w-[280px] text-xs font-semibold text-red-600">
+              {saveError}
+            </span>
+          )}
           <button 
             onClick={() => handleSaveAction('draft')} 
             disabled={isSaving} 
@@ -637,6 +651,29 @@ function StoryEditor({ id, initialData, onSave, onDelete, getMediaUrl }: StoryEd
                 
                 <Input label="Override Publish Date" type="date" value={data.datePublished ? data.datePublished.substring(0,10) : ''} onChange={(e: any) => setData({...data, datePublished: e.target.value ? e.target.value + "T00:00:00Z" : null})} />
               </div>
+
+                <div className="col-span-2 mt-2 rounded-xl border border-[#C8497A]/20 bg-[#C8497A]/5 p-4">
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      aria-label="Feature on homepage"
+                      data-testid="checkbox-feature-homepage"
+                      checked={data.pinned === true}
+                      disabled={data.status !== 'published'}
+                      onChange={(event) => setData({ ...data, pinned: event.target.checked })}
+                      className="mt-1 h-4 w-4 accent-[#C8497A]"
+                    />
+                    <span>
+                      <span className="block text-sm font-bold text-[#0a1628]">Feature on homepage</span>
+                      <span className="mt-1 block text-xs leading-relaxed text-gray-500">
+                        Pinned published stories appear before the latest articles. The newest pinned story appears first.
+                        {data.status !== 'published'
+                          ? ' Publish this story before featuring it.'
+                          : ' Up to 3 stories can be featured.'}
+                      </span>
+                    </span>
+                  </label>
+                </div>
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10 mb-8">
@@ -682,6 +719,7 @@ export function InsightsAdminPage({ onBack }: { onBack: () => void }) {
 
   const { data: insights, refetch } = useListAdminInsights({ query: { queryKey: getListAdminInsightsQueryKey() } });
   const { data: mediaItems } = useListAdminInsightMedia({ query: { queryKey: getListAdminInsightMediaQueryKey() } });
+  const pinnedCount = insights?.filter((story: InsightArticle) => story.pinned).length ?? 0;
   
   const createInsight = (useCreateAdminInsight as any)();
   const updateInsight = (useUpdateAdminInsight as any)();
@@ -775,6 +813,10 @@ export function InsightsAdminPage({ onBack }: { onBack: () => void }) {
               />
             </div>
           </div>
+            <div className="border-b border-gray-200 bg-white px-5 py-3 text-xs leading-relaxed text-gray-500">
+              <strong className="text-[#0a1628]">{pinnedCount} of 3</strong> homepage feature slots used.
+              Published stories can be pinned from Settings &amp; SEO; featured stories appear first.
+            </div>
           
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {insights ? (
@@ -798,6 +840,11 @@ export function InsightsAdminPage({ onBack }: { onBack: () => void }) {
                         <span className="flex items-center gap-1 rounded bg-blue-100 px-2 py-1 font-bold tracking-wide text-blue-700">
                           <ExternalLink size={11} />
                           EXTERNAL
+                        </span>
+                      )}
+                      {story.pinned && story.status === 'published' && (
+                        <span data-testid={`pinned-badge-${story.id}`} className="rounded bg-[#C8497A]/15 px-2 py-1 font-bold tracking-wide text-[#C8497A]">
+                          PINNED
                         </span>
                       )}
                     </div>

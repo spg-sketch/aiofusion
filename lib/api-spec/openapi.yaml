@@ -433,7 +433,7 @@ components:
           type: string
     InsightArticle:
       type: object
-      required: [id, slug, title, excerpt, tag, body, status, coverImageUrl, coverImageAlt, seoTitle, seoDescription, focusKeyphrase, canonicalUrl]
+      required: [id, slug, title, excerpt, tag, body, status, pinned, coverImageUrl, coverImageAlt, seoTitle, seoDescription, focusKeyphrase, canonicalUrl]
       properties:
         id: { type: string }
         slug: { type: string }
@@ -454,6 +454,7 @@ components:
         focusKeyphrase: { type: [string, 'null'] }
         canonicalUrl: { type: [string, 'null'] }
         status: { type: string }
+        pinned: { type: boolean }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         publishedAt: { type: [string, 'null'], format: date-time }
@@ -480,6 +481,7 @@ components:
         focusKeyphrase: { type: [string, 'null'] }
         canonicalUrl: { type: [string, 'null'] }
         status: { type: string, enum: [draft, published] }
+        pinned: { type: boolean }
     InsightMedia:
       type: object
       required: [id, fileName, contentType, sizeBytes, publicUrl, altText, createdAt]

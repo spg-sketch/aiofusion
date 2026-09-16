@@ -27,9 +27,7 @@ import step2Img from "../assets/photos/photo-strategy.jpg";
 import step3Img from "../assets/photos/photo-plan.jpg";
 import step4Img from "../assets/photos/photo-optimise.jpg";
 import step5Img from "../assets/photos/photo-measure.jpg";
-import blogTile1 from "../assets/blog-tile-1.webp";
-import article1Img from "../assets/article-1-pr-ai.webp";
-import article2Img from "../assets/article-2-thought-leadership.webp";
+import { useLatestInsights } from "./useLatestInsights";
 import heroBgImg from "../assets/hero-bg.webp";
 
 const llmEngines = [
@@ -65,6 +63,7 @@ export default function LandingPageC({
   isAuthed?: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const { articles, loading: articlesLoading, error: articlesError } = useLatestInsights();
   const paper = "#FBF6EC";
   const ink = "#102B36";
   const accent = "#C8497A";
@@ -327,20 +326,22 @@ export default function LandingPageC({
             </a>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
-            {[
-              { img: blogTile1, tag: "Guide", title: "A Marketer's Guide to Winning AI Authority in 2026", excerpt: "What is AIO? And is PR really the new SEO?", url: "https://simpaticopraiauthorityguide.carrd.co/", external: true, accent: vars.teal },
-              { img: article1Img, tag: "Article", title: "PR professionals should not see AI as a threat", excerpt: "Why AI will elevate the role of PR and marketing professionals, not replace them.", url: `${base}insights/pr-professionals-not-threat`, external: false, accent: accent },
-              { img: article2Img, tag: "Article", title: "Why thought leadership is the engine of AI visibility", excerpt: "AI systems draw on third-party authority signals. Thought leadership and earned media can help a brand become easier to recognise and cite.", url: `${base}insights/thought-leadership-engine-ai-visibility`, external: false, accent: vars.gold },
-            ].map((a) => (
+            {articles.map((article, index) => ({
+              ...article,
+              img: article.coverImageUrl,
+              url: article.externalUrl || `${base}insights/${encodeURIComponent(article.slug)}`,
+              external: Boolean(article.externalUrl),
+              accent: [vars.teal, accent, vars.gold][index],
+            })).map((a) => (
               <a
-                key={a.title}
+                key={a.id}
                 href={a.url ?? "#"}
                 {...(a.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
                 className="group block bg-white rounded-2xl overflow-hidden transition-transform hover:-translate-y-1 cursor-pointer"
                 style={{ border: `1px solid ${vars.g200}`, boxShadow: "0 4px 14px -6px rgba(0,0,0,0.08)" }}
               >
                 <div className="aspect-[16/10] overflow-hidden" style={{ background: a.accent }}>
-                  <img src={a.img} alt="" aria-hidden="true" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  {a.img && <img src={a.img} alt={a.coverImageAlt || ""} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />}
                 </div>
                 <div className="p-5">
                   <span className="inline-block text-[10px] font-bold uppercase tracking-[0.16em] mb-2 px-2 py-1 rounded" style={{ background: `${a.accent}18`, color: a.accent }}>{a.tag}</span>
@@ -350,6 +351,11 @@ export default function LandingPageC({
               </a>
             ))}
           </div>
+          {articlesError ? (
+            <p role="status" className="mt-4 text-sm" style={{ color: vars.g600 }}>We couldn’t refresh the latest articles. Please try again shortly.</p>
+          ) : articles.length === 0 ? (
+            <p role="status" className="mt-4 text-sm" style={{ color: vars.g600 }}>{articlesLoading ? "Loading latest articles…" : "New articles will appear here when published."}</p>
+          ) : null}
         </div>
       </section>
 

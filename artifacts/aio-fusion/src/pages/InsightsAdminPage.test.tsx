@@ -7,10 +7,11 @@ const cmsMocks = vi.hoisted(() => ({
   update: vi.fn(),
   remove: vi.fn(),
   refetch: vi.fn(),
+  insights: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock('@workspace/api-client-react', () => ({
-  useListAdminInsights: () => ({ data: [], refetch: cmsMocks.refetch }),
+  useListAdminInsights: () => ({ data: cmsMocks.insights, refetch: cmsMocks.refetch }),
   getListAdminInsightsQueryKey: () => ['insights'],
   useCreateAdminInsight: () => ({ mutateAsync: cmsMocks.create }),
   useUpdateAdminInsight: () => ({ mutateAsync: cmsMocks.update }),
@@ -24,6 +25,7 @@ import { buildStoryPayload, createStoryTemplate, InsightsAdminPage } from './Ins
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  cmsMocks.insights = [];
 });
 
 describe('Insights CMS story templates', () => {
@@ -68,6 +70,46 @@ describe('Insights CMS story templates', () => {
       title: 'Untitled Story',
       status: 'published',
     });
+  });
+
+  it('only sends homepage pinning for published stories', () => {
+    const story = {
+      slug: 'homepage-story',
+      title: 'Homepage story',
+      excerpt: '',
+      tag: 'Insights',
+      body: [],
+      coverImageAlt: '',
+      status: 'published' as const,
+      pinned: true,
+    };
+
+    expect(buildStoryPayload(story, 'published').pinned).toBe(true);
+    expect(buildStoryPayload(story, 'draft').pinned).toBe(false);
+  });
+
+  it('shows the homepage feature control in Settings & SEO', () => {
+    render(<InsightsAdminPage onBack={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /write new story/i }));
+    fireEvent.click(screen.getByRole('button', { name: /settings & seo/i }));
+
+    expect(screen.getByRole('checkbox', { name: /feature on homepage/i })).toBeDisabled();
+    expect(screen.getByText(/publish this story before featuring it/i)).toBeInTheDocument();
+  });
+
+  it('marks occupied homepage slots in the story list', () => {
+    cmsMocks.insights = [{
+      id: 'pinned-story',
+      title: 'Pinned story',
+      status: 'published',
+      pinned: true,
+      body: [],
+    }];
+    render(<InsightsAdminPage onBack={() => {}} />);
+
+    expect(screen.getByTestId('pinned-badge-pinned-story')).toHaveTextContent('PINNED');
+    expect(screen.getByText('1 of 3')).toBeInTheDocument();
+    expect(screen.getByText(/homepage feature slots used/i)).toBeInTheDocument();
   });
 
   it('publishes a newly titled story through the create endpoint', async () => {

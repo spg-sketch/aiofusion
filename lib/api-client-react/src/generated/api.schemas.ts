@@ -88,6 +88,7 @@ export interface InsightArticle {
   /** @nullable */
   canonicalUrl: string | null;
   status: string;
+  pinned: boolean;
   createdAt?: string;
   updatedAt?: string;
   /** @nullable */
@@ -130,6 +131,7 @@ export interface InsightArticleInput {
   /** @nullable */
   canonicalUrl?: string | null;
   status: InsightArticleInputStatus;
+  pinned?: boolean;
 }
 
 export interface InsightMedia {

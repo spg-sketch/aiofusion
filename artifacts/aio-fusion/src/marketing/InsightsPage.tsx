@@ -24,6 +24,7 @@ export type PublicInsight = {
   focusKeyphrase: string | null;
   canonicalUrl: string | null;
   status: string;
+  pinned: boolean;
 };
 
 declare global {
@@ -48,6 +49,7 @@ const FALLBACK_INSIGHTS: PublicInsight[] = [
     focusKeyphrase: article.tag === "Guidance" ? "AIO Fusion guidance" : "AI visibility",
     canonicalUrl: `https://aiofusion.ai/insights/${article.id}`,
     status: "published",
+    pinned: false,
   })),
   {
     id: "ext-guide",
@@ -66,6 +68,7 @@ const FALLBACK_INSIGHTS: PublicInsight[] = [
     focusKeyphrase: "AI authority",
     canonicalUrl: "https://simpaticopraiauthorityguide.carrd.co/",
     status: "published",
+    pinned: false,
   },
 ];
 

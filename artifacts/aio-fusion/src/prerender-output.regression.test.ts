@@ -45,6 +45,7 @@ function publishedFixture(slug: string, title: string, excerpt: string): PublicI
     focusKeyphrase: "AI visibility",
     canonicalUrl: `https://aiofusion.ai/insights/${slug}`,
     status: "published",
+    pinned: false,
   };
 }
 

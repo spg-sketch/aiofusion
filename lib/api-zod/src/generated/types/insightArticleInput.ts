@@ -36,4 +36,5 @@ export interface InsightArticleInput {
   /** @nullable */
   canonicalUrl?: string | null;
   status: InsightArticleInputStatus;
+  pinned?: boolean;
 }
