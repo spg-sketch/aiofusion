@@ -507,7 +507,7 @@ export function SubscriptionCard({
         ) : (
           <div>
             <p className="aio-type-body mb-4" style={{ color: vars.g500 }}>
-              {trial.status === "active" ? "Subscribe when you are ready to continue after the trial." : `Subscribe to the ${planLabel} plan.`} {info.includedProjects} Premium project{info.includedProjects === 1 ? "" : "s"} included. Prices exclude VAT - tax is calculated at checkout based on your billing country, and business customers can enter a VAT number there.
+              {trial.status === "active" ? "Subscribe when you are ready to continue after the trial." : `Subscribe to the ${planLabel} plan.`} {info.includedProjects} Premium project{info.includedProjects === 1 ? "" : "s"} included. Review your total at checkout.
             </p>
             <RestartChooser info={info} frequency={frequency} setFrequency={setFrequency} starting={starting} onStart={startCheckout} error={error} />
           </div>
@@ -616,7 +616,7 @@ function AddProjectCard({ info }: { info: SubscriptionInfo }) {
     <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
        <h2 className="aio-type-card-title mb-1" style={{ color: ink }}>Add a project workspace</h2>
       <p className="aio-type-body mb-4" style={{ color: vars.g500 }}>
-         Add one independent project workspace for another brand, client, or programme. Billed annually, excl. VAT (added at checkout). Once paid, your next new project uses the tier you choose here. This adds a separate workspace, not extra runtime capacity inside an existing project.
+         Add one independent project workspace for another brand, client, or programme. Billed annually. Once paid, your next new project uses the tier you choose here. This adds a separate workspace, not extra runtime capacity inside an existing project.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 max-w-2xl">
         {TIER_ORDER.map((t) => (

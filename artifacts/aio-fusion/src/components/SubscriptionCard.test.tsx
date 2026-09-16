@@ -34,6 +34,53 @@ function activeSubscription() {
   };
 }
 
+describe("billing descriptions", () => {
+  it("describes additional workspaces and annual billing without claiming VAT is added", async () => {
+    const info = {
+      ...activeSubscription(),
+      tierPrices: {
+        standard: { yearlyTotal: 10000, actionsPerMonth: 50 },
+        premium: { yearlyTotal: 20000, actionsPerMonth: 100 },
+        max: { yearlyTotal: 30000, actionsPerMonth: 200 },
+      },
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/billing/subscription")) {
+        return { ok: true, json: async () => info } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/invoices")) {
+        return { ok: true, json: async () => ({ invoices: [] }) } as Response;
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    const { container } = render(<SubscriptionCard />);
+
+    expect(await screen.findByText(
+      "Add one independent project workspace for another brand, client, or programme. Billed annually. Once paid, your next new project uses the tier you choose here. This adds a separate workspace, not extra runtime capacity inside an existing project.",
+    )).toBeInTheDocument();
+    expect(container).not.toHaveTextContent(/excl\.? VAT|prices exclude VAT|VAT.*checkout|tax is calculated at checkout/i);
+  });
+
+  it("uses neutral checkout-total wording for an unsubscribed plan", async () => {
+    const info = { ...activeSubscription(), status: "none", plan: null, entitled: false };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/api/platform/billing/subscription")) {
+        return { ok: true, json: async () => info } as Response;
+      }
+      throw new Error(`Unexpected request: ${input}`);
+    }));
+
+    const { container } = render(<SubscriptionCard />);
+
+    expect(await screen.findByText(
+      "Subscribe to the Agency/Partner plan. 3 Premium projects included. Review your total at checkout.",
+    )).toBeInTheDocument();
+    expect(container).not.toHaveTextContent(/excl\.? VAT|prices exclude VAT|VAT.*checkout|tax is calculated at checkout/i);
+  });
+});
+
 describe("subscription renewal timing", () => {
   it("formats a valid period end and counts a partial day as one day", () => {
     const now = new Date("2027-04-10T12:00:00.000Z");
