@@ -1,0 +1,44 @@
+[
+  {
+    "role": "client",
+    "metrics": {
+      "height": "44px",
+      "radius": "12px",
+      "font": "13px",
+      "weight": "700",
+      "transform": "none"
+    },
+    "keyboardFocus": "3px",
+    "mobileOverflow": false,
+    "interceptedWrites": 2,
+    "errors": []
+  },
+  {
+    "role": "agency",
+    "metrics": {
+      "height": "44px",
+      "radius": "12px",
+      "font": "13px",
+      "weight": "700",
+      "transform": "none"
+    },
+    "keyboardFocus": "3px",
+    "mobileOverflow": false,
+    "interceptedWrites": 1,
+    "errors": []
+  },
+  {
+    "role": "admin",
+    "metrics": {
+      "height": "44px",
+      "radius": "12px",
+      "font": "13px",
+      "weight": "700",
+      "transform": "none"
+    },
+    "keyboardFocus": "3px",
+    "mobileOverflow": false,
+    "interceptedWrites": 1,
+    "errors": []
+  }
+]

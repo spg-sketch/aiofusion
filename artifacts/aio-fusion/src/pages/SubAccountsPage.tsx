@@ -1693,7 +1693,7 @@ function SubAccountsPage({
                             ? void handleOpenClientProjects(u.username, owned.length === 1 ? owned[0].id : null)
                             : handleEnterAccount(u.username))}
                           disabled={enteringUsername === u.username || checkingAllowanceFor === u.username}
-                          className="aio-button aio-button--primary text-white"
+                          className="aio-button aio-button--primary aio-button--compact text-white"
                           style={{ background: accent, opacity: enteringUsername === u.username ? 0.7 : 1 }}
                         >
                           {enteringUsername === u.username || checkingAllowanceFor === u.username
@@ -1723,16 +1723,14 @@ function SubAccountsPage({
                             setProfileWebsite(u.website || "");
                             setProfileError(null);
                           }}
-                          className="aio-button aio-button--outline"
-                          style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+                          className="aio-button aio-button--outline aio-button--compact"
                         >
                           <FileEdit size={13} /> {editingProfile ? "Cancel" : "Edit details"}
                         </button>
                         {!isAgencyPartner && !u.agencyManaged && (
                         <button
                           onClick={() => { setPwUser(editingPw ? null : u.username); setPwValue(""); setPwError(null); }}
-                           className="aio-button aio-button--compact"
-                          style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+                          className="aio-button aio-button--outline aio-button--compact"
                         >
                           <KeyRound size={12} /> {editingPw ? "Cancel" : "Change password"}
                         </button>
@@ -1740,8 +1738,8 @@ function SubAccountsPage({
                         {isAgencyPartner || u.agencyManaged ? null : u.managed ? (
                           <button
                             onClick={() => { setAccessUser(accessUser === u.username ? null : u.username); setAccessPassword(""); setAccessError(null); setAccessNotice(null); }}
-                            className="aio-button aio-button--compact"
-                            style={{ color: vars.green, border: `1.5px solid ${vars.green}40` }}
+                            className="aio-button aio-button--outline aio-button--compact"
+                            style={{ color: vars.green, borderColor: `${vars.green}40` }}
                           >
                             <Shield size={12} /> {accessUser === u.username ? "Cancel" : "Give client access"}
                           </button>
@@ -1750,16 +1748,15 @@ function SubAccountsPage({
                             <button
                               onClick={() => handleResendWelcome(u.username)}
                               disabled={accessBusy}
-                            className="aio-button aio-button--compact"
-                              style={{ color: accent, border: `1.5px solid ${accent}40` }}
+                              className="aio-button aio-button--outline aio-button--compact"
+                              style={{ color: accent, borderColor: `${accent}40` }}
                               title="Send a fresh set-password email"
                             >
                               {accessBusy ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />} Resend welcome email
                             </button>
                             <button
                               onClick={() => handleRevokeAccess(u.username)}
-                              className="aio-button aio-button--compact"
-                              style={{ color: vars.g500, border: `1.5px solid ${vars.g200}` }}
+                              className="aio-button aio-button--outline aio-button--compact"
                             >
                               <Lock size={12} /> Remove client access
                             </button>
@@ -1768,8 +1765,7 @@ function SubAccountsPage({
                               title={isAgencyPartner
                                 ? "Use this if the Client Project is run by your agency and was never given sign-in access."
                                 : "Use this if the client account is run by your organisation and was never given sign-in access."}
-                              className="aio-button aio-button--compact"
-                              style={{ color: vars.g500, border: `1.5px solid ${vars.g200}` }}
+                              className="aio-button aio-button--outline aio-button--compact"
                             >
                               <Shield size={12} /> Mark as managed
                             </button>
@@ -1777,15 +1773,13 @@ function SubAccountsPage({
                         )}
                         <button
                           onClick={() => handleArchive(u.username, true)}
-                          className="aio-button aio-button--compact"
-                          style={{ color: vars.g500, border: `1.5px solid ${vars.g200}` }}
+                          className="aio-button aio-button--outline aio-button--compact"
                         >
                           <Archive size={12} /> Archive
                         </button>
                         <button
                           onClick={() => handleDelete(u.username)}
-                          className="aio-button aio-button--compact"
-                          style={{ color: accent, border: `1.5px solid ${accent}40` }}
+                          className="aio-button aio-button--destructive aio-button--compact"
                         >
                           <Trash2 size={12} /> Delete
                         </button>
@@ -1948,15 +1942,13 @@ function SubAccountsPage({
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleArchive(u.username, false)}
-                           className="aio-button aio-button--compact"
-                          style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+                          className="aio-button aio-button--outline aio-button--compact"
                         >
                           <ArchiveRestore size={12} /> Restore
                         </button>
                         <button
                           onClick={() => handleDelete(u.username)}
-                           className="aio-button aio-button--compact"
-                          style={{ color: accent, border: `1.5px solid ${accent}40` }}
+                          className="aio-button aio-button--destructive aio-button--compact"
                         >
                           <Trash2 size={12} /> Delete
                         </button>

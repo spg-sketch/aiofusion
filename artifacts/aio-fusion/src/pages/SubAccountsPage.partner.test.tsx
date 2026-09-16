@@ -70,6 +70,7 @@ beforeEach(() => {
   );
   serverAddUser.mockClear();
   serverImpersonate.mockClear();
+  serverSetDisplayName.mockClear();
    serverSetClientAccess.mockClear();
   getSubAccounts.mockReturnValue(partnerClientRows);
   auditAndRecoverLocalProjects.mockResolvedValue({ serverProjectIds: ["proj-1"], localOnly: [] });
@@ -251,5 +252,34 @@ describe("agency partner create-client form", () => {
         "https://updated.example",
       );
     });
+  });
+
+  it("uses standard button variants for editing profile and respects cancel behavior", async () => {
+    openClientsSection();
+    const editButtons = screen.getAllByRole("button", { name: /edit details/i });
+    expect(editButtons[0].className).toContain("aio-button--outline");
+    expect(editButtons[0].className).toContain("aio-button--compact");
+
+    // Enter edit mode
+    fireEvent.click(editButtons[0]);
+    const cancelButton = screen.getByRole("button", { name: /cancel/i });
+    expect(cancelButton.className).toContain("aio-button--outline");
+    expect(cancelButton.className).toContain("aio-button--compact");
+
+    // Change input
+    const nameInput = screen.getByPlaceholderText(/client name/i);
+    fireEvent.change(nameInput, { target: { value: "Changed Name" } });
+
+    // Cancel should exit edit mode without saving
+    fireEvent.click(cancelButton);
+    expect(screen.queryByPlaceholderText(/client name/i)).toBeNull();
+    expect(serverSetDisplayName).not.toHaveBeenCalled();
+  });
+
+  it.each(["agency", "admin"] as const)("keeps %s row actions purpose-specific", (role) => {
+    render(<SubAccountsPage {...baseProps} session={{ username: "acme-agency", role }} initialSection="clients" />);
+    expect(screen.getAllByRole("button", { name: /^archive$/i })[0]).toHaveClass("aio-button--outline", "aio-button--compact");
+    expect(screen.getAllByRole("button", { name: /^delete$/i })[0]).toHaveClass("aio-button--destructive", "aio-button--compact");
+    expect(screen.getAllByRole("button", { name: /^(go to client project|open account)$/i })[0]).toHaveClass("aio-button--primary");
   });
 });

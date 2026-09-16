@@ -254,3 +254,17 @@ mtime_ms = 1789363875234
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/86c617ee-9c29-4afe-a1ad-2e596ffd7a8c/a2b80ab8-bcce-4087-a573-f096197da69f"
 storage_version_token = "1789363889424235"
 content_type = "image/png"
+
+[[outputs]]
+id = "mOm7X5YoC1Dtnl5RVKrdV"
+uri = "file://screenshots/settings-button-review.html"
+type = "text"
+title = "Account Settings: before and after"
+description = "Desktop/mobile comparisons of workspace component fixtures, plus the unchanged staging Hub reference. No deployment."
+logical_id = "547903b5-51e9-4780-b296-fd171d6532f2"
+content_hash = "sha256:ad168b88451f64f9c0161355387c15bd3f68cf189f0e247250d7edeb9f1468c5"
+size = 1928578
+mtime_ms = 1789543872723
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/547903b5-51e9-4780-b296-fd171d6532f2/e5961bbb-a682-4d03-be40-847e65aa12ac"
+storage_version_token = "1789543894014219"
+content_type = "text/html"

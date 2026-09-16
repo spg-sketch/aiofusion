@@ -218,7 +218,6 @@
   justify-content: center;
   gap: 8px;
   margin-top: 16px;
-  padding: 10px 12px;
   border: 0;
   border-radius: 12px;
   color: white;
@@ -230,6 +229,7 @@
 .settings-george-card > button:not(.aio-button) {
   font-size: 12px;
   font-weight: 600;
+  padding: 10px 12px;
 }
 
 .settings-george-card > button:hover {
@@ -247,7 +247,6 @@
   justify-content: center;
   gap: 8px;
   margin-top: 12px;
-  padding: 11px 14px;
   border: 0;
   border-radius: 12px;
   color: white;
@@ -257,6 +256,7 @@
 .settings-george-mobile-button:not(.aio-button) {
   font-size: 12px;
   font-weight: 600;
+  padding: 11px 14px;
 }
 
 .settings-mobile-nav-button {
@@ -360,6 +360,16 @@
 
 .settings-alert {
   border-radius: 16px !important;
+}
+
+/* Ensure ordinary billing action pills match the standardized styles */
+.aio-account-settings .settings-content .aio-button.rounded-full {
+  border-radius: 0.75rem !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+.aio-account-settings .settings-content .aio-button--compact.rounded-full {
+  border-radius: 0.625rem !important;
 }
 
 @media (min-width: 801px) and (max-width: 1023px) {
