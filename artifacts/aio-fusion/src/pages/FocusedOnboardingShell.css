@@ -36,8 +36,7 @@
 .focused-onboarding .fo-shell {
   display: flex;
   min-height: 100dvh;
-  max-width: 1440px;
-  margin: 0 auto;
+  width: 100%;
 }
 
 .focused-onboarding .fo-rail {

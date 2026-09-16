@@ -1,0 +1,181 @@
+{
+  "environment": "Development workspace preview; real onboarding components with intercepted API fixtures. Not production.",
+  "results": [
+    {
+      "step": "account_type",
+      "width": 1280,
+      "railLeft": 0,
+      "railWidth": 310,
+      "railColor": "rgb(16, 43, 54)",
+      "shellWidth": 1280,
+      "formWidth": 842,
+      "layout": "flex",
+      "overflow": false
+    },
+    {
+      "step": "account_type",
+      "width": 1600,
+      "railLeft": 80,
+      "railWidth": 310,
+      "railColor": "rgb(16, 43, 54)",
+      "shellWidth": 1440,
+      "formWidth": 920,
+      "layout": "flex",
+      "overflow": false
+    },
+    {
+      "step": "account_type",
+      "width": 2560,
+      "railLeft": 560,
+      "railWidth": 310,
+      "railColor": "rgb(16, 43, 54)",
+      "shellWidth": 1440,
+      "formWidth": 920,
+      "layout": "flex",
+      "overflow": false
+    },
+    {
+      "step": "account_type",
+      "width": 390,
+      "railLeft": 0,
+      "railWidth": 390,
+      "railColor": "rgb(16, 43, 54)",
+      "shellWidth": 390,
+      "formWidth": 350,
+      "layout": "block",
+      "overflow": false
+    },
+    {
+      "step": "workspace_basics",
+      "width": 1280,
+      "railLeft": 0,
+      "railWidth": 310,
+      "railColor": "rgb(16, 43, 54)",
+      "shellWidth": 1280,
+      "formWidth": 842,
+      "layout": "flex",
+      "overflow": false
+    },
+    {
+      "step": "workspace_basics",
+      "width": 1600,
+      "railLeft": 80,
+      "railWidth": 310,
+      "railColor": "rgb(16, 43, 54)",
+      "shellWidth": 1440,
+      "formWidth": 920,
+      "layout": "flex",
+      "overflow": false
+    },
+    {
+      "step": "workspace_basics",
+      "width": 2560,
+      "railLeft": 560,
+      "railWidth": 310,
+      "railColor": "rgb(16, 43, 54)",
+      "shellWidth": 1440,
+      "formWidth": 920,
+      "layout": "flex",
+      "overflow": false
+    },
+    {
+      "step": "workspace_basics",
+      "width": 390,
+      "railLeft": 0,
+      "railWidth": 390,
+      "railColor": "rgb(16, 43, 54)",
+      "shellWidth": 390,
+      "formWidth": 350,
+      "layout": "block",
+      "overflow": false
+    },
+    {
+      "step": "access",
+      "width": 1280,
+      "railLeft": 0,
+      "railWidth": 310,
+      "railColor": "rgb(16, 43, 54)",
+      "shellWidth": 1280,
+      "formWidth": 842,
+      "layout": "flex",
+      "overflow": false
+    },
+    {
+      "step": "access",
+      "width": 1600,
+      "railLeft": 80,
+      "railWidth": 310,
+      "railColor": "rgb(16, 43, 54)",
+      "shellWidth": 1440,
+      "formWidth": 920,
+      "layout": "flex",
+      "overflow": false
+    },
+    {
+      "step": "access",
+      "width": 2560,
+      "railLeft": 560,
+      "railWidth": 310,
+      "railColor": "rgb(16, 43, 54)",
+      "shellWidth": 1440,
+      "formWidth": 920,
+      "layout": "flex",
+      "overflow": false
+    },
+    {
+      "step": "access",
+      "width": 390,
+      "railLeft": 0,
+      "railWidth": 390,
+      "railColor": "rgb(16, 43, 54)",
+      "shellWidth": 390,
+      "formWidth": 350,
+      "layout": "block",
+      "overflow": false
+    },
+    {
+      "step": "billing",
+      "width": 1280,
+      "railLeft": 0,
+      "railWidth": 310,
+      "railColor": "rgb(16, 43, 54)",
+      "shellWidth": 1280,
+      "formWidth": 842,
+      "layout": "flex",
+      "overflow": false
+    },
+    {
+      "step": "billing",
+      "width": 1600,
+      "railLeft": 80,
+      "railWidth": 310,
+      "railColor": "rgb(16, 43, 54)",
+      "shellWidth": 1440,
+      "formWidth": 920,
+      "layout": "flex",
+      "overflow": false
+    },
+    {
+      "step": "billing",
+      "width": 2560,
+      "railLeft": 560,
+      "railWidth": 310,
+      "railColor": "rgb(16, 43, 54)",
+      "shellWidth": 1440,
+      "formWidth": 920,
+      "layout": "flex",
+      "overflow": false
+    },
+    {
+      "step": "billing",
+      "width": 390,
+      "railLeft": 0,
+      "railWidth": 390,
+      "railColor": "rgb(16, 43, 54)",
+      "shellWidth": 390,
+      "formWidth": 350,
+      "layout": "block",
+      "overflow": false
+    }
+  ]
+}

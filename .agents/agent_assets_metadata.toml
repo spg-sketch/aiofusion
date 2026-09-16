@@ -296,3 +296,31 @@ mtime_ms = 1789546491445
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/f2154515-2216-400c-b6f6-288880aa30ab/54b46863-da76-463a-a79f-99075056209c"
 storage_version_token = "1789546522522492"
 content_type = "application/pdf"
+
+[[outputs]]
+id = "5sNVoqXA7M6sB86DWsjx-"
+uri = "file://screenshots/onboarding/before-account_type-1600.png"
+type = "image"
+title = "Before: onboarding gutter at 1600px"
+description = "Development preview, real onboarding components with intercepted API fixtures. The old centred shell leaves an 80px pale left gutter."
+logical_id = "b26cc528-9906-4dc6-9f93-c80cf3907e10"
+content_hash = "sha256:393015fee2a2cb468cdabc89da36d192b176c3167ca66db80d862eeead05ff90"
+size = 370538
+mtime_ms = 1789554137715
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/b26cc528-9906-4dc6-9f93-c80cf3907e10/dc379f83-b7b7-4cec-93f4-3773e46a3435"
+storage_version_token = "1789554223017732"
+content_type = "image/png"
+
+[[outputs]]
+id = "CPHnfSKrLTykE5uglmi4s"
+uri = "file://screenshots/onboarding/after-account_type-1600.png"
+type = "image"
+title = "After: navy rail flush left"
+description = "Development preview at 1600px. Navy rail starts at the viewport edge; form content retains its width constraint. Not deployed to production."
+logical_id = "75c2b84a-8a0d-43f0-bfb8-72bc652e351e"
+content_hash = "sha256:46c0e05ff213786e4898e2166679b59244301bd417e11dc3b2706d2f0ff876ef"
+size = 366146
+mtime_ms = 1789554184659
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/75c2b84a-8a0d-43f0-bfb8-72bc652e351e/5ed9b7fa-4cd1-480d-9d61-70ff56f5d9a4"
+storage_version_token = "1789554223609142"
+content_type = "image/png"
