@@ -26,6 +26,16 @@ import "./SubAccountsPage.css";
 import { type Session as LocalSession, type User as LocalUser, type Role, getSubAccounts as getLocalSubAccounts, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverSetSeatCap, refreshAccountsCache, serverImpersonate, serverSwitchToMaster, serverChangeAccountType, serverSetClientAccess, canCreateSubAccounts } from "../lib/auth";
 /** Section ids for the left-hand settings navigation. */
 type SettingsSection = "profile" | "security" | "billing" | "team" | "clients" | "archived" | "assign";
+type ClientCreationAttempt = { requestKey: string; payload: string; uncertain: boolean };
+
+function newClientCreationRequestKey(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  // Retain a UUID-shaped fallback for privacy-restricted webviews.
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (character) => {
+    const random = Math.floor(Math.random() * 16);
+    return (character === "x" ? random : (random & 0x3) | 0x8).toString(16);
+  });
+}
 type NavigationTarget = {
   username: string;
   projectId: string | null;
@@ -219,8 +229,16 @@ function SubAccountsPage({
   const [newLogoDataUrl, setNewLogoDataUrl] = useState<string | null>(null);
   const [logoProcessing, setLogoProcessing] = useState(false);
   const [addingClient, setAddingClient] = useState(false);
+  const [clientCreationUncertain, setClientCreationUncertain] = useState(false);
   const [pendingClientCreation, setPendingClientCreation] = useState<{ username: string; projectId: string } | null>(null);
   const [navigationRetry, setNavigationRetry] = useState<NavigationRetry | null>(null);
+  // Preserve the original request while its outcome is uncertain.
+  const clientCreationAttemptRef = useRef<ClientCreationAttempt | null>(null);
+  const clientCreationInFlightRef = useRef(false);
+  const markClientCreationEdited = () => {
+    if (clientCreationInFlightRef.current || clientCreationAttemptRef.current?.uncertain) return;
+    clientCreationAttemptRef.current = null;
+  };
   // A switch changes the server session before the browser reloads. Keep a
   // lock while that transition is in flight so a double click cannot start a
   // second switch (or overwrite the first handoff).
@@ -672,6 +690,7 @@ function SubAccountsPage({
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
+    if (clientCreationInFlightRef.current || pendingClientCreation) return;
     setAddError(null);
     setAddSuccess(null);
     setNavigationRetry(null);
@@ -695,7 +714,33 @@ function SubAccountsPage({
       .replace(/^[-.]+|[-.]+$/g, "") || "client";
     // Agency partners always create managed clients - no password, no email.
     const effectiveManaged = isAgencyPartner || newManaged;
+    const creationPayload = JSON.stringify({
+      username: usernameSuggestion,
+      password: effectiveManaged ? "" : newPassword,
+      role: "client",
+      displayName: companyName,
+      website,
+      contactName: newContactName.trim(),
+      contactEmail,
+      autoUsername: true,
+      logoDataUrl: newLogoDataUrl || undefined,
+      managed: effectiveManaged || undefined,
+    });
+    const previousAttempt = clientCreationAttemptRef.current;
+    if (previousAttempt?.uncertain && previousAttempt.payload !== creationPayload) {
+      setAddError("This creation is awaiting confirmation. Retry the original request before editing the draft.");
+      return;
+    }
+    const creationRequestKey = previousAttempt?.payload === creationPayload
+      ? previousAttempt.requestKey : newClientCreationRequestKey();
+    clientCreationAttemptRef.current = {
+      requestKey: creationRequestKey, payload: creationPayload,
+      uncertain: previousAttempt?.uncertain === true,
+    };
+    setClientCreationUncertain(previousAttempt?.uncertain === true);
+    clientCreationInFlightRef.current = true;
     setAddingClient(true);
+    let creationConfirmed = false;
     void (async () => {
       try {
         const result = await serverAddUser(usernameSuggestion, effectiveManaged ? "" : newPassword, "client", companyName, {
@@ -705,11 +750,20 @@ function SubAccountsPage({
           autoUsername: true,
           ...(newLogoDataUrl ? { logoDataUrl: newLogoDataUrl } : {}),
           ...(effectiveManaged ? { managed: true } : {}),
+          creationRequestKey,
         });
         if (!result.ok) {
+          clientCreationAttemptRef.current = {
+            requestKey: creationRequestKey, payload: creationPayload,
+            uncertain: previousAttempt?.uncertain === true || result.uncertain === true,
+          };
+          setClientCreationUncertain(previousAttempt?.uncertain === true || result.uncertain === true);
           setAddError(result.error);
           return;
         }
+        creationConfirmed = true;
+        clientCreationAttemptRef.current = null;
+        setClientCreationUncertain(false);
 
         // Agency clients are workspaces managed by the agency, not separate
         // client logins. Create the first project only after the authorized
@@ -765,8 +819,17 @@ function SubAccountsPage({
         setNewLogoDataUrl(null);
         refresh();
       } catch (error) {
+        if (creationConfirmed) {
+          setAddError(error instanceof Error ? error.message : "The account was created, but opening it failed.");
+          return;
+        }
+        clientCreationAttemptRef.current = {
+          requestKey: creationRequestKey, payload: creationPayload, uncertain: true,
+        };
+        setClientCreationUncertain(true);
         setAddError(error instanceof Error ? error.message : "Failed to create the client account.");
       } finally {
+        clientCreationInFlightRef.current = false;
         setAddingClient(false);
       }
     })();
@@ -1773,7 +1836,8 @@ function SubAccountsPage({
                 id="new-client-company-name"
                 type="text"
                 value={newCompanyName}
-                onChange={(e) => { setNewCompanyName(e.target.value); setAddSuccess(null); }}
+                disabled={addingClient || clientCreationUncertain}
+                onChange={(e) => { markClientCreationEdited(); setNewCompanyName(e.target.value); setAddSuccess(null); }}
                 placeholder="e.g. Acme Ltd"
                 required
                  className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
@@ -1787,7 +1851,8 @@ function SubAccountsPage({
                 type="text"
                 inputMode="url"
                 value={newWebsite}
-                onChange={(e) => { setNewWebsite(e.target.value); setAddSuccess(null); }}
+                disabled={addingClient || clientCreationUncertain}
+                onChange={(e) => { markClientCreationEdited(); setNewWebsite(e.target.value); setAddSuccess(null); }}
                 placeholder="e.g. https://www.acme.com"
                 required
                  className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
@@ -1800,7 +1865,8 @@ function SubAccountsPage({
                 id="new-client-contact-name"
                 type="text"
                 value={newContactName}
-                onChange={(e) => { setNewContactName(e.target.value); setAddSuccess(null); }}
+                disabled={addingClient || clientCreationUncertain}
+                onChange={(e) => { markClientCreationEdited(); setNewContactName(e.target.value); setAddSuccess(null); }}
                 placeholder="e.g. Jane Smith"
                  className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
@@ -1813,7 +1879,8 @@ function SubAccountsPage({
                 type="text"
                 inputMode="email"
                 value={newContactEmail}
-                onChange={(e) => { setNewContactEmail(e.target.value); setAddSuccess(null); }}
+                disabled={addingClient || clientCreationUncertain}
+                onChange={(e) => { markClientCreationEdited(); setNewContactEmail(e.target.value); setAddSuccess(null); }}
                 placeholder="e.g. jane@acme.com"
                  className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
@@ -1825,7 +1892,8 @@ function SubAccountsPage({
                 id="new-client-managed"
                 type="checkbox"
                 checked={newManaged}
-                onChange={(e) => { setNewManaged(e.target.checked); setAddSuccess(null); }}
+                disabled={addingClient || clientCreationUncertain}
+                onChange={(e) => { markClientCreationEdited(); setNewManaged(e.target.checked); setAddSuccess(null); }}
                 className="mt-0.5"
                 style={{ accentColor: accent }}
               />
@@ -1851,11 +1919,15 @@ function SubAccountsPage({
                   <input
                     aria-label="Upload client logo"
                     type="file"
+                    disabled={addingClient || clientCreationUncertain}
                     accept="image/png,image/jpeg,image/webp"
                     className="hidden"
                     onChange={(e) => {
                       const f = e.target.files?.[0];
-                      if (f) handleNewClientLogo(f);
+                      if (f) {
+                        markClientCreationEdited();
+                        handleNewClientLogo(f);
+                      }
                       e.target.value = "";
                     }}
                   />
@@ -1863,7 +1935,8 @@ function SubAccountsPage({
                 {newLogoDataUrl && (
                   <button
                     type="button"
-                    onClick={() => setNewLogoDataUrl(null)}
+                    disabled={addingClient || clientCreationUncertain}
+                    onClick={() => { markClientCreationEdited(); setNewLogoDataUrl(null); }}
                     className="text-[12px] font-semibold underline"
                     style={{ color: vars.g500 }}
                   >
@@ -1879,7 +1952,8 @@ function SubAccountsPage({
                   type="password"
                   autoComplete="new-password"
                   value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
+                  disabled={addingClient || clientCreationUncertain}
+                  onChange={(e) => { markClientCreationEdited(); setNewPassword(e.target.value); }}
                   placeholder="min 8 characters"
                   required
                    className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
@@ -1904,6 +1978,11 @@ function SubAccountsPage({
                 ? "No email will be sent and the client won't be able to sign in - you manage everything on their behalf."
                 : "If you add a key contact email, we'll let them know their account has been created and they can set their own password."}
             </p>
+            {clientCreationUncertain && (
+              <p className="aio-type-supporting md:col-span-12" style={{ color: accent }}>
+                We couldn't confirm whether this client was created. The draft is locked to the original details - retry to safely recover the original result before making edits.
+              </p>
+            )}
              {addError && <p className="aio-type-supporting md:col-span-12" style={{ color: accent }}>{addError}</p>}
              {addSuccess && <p className="aio-type-supporting md:col-span-12" style={{ color: vars.green }}>{addSuccess}</p>}
           </form>

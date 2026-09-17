@@ -47,7 +47,10 @@ vi.mock("../components/BillingDetailsCard", () => ({
   BillingDetailsCard: () => <div data-testid="billing-card">Billing card</div>,
 }));
 
-const serverAddUser = vi.fn(async () => ({ ok: true as const, username: "new-client" }));
+type MockCreateResult =
+  | { ok: true; username: string }
+  | { ok: false; error: string; uncertain?: boolean };
+const serverAddUser = vi.fn(async (): Promise<MockCreateResult> => ({ ok: true, username: "new-client" }));
 type ImpersonateResult = { ok: true };
 const serverImpersonate = vi.fn<(username: string) => Promise<ImpersonateResult>>(
   async (_username: string) => ({ ok: true as const }),
@@ -256,6 +259,92 @@ describe("agency partner client rows", () => {
       projectId: null,
     });
     expect(redirect.url).toBe(`${import.meta.env.BASE_URL || "/"}project-hub`);
+    redirect.restore();
+  });
+
+  it("reuses the creation request key when the response is lost", async () => {
+    const redirect = captureProtectedRedirect();
+    serverAddUser.mockRejectedValueOnce(new Error("The creation response was lost"));
+    pushProjectMeta.mockResolvedValue({ ok: true });
+    openClientsSection();
+    fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "Retry Client Co" } });
+    fireEvent.change(screen.getByPlaceholderText(/www\.acme\.com/i), { target: { value: "retryclient.example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+
+    await vi.waitFor(() => expect(screen.getByText("The creation response was lost")).toBeTruthy());
+    expect(serverAddUser).toHaveBeenCalledTimes(1);
+    const firstOptions = (serverAddUser.mock.calls[0] as unknown as unknown[])[4] as { creationRequestKey?: string };
+    expect(firstOptions.creationRequestKey).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+    await vi.waitFor(() => expect(serverAddUser).toHaveBeenCalledTimes(2));
+    const secondOptions = (serverAddUser.mock.calls[1] as unknown as unknown[])[4] as { creationRequestKey?: string };
+    expect(secondOptions.creationRequestKey).toBe(firstOptions.creationRequestKey);
+    await vi.waitFor(() => expect(redirect.url).toBe(`${import.meta.env.BASE_URL || "/"}project-hub`));
+    redirect.restore();
+  });
+
+  it("does not start a new creation when an uncertain draft is edited", async () => {
+    serverAddUser.mockRejectedValueOnce(new Error("The creation response was lost"));
+    openClientsSection();
+    fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "Original Client Co" } });
+    fireEvent.change(screen.getByPlaceholderText(/www\.acme\.com/i), { target: { value: "originalclient.example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+
+    await vi.waitFor(() => expect(screen.getByText(/couldn't confirm whether this client was created/i)).toBeTruthy());
+    // fireEvent intentionally bypasses the disabled control to model a stale
+    // browser event; handleAdd must still refuse a second logical request.
+    fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "Edited Client Co" } });
+    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+
+    await vi.waitFor(() => expect(screen.getByText(/retry the original request before editing/i)).toBeTruthy());
+    expect(serverAddUser).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an uncertain draft locked when its recovery retry gets a definitive auth error", async () => {
+    serverAddUser.mockRejectedValueOnce(new Error("The creation response was lost"));
+    serverAddUser.mockResolvedValueOnce({ ok: false, error: "Not authorized", uncertain: false });
+    openClientsSection();
+    fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "Locked Client Co" } });
+    fireEvent.change(screen.getByPlaceholderText(/www\.acme\.com/i), { target: { value: "lockedclient.example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+    await vi.waitFor(() => expect(screen.getByText(/couldn't confirm whether this client was created/i)).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+    await vi.waitFor(() => expect(screen.getByText("Not authorized")).toBeTruthy());
+    expect(screen.getByPlaceholderText(/acme ltd/i)).toBeDisabled();
+    expect(serverAddUser).toHaveBeenCalledTimes(2);
+  });
+
+  it("starts with a fresh creation request key after a confirmed success", async () => {
+    const redirect = captureProtectedRedirect();
+    pushProjectMeta.mockResolvedValue({ ok: true });
+    openClientsSection();
+    fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "First Client Co" } });
+    fireEvent.change(screen.getByPlaceholderText(/www\.acme\.com/i), { target: { value: "firstclient.example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+    await vi.waitFor(() => expect(serverAddUser).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(pushProjectMeta).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(redirect.url).toBe(`${import.meta.env.BASE_URL || "/"}project-hub`));
+    const firstOptions = (serverAddUser.mock.calls[0] as unknown as unknown[])[4] as { creationRequestKey?: string };
+
+    // Agency project creation navigates to the protected hub and leaves the
+    // pending handoff button disabled. Remount as a fresh page after success
+    // before exercising the next create request.
+    cleanup();
+    render(<SubAccountsPage {...baseProps} session={agencySession as any} />);
+    fireEvent.click(screen.getAllByRole("button", { name: /^client projects$/i })[0]);
+    fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "Second Client Co" } });
+    fireEvent.change(screen.getByPlaceholderText(/www\.acme\.com/i), { target: { value: "secondclient.example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+    await vi.waitFor(() => expect(serverAddUser).toHaveBeenCalledTimes(2));
+    const secondOptions = (serverAddUser.mock.calls[1] as unknown as unknown[])[4] as { creationRequestKey?: string };
+    expect(secondOptions.creationRequestKey).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    expect(secondOptions.creationRequestKey).not.toBe(firstOptions.creationRequestKey);
     redirect.restore();
   });
 

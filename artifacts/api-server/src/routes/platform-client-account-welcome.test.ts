@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import express from "express";
 import cookieParser from "cookie-parser";
+import { createHash } from "node:crypto";
 
 // ---------------------------------------------------------------------------
 // Hoisted captures -- must be above all vi.mock calls
@@ -290,11 +291,12 @@ import {
   db,
   platformUsersTable,
   platformAccountsTable,
+  platformMetaTable,
   platformMembershipsTable,
   platformCompaniesTable,
   platformPasswordResetsTable,
 } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 import { hashPassword } from "../lib/platform-auth";
 import platformRouter from "./platform";
 
@@ -528,6 +530,357 @@ describe("POST /api/platform/accounts -- welcome token for new client contact", 
     expect(call.setPasswordUrl).toBeUndefined();
     // loginUrl still present as fallback.
     expect(call.loginUrl).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/platform/accounts -- idempotent creation and transaction safety
+// ---------------------------------------------------------------------------
+describe("POST /api/platform/accounts -- idempotent creation", () => {
+  let server: Server;
+  let baseUrl: string;
+
+  const AGENCY = "idemp-agency";
+  const OTHER_AGENCY = "idemp-other-agency";
+  const CONTACT = "idemp-contact@example.com";
+  const LOGO =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  const childUsernames = [
+    "idemp-failing",
+    "idemp-managed",
+    "idemp-retry",
+    "idemp-retry-1",
+    "idemp-conflict",
+    "idemp-independent-a",
+    "idemp-independent-b",
+    "idemp-scoped",
+    "idemp-scoped-1",
+    "idemp-concurrent",
+    "idemp-seat",
+    "idemp-deleted",
+    "idemp-reparented",
+  ];
+
+  beforeEach(async () => {
+    clientAccountCreatedCalls.length = 0;
+    await db.insert(platformAccountsTable).values([
+      { username: AGENCY, passwordHash: hashPassword("agency-password"), role: "user", status: "active" },
+      { username: OTHER_AGENCY, passwordHash: hashPassword("other-password"), role: "user", status: "active" },
+    ]);
+    ({ server, baseUrl } = await startServer());
+  });
+
+  afterEach(async () => {
+    await stopServer(server);
+
+    const [contactUser] = await db
+      .select()
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.email, CONTACT))
+      .limit(1);
+    if (contactUser) {
+      await db.delete(platformPasswordResetsTable).where(eq(platformPasswordResetsTable.userId, contactUser.id));
+      await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.userId, contactUser.id));
+      await db.delete(platformUsersTable).where(eq(platformUsersTable.id, contactUser.id));
+    }
+    for (const username of [...childUsernames, AGENCY, OTHER_AGENCY]) {
+      await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, username));
+    }
+    for (const username of [...childUsernames, AGENCY, OTHER_AGENCY]) {
+      await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, username));
+    }
+    for (const username of childUsernames) {
+      for (const key of [
+        `account:profile:${username}`,
+        `account:image:logo:${username}`,
+        `account:managed:${username}`,
+      ]) {
+        await db.delete(platformMetaTable).where(eq(platformMetaTable.key, key));
+      }
+    }
+    for (const actor of [AGENCY, OTHER_AGENCY]) {
+      await db
+        .delete(platformMetaTable)
+        .where(like(platformMetaTable.key, `account:creation:${actor}:%`));
+    }
+  });
+
+  async function create(body: Record<string, unknown>, actor = AGENCY) {
+    return fetch(`${baseUrl}/api/platform/accounts`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-test-account": JSON.stringify({ username: actor, role: "user", userId: null }),
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  async function account(username: string) {
+    const rows = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, username))
+      .limit(1);
+    return rows[0];
+  }
+
+  it("rolls back the account, profile, logo, managed flag, and receipt when a post-insert write fails", async () => {
+    const originalTransaction = (db as any).transaction.bind(db);
+    const transaction = vi.spyOn(db as any, "transaction");
+    transaction.mockImplementationOnce(async (callback: (tx: unknown) => Promise<unknown>) =>
+      originalTransaction(async (realTx: unknown) => {
+        const failingTx = new Proxy(realTx as object, {
+          get(target, property, receiver) {
+            if (property === "update") {
+              return () => {
+                throw new Error("injected post-insert failure");
+              };
+            }
+            return Reflect.get(target, property, receiver);
+          },
+        });
+        return callback(failingTx);
+      }),
+    );
+
+    const res = await create({
+      username: "idemp-failing",
+      password: "ClientPass123",
+      role: "client",
+      displayName: "Should Roll Back",
+      contactName: "Rollback Contact",
+      logoDataUrl: LOGO,
+      managed: true,
+      creationRequestKey: "RollbackKey123456",
+    });
+    transaction.mockRestore();
+
+    expect(res.status).toBe(500);
+    expect(await account("idemp-failing")).toBeUndefined();
+    const meta = await db.select().from(platformMetaTable);
+    expect(meta.some((row) => row.key.includes("idemp-failing"))).toBe(false);
+    expect(meta.some((row) => row.key === `account:creation:${AGENCY}:RollbackKey123456`)).toBe(false);
+    expect(clientAccountCreatedCalls).toHaveLength(0);
+  });
+
+  it("replays a successful lost-response retry, including an auto-suffixed username, without a second email", async () => {
+    await db.insert(platformAccountsTable).values({
+      username: "idemp-retry",
+      passwordHash: hashPassword("existing-password"),
+      role: "client",
+      parent: AGENCY,
+      status: "active",
+    });
+
+    const body = {
+      username: "idemp-retry",
+      password: "ClientPass123",
+      role: "client",
+      autoUsername: true,
+      contactEmail: CONTACT,
+      contactName: "Retry Contact",
+      creationRequestKey: "RetryKey123456789",
+    };
+    const first = await create(body);
+    expect(first.status).toBe(200);
+    const firstJson = (await first.json()) as { username: string; welcomeLinkCreated?: boolean };
+    expect(firstJson.username).toBe("idemp-retry-1");
+
+    const second = await create(body);
+    expect(second.status).toBe(200);
+    const secondJson = (await second.json()) as { username: string; welcomeLinkCreated?: boolean };
+    expect(secondJson.username).toBe(firstJson.username);
+    expect(secondJson.welcomeLinkCreated).toBe(firstJson.welcomeLinkCreated);
+    expect(await account("idemp-retry-1")).toBeDefined();
+    expect(clientAccountCreatedCalls).toHaveLength(1);
+  });
+
+  it("persists managed, profile, and logo metadata in the same idempotent creation", async () => {
+    const res = await create({
+      username: "idemp-managed",
+      password: "ignored-for-managed",
+      role: "client",
+      managed: true,
+      displayName: "Managed Client",
+      contactName: "Managed Contact",
+      logoDataUrl: LOGO,
+      creationRequestKey: "ManagedKey1234567",
+    });
+    expect(res.status).toBe(200);
+    expect(clientAccountCreatedCalls).toHaveLength(0);
+
+    const rows = await db.select().from(platformMetaTable);
+    const byKey = new Map(rows.map((row) => [row.key, row.value]));
+    expect(byKey.get("account:managed:idemp-managed")).toBe("true");
+    expect(JSON.parse(byKey.get("account:profile:idemp-managed")!)).toEqual({
+      displayName: "Managed Client",
+      ownerName: "Managed Contact",
+    });
+    expect(byKey.get("account:image:logo:idemp-managed")).toBe(LOGO);
+    expect(JSON.parse(byKey.get(`account:creation:${AGENCY}:ManagedKey1234567`)!).username).toBe("idemp-managed");
+  });
+
+  it("stores only a non-secret fingerprint and checks changed passwords using the protected account hash", async () => {
+    const body = {
+      username: "idemp-conflict",
+      password: "ClientPass123",
+      role: "client",
+      creationRequestKey: "PasswordSafetyKey1234",
+      displayName: "Original",
+    };
+    expect((await create(body)).status).toBe(200);
+    const [stored] = await db.select().from(platformMetaTable)
+      .where(eq(platformMetaTable.key, `account:creation:${AGENCY}:${body.creationRequestKey}`));
+    const canonical = {
+      username: body.username, role: "client", managed: false, autoUsername: false,
+      website: "", contactName: "", contactEmail: "", displayName: "Original",
+      logoDataUrl: "",
+    };
+    const fingerprint = JSON.parse(stored.value).fingerprint;
+    // An explicit non-secret digest is the complete stored fingerprint: there
+    // is no password-dependent material to test guesses against in the receipt.
+    expect(fingerprint).toBe(createHash("sha256").update(JSON.stringify({
+      ...canonical, suppliedPassword: true,
+    })).digest("hex"));
+    for (const candidate of [body.password, "DifferentPassword123"]) {
+      expect(fingerprint).not.toBe(createHash("sha256").update(JSON.stringify({
+        ...canonical, password: candidate,
+      })).digest("hex"));
+      expect(stored.value).not.toContain(candidate);
+    }
+    expect((await create({ ...body, password: "DifferentPassword123" })).status).toBe(409);
+    expect((await create(body)).status).toBe(200);
+    expect(clientAccountCreatedCalls).toHaveLength(0);
+  });
+
+  it("rejects changed payloads for a key while allowing independent keys and actor-scoped reuse", async () => {
+    const first = await create({
+      username: "idemp-conflict",
+      password: "ClientPass123",
+      role: "client",
+      creationRequestKey: "ConflictKey123456",
+      displayName: "Original",
+    });
+    expect(first.status).toBe(200);
+
+    const changed = await create({
+      username: "idemp-conflict",
+      password: "ClientPass123",
+      role: "client",
+      creationRequestKey: "ConflictKey123456",
+      displayName: "Changed",
+    });
+    expect(changed.status).toBe(409);
+    expect((await db.select().from(platformAccountsTable)).filter((row) => row.username === "idemp-conflict")).toHaveLength(1);
+
+    expect(
+      (
+        await create({
+          username: "idemp-independent-a",
+          password: "ClientPass123",
+          role: "client",
+          creationRequestKey: "IndependentKey1_23456",
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await create({
+          username: "idemp-independent-b",
+          password: "ClientPass123",
+          role: "client",
+          creationRequestKey: "IndependentKey2_23456",
+        })
+      ).status,
+    ).toBe(200);
+
+    const actorScopedBody = {
+      username: "idemp-scoped",
+      password: "ClientPass123",
+      role: "client",
+      autoUsername: true,
+      creationRequestKey: "ActorScopedKey1234",
+    };
+    expect((await create(actorScopedBody)).status).toBe(200);
+    const other = await create(actorScopedBody, OTHER_AGENCY);
+    expect(other.status).toBe(200);
+    expect(await account("idemp-scoped")).toMatchObject({ parent: AGENCY });
+    expect(await account("idemp-scoped-1")).toMatchObject({ parent: OTHER_AGENCY });
+  });
+
+  it("serializes same-key concurrent requests into one account and one receipt", async () => {
+    const body = {
+      username: "idemp-concurrent",
+      password: "ClientPass123",
+      role: "client",
+      creationRequestKey: "ConcurrentKey1234",
+    };
+    const responses = await Promise.all([create(body), create(body)]);
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 200]);
+    const payloads = await Promise.all(
+      responses.map((response) => response.json() as Promise<{ username: string }>),
+    );
+    expect(payloads[0]!.username).toBe("idemp-concurrent");
+    expect(payloads[1]!.username).toBe("idemp-concurrent");
+    const rows = (await db.select().from(platformAccountsTable)).filter(
+      (row) => row.username === "idemp-concurrent",
+    );
+    expect(rows).toHaveLength(1);
+    const receipts = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, `account:creation:${AGENCY}:ConcurrentKey1234`));
+    expect(receipts).toHaveLength(1);
+  });
+
+  it("replays successfully after the first request consumes the final seat", async () => {
+    await db
+      .update(platformAccountsTable)
+      .set({ maxSeats: 1 })
+      .where(eq(platformAccountsTable.username, AGENCY));
+
+    const body = {
+      username: "idemp-seat",
+      password: "ClientPass123",
+      role: "client",
+      creationRequestKey: "FinalSeatKey123456",
+    };
+    const first = await create(body);
+    expect(first.status).toBe(200);
+    const retry = await create(body);
+    expect(retry.status).toBe(200);
+    expect((await retry.json() as { username: string }).username).toBe("idemp-seat");
+    expect(
+      (await db.select().from(platformAccountsTable)).filter((row) => row.username === "idemp-seat"),
+    ).toHaveLength(1);
+  });
+
+  it("rejects a replay when the original account was deleted or reparented", async () => {
+    const deletedBody = {
+      username: "idemp-deleted",
+      password: "ClientPass123",
+      role: "client",
+      creationRequestKey: "DeletedAccountKey1",
+    };
+    expect((await create(deletedBody)).status).toBe(200);
+    await db
+      .delete(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, "idemp-deleted"));
+    expect((await create(deletedBody)).status).toBe(409);
+
+    const reparentedBody = {
+      username: "idemp-reparented",
+      password: "ClientPass123",
+      role: "client",
+      creationRequestKey: "ReparentedAccountKey1",
+    };
+    expect((await create(reparentedBody)).status).toBe(200);
+    await db
+      .update(platformAccountsTable)
+      .set({ parent: OTHER_AGENCY })
+      .where(eq(platformAccountsTable.username, "idemp-reparented"));
+    expect((await create(reparentedBody)).status).toBe(409);
   });
 });
 

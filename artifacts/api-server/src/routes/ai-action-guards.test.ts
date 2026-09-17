@@ -809,6 +809,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "PUT /store/media-db/contacts/:id",
   "DELETE /store/media-db/contacts/:id",
   "POST /store/media-db/import",
+  // Media routes use memberProjectGate and per-route authentication/visibility.
   "POST /store/media-db/discoveries",
   "GET /store/media-db/discoveries",
   "POST /store/media-db/discoveries/:id/approve",
@@ -820,6 +821,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "GET /store/media-db/recommendations/brief",
   "PUT /store/media-db/recommendations/brief",
   "POST /store/media-db/recommendations/contact-restriction",
+  // Enrichment also enforces its own monthly-spend and project-usage limits.
   "POST /store/media-db/recommendations/enrich",
   "PUT /store/media-db/recommendations/feedback",
   "DELETE /store/media-db/recommendations/feedback",

@@ -70,7 +70,22 @@ vi.mock("@workspace/db", async () => {
     CREATE TABLE media_contact_categories (id serial PRIMARY KEY, contact_id integer, category_id integer, account_id varchar);
     CREATE TABLE media_contact_field_overrides (id serial PRIMARY KEY, contact_id integer, account_id varchar);
     CREATE TABLE media_import_batches (id serial PRIMARY KEY, account_id varchar);
-    CREATE TABLE media_discoveries (id serial PRIMARY KEY, account_id varchar);
+    CREATE TABLE media_discoveries (
+      id serial PRIMARY KEY,
+      account_id varchar NOT NULL,
+      project_id varchar NOT NULL,
+      candidate_key text NOT NULL,
+      status varchar(20) NOT NULL DEFAULT 'pending',
+      candidate jsonb NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      reviewed_at timestamptz,
+      reviewed_by varchar,
+      rejection_reason text,
+      contact_id integer,
+      outlet_id integer
+    );
+    CREATE UNIQUE INDEX media_discoveries_account_project_candidate_unique
+      ON media_discoveries (account_id, project_id, candidate_key);
     CREATE TABLE media_recommendation_sets (id serial PRIMARY KEY, account_id varchar, project_id varchar, story_key varchar,
       criteria jsonb DEFAULT '{}', created_at timestamptz DEFAULT now());
     CREATE TABLE media_recommendation_items (id serial PRIMARY KEY, recommendation_set_id integer, contact_id integer,

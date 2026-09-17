@@ -32,3 +32,13 @@ Clients whose parent account role is "agency" are permanently managed: they neve
 **Why:** Tightening the handoff consumer without updating every producer previously broke Master navigation despite passing agency-only tests.
 
 **How to apply:** When changing the handoff contract, search every writer and include a producer-to-consumer regression rather than asserting hand-crafted payloads alone.
+
+**Creation recovery rule:** Treat an uncertain create and a failed hub handoff as separate operations. Recover the original create before allowing draft changes; a later authorization failure does not prove the earlier create failed.
+
+**Why:** An API response can disappear after commit. Changing the request identity on an edited draft can then create a second client, while repeating creation after confirmed success confuses navigation failure with data failure.
+
+**How to apply:** Keep the original request identity and effective input together until confirmation. Keep welcome-email delivery outside the required account transaction and do not resend it merely because creation is replayed.
+
+**Receipt security rule:** Never include passwords in an unkeyed request fingerprint, even if only the digest is persisted.
+
+**Why:** Known surrounding request fields turn a fast digest into an offline password verifier, bypassing the account's salted slow password hash. Compare passwords through the protected verifier separately, or use a properly secret-keyed digest.

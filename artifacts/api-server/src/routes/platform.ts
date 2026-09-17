@@ -5037,6 +5037,12 @@ async function sendWelcomeSetPasswordEmail(opts: {
 
 // Create a sub-account. The new account's parent is the caller (so it joins the
 // caller's visibility subtree). Only an admin may create another admin.
+class AccountCreationError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
 router.post(
   "/platform/accounts",
   requirePlatformAuth,
@@ -5076,6 +5082,12 @@ router.post(
       // When set, the username is a suggestion derived from the company name;
       // append a numeric suffix instead of failing on a collision.
       const autoUsername = req.body?.autoUsername === true;
+      const creationRequestKey = req.body?.creationRequestKey;
+      if (creationRequestKey !== undefined
+        && (typeof creationRequestKey !== "string" || !/^[A-Za-z0-9_-]{16,128}$/.test(creationRequestKey))) {
+        res.status(400).json({ error: "Invalid account creation request key." });
+        return;
+      }
       // Optional client logo, validated exactly like the profile-image route.
       const logoDataUrl = typeof req.body?.logoDataUrl === "string" ? req.body.logoDataUrl : "";
       if (logoDataUrl && (!DATA_URL_RE.test(logoDataUrl) || logoDataUrl.length > MAX_IMAGE_DATA_URL_LENGTH)) {
@@ -5108,85 +5120,115 @@ router.post(
         res.status(403).json({ error: "Your account cannot create other accounts." });
         return;
       }
-      if (!autoUsername) {
-        const existing = await getAccount(username);
-        if (existing) {
-          res.status(409).json({ error: "That username already exists." });
-          return;
-        }
-      }
-
-      // Seat-cap enforcement: if the parent account has a maxSeats limit, count
-      // existing direct sub-accounts and reject if the cap is already reached.
-      if (actor.role !== "admin") {
-        const parentAccount = await getAccount(normUsername(actor.username));
-        if (parentAccount?.maxSeats != null) {
-          const [{ value: currentSeats }] = await db
-            .select({ value: count() })
-            .from(platformAccountsTable)
-            .where(eq(platformAccountsTable.parent, normUsername(actor.username)));
-          if (currentSeats >= parentAccount.maxSeats) {
-            res.status(403).json({
-              error: `Seat cap reached (${parentAccount.maxSeats} ${parentAccount.maxSeats === 1 ? "seat" : "seats"} allowed). Contact your administrator to increase the limit.`,
-            });
-            return;
+      const actorUsername = normUsername(actor.username);
+      const receiptKey = creationRequestKey
+        ? `account:creation:${actorUsername}:${creationRequestKey}` : undefined;
+      // Fingerprint only non-secret inputs. Including passwords in a fast hash
+      // would create a cheap password verifier alongside the salted slow hash.
+      const suppliedPassword = !actorIsAgencyPartner
+        && typeof req.body?.password === "string" && req.body.password.length > 0;
+      const fingerprint = crypto.createHash("sha256").update(JSON.stringify({
+        username, role, managed, autoUsername, website, contactName, contactEmail,
+        displayName: displayName.trim().slice(0, 64), logoDataUrl,
+        suppliedPassword,
+      })).digest("hex");
+      const passwordHash = hashPassword(password);
+      const result = await db.transaction(async (tx) => {
+        if (receiptKey) {
+          // The unique key serializes retries across API processes. The claim,
+          // account and final receipt commit together, or all roll back.
+          const claimed = await tx.insert(platformMetaTable)
+            .values({ key: receiptKey, value: "{}" })
+            .onConflictDoNothing({ target: platformMetaTable.key })
+            .returning({ key: platformMetaTable.key });
+          if (!claimed.length) {
+            const [stored] = await tx.select().from(platformMetaTable)
+              .where(eq(platformMetaTable.key, receiptKey)).limit(1);
+            const receipt = JSON.parse(stored.value) as {
+              fingerprint: string; username: string; welcomeLinkCreated?: boolean;
+            };
+            if (receipt.fingerprint !== fingerprint) {
+              throw new AccountCreationError(409, "This creation request was already used with different account details.");
+            }
+            const [existing] = await tx.select().from(platformAccountsTable)
+              .where(eq(platformAccountsTable.username, receipt.username)).limit(1);
+            if (!existing || existing.parent !== actorUsername) {
+              throw new AccountCreationError(409, "The account from this creation request is no longer available.");
+            }
+            // Supplied passwords are compared only using the existing slow
+            // verifier. Server-generated managed passwords are not replay input.
+            if (suppliedPassword && !verifyPassword(password, existing.passwordHash)) {
+              throw new AccountCreationError(409, "This creation request was already used with different account details.");
+            }
+            return { username: receipt.username, replayed: true, welcomeLinkCreated: receipt.welcomeLinkCreated };
           }
         }
-      }
-
-      // Insert relying on the primary key for uniqueness. With autoUsername we
-      // retry with a numeric suffix on conflict, so concurrent creates cannot
-      // race a check-then-insert into a 500.
-      const base = username.slice(0, 28);
-      let inserted = false;
-      for (let attempt = 0; attempt <= 50; attempt++) {
-        const candidate = attempt === 0 ? username : `${base}-${attempt}`;
-        const rows = await db
-          .insert(platformAccountsTable)
-          .values({
-            username: candidate,
-            passwordHash: hashPassword(password),
-            role,
-            parent: normUsername(actor.username),
+        // Check capacity after replay: a lost response must remain recoverable
+        // even when the newly created account consumed the final seat.
+        if (actor.role !== "admin") {
+          const [parentAccount] = await tx.select().from(platformAccountsTable)
+            .where(eq(platformAccountsTable.username, actorUsername)).limit(1);
+          if (parentAccount?.maxSeats != null) {
+            const [{ value: currentSeats }] = await tx.select({ value: count() })
+              .from(platformAccountsTable).where(eq(platformAccountsTable.parent, actorUsername));
+            if (currentSeats >= parentAccount.maxSeats) {
+              throw new AccountCreationError(403,
+                `Seat cap reached (${parentAccount.maxSeats} ${parentAccount.maxSeats === 1 ? "seat" : "seats"} allowed). Contact your administrator to increase the limit.`);
+            }
+          }
+        }
+        const base = username.slice(0, 28);
+        let inserted = false;
+        for (let attempt = 0; attempt <= 50; attempt++) {
+          const candidate = attempt === 0 ? username : `${base}-${attempt}`;
+          const rows = await tx.insert(platformAccountsTable).values({
+            username: candidate, passwordHash, role, parent: actorUsername,
             ...(website ? { website } : {}),
             ...(contactEmail ? { email: contactEmail } : {}),
-          })
-          .onConflictDoNothing({ target: platformAccountsTable.username })
-          .returning({ username: platformAccountsTable.username });
-        if (rows.length > 0) {
-          username = candidate;
-          inserted = true;
-          break;
+          }).onConflictDoNothing({ target: platformAccountsTable.username })
+            .returning({ username: platformAccountsTable.username });
+          if (rows.length) {
+            username = candidate;
+            inserted = true;
+            break;
+          }
+          if (!autoUsername) throw new AccountCreationError(409, "That username already exists.");
         }
-        if (!autoUsername) {
-          res.status(409).json({ error: "That username already exists." });
-          return;
+        if (!inserted) {
+          throw new AccountCreationError(409, "Could not find a free username - please choose one manually.");
         }
-      }
-      if (!inserted) {
-        res.status(409).json({ error: "Could not find a free username - please choose one manually." });
+        if (displayName.trim() || contactName) {
+          const value = JSON.stringify({
+            ...(displayName.trim() ? { displayName: displayName.trim().slice(0, 64) } : {}),
+            ...(contactName ? { ownerName: contactName } : {}),
+          });
+          await tx.insert(platformMetaTable).values({ key: profileKey(username), value })
+            .onConflictDoUpdate({ target: platformMetaTable.key, set: { value } });
+        }
+        if (logoDataUrl) {
+          await tx.insert(platformMetaTable)
+            .values({ key: profileImageKey("logo", username), value: logoDataUrl })
+            .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: logoDataUrl } });
+        }
+        if (managed) {
+          await tx.insert(platformMetaTable).values({ key: managedKey(username), value: "true" })
+            .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: "true" } });
+        }
+        // Until the optional post-commit email succeeds, retries must not claim
+        // a welcome link exists or issue another one.
+        const welcomeLinkCreated = contactEmail && !managed ? false : undefined;
+        if (receiptKey) {
+          await tx.update(platformMetaTable)
+            .set({ value: JSON.stringify({ fingerprint, username, welcomeLinkCreated }) })
+            .where(eq(platformMetaTable.key, receiptKey));
+        }
+        return { username, replayed: false, welcomeLinkCreated };
+      });
+      username = result.username;
+      if (result.replayed) {
+        res.json({ ok: true, username, welcomeLinkCreated: result.welcomeLinkCreated });
         return;
       }
-      if (displayName.trim() || contactName) {
-        const value = JSON.stringify({
-          ...(displayName.trim() ? { displayName: displayName.trim().slice(0, 64) } : {}),
-          ...(contactName ? { ownerName: contactName } : {}),
-        });
-        await db
-          .insert(platformMetaTable)
-          .values({ key: profileKey(username), value })
-          .onConflictDoUpdate({ target: platformMetaTable.key, set: { value } });
-      }
-      if (logoDataUrl) {
-        const logoKey = profileImageKey("logo", username);
-        await db
-          .insert(platformMetaTable)
-          .values({ key: logoKey, value: logoDataUrl })
-          .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: logoDataUrl } });
-      }
-      // Managed accounts are flagged so the UI can offer "Give client access"
-      // later, and so the flag survives restarts.
-      if (managed) await setManaged(username, true);
       // Tell the key contact they have a login. Fail-soft: account creation
       // succeeds even if the email cannot be sent or the token insertion fails.
       // Managed accounts skip this entirely - the client is not given access.
@@ -5204,9 +5246,24 @@ router.post(
           companyRole: role,
         });
         welcomeLinkCreated = tokenIssued;
+        if (receiptKey) {
+          // Email status is optional, outside the required creation transaction.
+          // A persistence failure must not turn a committed create into a 500.
+          try {
+            await db.update(platformMetaTable)
+              .set({ value: JSON.stringify({ fingerprint, username, welcomeLinkCreated }) })
+              .where(eq(platformMetaTable.key, receiptKey));
+          } catch {
+            logger.warn({ username }, "Could not persist account creation welcome status");
+          }
+        }
       }
       res.json({ ok: true, username, welcomeLinkCreated });
-    } catch {
+    } catch (error) {
+      if (error instanceof AccountCreationError) {
+        res.status(error.status).json({ error: error.message });
+        return;
+      }
       res.status(500).json({ error: "Failed to create account" });
     }
   },

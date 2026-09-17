@@ -11,6 +11,7 @@ import {
   getSession,
   serverLogin,
   serverSignUp,
+  serverAddUser,
   AUTHORITY_TIMEOUT_MS,
   type Session,
 } from "./auth";
@@ -301,5 +302,56 @@ describe("workspace switch cache isolation", () => {
     }
     expect(localStorage.getItem("aio.store.migrated.v1")).toBe("1");
     expect(localStorage.getItem("aio.intake.v2::globally-unique-project-id")).toBe("safe-project-data");
+  });
+});
+
+describe("serverAddUser creation request keys", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("includes the optional creation request key in the platform account body", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push({ url: String(input), init });
+      if (init?.method === "POST") {
+        return new Response(JSON.stringify({ username: "original-client" }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ accounts: [] }), { status: 200 });
+    }));
+
+    const result = await serverAddUser("client", "", "client", "Client", {
+      autoUsername: true,
+      creationRequestKey: "8f1f4c31-0f13-4d3e-a2d4-6e0ee3bb8df3",
+    });
+
+    expect(result).toEqual({ ok: true, username: "original-client" });
+    const createRequest = requests.find(({ init }) => init?.method === "POST");
+    expect(createRequest).toBeTruthy();
+    expect(JSON.parse(String(createRequest?.init?.body))).toMatchObject({
+      username: "client",
+      autoUsername: true,
+      creationRequestKey: "8f1f4c31-0f13-4d3e-a2d4-6e0ee3bb8df3",
+    });
+  });
+
+  it("does not fall back to the suggested username after a malformed auto-username 2xx response", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") return new Response(JSON.stringify({}), { status: 200 });
+      return new Response(JSON.stringify({ accounts: [] }), { status: 200 });
+    }));
+
+    const result = await serverAddUser("suggested-client", "", "client", "Client", {
+      autoUsername: true,
+      creationRequestKey: "8f1f4c31-0f13-4d3e-a2d4-6e0ee3bb8df3",
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      uncertain: true,
+      status: 200,
+    });
+    expect(result).not.toEqual(expect.objectContaining({ username: "suggested-client" }));
   });
 });

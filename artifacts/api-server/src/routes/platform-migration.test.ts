@@ -76,12 +76,14 @@ vi.mock("@workspace/db", () => {
         // onConflictDoNothing must be awaitable (the migration code does
         // `const result = await db.insert().values().onConflictDoNothing()`)
         // AND support `.returning()` (used by the account-creation endpoint).
-        const makeConflictResult = () => {
-          const isConflict = rows.some((r) => r["username"] === values["username"]);
+         const makeConflictResult = () => {
+           const conflictColumn = "key" in values ? "key" : "username";
+           const isConflict = rows.some((r) => r[conflictColumn] === values[conflictColumn]);
           const rowCount = isConflict ? 0 : 1;
           if (!isConflict) rows.push({ ...values });
           const result: any = Promise.resolve({ rowCount });
-          result.returning = () => Promise.resolve(isConflict ? [] : [{ username: values["username"] }]);
+           result.returning = () =>
+             Promise.resolve(isConflict ? [] : [{ [conflictColumn]: values[conflictColumn] }]);
           return result;
         };
         return {
@@ -103,7 +105,10 @@ vi.mock("@workspace/db", () => {
       where: () => Promise.resolve(),
     }),
     execute: () => Promise.resolve(),
-    transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn({}),
+     // The account-creation route now executes its writes through a Drizzle
+     // transaction.  This lightweight mock has no separate connection, so
+     // expose the same query surface as the transaction handle.
+     transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db),
   };
 
   return {

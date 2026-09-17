@@ -776,14 +776,24 @@ export async function serverExitImpersonation(): Promise<
   return { ok: true, session };
 }
 
+type ServerAddUserFailure = { ok: false; error: string; status?: number; uncertain?: boolean };
+
 export async function serverAddUser(
   username: string,
   password: string,
   role: Role,
   displayName?: string,
-  extra?: { website?: string; contactName?: string; contactEmail?: string; autoUsername?: boolean; logoDataUrl?: string; managed?: boolean },
-): Promise<{ ok: true; username: string; welcomeLinkCreated?: boolean } | { ok: false; error: string }> {
-  const { ok, json } = await postJson("/api/platform/accounts", {
+  extra?: {
+    website?: string;
+    contactName?: string;
+    contactEmail?: string;
+    autoUsername?: boolean;
+    logoDataUrl?: string;
+    managed?: boolean;
+    creationRequestKey?: string;
+  },
+): Promise<{ ok: true; username: string; welcomeLinkCreated?: boolean } | ServerAddUserFailure> {
+  const { ok, status, json } = await postJson("/api/platform/accounts", {
     username,
     password,
     role,
@@ -794,13 +804,34 @@ export async function serverAddUser(
     ...(extra?.autoUsername ? { autoUsername: true } : {}),
     ...(extra?.logoDataUrl ? { logoDataUrl: extra.logoDataUrl } : {}),
     ...(extra?.managed ? { managed: true } : {}),
+    ...(extra?.creationRequestKey ? { creationRequestKey: extra.creationRequestKey } : {}),
   });
-  if (!ok) return { ok: false, error: json?.error || "Failed to create account." };
+  if (!ok) {
+    return {
+      ok: false,
+      error: json?.error || "Failed to create account.",
+      status,
+      uncertain: status === 0 || status >= 500,
+    };
+  }
   await refreshAccountsCache();
   const j = json as { username?: string; welcomeLinkCreated?: boolean };
+  const returnedUsername = typeof j?.username === "string" ? j.username.trim() : "";
+  // An auto-generated username is authoritative for the follow-up workspace
+  // handoff. Never fall back to the suggestion after a malformed 2xx body:
+  // the account may already exist, so the form must preserve its key for a
+  // safe reconciliation retry.
+  if (extra?.autoUsername && !/^[a-zA-Z0-9_.-]{2,32}$/.test(returnedUsername)) {
+    return {
+      ok: false,
+      error: "Account creation returned an invalid username. Retry the original request.",
+      status,
+      uncertain: true,
+    };
+  }
   return {
     ok: true,
-    username: j?.username || username,
+    username: returnedUsername || username,
     ...(typeof j?.welcomeLinkCreated === "boolean" ? { welcomeLinkCreated: j.welcomeLinkCreated } : {}),
   };
 }
