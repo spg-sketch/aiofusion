@@ -1,5 +1,6 @@
 // hint: Logic changed on both sides. Requires understanding intent of each change.
 - [AIO Fusion profile images](aio-fusion-profile-images.md) — personal avatars are user-scoped, logos workspace-scoped; Google photos import only when no avatar/tombstone exists.
+- [GitHub Git authentication](github-git-authentication.md) — working API access does not prove Git push credentials work; diagnose Git Providers separately.
 - [AIO Fusion saved audits + App/LlmCheckPage coupling](aio-fusion-saved-audits-and-cycles.md) — fire `aio:saved-audits-changed` window event on save/delete so sidebar refreshes; beware the App<->LlmCheckPage circular import.
 - [AIO Fusion audit server sync](aio-fusion-audit-server-sync.md) — savedAudits/savedDiagnostics synced to DB via store-audits.ts; auditSync.ts is the client helper; savedAuditsKey must be exported; Content/Tech GEO SavedScored still localStorage-only.
 - [AIO Fusion IntakeForm structured fields](aio-fusion-intake-structured-fields.md) — one answer predicate feeds all completion views; legacy arrays fall back only when undefined; line limits need real-key tests.
