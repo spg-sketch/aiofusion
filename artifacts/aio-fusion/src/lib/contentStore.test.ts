@@ -10,6 +10,10 @@ import {
   saveArchive,
   savePlannerProjects,
   saveScoringConfig,
+  splitArchiveBody,
+  articleSnapshotForPlanner,
+  archiveItemForPlanner,
+  plannerProjectForArchive,
   type ArchiveItem,
   type PlannerProject,
   type ScoringConfig,
@@ -92,7 +96,9 @@ describe("content store reliability", () => {
     vi.stubGlobal("fetch", vi.fn()
       .mockResolvedValueOnce(jsonResponse({ items: [archiveItem] }))
       .mockResolvedValueOnce(jsonResponse({ ok: true }))
-      .mockResolvedValueOnce(jsonResponse({ items: [edited] })));
+      .mockResolvedValueOnce(jsonResponse({ items: [edited] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [] })));
     await saveArchive([edited]);
     expect(loadArchive()[0].title).toBe("Edited");
   });
@@ -134,10 +140,12 @@ describe("content store reliability", () => {
 
     const retryFetch = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ items: [edited] }))
-      .mockResolvedValueOnce(jsonResponse({ items: [edited] }));
+      .mockResolvedValueOnce(jsonResponse({ items: [edited] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [] }));
     vi.stubGlobal("fetch", retryFetch);
     await saveArchive([edited]);
-    expect(retryFetch).toHaveBeenCalledTimes(2);
+    expect(retryFetch).toHaveBeenCalledTimes(4);
     expect(loadArchive()[0].title).toBe("Edited once");
   });
 
@@ -195,6 +203,137 @@ describe("content store reliability", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({}, 401)));
     await expect(saveScoringConfig({ ...DEFAULT_SCORING, channelCap: 9 })).rejects.toThrow("authentication");
     expect(getContentStoreState().mutationError).toBe("authentication");
+  });
+});
+
+describe("article workflow snapshots", () => {
+  const completeArticle: ArchiveItem = {
+    ...archiveItem,
+    headline: "Exact headline",
+    standfirst: "Exact standfirst",
+    bodyCopy: "Exact full body",
+    actionNotes: "Exact action note",
+    selectedMessages: ["Message one"],
+    mediaCats: ["Trade press"],
+    pubDate: "2026-06-01",
+    targetPhrases: [{ id: "phrase-1", text: "exact phrase", intentGroup: "discovery" }],
+    targetPhraseIds: ["phrase-1"],
+  };
+
+  it("copies a complete article snapshot and keeps one planner identity per archive record", () => {
+    const first = plannerProjectForArchive(completeArticle, undefined, {
+      keyMessage: "Message one", audience: "Trade press", channels: ["Website"],
+      week: 23, status: "Drafting", releaseDate: "2026-06-01", notes: "Exact action note",
+    });
+    const repeated = plannerProjectForArchive({ ...completeArticle, bodyCopy: "Updated body" }, first, {
+      keyMessage: "Message one", audience: "Trade press", channels: ["Website"],
+      week: 23, status: "Drafting", releaseDate: "2026-06-01", notes: "Exact action note",
+    });
+    expect(articleSnapshotForPlanner(completeArticle)).toMatchObject({
+      sourceArchiveId: "a1", body: "Body", actionNotes: "Exact action note",
+      selectedMessages: ["Message one"], mediaCats: ["Trade press"], pubDate: "2026-06-01",
+      targetPhraseIds: ["phrase-1"],
+    });
+    expect(repeated.id).toBe(first.id);
+    expect(repeated.sourceArchiveId).toBe(completeArticle.id);
+    expect(repeated.bodyCopy).toBe("Updated body");
+  });
+
+  it("creates a canonical record from legacy planner data without inventing body copy", () => {
+    const legacy = makeProject({ headline: "Only headline", bodyCopy: undefined, actionNotes: "Keep note" });
+    const archived = archiveItemForPlanner(legacy, "arch-linked", "2026-01-01T00:00:00.000Z");
+    expect(archived.id).toBe("arch-linked");
+    expect(archived.body).toBe("");
+    expect(archived.bodyCopy).toBeUndefined();
+    expect(archived.actionNotes).toBe("Keep note");
+  });
+
+  it("uses legacy body copy when nullable SQL fields round-trip as null", () => {
+    const recovered = splitArchiveBody({
+      headline: null,
+      standfirst: null,
+      bodyCopy: null,
+      body: "Legacy headline\n\nLegacy standfirst\n\nLegacy complete body",
+    });
+    expect(recovered).toEqual({
+      headline: "Legacy headline",
+      standfirst: "Legacy standfirst",
+      bodyCopy: "Legacy complete body",
+    });
+  });
+
+  it("refreshes linked planner snapshots when the canonical archive is edited", async () => {
+    const linkedPlanner = {
+      ...makeProject({ id: "planner-1", title: archiveItem.title }),
+      projectId: "default",
+      sourceArchiveId: archiveItem.id,
+      body: archiveItem.body,
+      selectedMessages: [],
+      mediaCats: [],
+    };
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [archiveItem] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [linkedPlanner] }))
+      .mockResolvedValueOnce(jsonResponse({ config: null })));
+    await initContentStore();
+    const edited = { ...completeArticle, body: "Exact headline\n\nExact standfirst\n\nUpdated full body", bodyCopy: "Updated full body" };
+    const syncFetch = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [archiveItem] }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+      .mockResolvedValueOnce(jsonResponse({ items: [edited] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [linkedPlanner] }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+      .mockResolvedValueOnce(jsonResponse({ items: [{ ...linkedPlanner, ...articleSnapshotForPlanner(edited) }] }));
+    vi.stubGlobal("fetch", syncFetch);
+    await saveArchive([edited]);
+    const plannerPayload = JSON.parse(syncFetch.mock.calls[4][1]?.body as string);
+    expect(plannerPayload).toMatchObject({
+      id: "planner-1", sourceArchiveId: "a1", bodyCopy: "Updated full body",
+      actionNotes: "Exact action note", selectedMessages: ["Message one"], mediaCats: ["Trade press"],
+    });
+  });
+
+  it("retries a failed planner sync on an identical archive save and discovers uncached server links", async () => {
+    const serverLinkedPlanner = {
+      ...makeProject({ id: "planner-server-link", title: archiveItem.title }),
+      projectId: "default",
+      sourceArchiveId: archiveItem.id,
+    };
+    // Simulate another session placing this article in the Planner after this
+    // browser loaded: the local planner cache has no link.
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [archiveItem] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [] }))
+      .mockResolvedValueOnce(jsonResponse({ config: null })));
+    await initContentStore();
+    const edited = { ...completeArticle, title: "Edited canonical article", bodyCopy: "Updated body" };
+
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [archiveItem] }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+      .mockResolvedValueOnce(jsonResponse({ items: [edited] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [serverLinkedPlanner] }))
+      .mockResolvedValueOnce(jsonResponse({ error: "planner unavailable" }, 503)));
+    await expect(saveArchive([edited])).rejects.toThrow("linked-planner-sync");
+    expect(loadArchive()[0].title).toBe("Edited canonical article");
+
+    const retryFetch = vi.fn()
+      // The archive is already confirmed, so no second archive PUT is sent.
+      .mockResolvedValueOnce(jsonResponse({ items: [edited] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [edited] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [serverLinkedPlanner] }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+      .mockResolvedValueOnce(jsonResponse({ items: [{ ...serverLinkedPlanner, ...articleSnapshotForPlanner(edited) }] }));
+    vi.stubGlobal("fetch", retryFetch);
+    await saveArchive([edited]);
+    expect(retryFetch).toHaveBeenCalledTimes(5);
+    expect(JSON.parse(retryFetch.mock.calls[3][1]?.body as string)).toMatchObject({
+      id: "planner-server-link",
+      sourceArchiveId: "a1",
+      bodyCopy: "Updated body",
+      targetPhraseIds: ["phrase-1"],
+      selectedMessages: ["Message one"],
+    });
   });
 });
 

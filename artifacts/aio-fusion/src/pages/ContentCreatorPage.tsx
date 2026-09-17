@@ -12,7 +12,7 @@ import {
 import { vars } from "../marketing/vars";
 import { TRADE_MEDIA_CATEGORIES } from "../tradeMediaCategories";
 import { streamContent, buildProjectDataText, CONTENT_AI_TIMEOUT_MS, escapeHtml, textToHtmlParagraphs, downloadWordDocument, GenerationProgress, safeHttpUrl } from "../lib/contentAi";
-import { loadArchive, saveArchive, useContentStore, splitArchiveBody, type ArchiveItem, loadPlannerProjects, savePlannerProjects, getISOWeek, weekDateLabel, type PlannerProject } from "../lib/contentStore";
+import { loadArchive, saveArchive, useContentStore, isLinkedPlannerSyncError, splitArchiveBody, plannerProjectForArchive, type ArchiveItem, loadPlannerProjects, savePlannerProjects, getISOWeek, weekDateLabel, type PlannerProject } from "../lib/contentStore";
 import { getKeyMessages, getSpokespeople, loadIntakeData, getActiveProjectId, getProjectMediaCategories, getCompetitors, getConfirmedEntity } from "../IntakeForm";
 import { buildExactTargetRequest, getExactTargetPhrases as getCanonicalExactTargetPhrases, type ExactTargetPhrase } from "../lib/exactTargetPhrases";
 import { CategoryPickerModal, CONTENT_TYPES, countWords, Labelled } from "./shared";
@@ -66,6 +66,11 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   const [draftSnapshot, setDraftSnapshot] = useState<{ articleHeadline: string; standfirst: string; transcript: string } | null>(null);
   const [supportingData, setSupportingData] = useState<{ text: string; url: string }[]>([]);
   const [targetPhrases, setTargetPhrases] = useState<ExactTargetPhrase[]>([]);
+  const [selectedMessagesSnapshot, setSelectedMessagesSnapshot] = useState<string[]>([]);
+  // Re-opening a library draft must update the same canonical record rather
+  // than silently creating another article every time it is saved.
+  const [sourceArchiveId, setSourceArchiveId] = useState<string | null>(null);
+  const [sourceArchiveCreatedAt, setSourceArchiveCreatedAt] = useState<string | null>(null);
 
   const projectPhrases = getCanonicalExactTargetPhrases((intake as { llmQueries?: { v?: 1; discovery?: string[]; shortlist?: string[]; comparison?: string[] } } | null)?.llmQueries);
   const targetQuery = targetPhrases[0]
@@ -103,12 +108,19 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     try { localStorage.removeItem("aio.creator.preload"); } catch { /* noop */ }
     const arc = loadArchive().find((a) => a.id === archiveId);
     if (arc) {
+      setSourceArchiveId(arc.id);
+      setSourceArchiveCreatedAt(arc.createdAt);
       const parts = splitArchiveBody(arc);
       setArticleHeadline(parts.headline);
       setStandfirst(parts.standfirst);
       setTranscript(parts.bodyCopy);
       if (arc.contentType) setContentType(arc.contentType);
       if (arc.spokesperson) setSpokesperson(arc.spokesperson);
+      setActionNotes(arc.actionNotes || "");
+      setMediaTarget(arc.mediaCats ? [...arc.mediaCats] : []);
+      setPubDate(arc.pubDate || "");
+      setSelectedMessagesSnapshot(arc.selectedMessages ? [...arc.selectedMessages] : []);
+      if (arc.title) setProjectName(arc.title);
       if (Array.isArray(arc.targetPhrases)) {
         setTargetPhrases(arc.targetPhrases);
       } else if (Array.isArray(arc.targetPhraseIds)) {
@@ -117,34 +129,41 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     }
   }, []);
 
-  const archiveItem = async (): Promise<boolean> => {
+  const archiveItem = async (): Promise<ArchiveItem | null> => {
     const items = loadArchive();
     const item: ArchiveItem = {
-      id: `arch-${Date.now()}`,
+      id: sourceArchiveId || `arch-${Date.now()}`,
       title: articleHeadline.trim().slice(0, 120) || headline.split("\n")[0].slice(0, 120) || projectName || "Untitled draft",
       contentType,
       spokesperson,
       status: contentStatus === "Final" ? "Final" : "Draft",
       tags: [contentType.toLowerCase().replace(/\s+/g, "-"), "creator"],
-      body: [articleHeadline, standfirst, transcript].filter(Boolean).join("\n\n") || "(No content supplied)",
+      body: [articleHeadline, standfirst, transcript].filter(Boolean).join("\n\n"),
       headline: articleHeadline,
       standfirst: standfirst,
       bodyCopy: transcript,
       actionNotes,
       mediaCats: mediaTarget,
       pubDate,
-      createdAt: new Date().toISOString(),
+      selectedMessages: selectedMessagesSnapshot.length
+        ? [...selectedMessagesSnapshot]
+        : projectMessages.map((message) => message.long || message.short).filter(Boolean),
+      createdAt: sourceArchiveCreatedAt || new Date().toISOString(),
       source: "creator",
       targetPhrases: targetPhrases.map((phrase) => ({ ...phrase })),
       targetPhraseIds: targetPhrases.map((phrase) => phrase.id),
     };
     try {
-      await saveArchive([item, ...items]);
+      await saveArchive([item, ...items.filter((existing) => existing.id !== item.id)]);
+      setSourceArchiveId(item.id);
+      setSourceArchiveCreatedAt(item.createdAt);
       alert(`Saved "${item.title}" to Content Library.`);
-      return true;
-    } catch {
-      alert("This item was not saved. Check your connection, then try again.");
-      return false;
+      return item;
+    } catch (error) {
+      alert(isLinkedPlannerSyncError(error)
+        ? "The article was saved to Content Library, but its linked planner snapshot was not updated. Retry Save to Content Library before continuing."
+        : "This item was not saved. Check your connection, then try again.");
+      return null;
     }
   };
 
@@ -388,39 +407,19 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   };
 
   const sendToMediaResearchFromCreator = async () => {
-    const id = `temp-${Date.now()}`;
-    const items = loadArchive();
-    try {
-      await saveArchive([{
-      id,
-      title: articleHeadline.trim().slice(0, 120) || projectName || "Untitled draft",
-      contentType,
-      spokesperson: spokesperson === "NA" ? "" : spokesperson,
-      status: "Draft",
-      tags: [contentType.toLowerCase().replace(/\s+/g, "-"), "creator"],
-      body: [standfirst, transcript].filter(Boolean).join("\n\n"),
-      headline: articleHeadline,
-      standfirst: standfirst,
-      bodyCopy: transcript,
-      createdAt: new Date().toISOString(),
-      targetPhrases: targetPhrases.map((phrase) => ({ ...phrase })),
-      targetPhraseIds: targetPhrases.map((phrase) => phrase.id),
-      }, ...items]);
-      try { localStorage.setItem("aio.research.preload", id); } catch { /* noop */ }
-      onNavigate("media-research");
-    } catch {
-      alert("This draft was not saved. Check your connection, then try again.");
-    }
+    const item = await archiveItem();
+    if (!item) return;
+    try { localStorage.setItem("aio.research.preload", item.id); } catch { /* noop */ }
+    onNavigate("media-research");
   };
 
   const pushToCommsPlanner = async () => {
+    const item = await archiveItem();
+    if (!item) return;
     const projects = loadPlannerProjects();
     const fallbackNote = anyOptimised ? "Pushed from Content Creator (LLM-optimised draft)." : "Pushed from Content Creator.";
-    const proj: PlannerProject = {
-      id: `pp-${Date.now()}`,
-      title: articleHeadline.trim().slice(0, 120) || projectName || "Untitled draft",
-      contentType,
-      spokesperson: spokesperson === "NA" ? "" : spokesperson,
+    const existing = projects.find((project) => project.sourceArchiveId === item.id);
+    const proj: PlannerProject = plannerProjectForArchive(item, existing, {
       keyMessage: projectMessages[0]?.short || "",
       audience: mediaTarget[0] || "",
       channels: mediaTarget.slice(0, 4),
@@ -428,19 +427,13 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       status: contentStatus === "Final" ? "Approved" : contentStatus === "Review" ? "Review" : "Drafting",
       releaseDate: pubDate,
       notes: actionNotes.trim() || fallbackNote,
-      headline: articleHeadline,
-      standfirst,
-      bodyCopy: transcript,
-      actionNotes: actionNotes.trim(),
-      targetPhrases: targetPhrases.map((phrase) => ({ ...phrase })),
-      targetPhraseIds: targetPhrases.map((phrase) => phrase.id),
-    };
+    });
     try {
-      await savePlannerProjects([proj, ...projects]);
+      await savePlannerProjects([proj, ...projects.filter((project) => project.id !== proj.id)]);
       alert(`"${proj.title}" pushed to the Comms Planner (w/c ${weekDateLabel(proj.week)}).`);
       onNavigate("planner");
     } catch {
-      alert("This planner item was not saved. Check your connection, then try again.");
+      alert("The article was saved to Content Library, but its planner row was not saved. Retry Push to Comms Planner to finish linking it.");
     }
   };
 

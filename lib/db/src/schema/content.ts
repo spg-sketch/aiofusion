@@ -22,6 +22,7 @@ export const archiveItemsTable = pgTable("archive_items", {
   headline: text("headline"),
   standfirst: text("standfirst"),
   bodyCopy: text("body_copy"),
+  actionNotes: text("action_notes"),
   body: text("body"),
   selectedMessages: jsonb("selected_messages").$type<string[]>(),
   mediaCats: jsonb("media_cats").$type<string[]>(),
@@ -59,6 +60,14 @@ export const plannerItemsTable = pgTable("planner_items", {
   standfirst: text("standfirst"),
   bodyCopy: text("body_copy"),
   actionNotes: text("action_notes"),
+  // The canonical Content Library record for article-backed planner rows.
+  // Planner keeps a complete snapshot too, so deleting a planner row never
+  // deletes the article and a legacy planner row remains useful on its own.
+  sourceArchiveId: varchar("source_archive_id"),
+  body: text("body"),
+  selectedMessages: jsonb("selected_messages").$type<string[]>(),
+  mediaCats: jsonb("media_cats").$type<string[]>(),
+  pubDate: varchar("pub_date"),
   targetPhrases: jsonb("target_phrases").$type<Array<Record<string, unknown>>>(),
   targetPhraseIds: jsonb("target_phrase_ids").$type<string[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

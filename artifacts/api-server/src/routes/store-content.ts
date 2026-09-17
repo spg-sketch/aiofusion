@@ -35,6 +35,28 @@ function canSeeOwner(owner: string, visible: string[] | null): boolean {
   return visible.includes(normUsername(owner));
 }
 
+const INVALID_SOURCE_ARCHIVE_ERROR =
+  "sourceArchiveId must reference an active archive item in this project.";
+const DUPLICATE_SOURCE_ARCHIVE_ERROR =
+  "This library item is already linked to an active Comms Planner row.";
+
+async function lockContentProject(
+  executor: Pick<typeof db, "execute">,
+  projectId: string,
+): Promise<void> {
+  // This transaction-scoped PostgreSQL lock serializes canonical archive
+  // deletes with every planner create/update in the project. It avoids a
+  // delete slipping between source validation and the planner write, and
+  // makes the active source link check safe without a startup-time index DDL.
+  // PGlite does not implement advisory locks, so route tests still exercise
+  // the surrounding transaction without the production-only lock.
+  if (process.env.NODE_ENV !== "test") {
+    await executor.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${`store-content-link:${projectId}`}))`,
+    );
+  }
+}
+
 // Resolve the set of project IDs the request may see, based on project
 // ownership rather than item ownership. Returns null for an admin (sees all).
 // Any account that can see a project in their sidebar can see all archive and
@@ -142,6 +164,7 @@ router.post(
         headline,
         standfirst,
         bodyCopy,
+        actionNotes,
         body,
         selectedMessages,
         mediaCats,
@@ -181,6 +204,7 @@ router.post(
           headline: headline ?? null,
           standfirst: standfirst ?? null,
           bodyCopy: bodyCopy ?? null,
+          actionNotes: actionNotes ?? null,
           body: body ?? null,
           selectedMessages: Array.isArray(selectedMessages)
             ? selectedMessages
@@ -243,6 +267,7 @@ router.put(
         headline,
         standfirst,
         bodyCopy,
+        actionNotes,
         body,
         selectedMessages,
         mediaCats,
@@ -265,6 +290,7 @@ router.put(
           headline: headline ?? null,
           standfirst: standfirst ?? null,
           bodyCopy: bodyCopy ?? null,
+          actionNotes: actionNotes ?? null,
           body: body ?? null,
           selectedMessages: Array.isArray(selectedMessages)
             ? selectedMessages
@@ -330,20 +356,50 @@ router.delete(
         return;
       }
 
-      // Atomic ownership-scoped soft-delete (TOCTOU guard): the owner filter
-      // rides in the same SQL statement as the write.
-      const deleted = await db
-        .update(archiveItemsTable)
-        .set({ deletedAt: new Date() })
-        .where(
-          and(
-            eq(archiveItemsTable.id, id),
-            eq(archiveItemsTable.owner, existing[0].owner),
-          ),
-        )
-        .returning({ id: archiveItemsTable.id });
+       const result = await db.transaction(async (tx) => {
+         await lockContentProject(tx, existing[0].projectId);
 
-      if (!deleted[0]) {
+         // A linked planner row is an active workflow reference. Refuse the
+         // archive deletion rather than leaving Media Research pointing at a
+         // missing canonical article. This check and the soft delete share
+         // the project lock with planner POST/PUT.
+         const linkedPlanner = await tx
+           .select({ id: plannerItemsTable.id })
+           .from(plannerItemsTable)
+           .where(and(
+             eq(plannerItemsTable.projectId, existing[0].projectId),
+             eq(plannerItemsTable.sourceArchiveId, id),
+             isNull(plannerItemsTable.deletedAt),
+           ))
+           .limit(1);
+         if (linkedPlanner[0]) return { linked: true as const };
+
+         // Atomic ownership-scoped soft-delete (TOCTOU guard): the owner
+         // filter rides in the same SQL statement as the write. deletedAt is
+         // also asserted so a concurrent delete cannot report success twice.
+         const deleted = await tx
+           .update(archiveItemsTable)
+           .set({ deletedAt: new Date() })
+           .where(
+             and(
+               eq(archiveItemsTable.id, id),
+               eq(archiveItemsTable.owner, existing[0].owner),
+               isNull(archiveItemsTable.deletedAt),
+             ),
+           )
+           .returning({ id: archiveItemsTable.id });
+         return { linked: false as const, deleted: Boolean(deleted[0]) };
+       });
+
+       if (result.linked) {
+        res.status(409).json({
+          error: "This library item is still linked to a Comms Planner row. Delete that planner row first, then retry.",
+          code: "archive_linked_to_planner",
+        });
+        return;
+      }
+
+       if (!result.deleted) {
         res.status(409).json({ error: "Conflict" });
         return;
       }
@@ -435,6 +491,11 @@ router.post(
         standfirst,
         bodyCopy,
         actionNotes,
+        sourceArchiveId,
+        body,
+        selectedMessages,
+        mediaCats,
+        pubDate,
         targetPhrases,
         targetPhraseIds,
       } = req.body ?? {};
@@ -452,33 +513,78 @@ router.post(
         return;
       }
 
-      const [row] = await db
-        .insert(plannerItemsTable)
-        .values({
-          id,
-          projectId,
-          owner,
-          title: title ?? "",
-          contentType: contentType ?? "",
-          spokesperson: spokesperson ?? "",
-          keyMessage: keyMessage ?? "",
-          audience: audience ?? "",
-          channels: Array.isArray(channels) ? channels : [],
-          week: typeof week === "number" ? week : 1,
-          status: status ?? "Planned",
-          releaseDate: releaseDate ?? "",
-          notes: notes ?? "",
-          headline: headline ?? null,
-          standfirst: standfirst ?? null,
-          bodyCopy: bodyCopy ?? null,
-          actionNotes: actionNotes ?? null,
-          targetPhrases: Array.isArray(targetPhrases) ? targetPhrases : null,
-          targetPhraseIds: Array.isArray(targetPhraseIds) ? targetPhraseIds : null,
-        })
-        .onConflictDoNothing()
-        .returning();
+       const linkedArchiveId =
+         typeof sourceArchiveId === "string" ? sourceArchiveId : null;
+       const result = await db.transaction(async (tx) => {
+         await lockContentProject(tx, projectId);
 
-      res.json({ ok: true, item: row ?? null });
+         if (linkedArchiveId !== null) {
+           const [archive] = await tx
+             .select({ id: archiveItemsTable.id })
+             .from(archiveItemsTable)
+             .where(and(
+               eq(archiveItemsTable.id, linkedArchiveId),
+               eq(archiveItemsTable.projectId, projectId),
+               isNull(archiveItemsTable.deletedAt),
+             ))
+             .limit(1);
+           if (!archive) return { error: "invalid_source" as const };
+
+           const [existingLink] = await tx
+             .select({ id: plannerItemsTable.id })
+             .from(plannerItemsTable)
+             .where(and(
+               eq(plannerItemsTable.projectId, projectId),
+               eq(plannerItemsTable.sourceArchiveId, linkedArchiveId),
+               isNull(plannerItemsTable.deletedAt),
+             ))
+             .limit(1);
+           if (existingLink) return { error: "duplicate_source" as const };
+         }
+
+         const [row] = await tx
+           .insert(plannerItemsTable)
+           .values({
+             id,
+             projectId,
+             owner,
+             title: title ?? "",
+             contentType: contentType ?? "",
+             spokesperson: spokesperson ?? "",
+             keyMessage: keyMessage ?? "",
+             audience: audience ?? "",
+             channels: Array.isArray(channels) ? channels : [],
+             week: typeof week === "number" ? week : 1,
+             status: status ?? "Planned",
+             releaseDate: releaseDate ?? "",
+             notes: notes ?? "",
+             headline: headline ?? null,
+             standfirst: standfirst ?? null,
+             bodyCopy: bodyCopy ?? null,
+             actionNotes: actionNotes ?? null,
+             sourceArchiveId: linkedArchiveId,
+             body: body ?? null,
+             selectedMessages: Array.isArray(selectedMessages) ? selectedMessages : null,
+             mediaCats: Array.isArray(mediaCats) ? mediaCats : null,
+             pubDate: pubDate ?? null,
+             targetPhrases: Array.isArray(targetPhrases) ? targetPhrases : null,
+             targetPhraseIds: Array.isArray(targetPhraseIds) ? targetPhraseIds : null,
+           })
+           .onConflictDoNothing()
+           .returning();
+         return { row };
+       });
+
+       if ("error" in result) {
+         if (result.error === "invalid_source") {
+           res.status(400).json({ error: INVALID_SOURCE_ARCHIVE_ERROR });
+           return;
+         }
+         res.status(409).json({ error: DUPLICATE_SOURCE_ARCHIVE_ERROR });
+         return;
+       }
+
+       res.json({ ok: true, item: result.row ?? null });
     } catch {
       res.status(500).json({ error: "Failed to create planner item" });
     }
@@ -530,45 +636,96 @@ router.put(
         standfirst,
         bodyCopy,
         actionNotes,
+        sourceArchiveId,
+        body,
+        selectedMessages,
+        mediaCats,
+        pubDate,
         targetPhrases,
         targetPhraseIds,
       } = req.body ?? {};
 
-      const [updated] = await db
-        .update(plannerItemsTable)
-        .set({
-          title: title ?? "",
-          contentType: contentType ?? "",
-          spokesperson: spokesperson ?? "",
-          keyMessage: keyMessage ?? "",
-          audience: audience ?? "",
-          channels: Array.isArray(channels) ? channels : [],
-          week: typeof week === "number" ? week : 1,
-          status: status ?? "Planned",
-          releaseDate: releaseDate ?? "",
-          notes: notes ?? "",
-          headline: headline ?? null,
-          standfirst: standfirst ?? null,
-          bodyCopy: bodyCopy ?? null,
-          actionNotes: actionNotes ?? null,
-          targetPhrases: Array.isArray(targetPhrases) ? targetPhrases : null,
-          targetPhraseIds: Array.isArray(targetPhraseIds) ? targetPhraseIds : null,
-        })
-        // Atomic ownership-scoped write (TOCTOU guard); see archive PUT.
-        .where(
-          and(
-            eq(plannerItemsTable.id, id),
-            eq(plannerItemsTable.owner, existing[0].owner),
-          ),
-        )
-        .returning();
+       const linkedArchiveId =
+         typeof sourceArchiveId === "string" ? sourceArchiveId : null;
+       const result = await db.transaction(async (tx) => {
+         await lockContentProject(tx, existing[0].projectId);
 
-      if (!updated) {
+         if (linkedArchiveId !== null) {
+           const [archive] = await tx
+             .select({ id: archiveItemsTable.id })
+             .from(archiveItemsTable)
+             .where(and(
+               eq(archiveItemsTable.id, linkedArchiveId),
+               eq(archiveItemsTable.projectId, existing[0].projectId),
+               isNull(archiveItemsTable.deletedAt),
+             ))
+             .limit(1);
+           if (!archive) return { error: "invalid_source" as const };
+
+           const [existingLink] = await tx
+             .select({ id: plannerItemsTable.id })
+             .from(plannerItemsTable)
+             .where(and(
+               eq(plannerItemsTable.projectId, existing[0].projectId),
+               eq(plannerItemsTable.sourceArchiveId, linkedArchiveId),
+               isNull(plannerItemsTable.deletedAt),
+               sql`${plannerItemsTable.id} <> ${id}`,
+             ))
+             .limit(1);
+           if (existingLink) return { error: "duplicate_source" as const };
+         }
+
+         const [updated] = await tx
+           .update(plannerItemsTable)
+           .set({
+             title: title ?? "",
+             contentType: contentType ?? "",
+             spokesperson: spokesperson ?? "",
+             keyMessage: keyMessage ?? "",
+             audience: audience ?? "",
+             channels: Array.isArray(channels) ? channels : [],
+             week: typeof week === "number" ? week : 1,
+             status: status ?? "Planned",
+             releaseDate: releaseDate ?? "",
+             notes: notes ?? "",
+             headline: headline ?? null,
+             standfirst: standfirst ?? null,
+             bodyCopy: bodyCopy ?? null,
+             actionNotes: actionNotes ?? null,
+             sourceArchiveId: linkedArchiveId,
+             body: body ?? null,
+             selectedMessages: Array.isArray(selectedMessages) ? selectedMessages : null,
+             mediaCats: Array.isArray(mediaCats) ? mediaCats : null,
+             pubDate: pubDate ?? null,
+             targetPhrases: Array.isArray(targetPhrases) ? targetPhrases : null,
+             targetPhraseIds: Array.isArray(targetPhraseIds) ? targetPhraseIds : null,
+           })
+           // Atomic ownership-scoped write (TOCTOU guard); see archive PUT.
+           .where(
+             and(
+               eq(plannerItemsTable.id, id),
+               eq(plannerItemsTable.owner, existing[0].owner),
+             ),
+           )
+           .returning();
+         return { updated };
+       });
+
+       if ("error" in result) {
+         if (result.error === "invalid_source") {
+           res.status(400).json({ error: INVALID_SOURCE_ARCHIVE_ERROR });
+           return;
+         }
+         res.status(409).json({ error: DUPLICATE_SOURCE_ARCHIVE_ERROR });
+         return;
+       }
+
+       if (!result.updated) {
         res.status(409).json({ error: "Conflict" });
         return;
       }
 
-      res.json({ ok: true, item: updated });
+       res.json({ ok: true, item: result.updated });
     } catch {
       res.status(500).json({ error: "Failed to update planner item" });
     }
@@ -604,7 +761,6 @@ router.delete(
         res.status(403).json({ error: "Forbidden" });
         return;
       }
-
       // Atomic ownership-scoped soft-delete (TOCTOU guard); see archive DELETE.
       const deleted = await db
         .update(plannerItemsTable)

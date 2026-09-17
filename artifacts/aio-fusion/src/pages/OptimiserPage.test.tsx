@@ -63,6 +63,9 @@ vi.mock("../lib/contentStore", () => ({
   saveArchive: async (items: unknown[]) => { fixtures.savedArchive.push(items); },
   loadPlannerProjects: () => fixtures.planner,
   savePlannerProjects: async (items: unknown[]) => { fixtures.savedPlanner.push(items); },
+  plannerProjectForArchive: (item: Record<string, unknown>, existing: Record<string, unknown> | undefined, fields: Record<string, unknown>) => ({
+    ...existing, ...item, sourceArchiveId: item.id, ...fields, id: existing?.id || "planner-linked",
+  }),
   useContentStore: () => 1,
   splitArchiveBody: (item: { headline?: string; bodyCopy?: string; body?: string }) => ({
     headline: item.headline || "",
@@ -105,10 +108,13 @@ describe("OptimiserPage target phrase round trips", () => {
     fireEvent.click(screen.getByRole("button", { name: /Save to Content Library/i }));
     fireEvent.click(screen.getByRole("button", { name: /Push to Comms Planner/i }));
     await waitFor(() => {
-      expect(fixtures.savedArchive.length).toBe(1);
+      // Saving to the library and then placing a legacy planner draft both
+      // persist the complete snapshot; the latter is what establishes its
+      // canonical source link.
+      expect(fixtures.savedArchive.length).toBe(2);
       expect(fixtures.savedPlanner.length).toBe(1);
     });
-    const archived = (fixtures.savedArchive[0] as Array<Record<string, unknown>>)[0];
+    const archived = (fixtures.savedArchive[1] as Array<Record<string, unknown>>)[0];
     const planned = (fixtures.savedPlanner[0] as Array<Record<string, unknown>>)[0];
     expect(archived.targetPhrases).toEqual([fixtures.phrase]);
     expect(archived.targetPhraseIds).toEqual([fixtures.phrase.id]);

@@ -12,7 +12,7 @@ import {
 import { vars } from "../marketing/vars";
 import { TRADE_MEDIA_CATEGORIES } from "../tradeMediaCategories";
 import { streamContent, buildProjectDataText, CONTENT_AI_TIMEOUT_MS, escapeHtml, safeHttpUrl, GenerationProgress, textToHtmlParagraphs, downloadWordDocument } from "../lib/contentAi";
-import { loadArchive, saveArchive, useContentStore, splitArchiveBody, type ArchiveItem, loadPlannerProjects, savePlannerProjects, getISOWeek, weekDateLabel, type PlannerProject } from "../lib/contentStore";
+import { loadArchive, saveArchive, useContentStore, isLinkedPlannerSyncError, splitArchiveBody, plannerProjectForArchive, type ArchiveItem, loadPlannerProjects, savePlannerProjects, getISOWeek, weekDateLabel, type PlannerProject } from "../lib/contentStore";
 import { getKeyMessages, loadIntakeData, getActiveProjectId, getProjectMediaCategories, getProjectDataMessages, getSpokespeople } from "../IntakeForm";
 import { CategoryPickerModal, CONTENT_TYPES, Labelled, countWords } from "./shared";
 import InfoTip from "../InfoTip";
@@ -56,6 +56,8 @@ function OptimiserPage({
   const [showOptimiseBriefModal, setShowOptimiseBriefModal] = useState(false);
   const [showDownloadNotesModal, setShowDownloadNotesModal] = useState(false);
   const [retrieveQuery, setRetrieveQuery] = useState("");
+  const [sourceArchiveId, setSourceArchiveId] = useState<string | null>(null);
+  const [sourceArchiveCreatedAt, setSourceArchiveCreatedAt] = useState<string | null>(null);
 
   const PROMPT_1_TYPES = ["Press release", "Case study", "Speaker submission", "Award submission", "Event copy", "Directory entry"];
   const PITCH_TYPES = ["Article Media Pitch"];
@@ -80,23 +82,37 @@ function OptimiserPage({
     try { localStorage.removeItem("aio.optimiser.preload"); } catch { /* noop */ }
     const planner = loadPlannerProjects().find((p) => p.id === archiveId);
     if (planner) {
-      setProjectTitle(planner.title);
-      setContentType(planner.contentType);
-      setTargetPhrases(Array.isArray(planner.targetPhrases) ? planner.targetPhrases : []);
-      setTargetPhraseIds(Array.isArray(planner.targetPhraseIds) ? planner.targetPhraseIds : (planner.targetPhrases ?? []).map((phrase) => phrase.id));
-      if (planner.spokesperson) setSpokesperson(planner.spokesperson);
+      // Linked rows intentionally open the canonical article, not an older
+      // planner snapshot. Legacy planner-only rows still open their own
+      // captured values without attempting a title-based match.
+      const canonical = planner.sourceArchiveId
+        ? loadArchive().find((item) => item.id === planner.sourceArchiveId)
+        : undefined;
+      const article = canonical || planner;
+      setSourceArchiveId(canonical?.id || planner.sourceArchiveId || null);
+      setSourceArchiveCreatedAt(canonical?.createdAt || null);
+      setProjectTitle(article.title);
+      setContentType(article.contentType);
+      setTargetPhrases(Array.isArray(article.targetPhrases) ? article.targetPhrases : []);
+      setTargetPhraseIds(Array.isArray(article.targetPhraseIds) ? article.targetPhraseIds : (article.targetPhrases ?? []).map((phrase) => phrase.id));
+      if (article.spokesperson) setSpokesperson(article.spokesperson);
       if (planner.releaseDate) setPubDate(planner.releaseDate);
-      if (planner.headline !== undefined || planner.standfirst !== undefined || planner.bodyCopy !== undefined) {
-        const parts = splitArchiveBody(planner);
+      setSelectedMessages(article.selectedMessages ? [...article.selectedMessages] : (planner.keyMessage ? [planner.keyMessage] : []));
+      setMediaCats(article.mediaCats ? [...article.mediaCats] : []);
+      if (article.pubDate) setPubDate(article.pubDate);
+      if (article.headline != null || article.standfirst != null || article.bodyCopy != null || article.body != null) {
+        const parts = splitArchiveBody(article);
         setArticleHeadline(parts.headline);
         setStandfirst(parts.standfirst);
         setBodyCopy(parts.bodyCopy);
-        setActionNotes(planner.actionNotes ?? "");
+        setActionNotes(article.actionNotes ?? "");
       }
       return;
     }
     const arc = loadArchive().find((a) => a.id === archiveId);
     if (arc) {
+      setSourceArchiveId(arc.id);
+      setSourceArchiveCreatedAt(arc.createdAt);
       setProjectTitle(arc.title);
       setContentType(arc.contentType);
       setSpokesperson(arc.spokesperson || "");
@@ -114,6 +130,8 @@ function OptimiserPage({
   }, []);
 
   const handleRetrieve = (a: ArchiveItem) => {
+    setSourceArchiveId(a.id);
+    setSourceArchiveCreatedAt(a.createdAt);
     setProjectTitle(a.title);
     setContentType(a.contentType);
     setSpokesperson(a.spokesperson || "");
@@ -133,16 +151,16 @@ function OptimiserPage({
     setShowRetrieve(false);
   };
 
-  const archiveItem = async (status: "Draft" | "Final") => {
+  const archiveItem = async (status: "Draft" | "Final"): Promise<ArchiveItem | null> => {
     const items = loadArchive();
     const item: ArchiveItem = {
-      id: `arch-${Date.now()}`,
+      id: sourceArchiveId || `arch-${Date.now()}`,
       title: projectTitle || "Untitled project",
       contentType,
       spokesperson: spokesperson === "NA" ? "" : spokesperson,
       status,
       tags: [contentType.toLowerCase().replace(/\s+/g, "-"), ...mediaCats.slice(0, 3).map((c) => c.toLowerCase().replace(/\s+/g, "-"))],
-      body: [articleHeadline, standfirst, bodyCopy].filter(Boolean).join("\n\n") || "Optimised content body. (Demo)",
+      body: [articleHeadline, standfirst, bodyCopy].filter(Boolean).join("\n\n"),
       headline: articleHeadline,
       standfirst: standfirst,
       bodyCopy: bodyCopy,
@@ -152,14 +170,20 @@ function OptimiserPage({
       pubDate,
       targetPhrases: targetPhrases.map((phrase) => ({ ...phrase })),
       targetPhraseIds: targetPhraseIds.length ? [...targetPhraseIds] : targetPhrases.map((phrase) => phrase.id),
-      createdAt: new Date().toISOString(),
+      createdAt: sourceArchiveCreatedAt || new Date().toISOString(),
       source: "optimiser",
     };
     try {
-      await saveArchive([item, ...items]);
+      await saveArchive([item, ...items.filter((existing) => existing.id !== item.id)]);
+      setSourceArchiveId(item.id);
+      setSourceArchiveCreatedAt(item.createdAt);
       alert(`Saved "${item.title}" to Content Library as ${status}.`);
-    } catch {
-      alert("This item was not saved. Check your connection, then try again.");
+      return item;
+    } catch (error) {
+      alert(isLinkedPlannerSyncError(error)
+        ? "The article was saved to Content Library, but its linked planner snapshot was not updated. Retry Save to Content Library before continuing."
+        : "This item was not saved. Check your connection, then try again.");
+      return null;
     }
   };
   const pushToPlanner = async () => {
@@ -167,13 +191,12 @@ function OptimiserPage({
       alert("Add a Content Title before placing it on the Comms Planner.");
       return;
     }
+    const item = await archiveItem(contentStatus === "Final" ? "Final" : "Draft");
+    if (!item) return;
     const projects = loadPlannerProjects();
     const dateWeek = pubDate ? getISOWeek(new Date(pubDate)) : getISOWeek(new Date());
-    const proj: PlannerProject = {
-      id: `proj-${Date.now()}`,
-      title: projectTitle,
-      contentType,
-      spokesperson: spokesperson === "NA" ? "" : spokesperson,
+    const existing = projects.find((project) => project.sourceArchiveId === item.id);
+    const proj: PlannerProject = plannerProjectForArchive(item, existing, {
       keyMessage: selectedMessages[0] || "",
       audience: mediaCats[0] || "",
       channels: mediaCats.slice(0, 4),
@@ -181,15 +204,13 @@ function OptimiserPage({
       status: contentStatus === "Final" ? "Approved" : contentStatus === "Review" ? "Review" : "Drafting",
       releaseDate: pubDate,
       notes: actionNotes.trim() || "Sent from Content Optimiser.",
-      targetPhrases: targetPhrases.map((phrase) => ({ ...phrase })),
-      targetPhraseIds: targetPhraseIds.length ? [...targetPhraseIds] : targetPhrases.map((phrase) => phrase.id),
-    };
+    });
     try {
-      await savePlannerProjects([proj, ...projects]);
+      await savePlannerProjects([proj, ...projects.filter((project) => project.id !== proj.id)]);
       alert(`"${proj.title}" added to the Comms Planner (w/c ${weekDateLabel(proj.week)}).`);
       onNavigate("planner");
     } catch {
-      alert("This planner item was not saved. Check your connection, then try again.");
+      alert("The article was saved to Content Library, but its planner row was not saved. Retry Push to Comms Planner to finish linking it.");
     }
   };
   const shareDraft = () => {
@@ -278,29 +299,10 @@ function OptimiserPage({
   };
 
   const sendToMediaResearch = async () => {
-    const id = `temp-${Date.now()}`;
-    const items = loadArchive();
-    try {
-      await saveArchive([{
-      id,
-      title: projectTitle || "Untitled draft",
-      contentType,
-      spokesperson: spokesperson === "NA" ? "" : spokesperson,
-      status: "Draft",
-      tags: [contentType.toLowerCase().replace(/\s+/g, "-")],
-      body: [articleHeadline, standfirst, bodyCopy].filter(Boolean).join("\n\n"),
-      headline: articleHeadline,
-      standfirst: standfirst,
-      bodyCopy: bodyCopy,
-      targetPhrases: targetPhrases.map((phrase) => ({ ...phrase })),
-      targetPhraseIds: targetPhraseIds.length ? [...targetPhraseIds] : targetPhrases.map((phrase) => phrase.id),
-      createdAt: new Date().toISOString(),
-      }, ...items]);
-      try { localStorage.setItem("aio.research.preload", id); } catch { /* noop */ }
-      onNavigate("media-research");
-    } catch {
-      alert("This draft was not saved. Check your connection, then try again.");
-    }
+    const item = await archiveItem(contentStatus === "Final" ? "Final" : "Draft");
+    if (!item) return;
+    try { localStorage.setItem("aio.research.preload", item.id); } catch { /* noop */ }
+    onNavigate("media-research");
   };
   const canResearch = RESEARCH_TYPES.includes(contentType);
   const intakeReady = !!intake;

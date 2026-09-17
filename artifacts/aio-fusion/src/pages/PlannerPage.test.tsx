@@ -67,6 +67,11 @@ vi.mock("../lib/contentStore", () => ({
     plannerState.projects = next;
   },
   loadArchive: () => plannerState.archive,
+  saveArchive: async () => undefined,
+  archiveItemForPlanner: (project: Record<string, unknown>, id: string) => ({ ...project, id, status: "Draft", tags: [], body: project.body || "" }),
+  plannerProjectForArchive: (item: Record<string, unknown>, existing: Record<string, unknown> | undefined, fields: Record<string, unknown>) => ({
+    ...existing, ...item, sourceArchiveId: item.id, ...fields, id: existing?.id || "planner-linked",
+  }),
   useContentStore: () => 1,
   getContentStoreState: () => ({ status: "ready", mutationPending: false, mutationError: null }),
   initContentStore: vi.fn(),

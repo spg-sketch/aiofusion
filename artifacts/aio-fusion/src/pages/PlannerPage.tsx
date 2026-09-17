@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { loadPlannerProjects, savePlannerProjects, useContentStore, getContentStoreState, initContentStore, loadArchive, getISOWeek, weekDateLabel, DEFAULT_SCORING, STATUS_COLOURS, scoreProject, aggregatePlanScore, loadScoringConfig, saveScoringConfig, type PlannerProject, type PlannerStatus, type ScoringConfig } from "../lib/contentStore";
+import { loadPlannerProjects, savePlannerProjects, useContentStore, getContentStoreState, initContentStore, loadArchive, saveArchive, archiveItemForPlanner, plannerProjectForArchive, getISOWeek, weekDateLabel, DEFAULT_SCORING, STATUS_COLOURS, scoreProject, aggregatePlanScore, loadScoringConfig, saveScoringConfig, type PlannerProject, type PlannerStatus, type ScoringConfig } from "../lib/contentStore";
 import { getKeyMessages, getSpokespeople, getActiveProjectId, loadIntakeData } from "../IntakeForm";
 import { getExactTargetPhrases as getCanonicalExactTargetPhrases } from "../lib/exactTargetPhrases";
 import { CONTENT_TYPES } from "./shared";
@@ -117,13 +117,44 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
   const editTitleRef = useRef<HTMLInputElement>(null);
   const archive = useMemo(() => loadArchive(), [showArchivePicker, contentVersion]);
 
-  const sendToOptimiser = (archiveId?: string) => {
-    if (archiveId) {
-      try { localStorage.setItem("aio.optimiser.preload", archiveId); } catch { /* noop */ }
+  const sendToOptimiser = (item?: PlannerProject | string) => {
+    const preloadId = typeof item === "string" ? item : item?.sourceArchiveId || item?.id;
+    if (preloadId) {
+      try { localStorage.setItem("aio.optimiser.preload", preloadId); } catch { /* noop */ }
     }
     onNavigate("optimiser");
   };
-  const sendToMediaResearch = (archiveId: string) => {
+  const sendToMediaResearch = async (item: PlannerProject) => {
+    // Planner IDs are not archive IDs. Legacy/direct planner items receive a
+    // canonical archive record first; the snapshot is retained exactly as-is,
+    // including an intentionally empty body.
+    let archiveId = item.sourceArchiveId;
+    if (!archiveId) {
+      const createdAt = new Date().toISOString();
+      // Deterministic per planner row: if archive persistence succeeded but
+      // linking the planner row failed, retrying cannot create a duplicate.
+      archiveId = `arch-from-planner-${item.id}`;
+      const archiveItem = archiveItemForPlanner(item, archiveId, createdAt);
+      try {
+        await saveArchive([archiveItem, ...loadArchive().filter((existing) => existing.id !== archiveItem.id)]);
+        const linked = { ...item, ...plannerProjectForArchive(archiveItem, item, {
+          keyMessage: item.keyMessage,
+          audience: item.audience,
+          channels: item.channels,
+          week: item.week,
+          status: item.status,
+          releaseDate: item.releaseDate,
+          notes: item.notes,
+        }) };
+        if (!await update(projects.map((project) => project.id === item.id ? linked : project))) {
+          setSaveError("The article was saved to Content Library, but its planner link was not saved. Retry Media Research to finish linking it.");
+          return;
+        }
+      } catch {
+        setSaveError("The article could not be saved before Media Research. Check your connection and retry.");
+        return;
+      }
+    }
     try { localStorage.setItem("aio.research.preload", archiveId); } catch { /* noop */ }
     onNavigate("media-research");
   };
@@ -176,25 +207,17 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
   const addProjectFromArchive = (item: (typeof archive)[number]) => {
     const w = getISOWeek(new Date());
     const defaultType = Object.keys(cfg.typeWeights)[0] || item.contentType || "Press release";
-    const np: PlannerProject = {
-      id: `proj-${Date.now()}`,
-      title: item.title,
-      contentType: item.contentType || defaultType,
-      spokesperson: item.spokesperson || "",
+    const existing = projects.find((project) => project.sourceArchiveId === item.id);
+    const np: PlannerProject = plannerProjectForArchive(item, existing, {
       keyMessage: item.selectedMessages?.[0] || "",
-      audience: "",
+      audience: item.mediaCats?.[0] || "",
       channels: cfg.channels[0] ? [cfg.channels[0]] : [],
       week: w,
       status: "Planned",
       releaseDate: "",
       notes: "",
-      headline: item.headline,
-      standfirst: item.standfirst,
-      bodyCopy: item.bodyCopy,
-      targetPhrases: item.targetPhrases?.map((phrase) => ({ ...phrase })),
-      targetPhraseIds: item.targetPhraseIds ? [...item.targetPhraseIds] : item.targetPhrases?.map((phrase) => phrase.id),
-    };
-    void update([np, ...projects]).then((saved) => {
+    });
+    void update([np, ...projects.filter((project) => project.id !== np.id)]).then((saved) => {
       setEditing(np);
       setShowArchivePicker(false);
       if (!saved) setSaveError("The archived content was not added. Its draft is still open so you can retry.");
@@ -593,11 +616,11 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                             {p ? (
                               <>
                                 <td className="px-3 py-2 border hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, whiteSpace: "nowrap" }}>
-                                  <button aria-label={`Open ${p.title} content type in Content Optimiser`} onClick={() => sendToOptimiser(p.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left w-full">{p.contentType || ""}</button>
+                                  <button aria-label={`Open ${p.title} content type in Content Optimiser`} onClick={() => sendToOptimiser(p)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left w-full">{p.contentType || ""}</button>
                                 </td>
                                 <td className="px-3 py-2 border hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy }}>
                                   <div className="flex items-center gap-1">
-                                    <button aria-label={`Open ${p.title} in Content Optimiser`} onClick={() => sendToOptimiser(p.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left hover:underline flex-1 min-w-0 truncate text-[12px]" style={{ color: vars.navy, fontWeight: 600 }} title="Open in Content Optimiser">
+                                    <button aria-label={`Open ${p.title} in Content Optimiser`} onClick={() => sendToOptimiser(p)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left hover:underline flex-1 min-w-0 truncate text-[12px]" style={{ color: vars.navy, fontWeight: 600 }} title="Open in Content Optimiser">
                                       {p.title}
                                       {p.targetPhrases?.length ? <span className="ml-1 text-[10px] font-normal" style={{ color: vars.accent }} title={p.targetPhrases.map((phrase) => phrase.text).join(", ")}>· {p.targetPhrases.length} target{p.targetPhrases.length === 1 ? "" : "s"}</span> : null}
                                     </button>
@@ -608,19 +631,19 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                                   <button onClick={() => setEditing(p)} aria-label={`Change status for ${p.title}; currently ${p.status}`} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-pink-500 w-full" title="Change status">{p.status}</button>
                                 </td>
                                 <td className="px-3 py-2 border hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, maxWidth: 220 }}>
-                                  <button aria-label={`Open ${p.title} key message in Content Optimiser`} onClick={() => sendToOptimiser(p.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left w-full">{p.keyMessage || ""}</button>
+                                  <button aria-label={`Open ${p.title} key message in Content Optimiser`} onClick={() => sendToOptimiser(p)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left w-full">{p.keyMessage || ""}</button>
                                 </td>
                                 <td className="px-3 py-2 border hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600 }}>
-                                  <button aria-label={`Open ${p.title} spokesperson in Content Optimiser`} onClick={() => sendToOptimiser(p.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left w-full">{p.spokesperson || ""}</button>
+                                  <button aria-label={`Open ${p.title} spokesperson in Content Optimiser`} onClick={() => sendToOptimiser(p)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left w-full">{p.spokesperson || ""}</button>
                                 </td>
                                 <td className="px-3 py-2 border hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, whiteSpace: "nowrap" }}>
-                                  <button aria-label={`Open ${p.title} release date in Content Optimiser`} onClick={() => sendToOptimiser(p.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left w-full">{p.releaseDate || ""}</button>
+                                  <button aria-label={`Open ${p.title} release date in Content Optimiser`} onClick={() => sendToOptimiser(p)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left w-full">{p.releaseDate || ""}</button>
                                 </td>
                                 <td className="px-3 py-2 border text-right font-bold hover:bg-slate-100 transition-colors text-[12px]" style={{ background: slotBg, borderColor: vars.navy, color: vars.teal }}>
-                                  <button aria-label={`Open ${p.title} score in Content Optimiser`} onClick={() => sendToOptimiser(p.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-right w-full">{Math.round(s!.visibility + s!.authority)}<span style={{ color: vars.g500, fontWeight: 400 }}> pts</span></button>
+                                  <button aria-label={`Open ${p.title} score in Content Optimiser`} onClick={() => sendToOptimiser(p)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-right w-full">{Math.round(s!.visibility + s!.authority)}<span style={{ color: vars.g500, fontWeight: 400 }}> pts</span></button>
                                 </td>
                                 <td className="px-3 py-2 border hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, maxWidth: 240 }}>
-                                  <button aria-label={`Open ${p.title} action notes in Content Optimiser`} onClick={() => sendToOptimiser(p.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left w-full">{p.notes || ""}</button>
+                                  <button aria-label={`Open ${p.title} action notes in Content Optimiser`} onClick={() => sendToOptimiser(p)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pink-500 text-left w-full">{p.notes || ""}</button>
                                 </td>
                               </>
                             ) : (
@@ -714,7 +737,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                             const canResearch = RESEARCH_TYPES.includes(p.contentType);
                             return (
                               <div key={p.id} className="rounded-lg border p-3 transition-all min-w-[240px] max-w-[300px] bg-white" style={{ borderColor: vars.g200 }}>
-                                 <button onClick={() => sendToOptimiser(p.id)} aria-label={`Open ${p.title} in Content Optimiser`} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-left w-full">
+                                 <button onClick={() => sendToOptimiser(p)} aria-label={`Open ${p.title} in Content Optimiser`} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-left w-full">
                                   <div className="flex items-start justify-between gap-2 mb-1">
                                     <p className="text-[13px] font-semibold leading-tight" style={{ color: vars.navy }}>{p.title}</p>
                                     <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0" style={{ background: cs.bg, color: cs.fg }}>{p.status}</span>
@@ -729,7 +752,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                                 <div className="flex items-center gap-1 pt-2 border-t" style={{ borderColor: vars.g100 }}>
                                    <button aria-label={`Edit ${p.title}`} onClick={() => setEditing(p)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 text-[10px] font-semibold px-2 py-1 rounded" style={{ background: vars.g100, color: vars.g500 }} title="Quick edit">Edit</button>
                                   {canResearch && (
-                                     <button aria-label={`Send ${p.title} to Media Research`} onClick={() => sendToMediaResearch(p.id)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-700 text-[10px] font-semibold px-2 py-1 rounded ml-auto" style={{ background: "rgba(201,160,78,0.15)", color: "#7A5E25" }} title="Send to Media Research">
+                                     <button aria-label={`Send ${p.title} to Media Research`} onClick={() => void sendToMediaResearch(p)} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-700 text-[10px] font-semibold px-2 py-1 rounded ml-auto" style={{ background: "rgba(201,160,78,0.15)", color: "#7A5E25" }} title="Send to Media Research">
                                       <Target size={10} className="inline mr-1" /> Media Research
                                     </button>
                                   )}

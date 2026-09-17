@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Database, Download, ExternalLink, Loader2, RotateCcw, Search, Target, ThumbsDown, Users } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { escapeHtml, apiBase } from "../lib/contentAi";
-import { loadArchive, useContentStore } from "../lib/contentStore";
+import { isContentStoreReady, loadArchive, useContentStore } from "../lib/contentStore";
 import * as IntakeForm from "../IntakeForm";
 import { getExactTargetPhrases as getCanonicalExactTargetPhrases, normaliseExactTargetPhrases, type ExactTargetPhrase } from "../lib/exactTargetPhrases";
 import { SummaryRow } from "./shared";
@@ -16,6 +16,8 @@ type ResearchArticle = {
   standfirst?: string;
   bodyCopy?: string;
   body?: string;
+  mediaCats?: string[];
+  selectedMessages?: string[];
   targetPhrases?: ExactTargetPhrase[];
   targetPhraseIds?: string[];
 };
@@ -31,6 +33,20 @@ export function resolveArticleTargetPhrases(
   if (snapshots.length > 0) return snapshots;
   const ids = Array.isArray(article.targetPhraseIds) ? new Set(article.targetPhraseIds) : new Set<string>();
   return projectPhrases.filter((phrase) => ids.has(phrase.id));
+}
+
+export function resolveArticleResearchContext(
+  article: Pick<ResearchArticle, "mediaCats" | "selectedMessages"> | null | undefined,
+  projectCategories: string[],
+  projectMessages: string[],
+): { categories: string[]; messages: string[] } {
+  const categories = Array.isArray(article?.mediaCats)
+    ? article.mediaCats.filter((value): value is string => typeof value === "string")
+    : projectCategories;
+  const messages = Array.isArray(article?.selectedMessages)
+    ? article.selectedMessages.filter((value): value is string => typeof value === "string")
+    : projectMessages;
+  return { categories: [...categories], messages: [...messages] };
 }
 
 function wordsFrom(values: string[]): string[] {
@@ -49,11 +65,18 @@ function termsFor(selected: ResearchArticle, categories: string[], messages: str
   return Array.from(new Set([...projectTerms.slice(0, 15), ...articleTerms.slice(0, 20)])).slice(0, 30);
 }
 
-function projectResearchContext(): { sector: string; keywords: string[]; exactPhrases: ExactTargetPhrase[]; regionalText: string; hasIntakeData: boolean } {
+function projectResearchContext(): {
+  sector: string;
+  keywords: string[];
+  projectQueryKeywords: string[];
+  exactPhrases: ExactTargetPhrase[];
+  regionalText: string;
+  hasIntakeData: boolean;
+} {
   // Use IntakeForm's canonical scoped loader so one project's research
   // criteria can never fall back to another project's legacy bare-key data.
   const data = IntakeForm.loadIntakeData();
-  if (!data) return { sector: "", keywords: [], exactPhrases: [], regionalText: "", hasIntakeData: false };
+  if (!data) return { sector: "", keywords: [], projectQueryKeywords: [], exactPhrases: [], regionalText: "", hasIntakeData: false };
   const formData = data.formData && typeof data.formData === "object" ? data.formData : {};
   const sector = typeof formData["4.4"] === "string" ? formData["4.4"].trim() : "";
   const stringLocations = Array.isArray(data.stringLists?.["3.3"]) ? data.stringLists["3.3"].join(", ") : "";
@@ -74,6 +97,7 @@ function projectResearchContext(): { sector: string; keywords: string[]; exactPh
   return {
     sector,
     keywords: Array.from(new Set([...projectMessages, ...productQueries].filter((value): value is string => typeof value === "string" && Boolean(value.trim())))),
+    projectQueryKeywords: Array.from(new Set(productQueries.filter((value): value is string => typeof value === "string" && Boolean(value.trim())))),
     exactPhrases: getCanonicalExactTargetPhrases(data.llmQueries as { v?: 1; discovery?: string[]; shortlist?: string[]; comparison?: string[] } | undefined),
     regionalText: locations,
     hasIntakeData: true,
@@ -92,10 +116,16 @@ function regionForProject(regionalText: string): string[] {
   return ["Global"];
 }
 
-function generatedCriteria(selected: ResearchArticle, categories: string[], messages: string[], context: ReturnType<typeof projectResearchContext>) {
+function generatedCriteria(
+  selected: ResearchArticle,
+  categories: string[],
+  messages: string[],
+  context: ReturnType<typeof projectResearchContext>,
+  projectKeywords = context.keywords,
+) {
   const topic = context.sector || categories[0] || "";
   const categoryText = categories.length ? ` across ${categories.join(", ")} media` : "";
-  const keywordText = context.keywords.slice(0, 3).join(", ");
+  const keywordText = projectKeywords.slice(0, 3).join(", ");
   const messageText = messages.filter(Boolean).slice(0, 2).join("; ");
   const articleText = [selected.title, selected.headline, selected.standfirst, selected.bodyCopy, selected.body]
     .filter(Boolean)
@@ -158,6 +188,30 @@ export const SHORTLIST_EXPORT_COLUMNS = [
   "Confidence", "Last Verified", "Source Status", "Lifecycle Status", "Notes", "Review Notes",
 ] as const;
 
+const RESEARCH_SELECTION_KEY = "aio.research.selection.v1";
+
+function researchSelectionStorageKey(projectId: string | null): string | null {
+  if (!projectId) return null;
+  try {
+    const rawSession = localStorage.getItem("aio.auth.session.v3");
+    const session = rawSession ? JSON.parse(rawSession) as { username?: unknown } : null;
+    const workspace = typeof session?.username === "string" ? session.username.trim().toLowerCase() : "";
+    if (!workspace) return null;
+    return `${RESEARCH_SELECTION_KEY}::${encodeURIComponent(workspace)}::${encodeURIComponent(projectId)}`;
+  } catch {
+    return null;
+  }
+}
+
+function readRememberedResearchSelection(storageKey: string | null): string {
+  if (!storageKey) return "";
+  try { return sessionStorage.getItem(storageKey) || ""; } catch { return ""; }
+}
+
+function readResearchPreload(): string {
+  try { return localStorage.getItem("aio.research.preload") || ""; } catch { return ""; }
+}
+
 export function shortlistExportRow(contact: Contact): string[] {
   return [
     contact.firstName,
@@ -192,15 +246,19 @@ export function shortlistExportRow(contact: Contact): string[] {
 }
 
 function MediaResearchPage() {
-  useContentStore();
+  const contentVersion = useContentStore();
+  const archiveReady = isContentStoreReady();
   const archive = loadArchive().filter((a) => ["Press release", "Article", "Case study", "Whitepaper", "Blog post"].includes(a.contentType));
   const projectId = IntakeForm.getActiveProjectId();
+  const selectionStorageKey = researchSelectionStorageKey(projectId);
   const projectContext = projectResearchContext();
-  const messages = projectContext.hasIntakeData
+  const projectMessages = projectContext.hasIntakeData
     ? IntakeForm.getKeyMessages().map((m) => m.long || m.short).filter((message) => Boolean(message) && !/primary message not yet set|add your primary message/i.test(message))
     : [];
-  const categories = IntakeForm.getProjectMediaCategories();
-  const [selectedId, setSelectedId] = useState(() => { try { return localStorage.getItem("aio.research.preload") || ""; } catch { return ""; } });
+  const projectCategories = IntakeForm.getProjectMediaCategories();
+  const [preloadId] = useState(readResearchPreload);
+  const preloadIdRef = useRef(preloadId);
+  const [selectedId, setSelectedId] = useState(() => preloadId || readRememberedResearchSelection(selectionStorageKey));
   const [items, setItems] = useState<Recommendation[]>([]);
   const [decisions, setDecisions] = useState<Record<number, Decision>>({});
   const [decisionContacts, setDecisionContacts] = useState<Record<number, Contact>>({});
@@ -215,6 +273,10 @@ function MediaResearchPage() {
   const [feedback, setFeedback] = useState<Record<number, "more" | "less">>({});
   const [refining, setRefining] = useState<number | "reset" | null>(null);
   const selected = archive.find((a) => a.id === selectedId);
+  const { categories, messages } = resolveArticleResearchContext(selected, projectCategories, projectMessages);
+  const projectKeywords = Array.isArray(selected?.selectedMessages)
+    ? [...messages, ...projectContext.projectQueryKeywords]
+    : projectContext.keywords;
   const activeTargetPhrases = resolveArticleTargetPhrases(selected, projectContext.exactPhrases);
   const storyKey = selected?.id || "";
 
@@ -230,6 +292,31 @@ function MediaResearchPage() {
   const recommendationRevision = useRef(0);
   const activeStoryRef = useRef(`${projectId || ""}:${storyKey}`);
   activeStoryRef.current = `${projectId || ""}:${storyKey}`;
+
+  useEffect(() => {
+    // Do not validate or clear a remembered article while the content store is
+    // still hydrating. `loadArchive()` is intentionally empty during that
+    // window, and treating that as deletion would lose the user's selection.
+    if (!archiveReady || !projectId) return;
+    const explicitPreload = preloadIdRef.current;
+    const currentIsValid = Boolean(selectedId && archive.some((item) => item.id === selectedId));
+    const remembered = readRememberedResearchSelection(selectionStorageKey);
+    const rememberedIsValid = Boolean(remembered && archive.some((item) => item.id === remembered));
+    const candidate = explicitPreload
+      ? (archive.some((item) => item.id === explicitPreload) ? explicitPreload : "")
+      : (currentIsValid ? selectedId : (rememberedIsValid ? remembered : ""));
+
+    if (candidate !== selectedId) setSelectedId(candidate);
+    try { localStorage.removeItem("aio.research.preload"); } catch { /* noop */ }
+    preloadIdRef.current = "";
+    try {
+      if (candidate && archive.some((item) => item.id === candidate) && selectionStorageKey) {
+        sessionStorage.setItem(selectionStorageKey, candidate);
+      } else if (selectionStorageKey) {
+        sessionStorage.removeItem(selectionStorageKey);
+      }
+    } catch { /* storage may be unavailable */ }
+  }, [archiveReady, contentVersion, projectId, selectedId, selectionStorageKey]);
 
   const invalidateRequests = () => {
     recommendationRequest.current?.controller.abort();
@@ -267,27 +354,40 @@ function MediaResearchPage() {
     const loadId = ++decisionLoadSequence.current;
     const loadKey = `${projectId}:${storyKey}`;
     const revisionAtStart = recommendationRevision.current;
-    const response = await fetch(`${apiBase()}/api/store/media-db/recommendations/decisions?projectId=${encodeURIComponent(projectId)}&storyKey=${encodeURIComponent(storyKey)}`, { credentials: "include" });
-    if (!response.ok) return;
-    const data = await response.json();
-    if (decisionLoadSequence.current !== loadId || activeStoryRef.current !== loadKey) return;
-    setDecisions(Object.fromEntries((data.decisions || []).map((d: Decision) => [d.contactId, d])));
-    setFeedback(Object.fromEntries((data.feedback || []).map((entry: { contactId: number; signal: "more" | "less" }) => [entry.contactId, entry.signal])));
-    setDecisionContacts(Object.fromEntries((Array.isArray(data.decisionContacts) ? data.decisionContacts : [])
-      .filter((entry: { contactId?: unknown; contact?: unknown }) => Number(entry.contactId) > 0 && entry.contact && typeof entry.contact === "object")
-      .map((entry: { contactId: number; contact: Contact }) => [entry.contactId, entry.contact])));
-    // The decisions endpoint includes persisted recommendation records so the
-    // shortlist remains useful after a page reload, without regenerating it.
-    if (includeRecommendationItems && revisionAtStart === recommendationRevision.current && Array.isArray(data.items)) {
-      setItems(dedupeRecommendations(data.items));
+    const isCurrent = () => decisionLoadSequence.current === loadId && activeStoryRef.current === loadKey;
+    try {
+      const response = await fetch(`${apiBase()}/api/store/media-db/recommendations/decisions?projectId=${encodeURIComponent(projectId)}&storyKey=${encodeURIComponent(storyKey)}`, { credentials: "include" });
+      let data: Record<string, unknown> = {};
+      try {
+        data = await response.json() as Record<string, unknown>;
+      } catch {
+        if (!response.ok) throw new Error(`Could not load saved shortlist (HTTP ${response.status}).`);
+        throw new Error("Could not load saved shortlist: the server returned invalid data.");
+      }
+      if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : `Could not load saved shortlist (HTTP ${response.status}).`);
+      if (!isCurrent()) return;
+      setDecisions(Object.fromEntries((Array.isArray(data.decisions) ? data.decisions : []).map((d: Decision) => [d.contactId, d])));
+      setFeedback(Object.fromEntries((Array.isArray(data.feedback) ? data.feedback : []).map((entry: { contactId: number; signal: "more" | "less" }) => [entry.contactId, entry.signal])));
+      setDecisionContacts(Object.fromEntries((Array.isArray(data.decisionContacts) ? data.decisionContacts : [])
+        .filter((entry: { contactId?: unknown; contact?: unknown }) => Number(entry.contactId) > 0 && entry.contact && typeof entry.contact === "object")
+        .map((entry: { contactId: number; contact: Contact }) => [entry.contactId, entry.contact])));
+      // The decisions endpoint includes persisted recommendation records so the
+      // shortlist remains useful after a page reload, without regenerating it.
+      if (includeRecommendationItems && revisionAtStart === recommendationRevision.current && Array.isArray(data.items)) {
+        setItems(dedupeRecommendations(data.items));
+      }
+    } catch (reason) {
+      // A failed decision load must not leave an operator looking at an old
+      // article's shortlist, and a late failure from another scope must not
+      // overwrite the current article's status.
+      if (isCurrent()) setError(reason instanceof Error ? reason.message : "Could not load saved shortlist.");
     }
   };
   useEffect(() => { void loadDecisions(); }, [projectId, storyKey]);
-  useEffect(() => { try { localStorage.removeItem("aio.research.preload"); } catch { /* noop */ } }, []);
 
   const recommend = async (automatic = false) => {
     if (!selected || !projectId) { setError("Choose a saved article and active project before matching contacts."); return; }
-    const terms = termsFor(selected, categories, messages, projectContext.sector, projectContext.keywords);
+    const terms = termsFor(selected, categories, messages, projectContext.sector, projectKeywords);
     if (!terms.length) {
       if (!automatic) setError("Add meaningful article or project context before matching contacts.");
       return;
@@ -330,7 +430,7 @@ function MediaResearchPage() {
   // effect idempotent under React StrictMode.
   useEffect(() => {
     if (!selected || !projectId || !storyKey) return;
-    const criteria = generatedCriteria(selected, categories, messages, projectContext);
+    const criteria = generatedCriteria(selected, categories, messages, projectContext, projectKeywords);
     setSearchQuery(criteria.query);
     setSectorTopic(criteria.sectorTopic);
     setRegions(criteria.regions);

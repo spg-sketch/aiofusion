@@ -11,6 +11,7 @@ const intakeState = vi.hoisted(() => ({
     stringLists: {},
   } as Record<string, unknown> | null,
 }));
+const projectState = vi.hoisted(() => ({ id: "project-1" }));
 const decisionState = vi.hoisted(() => ({
   payload: { decisions: [] as Record<string, unknown>[], items: [] as Record<string, unknown>[], decisionContacts: [] as Record<string, unknown>[] },
 }));
@@ -30,11 +31,14 @@ const delayedRequests = vi.hoisted(() => ({
   recommendationCalls: [] as { storyKey: string; resolve: (response: Response) => void }[],
   liveCalls: [] as { storyKey: string; resolve: (response: Response) => void }[],
 }));
+const decisionLoadFailure = vi.hoisted(() => ({ kind: "" as "" | "network" | "json" }));
 
 vi.mock("../lib/contentStore", () => ({
-  useContentStore: () => undefined,
+  useContentStore: () => 1,
+  isContentStoreReady: () => true,
   loadArchive: () => [{
     id: "story-1",
+    projectId: "project-1",
     title: "New clean energy platform launches",
     contentType: "Press release",
     headline: "A better way to manage renewable power",
@@ -42,16 +46,17 @@ vi.mock("../lib/contentStore", () => ({
     targetPhrases: [storyOnePhrase],
   }, {
     id: "story-2",
+    projectId: "project-1",
     title: "New retail energy briefing published",
     contentType: "Article",
     headline: "Retailers cut emissions with cleaner power",
     bodyCopy: "Retail energy teams are changing how they source cleaner power.",
     targetPhrases: [storyTwoPhrase],
-  }],
+  }].filter((item) => item.projectId === projectState.id),
 }));
 
 vi.mock("../IntakeForm", () => ({
-  getActiveProjectId: () => "project-1",
+  getActiveProjectId: () => projectState.id,
   getKeyMessages: () => [{ long: "Clean energy teams can work faster" }],
   getProjectMediaCategories: () => ["Energy", "Technology"],
   loadIntakeData: () => intakeState.data,
@@ -62,7 +67,7 @@ vi.mock("../lib/contentAi", () => ({
   escapeHtml: (value: string) => value,
 }));
 
-import { MediaResearchPage, resolveArticleTargetPhrases, SHORTLIST_EXPORT_COLUMNS, sanitizeSpreadsheetCell as sanitizeResearchSpreadsheetCell, shortlistExportRow } from "./MediaResearchPage";
+import { MediaResearchPage, resolveArticleResearchContext, resolveArticleTargetPhrases, SHORTLIST_EXPORT_COLUMNS, sanitizeSpreadsheetCell as sanitizeResearchSpreadsheetCell, shortlistExportRow } from "./MediaResearchPage";
 import { exactTargetPhraseId } from "../lib/exactTargetPhrases";
 
 const storyOnePhrase = {
@@ -103,6 +108,27 @@ const candidate = {
 };
 
 describe("MediaResearchPage live discovery", () => {
+  it("uses explicit article categories and messages, including an intentional empty selection", () => {
+    expect(resolveArticleResearchContext({
+      mediaCats: ["Green energy", "Renewable Energy", "Environmental Technology"],
+      selectedMessages: ["The article's stored message"],
+    }, ["Project category"], ["Project message"])).toEqual({
+      categories: ["Green energy", "Renewable Energy", "Environmental Technology"],
+      messages: ["The article's stored message"],
+    });
+    expect(resolveArticleResearchContext({ mediaCats: [], selectedMessages: [] }, ["Project category"], ["Project message"])).toEqual({
+      categories: [],
+      messages: [],
+    });
+  });
+
+  it("falls back to project categories and messages for legacy articles without snapshots", () => {
+    expect(resolveArticleResearchContext({}, ["Project category"], ["Project message"])).toEqual({
+      categories: ["Project category"],
+      messages: ["Project message"],
+    });
+  });
+
   it("keeps explicit empty phrase snapshots empty while legacy articles inherit project phrases", () => {
     expect(resolveArticleTargetPhrases({ targetPhrases: [], targetPhraseIds: [] }, [storyOnePhrase])).toEqual([]);
     expect(resolveArticleTargetPhrases({}, [storyOnePhrase])).toEqual([storyOnePhrase]);
@@ -142,6 +168,8 @@ describe("MediaResearchPage live discovery", () => {
           }
           return new Response(JSON.stringify({ ok: true, decision: { contactId: 91, decision: "shortlisted", note: "" } }), { status: 200 });
         }
+        if (decisionLoadFailure.kind === "network") throw new Error("Decision service unavailable");
+        if (decisionLoadFailure.kind === "json") return new Response("not json", { status: 200 });
         if (delayedDecisionGets.pending) {
           delayedDecisionGets.calls += 1;
           return new Promise<Response>((resolve) => {
@@ -240,6 +268,11 @@ describe("MediaResearchPage live discovery", () => {
     delayedRequests.live = false;
     delayedRequests.recommendationCalls = [];
     delayedRequests.liveCalls = [];
+    decisionLoadFailure.kind = "";
+    projectState.id = "project-1";
+    sessionStorage.clear();
+    localStorage.removeItem("aio.research.preload");
+    localStorage.removeItem("aio.auth.session.v3");
     cleanup();
     vi.unstubAllGlobals();
   });
@@ -283,6 +316,45 @@ describe("MediaResearchPage live discovery", () => {
   it("explains that live email addresses must come from the cited public source", () => {
     render(<MediaResearchPage />);
     expect(screen.getByText(/sends the selected article excerpt.*to OpenAI/i)).toBeTruthy();
+  });
+
+  it("remembers the selected article after remount within the same workspace and project", async () => {
+    localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "workspace-a", role: "agency" }));
+    const first = render(<MediaResearchPage />);
+    const selector = screen.getByTestId("select-research-article") as HTMLSelectElement;
+    fireEvent.change(selector, { target: { value: "story-1" } });
+    await waitFor(() => expect(selector.value).toBe("story-1"));
+    await screen.findByText("Decision Contact");
+    first.unmount();
+
+    render(<MediaResearchPage />);
+    expect((screen.getByTestId("select-research-article") as HTMLSelectElement).value).toBe("story-1");
+    await screen.findByText("Decision Contact");
+  });
+
+  it("does not carry a remembered article into another project", async () => {
+    localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "workspace-a", role: "agency" }));
+    sessionStorage.setItem("aio.research.selection.v1::workspace-a::project-1", "story-1");
+    projectState.id = "project-2";
+    render(<MediaResearchPage />);
+    await waitFor(() => expect((screen.getByTestId("select-research-article") as HTMLSelectElement).value).toBe(""));
+  });
+
+  it("gives an explicit canonical preload priority over the remembered article", async () => {
+    localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "workspace-a", role: "agency" }));
+    sessionStorage.setItem("aio.research.selection.v1::workspace-a::project-1", "story-2");
+    localStorage.setItem("aio.research.preload", "story-1");
+    render(<MediaResearchPage />);
+    await waitFor(() => expect((screen.getByTestId("select-research-article") as HTMLSelectElement).value).toBe("story-1"));
+    expect(localStorage.getItem("aio.research.preload")).toBeNull();
+  });
+
+  it("clears an invalid remembered article after the archive is ready", async () => {
+    localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "workspace-a", role: "agency" }));
+    sessionStorage.setItem("aio.research.selection.v1::workspace-a::project-1", "deleted-story");
+    render(<MediaResearchPage />);
+    await waitFor(() => expect((screen.getByTestId("select-research-article") as HTMLSelectElement).value).toBe(""));
+    expect(sessionStorage.getItem("aio.research.selection.v1::workspace-a::project-1")).toBeNull();
   });
 
   it("runs one automatic database recommendation under StrictMode and never runs external search automatically", async () => {
@@ -340,6 +412,13 @@ describe("MediaResearchPage live discovery", () => {
     expect(await screen.findByText("Persisted Shortlist")).toBeTruthy();
     expect(screen.getByText("Older Energy Weekly")).toBeTruthy();
     expect(screen.queryByText("Recommended from your Media Database")).toBeNull();
+  });
+
+  it.each(["network", "json"] as const)("shows a saved shortlist error when the decision load returns %s failure", async (kind) => {
+    decisionLoadFailure.kind = kind;
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByText(kind === "network" ? "Decision service unavailable" : /Could not load saved shortlist: the server returned invalid data/i)).toBeTruthy();
   });
 
   it("does not apply an old decision-save response after switching articles", async () => {

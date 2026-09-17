@@ -29,21 +29,36 @@ export type ArchiveItem = {
   targetPhraseIds?: string[];
 };
 
-export function splitArchiveBody(arc: { body?: string; headline?: string; standfirst?: string; bodyCopy?: string }): { headline: string; standfirst: string; bodyCopy: string } {
+export function splitArchiveBody(arc: {
+  body?: string | null;
+  headline?: string | null;
+  standfirst?: string | null;
+  bodyCopy?: string | null;
+}): { headline: string; standfirst: string; bodyCopy: string } {
   // Strip any em dashes left in previously saved drafts so retrieved content is clean.
-  if (arc.headline !== undefined || arc.standfirst !== undefined || arc.bodyCopy !== undefined) {
+  // PostgreSQL returns nullable optional fields as `null`, while old browser
+  // records only had `body`. Treat null exactly like an absent field so an API
+  // round-trip cannot mask non-empty legacy copy.
+  const legacyParts = (arc.body || "").split(/\n\n+/);
+  const legacy = legacyParts.length >= 3
+    ? { headline: legacyParts[0], standfirst: legacyParts[1], bodyCopy: legacyParts.slice(2).join("\n\n") }
+    : legacyParts.length === 2
+      ? { headline: legacyParts[0], standfirst: "", bodyCopy: legacyParts[1] }
+      : { headline: "", standfirst: "", bodyCopy: arc.body || "" };
+  if (arc.headline != null || arc.standfirst != null || arc.bodyCopy != null) {
     return {
-      headline: stripEmDashes(arc.headline || ""),
-      standfirst: stripEmDashes(arc.standfirst || ""),
-      // Use arc.bodyCopy when it is explicitly set (even if empty ""), only fall back to
-      // arc.body for legacy items that pre-date the explicit bodyCopy field.
-      bodyCopy: normaliseAddedData(stripEmDashes(arc.bodyCopy !== undefined ? arc.bodyCopy : (arc.body || ""))),
+      headline: stripEmDashes(arc.headline ?? legacy.headline),
+      standfirst: stripEmDashes(arc.standfirst ?? legacy.standfirst),
+      // An explicit empty string is intentional; only null/undefined falls
+      // back to the legacy combined body.
+      bodyCopy: normaliseAddedData(stripEmDashes(arc.bodyCopy ?? legacy.bodyCopy)),
     };
   }
-  const parts = (arc.body || "").split(/\n\n+/);
-  if (parts.length >= 3) return { headline: stripEmDashes(parts[0]), standfirst: stripEmDashes(parts[1]), bodyCopy: normaliseAddedData(stripEmDashes(parts.slice(2).join("\n\n"))) };
-  if (parts.length === 2) return { headline: stripEmDashes(parts[0]), standfirst: "", bodyCopy: normaliseAddedData(stripEmDashes(parts[1])) };
-  return { headline: "", standfirst: "", bodyCopy: normaliseAddedData(stripEmDashes(arc.body || "")) };
+  return {
+    headline: stripEmDashes(legacy.headline),
+    standfirst: stripEmDashes(legacy.standfirst),
+    bodyCopy: normaliseAddedData(stripEmDashes(legacy.bodyCopy)),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -77,6 +92,10 @@ let _contentStoreState: ContentStoreState = {
 let _archiveMutation = Promise.resolve();
 let _plannerMutation = Promise.resolve();
 let _scoringMutation = Promise.resolve();
+// Archive persistence can succeed before a linked Planner snapshot write
+// fails. Keep those canonical IDs by project so an identical retry still
+// completes the outstanding link sync after the archive cache is refreshed.
+let _pendingArchivePlannerSyncIds = new Map<string, Set<string>>();
 
 function notifyContentStore() {
   window.dispatchEvent(new Event("aio:content-store-changed"));
@@ -91,6 +110,11 @@ export function getContentStoreState(): ContentStoreState {
 // rather than a misleading "Library is empty" state.
 export function isContentStoreAuthError(): boolean {
   return _contentStoreState.status === "authentication-error";
+}
+
+/** A canonical archive write completed but its linked planner snapshot did not. */
+export function isLinkedPlannerSyncError(error: unknown): boolean {
+  return error instanceof Error && error.message === "linked-planner-sync";
 }
 
 // Resolve the effective project id for a given clientId argument (mirrors the
@@ -136,6 +160,7 @@ export async function initContentStore(options: { signal?: AbortSignal } = {}): 
   _archiveCache = null;
   _plannerCache = null;
   _scoringCache = null;
+  _pendingArchivePlannerSyncIds.clear();
   _contentStoreState = { ..._contentStoreState, status: "loading", mutationError: null };
   notifyContentStore();
   try {
@@ -307,6 +332,7 @@ export function saveArchive(newItems: ArchiveItem[], clientId?: string): Promise
     const baselineMap = new Map(baseline.map((a) => [a.id, a]));
     const latestMap = new Map(latest.map((a) => [a.id, a]));
     const desiredMap = new Map(newItems.map((a) => [a.id, a]));
+    const changedIds = new Set<string>();
     for (const old of baseline) {
       if (!desiredMap.has(old.id) && latestMap.has(old.id)) {
         if (JSON.stringify(stripProjectId(latestMap.get(old.id)!)) !== JSON.stringify(stripProjectId(old))) {
@@ -324,7 +350,12 @@ export function saveArchive(newItems: ArchiveItem[], clientId?: string): Promise
       if (exists) {
         const latestValue = JSON.stringify(stripProjectId(latestMap.get(item.id)!));
         const desiredValue = JSON.stringify(stripProjectId(item));
-        if (latestValue === desiredValue) continue;
+        if (latestValue === desiredValue) {
+          // The prior request may have committed but lost its response. It is
+          // still safe (and necessary) to refresh linked planner snapshots.
+          changedIds.add(item.id);
+          continue;
+        }
         if (!baselineMap.has(item.id) || latestValue !== JSON.stringify(stripProjectId(baselineMap.get(item.id)!))) {
           _archiveCache = latestAll;
           notifyContentStore();
@@ -336,9 +367,47 @@ export function saveArchive(newItems: ArchiveItem[], clientId?: string): Promise
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...item, projectId: pid }),
       });
+      changedIds.add(item.id);
     }
     const confirmed = await checkedFetch(`${apiBase()}/api/store/archive`, { credentials: "include" });
-    _archiveCache = (await confirmed.json()).items ?? [];
+    const confirmedArchive = ((await confirmed.json()).items ?? []) as (ArchiveItem & { projectId: string })[];
+    _archiveCache = confirmedArchive;
+    // A linked planner row is a persisted article snapshot, not a title-based
+    // lookup. Whenever its canonical Library article is edited, refresh that
+    // snapshot while retaining planner-only scheduling fields and identity.
+    // Always discover links from the server. A different session can add a
+    // planner row after this browser's cache was populated, so cache presence
+    // is not a safe precondition for snapshot synchronisation.
+    const syncIds = new Set([
+      ...changedIds,
+      ...(_pendingArchivePlannerSyncIds.get(pid) ?? []),
+    ]);
+    if (syncIds.size) {
+      try {
+        const plannerResponse = await checkedFetch(`${apiBase()}/api/store/planner`, { credentials: "include" });
+        const latestPlanner = ((await plannerResponse.json()).items ?? []) as (PlannerProject & { projectId: string })[];
+        for (const project of latestPlanner.filter((candidate) =>
+          candidate.projectId === pid && candidate.sourceArchiveId && syncIds.has(candidate.sourceArchiveId),
+        )) {
+          const archive = confirmedArchive.find((candidate) => candidate.id === project.sourceArchiveId);
+          if (!archive) continue;
+          await checkedFetch(`${apiBase()}/api/store/planner/${project.id}`, {
+            method: "PUT", credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...project, ...articleSnapshotForPlanner(archive), projectId: pid }),
+          });
+        }
+        const confirmedPlanner = await checkedFetch(`${apiBase()}/api/store/planner`, { credentials: "include" });
+        _plannerCache = (await confirmedPlanner.json()).items ?? [];
+        _pendingArchivePlannerSyncIds.delete(pid);
+      } catch {
+        _pendingArchivePlannerSyncIds.set(pid, syncIds);
+        notifyContentStore();
+        // The archive is already durable; callers can accurately tell users
+        // to retry the linked planner synchronisation without navigating.
+        throw new Error("linked-planner-sync");
+      }
+    }
     notifyContentStore();
   });
 }
@@ -361,9 +430,91 @@ export type PlannerProject = {
   standfirst?: string;
   bodyCopy?: string;
   actionNotes?: string;
+  /** Stable canonical library identity for article-backed planner rows. */
+  sourceArchiveId?: string;
+  /** Full article snapshot retained by planner, including legacy-only rows. */
+  body?: string;
+  selectedMessages?: string[];
+  mediaCats?: string[];
+  pubDate?: string;
   targetPhrases?: ExactTargetPhrase[];
   targetPhraseIds?: string[];
 };
+
+/**
+ * Copy every content field that must survive a Library → Planner handoff.
+ * This deliberately copies data rather than looking up by title: titles are
+ * editable and legacy planner rows may not have a matching library record.
+ */
+export function articleSnapshotForPlanner(item: ArchiveItem): Pick<PlannerProject,
+  "sourceArchiveId" | "title" | "contentType" | "spokesperson" | "headline" |
+  "standfirst" | "bodyCopy" | "body" | "actionNotes" | "selectedMessages" |
+  "mediaCats" | "pubDate" | "targetPhrases" | "targetPhraseIds"
+> {
+  return {
+    sourceArchiveId: item.id,
+    title: item.title,
+    contentType: item.contentType,
+    spokesperson: item.spokesperson || "",
+    headline: item.headline,
+    standfirst: item.standfirst,
+    bodyCopy: item.bodyCopy,
+    body: item.body,
+    actionNotes: item.actionNotes,
+    selectedMessages: item.selectedMessages ? [...item.selectedMessages] : [],
+    mediaCats: item.mediaCats ? [...item.mediaCats] : [],
+    pubDate: item.pubDate,
+    targetPhrases: item.targetPhrases?.map((phrase) => ({ ...phrase })),
+    targetPhraseIds: item.targetPhraseIds
+      ? [...item.targetPhraseIds]
+      : item.targetPhrases?.map((phrase) => phrase.id),
+  };
+}
+
+/** Build or refresh the one planner row for a canonical library article. */
+export function plannerProjectForArchive(
+  item: ArchiveItem,
+  existing: PlannerProject | undefined,
+  fields: Omit<PlannerProject, keyof ReturnType<typeof articleSnapshotForPlanner> | "id">,
+): PlannerProject {
+  return {
+    ...existing,
+    ...articleSnapshotForPlanner(item),
+    ...fields,
+    id: existing?.id || `proj-${Date.now()}`,
+  };
+}
+
+/**
+ * Makes a canonical archive record from a planner snapshot without fabricating
+ * missing copy. Used only for direct/legacy planner → Media Research handoff.
+ */
+export function archiveItemForPlanner(project: PlannerProject, id: string, createdAt: string): ArchiveItem {
+  const explicitBody = typeof project.body === "string" ? project.body : undefined;
+  return {
+    id,
+    title: project.title,
+    contentType: project.contentType,
+    spokesperson: project.spokesperson || "",
+    status: project.status === "Approved" ? "Final" : "Draft",
+    tags: [project.contentType.toLowerCase().replace(/\s+/g, "-"), "planner"],
+    // Old planner rows were scheduling records, not article records. Never
+    // manufacture prose from their title/headline; retain only body copy that
+    // was actually captured in the planner snapshot.
+    body: explicitBody !== undefined ? explicitBody : (project.bodyCopy ?? ""),
+    headline: typeof project.headline === "string" ? project.headline : undefined,
+    standfirst: typeof project.standfirst === "string" ? project.standfirst : undefined,
+    bodyCopy: typeof project.bodyCopy === "string" ? project.bodyCopy : undefined,
+    actionNotes: project.actionNotes ?? project.notes,
+    selectedMessages: project.selectedMessages?.slice(),
+    mediaCats: project.mediaCats?.slice(),
+    pubDate: project.pubDate ?? project.releaseDate,
+    targetPhrases: project.targetPhrases?.map((phrase) => ({ ...phrase })),
+    targetPhraseIds: project.targetPhraseIds?.slice(),
+    createdAt,
+    source: "optimiser",
+  };
+}
 
 export function loadPlannerProjects(clientId?: string): PlannerProject[] {
   if (_plannerCache === null) return [];

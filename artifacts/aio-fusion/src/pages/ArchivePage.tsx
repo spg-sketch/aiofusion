@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { loadArchive, saveArchive, useContentStore, getContentStoreState, initContentStore, type ArchiveItem, splitArchiveBody, loadPlannerProjects, savePlannerProjects, getISOWeek, weekDateLabel, type PlannerProject } from "../lib/contentStore";
+import { loadArchive, saveArchive, useContentStore, getContentStoreState, initContentStore, plannerProjectForArchive, type ArchiveItem, splitArchiveBody, loadPlannerProjects, savePlannerProjects, getISOWeek, weekDateLabel, type PlannerProject } from "../lib/contentStore";
 import CountdownBanner from "../components/CountdownBanner";
 import { loadIntakeData, getKeyMessages, getSpokespeople } from "../IntakeForm";
 import { CONTENT_TYPES } from "./shared";
@@ -81,6 +81,10 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
   });
 
   const handleDelete = async (id: string) => {
+    if (loadPlannerProjects().some((project) => project.sourceArchiveId === id)) {
+      setActionError("This library item is linked to a Comms Planner row. Delete that planner row first, then retry.");
+      return;
+    }
     if (!confirm("Delete this archive item?")) return;
     const updated = archive.filter((a) => a.id !== id);
     setActionError("");
@@ -106,22 +110,19 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
     // (otherwise the row would save to localStorage but never appear in the visible calendar).
     const wk = rawWeek < currentWeek ? currentWeek : rawWeek;
     const km = keyMessages[0]?.short || keyMessages[0]?.long || "";
-    const proj: PlannerProject = {
-      id: `pp-${Date.now()}`,
-      title: item.title || "Untitled archive item",
-      contentType: item.contentType || "Article",
-      spokesperson: item.spokesperson || "",
+    const existing = projects.find((project) => project.sourceArchiveId === item.id);
+    const proj: PlannerProject = plannerProjectForArchive(item, existing, {
       keyMessage: km,
-      audience: "",
+      audience: item.mediaCats?.[0] || "",
       channels: item.releaseChannel ? [item.releaseChannel] : [],
       week: wk,
       status: item.status === "Final" ? "Approved" : "Review",
       releaseDate,
       notes: `Pushed from Content Library · ${item.status} · ${new Date(item.createdAt).toLocaleDateString()}`,
-    };
+    });
     setActionError("");
     try {
-      await savePlannerProjects([proj, ...projects]);
+      await savePlannerProjects([proj, ...projects.filter((project) => project.id !== proj.id)]);
       alert(`"${proj.title}" added to the Comms Planner (w/c ${weekDateLabel(wk)}).`);
       onNavigate("planner");
     } catch {
