@@ -3,6 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const calls = vi.hoisted(() => ({
   managedUrls: [] as string[],
   updatedUrls: [] as string[],
+  readiness: [] as unknown[],
+  probeSucceeds: true,
+  customerCreates: 0,
+  customerDeletes: 0,
 }));
 
 vi.mock("stripe-replit-sync", () => ({
@@ -20,7 +24,7 @@ vi.mock("./stripe-client", () => ({
     Promise.resolve({
       findOrCreateManagedWebhook: (url: string) => {
         calls.managedUrls.push(url);
-        return Promise.resolve({ url });
+        return Promise.resolve({ id: "we_managed", url });
       },
       syncBackfill: () => Promise.resolve(),
     }),
@@ -38,12 +42,36 @@ vi.mock("./stripe-client", () => ({
               },
             ],
           }),
-        update: (_id: string, values: { url: string }) => {
-          calls.updatedUrls.push(values.url);
+        update: (_id: string, values: { url?: string }) => {
+          if (values.url) calls.updatedUrls.push(values.url);
+          return Promise.resolve({ id: _id, ...values });
+        },
+        retrieve: (id: string) =>
+          Promise.resolve({
+            id,
+            url: "https://app.example/api/stripe/webhook",
+            metadata: {},
+          }),
+      },
+      customers: {
+        create: () => {
+          calls.customerCreates += 1;
+          return Promise.resolve({ id: "cus_readiness_probe" });
+        },
+        del: () => {
+          calls.customerDeletes += 1;
           return Promise.resolve();
         },
       },
     }),
+}));
+vi.mock("./stripe-readiness", () => ({
+  setStripeCheckoutReadiness: (value: unknown) => calls.readiness.push(value),
+  startStripeWebhookReadinessProbe: () => ({
+    probeId: "probe_test",
+    verified: Promise.resolve(calls.probeSucceeds),
+    cancel: () => {},
+  }),
 }));
 
 import { initStripe, shouldRegisterManagedStripeWebhook } from "./stripe-init";
@@ -55,6 +83,10 @@ const originalDatabaseUrl = process.env.DATABASE_URL;
 afterEach(() => {
   calls.managedUrls.length = 0;
   calls.updatedUrls.length = 0;
+  calls.readiness.length = 0;
+  calls.probeSucceeds = true;
+  calls.customerCreates = 0;
+  calls.customerDeletes = 0;
   if (originalDeploymentEnv === undefined) {
     delete process.env.DEPLOYMENT_ENV;
   } else {
@@ -98,6 +130,9 @@ describe("Stripe webhook registration at startup", () => {
 
     expect(calls.updatedUrls).toEqual(["https://staging.example/api/stripe/webhook"]);
     expect(calls.managedUrls).toEqual([]);
+    expect(calls.readiness.at(-1)).toEqual({ available: true });
+    expect(calls.customerCreates).toBe(1);
+    expect(calls.customerDeletes).toBe(1);
   });
 
   it("registers the intended production endpoint", async () => {
@@ -109,6 +144,9 @@ describe("Stripe webhook registration at startup", () => {
 
     expect(calls.managedUrls).toEqual(["https://app.example/api/stripe/webhook"]);
     expect(calls.updatedUrls).toEqual([]);
+    expect(calls.readiness.at(-1)).toEqual({ available: true });
+    expect(calls.customerCreates).toBe(1);
+    expect(calls.customerDeletes).toBe(1);
   });
 
   it("does not let development replace the published endpoint", async () => {
@@ -120,5 +158,19 @@ describe("Stripe webhook registration at startup", () => {
 
     expect(calls.managedUrls).toEqual([]);
     expect(calls.updatedUrls).toEqual([]);
+  });
+
+  it("disables checkout when Stripe does not deliver a successfully verified probe", async () => {
+    process.env.DEPLOYMENT_ENV = "production";
+    process.env.REPLIT_DOMAINS = "app.example";
+    process.env.DATABASE_URL = "postgres://test-only";
+    calls.probeSucceeds = false;
+
+    await initStripe();
+
+    expect(calls.readiness.at(-1)).toEqual({
+      available: false,
+      reason: "webhook_secret_mismatch",
+    });
   });
 });

@@ -6,6 +6,10 @@ import {
   getUncachableStripeClient,
   stripeConfigured,
 } from "./stripe-client";
+import {
+  setStripeCheckoutReadiness,
+  startStripeWebhookReadinessProbe,
+} from "./stripe-readiness";
 import { ensureAllPrices, warnIfTaxDeactivated } from "./billing";
 
 export function shouldRegisterManagedStripeWebhook(): boolean {
@@ -13,11 +17,35 @@ export function shouldRegisterManagedStripeWebhook(): boolean {
   return deploymentEnv === "staging" || deploymentEnv === "production";
 }
 
-async function configureStagingWebhookUrl(): Promise<void> {
+async function runWebhookReadinessProbe(
+  stripe: Awaited<ReturnType<typeof getUncachableStripeClient>>,
+): Promise<boolean> {
+  const probe = startStripeWebhookReadinessProbe();
+  let customerId: string | null = null;
+  try {
+    const customer = await stripe.customers.create({
+      metadata: { aio_webhook_readiness_probe: probe.probeId },
+    });
+    customerId = customer.id;
+    return await probe.verified;
+  } finally {
+    probe.cancel();
+    if (customerId) {
+      await stripe.customers.del(customerId).catch((err) => {
+        logger.warn(
+          { err, customerId },
+          "stripe-init: could not remove temporary webhook readiness customer",
+        );
+      });
+    }
+  }
+}
+
+async function configureStagingWebhookUrl(): Promise<boolean> {
   const domain = process.env.REPLIT_DOMAINS?.split(",")[0];
   if (!domain) {
     logger.warn("stripe-init: REPLIT_DOMAINS not set - staging webhook not configured");
-    return;
+    return false;
   }
 
   const { webhookSecret } = await getStripeCredentials();
@@ -25,7 +53,7 @@ async function configureStagingWebhookUrl(): Promise<void> {
     logger.warn(
       "stripe-init: STRIPE_STAGING_WEBHOOK_SECRET is not set - staging webhook URL unchanged",
     );
-    return;
+    return false;
   }
 
   const stripe = await getUncachableStripeClient();
@@ -36,7 +64,7 @@ async function configureStagingWebhookUrl(): Promise<void> {
   );
   if (exact) {
     logger.info({ url: targetUrl }, "stripe-init: staging webhook already configured");
-    return;
+    return runWebhookReadinessProbe(stripe);
   }
 
   const managed = endpoints.data.find((endpoint) => {
@@ -51,11 +79,12 @@ async function configureStagingWebhookUrl(): Promise<void> {
       { url: targetUrl },
       "stripe-init: no existing Stripe-managed webhook found to move to staging",
     );
-    return;
+    return false;
   }
 
   await stripe.webhookEndpoints.update(managed.id, { url: targetUrl });
   logger.info({ url: targetUrl }, "stripe-init: staging webhook URL configured");
+  return runWebhookReadinessProbe(stripe);
 }
 
 // Startup Stripe initialisation:
@@ -68,6 +97,13 @@ async function configureStagingWebhookUrl(): Promise<void> {
 // published domain. Development intentionally does not manage the webhook
 // because it may share Stripe and PostgreSQL state with published staging.
 export async function initStripe(): Promise<void> {
+  const deploymentEnv = process.env.DEPLOYMENT_ENV?.toLowerCase().trim();
+  if (deploymentEnv === "staging" || deploymentEnv === "production") {
+    setStripeCheckoutReadiness({
+      available: false,
+      reason: "webhook_validation_pending",
+    });
+  }
   if (!stripeConfigured()) {
     logger.warn("stripe-init: Stripe connection not available in this environment - skipping");
     return;
@@ -78,8 +114,25 @@ export async function initStripe(): Promise<void> {
     return;
   }
 
-  if (process.env.DEPLOYMENT_ENV?.toLowerCase().trim() === "staging") {
-    await configureStagingWebhookUrl();
+  if (deploymentEnv === "staging") {
+    try {
+      const valid = await configureStagingWebhookUrl();
+      setStripeCheckoutReadiness(
+        valid
+          ? { available: true }
+          : { available: false, reason: "webhook_secret_mismatch" },
+      );
+      if (!valid) {
+        logger.error(
+          "stripe-init: BILLING CHECKOUT DISABLED - the staging webhook endpoint and selected signing secret could not be validated",
+        );
+      }
+    } catch (err) {
+      logger.error(
+        { err },
+        "stripe-init: BILLING CHECKOUT DISABLED - staging webhook signing-secret validation failed",
+      );
+    }
     try {
       const stripe = await getUncachableStripeClient();
       await ensureAllPrices(stripe);
@@ -101,6 +154,18 @@ export async function initStripe(): Promise<void> {
       `https://${domain}/api/stripe/webhook`,
     );
     logger.info({ url: webhook?.url }, "stripe-init: managed webhook configured");
+    const stripe = await getUncachableStripeClient();
+    const valid = await runWebhookReadinessProbe(stripe);
+    setStripeCheckoutReadiness(
+      valid
+        ? { available: true }
+        : { available: false, reason: "webhook_secret_mismatch" },
+    );
+    if (!valid) {
+      logger.error(
+        "stripe-init: BILLING CHECKOUT DISABLED - the production webhook endpoint and selected signing secret do not match",
+      );
+    }
   } else if (domain) {
     logger.info(
       "stripe-init: development environment - leaving the published Stripe webhook unchanged",

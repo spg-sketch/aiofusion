@@ -4,6 +4,12 @@ import {
   selectStripeConnectionItem,
   stripeConfigured,
 } from "./stripe-client";
+import {
+  getStripeCheckoutReadiness,
+  observeStripeWebhookReadinessProbe,
+  setStripeCheckoutReadiness,
+  startStripeWebhookReadinessProbe,
+} from "./stripe-readiness";
 
 const originalDeploymentEnv = process.env.DEPLOYMENT_ENV;
 const originalStagingSecretKey = process.env.STRIPE_STAGING_SECRET_KEY;
@@ -151,5 +157,44 @@ describe("stripeConfigured", () => {
     delete process.env.WEB_REPL_RENEWAL;
 
     expect(stripeConfigured()).toBe(false);
+  });
+});
+
+describe("Stripe checkout readiness", () => {
+  it("fails closed in deployments until startup validation succeeds", () => {
+    process.env.DEPLOYMENT_ENV = "production";
+    setStripeCheckoutReadiness({
+      available: false,
+      reason: "webhook_secret_mismatch",
+    });
+
+    expect(getStripeCheckoutReadiness()).toEqual({
+      available: false,
+      reason: "webhook_secret_mismatch",
+    });
+  });
+
+  it("does not block local development", () => {
+    process.env.DEPLOYMENT_ENV = "development";
+    setStripeCheckoutReadiness({
+      available: false,
+      reason: "webhook_validation_pending",
+    });
+
+    expect(getStripeCheckoutReadiness()).toEqual({ available: true });
+  });
+
+  it("accepts only the matching tagged customer event as probe confirmation", async () => {
+    const probe = startStripeWebhookReadinessProbe(1_000);
+    observeStripeWebhookReadinessProbe({
+      type: "customer.created",
+      data: {
+        object: {
+          metadata: { aio_webhook_readiness_probe: probe.probeId },
+        },
+      },
+    });
+
+    await expect(probe.verified).resolves.toBe(true);
   });
 });

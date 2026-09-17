@@ -136,6 +136,8 @@ app.post(
         res.status(400).json({ error: "Invalid signature" });
         return;
       }
+      const { observeStripeWebhookReadinessProbe } = await import("./lib/stripe-readiness");
+      observeStripeWebhookReadinessProbe(event);
 
       await handleStripeEvent(event);
 

@@ -402,7 +402,10 @@ import {
   warnIfTaxDeactivated,
   getBetaTrialSummary,
   isEntitled,
+  createCheckoutSession,
+  createProjectCheckoutSession,
 } from "../lib/billing";
+import { setStripeCheckoutReadiness } from "../lib/stripe-readiness";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1278,6 +1281,43 @@ describe("billing routes", () => {
     });
 
     expect(getCheckoutErrorResponse(new Error("unexpected failure"))).toBeNull();
+  });
+
+  it("blocks both plan and project checkout before any Stripe work when webhook readiness fails", async () => {
+    const originalDeploymentEnv = process.env.DEPLOYMENT_ENV;
+    process.env.DEPLOYMENT_ENV = "production";
+    setStripeCheckoutReadiness({
+      available: false,
+      reason: "webhook_secret_mismatch",
+    });
+    try {
+      const planCheckout = createCheckoutSession({
+        slug: "blocked-plan",
+        plan: "agency",
+        frequency: "annual",
+        successUrl: "https://example.test/success",
+        cancelUrl: "https://example.test/cancel",
+      });
+      const projectCheckout = createProjectCheckoutSession({
+        slug: "blocked-project",
+        tier: "standard",
+        successUrl: "https://example.test/success",
+        cancelUrl: "https://example.test/cancel",
+      });
+
+      await expect(planCheckout).rejects.toMatchObject({
+        code: "stripe_webhook_unavailable",
+        statusCode: 503,
+      });
+      await expect(projectCheckout).rejects.toMatchObject({
+        code: "stripe_webhook_unavailable",
+        statusCode: 503,
+      });
+    } finally {
+      if (originalDeploymentEnv === undefined) delete process.env.DEPLOYMENT_ENV;
+      else process.env.DEPLOYMENT_ENV = originalDeploymentEnv;
+      setStripeCheckoutReadiness({ available: true });
+    }
   });
 
   it("creates the Stripe customer with address and VAT number from billing details", async () => {

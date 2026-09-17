@@ -9,6 +9,7 @@ import {
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { getUncachableStripeClient } from "./stripe-client";
+import { getStripeCheckoutReadiness } from "./stripe-readiness";
 import {
   PLAN_PRICES,
   PROJECT_TIER_PRICES,
@@ -1642,7 +1643,8 @@ function isTaxConfigurationError(err: unknown): boolean {
 
 export type CheckoutStartFailureCode =
   | "stripe_tax_incomplete"
-  | "discount_verification_failed";
+  | "discount_verification_failed"
+  | "stripe_webhook_unavailable";
 
 export class CheckoutStartError extends Error {
   readonly code: CheckoutStartFailureCode;
@@ -1710,6 +1712,15 @@ export function getCheckoutErrorResponse(err: unknown): CheckoutErrorResponse | 
   }
 
   return null;
+}
+
+function assertStripeCheckoutReady(): void {
+  const readiness = getStripeCheckoutReadiness();
+  if (readiness.available) return;
+  throw new CheckoutStartError(
+    "stripe_webhook_unavailable",
+    "Checkout is temporarily unavailable because the payment notification setup needs attention. Please contact support.",
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1817,6 +1828,7 @@ export async function createCheckoutSession(opts: {
   // the DB checkout claim when the session completes.
   claimToken?: string;
 }): Promise<{ url: string; sessionId: string }> {
+  assertStripeCheckoutReady();
   const stripe = await getUncachableStripeClient();
   const slug = normUsername(opts.slug);
   const price = PLAN_PRICES[opts.plan][opts.frequency];
@@ -1928,6 +1940,7 @@ export async function createProjectCheckoutSession(opts: {
   successUrl: string;
   cancelUrl: string;
 }): Promise<{ url: string }> {
+  assertStripeCheckoutReady();
   const stripe = await getUncachableStripeClient();
   const slug = normUsername(opts.slug);
   const priceId = await ensurePriceId(stripe, PROJECT_TIER_PRICES[opts.tier]);
