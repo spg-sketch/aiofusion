@@ -144,6 +144,7 @@ import { GeorgeSupport } from "./components/GeorgeSupport";
 import ClientSelectorPage from "./pages/ClientSelectorPage";
 import { RouteLoading } from "./components/RouteLoading";
 import { AuthPageLoading } from "./components/AuthPageLoading";
+import { CheckoutReturnLoading } from "./components/CheckoutReturnLoading";
 import { preloadRoute, scheduleIdlePreloads, type RoutePreloader } from "./lib/routePreloading";
 
 const routePreloadingEnabled = import.meta.env.MODE !== "test";
@@ -1458,6 +1459,19 @@ function App() {
           }}
         />
       </Suspense>
+    );
+  }
+
+  // A payment return is not a fresh sign-in. Keep the same neutral payment
+  // presentation while /me establishes authority instead of briefly showing
+  // Platform Home before onboarding can reconcile the checkout.
+  if (checkoutResult === "success" && authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 bg-[#f8fafc]">
+        <div className="w-full max-w-xl">
+          <CheckoutReturnLoading />
+        </div>
+      </div>
     );
   }
 

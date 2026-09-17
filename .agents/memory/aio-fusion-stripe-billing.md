@@ -81,3 +81,10 @@ The completion webhook conditional UPDATE must allow: (a) first purchase (null s
 - Paid onboarding should arrive at Billing with a visible server-verified acknowledgement, rather than leaving customers to find their subscription under another settings tab.
 - **Why:** the user completed a paid signup but interpreted the absence of confirmation, followed by an active subscription beside “Confirming payment…”, as an uncertain payment outcome.
 - **How to apply:** distinguish confirmation of the returned checkout from verification of an existing active subscription. A success URL alone proves neither; retain clear pending/error states and never require another purchase to resolve uncertainty.
+
+## Additional-workspace confirmation
+Confirm the specific add-on purchase separately from the main subscription. An unassigned paid workspace is available for the next new project; it is not an already-created project.
+
+**Why:** the generic active-subscription banner made an extra-workspace purchase look indistinguishable from the customer's existing plan. The main subscription renewal date also does not establish the add-on's renewal date.
+
+**How to apply:** use the server-verified purchase kind and persisted workspace grant for the tier and assignment wording. Do not infer a fresh purchase from an existing active subscription, old unused slots, or a success URL.

@@ -43,8 +43,7 @@ export default function AccountTypeSelectPage({ onComplete, onSignOut }: Props) 
   return (
     <FocusedOnboardingShell state={{ step: "account_type" }} onSignOut={onSignOut}>
       <section className="fo-fade fo-delay">
-        <p className="fo-eyebrow">01 / Workspace identity</p>
-        <h2 className="fo-page-heading mt-4">How will you use AIO Fusion?</h2>
+        <h2 className="fo-page-heading">How will you use AIO Fusion?</h2>
         <p className="fo-page-copy mt-4 max-w-xl text-[15px] leading-7">
           Choose the account type that best describes your work. Which would suit you best? You can update this in your account settings at a later stage.
         </p>

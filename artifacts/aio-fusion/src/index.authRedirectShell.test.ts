@@ -34,4 +34,14 @@ describe("prerendered auth redirect guard", () => {
     expect(root).not.toHaveAttribute("data-auth-redirect");
     expect(root.querySelector('[data-testid="prerendered-marketing"]')).not.toBeNull();
   });
+
+  it("shows neutral payment confirmation before the checkout-return app boots", () => {
+    const root = runIndexAuthGuard("/?checkout=success&session_id=cs_test_confirmation");
+
+    expect(root.querySelector('[data-testid="prerendered-marketing"]')).toBeNull();
+    expect(root.querySelector('[aria-label="Checking your payment"]')).not.toBeNull();
+    expect(root).toHaveTextContent("Please wait while we confirm your payment.");
+    expect(root).not.toHaveTextContent("Preparing secure sign in");
+    expect(root).not.toHaveTextContent("Payment confirmed");
+  });
 });

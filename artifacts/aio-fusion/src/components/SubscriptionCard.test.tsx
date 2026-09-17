@@ -24,7 +24,7 @@ function activeSubscription() {
     checkoutAvailable: true,
     companyRecordComplete: true,
     projects: [],
-    unassignedAddons: [],
+     unassignedAddons: [] as { tier: "standard" | "premium" | "max"; purchasedAt: string }[],
     tierPrices: {},
     prices: {
       annual: { yearlyTotal: 500 },
@@ -177,5 +177,109 @@ describe("paid checkout return hand-off", () => {
     expect(fetchMock.mock.calls.some(([input]) =>
       String(input).endsWith("/api/platform/billing/reconcile-checkout"),
     )).toBe(false);
+  });
+});
+
+describe("project add-on checkout return hand-off", () => {
+  function stubConfirmedAddon(
+    addon: { tier: "standard" | "premium" | "max"; projectId: string | null; assigned: boolean },
+    info = activeSubscription(),
+  ) {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/billing/subscription")) {
+        return { ok: true, json: async () => info } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/invoices")) {
+        return { ok: true, json: async () => ({ invoices: [] }) } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/reconcile-checkout")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ status: "confirmed", kind: "project-addon", addon }),
+        } as Response;
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it.each([
+    ["standard", "Standard"],
+    ["premium", "Premium"],
+    ["max", "Max"],
+  ] as const)("renders the server-confirmed %s tier", async (tier, tierLabel) => {
+    stubConfirmedAddon({ tier, projectId: null, assigned: false });
+
+    render(<SubscriptionCard checkoutResult="success" checkoutSessionId="cs_test_addon-return" />);
+
+    const banner = await screen.findByTestId("project-addon-success-state");
+    expect(banner).toHaveTextContent(`Tier: ${tierLabel}`);
+    expect(banner).toHaveTextContent("One extra workspace is now available.");
+    expect(banner).toHaveTextContent(`Your next new project will use ${tierLabel}.`);
+    expect(screen.queryByTestId("payment-success-state")).not.toBeInTheDocument();
+  });
+
+  it("does not show an add-on success banner while reconciliation is pending", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/billing/subscription")) {
+        return { ok: true, json: async () => activeSubscription() } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/invoices")) {
+        return { ok: true, json: async () => ({ invoices: [] }) } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/reconcile-checkout")) {
+        return { ok: false, status: 202, json: async () => ({ status: "processing" }) } as Response;
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<SubscriptionCard checkoutResult="success" checkoutSessionId="cs_test_addon-pending" />);
+
+    expect(await screen.findByTestId("payment-confirmation-pending")).toBeInTheDocument();
+    expect(screen.queryByTestId("project-addon-success-state")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("payment-success-state")).not.toBeInTheDocument();
+  });
+
+  it("keeps the main subscription banner for a main-subscription confirmation", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/billing/subscription")) {
+        return { ok: true, json: async () => activeSubscription() } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/invoices")) {
+        return { ok: true, json: async () => ({ invoices: [] }) } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/reconcile-checkout")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ status: "confirmed", kind: "main-subscription" }),
+        } as Response;
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    render(<SubscriptionCard checkoutResult="success" checkoutSessionId="cs_test_main-return" />);
+
+    expect(await screen.findByTestId("payment-success-state")).toBeInTheDocument();
+    expect(screen.queryByTestId("project-addon-success-state")).not.toBeInTheDocument();
+  });
+
+  it("describes an assigned add-on as linked, not as an unassigned workspace", async () => {
+    stubConfirmedAddon(
+      { tier: "premium", projectId: "project-123", assigned: true },
+      { ...activeSubscription(), unassignedAddons: [{ tier: "premium" as const, purchasedAt: "2099-01-01T00:00:00.000Z" }] },
+    );
+
+    render(<SubscriptionCard checkoutResult="success" checkoutSessionId="cs_test_attached-addon" />);
+
+    const banner = await screen.findByTestId("project-addon-success-state");
+    expect(banner).toHaveTextContent("Your Premium add-on is linked to your project.");
+    expect(banner).not.toHaveTextContent("One extra workspace is now available.");
+    expect(banner).not.toHaveTextContent(/your next new project will use/i);
   });
 });

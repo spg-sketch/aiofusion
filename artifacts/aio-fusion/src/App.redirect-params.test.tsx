@@ -91,6 +91,27 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
     await import("./App");
   });
 
+  it("keeps checkout returns on payment confirmation while authoritative auth is pending", async () => {
+    let release!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => { release = resolve; });
+    vi.stubGlobal("fetch", vi.fn(() => pending));
+    await renderAppAt("/?checkout=success&session_id=cs_test_confirmation");
+
+    expect(screen.getByTestId("checkout-return-loading")).toHaveTextContent("Checking your payment");
+    expect(screen.queryByTestId("auth-page-loading")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /The AI Authority Platform/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Billing and payment/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Thank you for signing up to AIO Fusion")).not.toBeInTheDocument();
+
+    await act(async () => {
+      release(new Response(JSON.stringify({ error: "unauthorized" }), {
+        status: 401, headers: { "Content-Type": "application/json" },
+      }));
+    });
+    // An expired session must leave the waiting state, not claim success.
+    await waitFor(() => expect(screen.queryByTestId("checkout-return-loading")).not.toBeInTheDocument());
+  });
+
   it("oauth_status=mfa + mfa cookie shows the two-factor verification panel", async () => {
     document.cookie = "aio_oauth_mfa_token=tok-verify-123; path=/";
     await renderAppAt("/?oauth_status=mfa");

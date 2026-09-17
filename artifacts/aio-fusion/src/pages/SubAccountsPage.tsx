@@ -1062,7 +1062,7 @@ function SubAccountsPage({
           </h1>
           <p className="settings-intro-description aio-type-body mt-3 max-w-2xl" style={{ color: vars.g600 }}>
             {isAgencyPartner
-              ? "Manage your agency account, team and Client Projects in one place. Open managed projects directly without requiring clients to have a separate AIO Fusion login."
+              ? <>Manage your agency account, team and Client Projects in one place.<br />Open managed projects directly without requiring clients to have a separate AIO Fusion login.</>
               : canCreateSubAccounts(session.role)
               ? "Give a client their own login so they can sign in and work on their own projects. They only ever see their own projects, while you still see everything across all of your clients."
               : "Manage your account settings, team members, and security options."}

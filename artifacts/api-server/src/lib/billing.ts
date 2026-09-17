@@ -1089,8 +1089,17 @@ async function handleProjectAddonPurchased(
     const addons = await getProjectAddons(slug);
     if (addons.some((a) => a.subscriptionId === subscriptionId)) return; // replayed
     if (requestedProjectId) {
-      if (await setProjectTierScoped(slug, requestedProjectId, tier)) {
+      // A stale checkout can outlive another purchase that has already
+      // claimed this project. Never overwrite that durable assignment; keep
+      // this newly purchased slot unassigned instead.
+      const alreadyAssigned = addons.some((a) => a.projectId === requestedProjectId);
+      if (!alreadyAssigned && await setProjectTierScoped(slug, requestedProjectId, tier)) {
         projectId = requestedProjectId;
+      } else if (alreadyAssigned) {
+        logger.warn(
+          { slug, projectId: requestedProjectId, subscriptionId },
+          "billing: add-on target project is already assigned - storing slot unassigned",
+        );
       } else {
         logger.warn(
           { slug, projectId: requestedProjectId, subscriptionId },

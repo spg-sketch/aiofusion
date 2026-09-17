@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { vars } from "../marketing/vars";
 import { apiBase } from "../lib/apiHelpers";
+import { CheckoutReturnLoading } from "./CheckoutReturnLoading";
 
 const ink = vars.navy;
 const accent = vars.accent;
@@ -14,6 +15,14 @@ const accent = vars.accent;
 // Access is enforced server-side; the parent gates rendering by role.
 
 type ProjectTier = "standard" | "premium" | "max";
+
+type ConfirmedAddon = {
+  tier: ProjectTier;
+  projectId: string | null;
+  assigned: boolean;
+};
+
+type CheckoutConfirmationKind = "main-subscription" | "project-addon";
 
 type BillingProject = {
   id: string;
@@ -88,6 +97,10 @@ const TIER_LABELS: Record<ProjectTier, string> = {
 
 const TIER_ORDER: ProjectTier[] = ["standard", "premium", "max"];
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
+function isProjectTier(value: unknown): value is ProjectTier {
+  return value === "standard" || value === "premium" || value === "max";
+}
 
 const STATUS_LABELS: Record<string, { text: string; color: string; bg: string }> = {
   active: { text: "Active", color: "#166534", bg: "#DCFCE7" },
@@ -197,16 +210,60 @@ function PaymentSuccessState({
   );
 }
 
+function ProjectAddonSuccessState({ addon }: { addon: ConfirmedAddon }) {
+  const tierLabel = TIER_LABELS[addon.tier];
+
+  return (
+    <div
+      className="mb-5 rounded-xl p-5"
+      data-testid="project-addon-success-state"
+      role="status"
+      aria-live="polite"
+      style={{ background: "#ECFDF5", border: "1px solid #A7F3D0" }}
+    >
+      <h3 className="aio-type-card-title" style={{ color: "#166534" }}>
+        Additional project workspace purchased
+      </h3>
+      <p className="aio-type-supporting mt-1" style={{ color: "#166534" }}>
+        Tier: <strong>{tierLabel}</strong>
+      </p>
+      {addon.assigned ? (
+        <p className="aio-type-supporting mt-1" style={{ color: "#166534" }}>
+          Your <strong>{tierLabel}</strong> add-on is linked to your project.
+        </p>
+      ) : (
+        <>
+          <p className="aio-type-supporting mt-1" style={{ color: "#166534" }}>
+            One extra workspace is now available.
+          </p>
+          <p className="aio-type-supporting mt-1" style={{ color: "#166534" }}>
+            Your next new project will use <strong>{tierLabel}</strong>.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function SubscriptionCard({
   checkoutResult,
   checkoutSessionId,
   onboarding = false,
   onAccessActivated,
+  confirmationOnly = false,
+  confirmationLoadingView,
 }: {
   checkoutResult?: "success" | "cancelled" | null;
   checkoutSessionId?: string | null;
   onboarding?: boolean;
   onAccessActivated?: (summary: SubscriptionActivationSummary) => void;
+  /**
+   * Keep the checkout reconciliation mounted without rendering the billing
+   * card. Guided onboarding uses this while the return page is still being
+   * verified, so a successful Stripe return never flashes the billing form.
+   */
+  confirmationOnly?: boolean;
+  confirmationLoadingView?: React.ReactNode;
 }) {
   const [info, setInfo] = useState<SubscriptionInfo | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -218,6 +275,9 @@ export function SubscriptionCard({
   const [confirmationError, setConfirmationError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [checkoutConfirmed, setCheckoutConfirmed] = useState(false);
+  const [checkoutConfirmationKind, setCheckoutConfirmationKind] = useState<CheckoutConfirmationKind | null>(null);
+  const [confirmedAddon, setConfirmedAddon] = useState<ConfirmedAddon | null>(null);
+  const [verifiedAfterConfirmation, setVerifiedAfterConfirmation] = useState(false);
   const paidSubscription = info?.status === "active" || info?.status === "past_due";
 
   useEffect(() => {
@@ -227,7 +287,10 @@ export function SubscriptionCard({
         const res = await fetch(`${apiBase()}/api/platform/billing/subscription`, { credentials: "include" });
         if (!res.ok) return;
         const json = (await res.json()) as SubscriptionInfo;
-        if (!cancelled) setInfo(json);
+        if (!cancelled) {
+          setInfo(json);
+          if (checkoutConfirmed) setVerifiedAfterConfirmation(true);
+        }
       } catch {
         /* card shows a fallback message */
       } finally {
@@ -235,7 +298,7 @@ export function SubscriptionCard({
       }
     })();
     return () => { cancelled = true; };
-  }, [checkoutResult, refreshTick]);
+  }, [checkoutConfirmed, checkoutResult, refreshTick]);
 
   useEffect(() => {
     const refresh = () => setRefreshTick((tick) => tick + 1);
@@ -245,7 +308,10 @@ export function SubscriptionCard({
 
   useEffect(() => {
     const accessConfirmed = checkoutResult === "success"
-      ? checkoutConfirmed && paidSubscription
+      ? checkoutConfirmed
+        && checkoutConfirmationKind !== "project-addon"
+        && verifiedAfterConfirmation
+        && info?.status === "active"
       : info?.entitled;
     if (accessConfirmed && onboarding && info) {
       onAccessActivated?.({
@@ -256,6 +322,7 @@ export function SubscriptionCard({
     }
   }, [
     checkoutConfirmed,
+    checkoutConfirmationKind,
     checkoutResult,
     info?.currentPeriodEnd,
     info?.entitled,
@@ -264,6 +331,7 @@ export function SubscriptionCard({
     onboarding,
     onAccessActivated,
     paidSubscription,
+    verifiedAfterConfirmation,
   ]);
 
   useEffect(() => {
@@ -301,8 +369,44 @@ export function SubscriptionCard({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sessionId: checkoutSessionId }),
         });
-        const json = await res.json().catch(() => ({})) as { status?: string; error?: string };
+        const json = await res.json().catch(() => ({})) as {
+          status?: string;
+          error?: string;
+          kind?: string;
+          addon?: {
+            tier?: string;
+            projectId?: string | null;
+            assigned?: boolean;
+          };
+        };
         if (res.ok && json.status === "confirmed") {
+          if (json.kind === "project-addon") {
+            const addon = json.addon;
+            const tier = addon?.tier;
+            if (
+              !addon
+              || !isProjectTier(tier)
+              || (addon.projectId !== null && typeof addon.projectId !== "string")
+              || typeof addon.assigned !== "boolean"
+            ) {
+              setConfirmationError("Payment confirmation returned incomplete project details. Try payment confirmation again.");
+              return;
+            }
+            setCheckoutConfirmationKind("project-addon");
+            setConfirmedAddon({
+              tier,
+              projectId: addon.projectId,
+              assigned: addon.assigned,
+            });
+          } else if (!json.kind || json.kind === "main-subscription") {
+            // Main-subscription was added as an optional response field. Keep
+            // accepting the original response shape for existing returns.
+            setCheckoutConfirmationKind("main-subscription");
+            setConfirmedAddon(null);
+          } else {
+            setConfirmationError("Payment confirmation returned an unknown purchase type. Try payment confirmation again.");
+            return;
+          }
           setCheckoutConfirmed(true);
           setRefreshTick((tick) => tick + 1);
           return;
@@ -372,6 +476,42 @@ export function SubscriptionCard({
     }
   }
 
+  if (confirmationOnly) {
+    if (confirmationError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-6 bg-[#f8fafc]">
+          <div className="w-full max-w-xl" data-testid="payment-confirmation-pending-page" role="status" aria-live="polite">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] mb-3" style={{ color: vars.accent }}>
+              Payment confirmation
+            </p>
+            <h2 className="fo-page-heading text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
+              We need to verify your payment
+            </h2>
+            <p className="fo-page-copy text-base sm:text-lg leading-relaxed text-slate-600">
+              {confirmationError}
+            </p>
+            <button
+              type="button"
+              className="fo-primary inline-flex items-center justify-center gap-2 rounded-md px-8 py-4 text-white text-sm font-bold uppercase tracking-wider mt-7 transition-all duration-300 hover:brightness-110"
+              style={{ background: vars.accent }}
+              onClick={() => setRefreshTick((tick) => tick + 1)}
+            >
+              Try payment confirmation again
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 bg-[#f8fafc]">
+        <div className="w-full max-w-xl" data-testid="payment-confirmation-pending-page">
+          {confirmationLoadingView ?? <CheckoutReturnLoading />}
+        </div>
+      </div>
+    );
+  }
+
   if (!loaded) return null;
   if (!info) return null;
 
@@ -385,10 +525,16 @@ export function SubscriptionCard({
       <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
         <h2 className="aio-type-card-title mb-1" style={{ color: ink }}>Subscription</h2>
 
-        {checkoutResult === "success" && paidSubscription && (checkoutConfirmed || !checkoutSessionId) && (
+        {checkoutResult === "success" && checkoutConfirmationKind !== "project-addon" && paidSubscription && (checkoutConfirmed || !checkoutSessionId) && (
           <PaymentSuccessState info={info} verifiedCheckout={checkoutConfirmed} />
         )}
-        {checkoutResult === "success" && (checkoutSessionId || onboarding) && (!checkoutConfirmed || !paidSubscription) && (
+        {checkoutResult === "success" && checkoutConfirmationKind === "project-addon" && checkoutConfirmed && confirmedAddon && (
+          <ProjectAddonSuccessState addon={confirmedAddon} />
+        )}
+        {checkoutResult === "success" && (checkoutSessionId || onboarding) && (
+          !checkoutConfirmed
+          || (checkoutConfirmationKind !== "project-addon" && !paidSubscription)
+        ) && (
           <div className="mb-5" data-testid="payment-confirmation-pending">
             <p className="aio-type-supporting" style={{ color: confirmationError ? "#991B1B" : vars.g600 }}>
               {confirmationError ?? (confirming ? "Securely confirming your completed Stripe checkout..." : "Confirming payment...")}

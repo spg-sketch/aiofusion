@@ -61,6 +61,18 @@
         var root = document.getElementById("root");
         if (!root) return;
         root.setAttribute("data-auth-redirect", "true");
+        if (params.get("checkout") === "success") {
+          root.innerHTML =
+            '<div role="status" aria-label="Checking your payment" style="min-height:100vh;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:24px;background:#f8fafc;color:#0a1628;font-family:Inter,sans-serif">' +
+              '<div style="width:100%;max-width:576px">' +
+                '<p style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;margin:0 0 12px;color:#C8497A">Payment confirmation</p>' +
+                '<h2 style="font-family:Alice,Georgia,serif;font-size:32px;margin:0 0 16px">Checking your payment</h2>' +
+                '<p style="font-size:16px;line-height:1.625;color:#475569;margin:0">Please wait while we confirm your payment.</p>' +
+                '<span style="display:block;width:26px;height:26px;box-sizing:border-box;margin-top:28px;border:2px solid rgba(200,73,122,.25);border-top-color:#C8497A;border-radius:50%;animation:aio-auth-spin .8s linear infinite"></span>' +
+              '</div>' +
+            '</div>';
+          return;
+        }
         root.innerHTML =
           '<div role="status" aria-label="Loading sign in" style="min-height:100vh;background:#fff;color:#0a1628;font-family:Inter,sans-serif">' +
             '<div style="background:#1A647B;height:86px"></div>' +

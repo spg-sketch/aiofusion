@@ -437,7 +437,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
         </div>
       )}
       <div className="flex items-center justify-between mb-1">
-        <h2 id="team-members-heading" className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Team members</h2>
+        <h2 id="team-members-heading" className="aio-type-card-title" style={{ color: ink }}>Team members</h2>
         <span className="text-[11px] font-bold uppercase tracking-[0.14em] px-3 py-1 rounded-full" style={{ background: seatsFull ? "#FDECEC" : accentSoft, color: seatsFull ? "#B3261E" : accent }}>
           {isMaster ? "Unlimited team members" : `${team.seatsUsed} / ${team.seatLimit} ${isAgency ? "account seats" : "seats"}`}
         </span>
@@ -520,7 +520,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
             <button
               type="submit"
               disabled={sending || submitBlocked}
-              className="w-full flex items-center justify-center gap-2 px-5 py-3 text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-90 disabled:opacity-50"
+              className="aio-button aio-button--secondary aio-button--compact uppercase tracking-[0.12em]"
               style={{ background: ink, color: "#fff" }}
             >
               {sending ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
@@ -774,8 +774,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
                   <button
                     onClick={() => handleResend(i.token)}
                     disabled={busy === i.token}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] border transition-all hover:bg-white"
-                    style={{ borderColor: "#92400E", color: "#92400E" }}
+                    className="aio-button aio-button--secondary aio-button--compact uppercase tracking-[0.12em]"
                     title="Resend invitation"
                   >
                     {busy === i.token ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Resend
@@ -783,8 +782,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
                   <button
                     onClick={() => handleRevoke(i.token)}
                     disabled={busy === i.token}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] border transition-all hover:bg-white"
-                    style={{ borderColor: vars.g300, color: ink }}
+                    className="aio-button aio-button--outline aio-button--compact uppercase tracking-[0.12em]"
                   >
                     {busy === i.token ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />} Revoke
                   </button>

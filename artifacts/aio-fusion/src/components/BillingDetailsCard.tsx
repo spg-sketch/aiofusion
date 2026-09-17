@@ -332,7 +332,7 @@ export function BillingDetailsCard({ onSaved }: { onSaved?: () => void } = {}) {
           <button
             type="submit"
             disabled={saving || !loaded}
-            className="aio-button aio-button--primary rounded-full uppercase tracking-[0.12em]"
+            className="aio-button aio-button--primary billing-details-save rounded-full uppercase tracking-[0.12em]"
             style={{ background: accent }}
           >
             {saving ? "Saving..." : "Save company information"}

@@ -9,6 +9,7 @@ import {
   SubscriptionCard,
   type SubscriptionActivationSummary,
 } from "../components/SubscriptionCard";
+import { CheckoutReturnLoading } from "../components/CheckoutReturnLoading";
 import { apiBase } from "../lib/apiHelpers";
 import { vars } from "../marketing/vars";
 
@@ -76,7 +77,7 @@ export function GuidedOnboardingPage({
       setError(result.error ?? "Could not finish account setup.");
       setBusy(false);
     }
-  }, [onComplete]);
+  }, [checkoutResult, onComplete]);
 
   const load = useCallback(async () => {
     const generation = ++loadGeneration.current;
@@ -162,42 +163,71 @@ export function GuidedOnboardingPage({
     if (next?.step === "first_project") await complete();
   }
 
+  // Keep one reconciliation owner mounted from the first successful-return
+  // render until the server has returned both confirmation and an active
+  // subscription. The host is deliberately outside the onboarding branches:
+  // a slow onboarding bootstrap must not unmount/restart Stripe reconciliation.
+  // If the server has already moved on to a different onboarding step, keep
+  // that authoritative step visible rather than layering checkout UI over it.
+  // A confirmed return still waits for the onboarding state while it is null.
+  const awaitingPaymentConfirmation = checkoutResult === "success"
+    && (!state || (!activationSummary && state.step === "billing"));
+  const confirmationHost = awaitingPaymentConfirmation ? (
+    <SubscriptionCard
+      checkoutResult={checkoutResult}
+      checkoutSessionId={checkoutSessionId}
+      onboarding
+      confirmationOnly
+      confirmationLoadingView={<CheckoutReturnLoading />}
+      onAccessActivated={handleAccessActivated}
+    />
+  ) : null;
+
   if (!state && !loadError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
-        <Loader2 className="animate-spin text-[#C8497A]" size={32} />
-      </div>
+      <>
+        {awaitingPaymentConfirmation ? confirmationHost : (
+          <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
+            <Loader2 className="animate-spin text-[#C8497A]" size={32} />
+          </div>
+        )}
+      </>
     );
   }
 
   if (!state) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-[#f8fafc]">
-        <div className="text-center max-w-md w-full bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-          <AlertCircle size={32} className="mx-auto mb-4 text-red-500" />
-          <p className="mb-8 text-slate-600 leading-relaxed font-medium">{loadError}</p>
-          <div className="flex items-center justify-center gap-6">
-            <button className="text-sm font-bold uppercase tracking-wider text-[#C8497A] hover:opacity-80 transition-opacity" onClick={() => void load()}>
-              Try again
-            </button>
-            <button className="text-sm font-bold uppercase tracking-wider text-slate-500 hover:text-slate-800 transition-colors" onClick={onSignOut}>
-              Sign out
-            </button>
+      <>
+        <div className="min-h-screen flex items-center justify-center p-6 bg-[#f8fafc]">
+          <div className="text-center max-w-md w-full bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+            <AlertCircle size={32} className="mx-auto mb-4 text-red-500" />
+            <p className="mb-8 text-slate-600 leading-relaxed font-medium">{loadError}</p>
+            <div className="flex items-center justify-center gap-6">
+              <button className="text-sm font-bold uppercase tracking-wider text-[#C8497A] hover:opacity-80 transition-opacity" onClick={() => void load()}>
+                Try again
+              </button>
+              <button className="text-sm font-bold uppercase tracking-wider text-slate-500 hover:text-slate-800 transition-colors" onClick={onSignOut}>
+                Sign out
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
   if (state.step === "account_type") {
     return (
-      <AccountTypeSelectPage
-        onSignOut={onSignOut}
-        onComplete={(role) => {
-          onRoleChanged(role);
-          void load();
-        }}
-      />
+      <>
+        {confirmationHost}
+        <AccountTypeSelectPage
+          onSignOut={onSignOut}
+          onComplete={(role) => {
+            onRoleChanged(role);
+            void load();
+          }}
+        />
+      </>
     );
   }
 
@@ -253,8 +283,14 @@ export function GuidedOnboardingPage({
     );
   }
 
+  if (state.step === "billing" && checkoutResult === "success") {
+    return <>{confirmationHost}</>;
+  }
+
   return (
-    <OnboardingLayout state={state} onSignOut={onSignOut}>
+    <>
+      {confirmationHost}
+      <OnboardingLayout state={state} onSignOut={onSignOut}>
       {state.step === "workspace_basics" && (
         <div className="animate-in fade-in duration-700">
           <h2 className="fo-page-heading text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
@@ -415,6 +451,7 @@ export function GuidedOnboardingPage({
         </div>
       )}
 
-    </OnboardingLayout>
+      </OnboardingLayout>
+    </>
   );
 }

@@ -4,6 +4,7 @@ import { GuidedOnboardingPage } from "./GuidedOnboardingPage";
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -208,6 +209,128 @@ describe("GuidedOnboardingPage", () => {
     await waitFor(() => expect(onComplete).toHaveBeenCalledWith("billing"));
   });
 
+  it("keeps the confirmation view stable while onboarding bootstrap is delayed", async () => {
+    let releaseSetup: (value: Response) => void = () => {};
+    const setupPromise = new Promise<Response>((resolve) => { releaseSetup = resolve; });
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/onboarding")) return setupPromise;
+      if (url.endsWith("/api/platform/billing/reconcile-checkout")) {
+        return { ok: false, status: 202, json: async () => ({ status: "pending" }) } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/subscription")) {
+        return response({ status: "none" });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    renderSetup("success", undefined, "cs_test_delayed");
+    expect(await screen.findByTestId("checkout-return-loading")).toBeInTheDocument();
+    expect(screen.queryByText("Billing and payment")).not.toBeInTheDocument();
+
+    releaseSetup(response({ state: { step: "billing", accessChoice: "paid" } }));
+    await waitFor(() => expect(screen.queryByTestId("checkout-return-loading")).not.toBeNull());
+    expect(screen.queryByText("Billing and payment")).not.toBeInTheDocument();
+  });
+
+  it("keeps payment loading visible when confirmation finishes before onboarding bootstrap", async () => {
+    let releaseSetup: (value: Response) => void = () => {};
+    const setupPromise = new Promise<Response>((resolve) => { releaseSetup = resolve; });
+    let subscriptionLoads = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/onboarding")) return setupPromise;
+      if (url.endsWith("/api/platform/billing/reconcile-checkout")) return response({ status: "confirmed" });
+      if (url.endsWith("/api/platform/billing/subscription")) {
+        subscriptionLoads += 1;
+        return response(subscriptionLoads === 1
+          ? { status: "none" }
+          : { status: "active", plan: "inhouse", frequency: "annual", currentPeriodEnd: null, entitled: true });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    renderSetup("success", undefined, "cs_test_bootstrap_slow");
+    await waitFor(() => expect(subscriptionLoads).toBeGreaterThanOrEqual(2));
+    expect(screen.getByTestId("checkout-return-loading")).toBeInTheDocument();
+    expect(screen.queryByText("Billing and payment")).not.toBeInTheDocument();
+
+    releaseSetup(response({ state: { step: "billing", accessChoice: "paid" } }));
+    expect(await screen.findByTestId("payment-success-page")).toBeInTheDocument();
+  });
+
+  it("shows the onboarding retry state when initial bootstrap fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/onboarding")) {
+        return { ok: false, json: async () => ({ error: "Could not load account setup." }) } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/reconcile-checkout")) {
+        return { ok: false, status: 202, json: async () => ({ status: "pending" }) } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/subscription")) return response({ status: "none" });
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    renderSetup("success", undefined, "cs_test_bootstrap_failed");
+    expect(await screen.findByText("Could not load account setup.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(screen.queryByTestId("payment-confirmation-pending-page")).not.toBeInTheDocument();
+  });
+
+  it("keeps the confirmation view pending through a 202 before an active subscription", async () => {
+    let reconcileCalls = 0;
+    let subscriptionLoads = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/onboarding")) {
+        return response({ state: { step: "billing", accessChoice: "paid" } });
+      }
+      if (url.endsWith("/api/platform/me")) return response({ accountProfile: {} });
+      if (url.endsWith("/api/platform/billing/reconcile-checkout")) {
+        reconcileCalls += 1;
+        return reconcileCalls === 1
+          ? { ok: false, status: 202, json: async () => ({ status: "pending" }) } as Response
+          : response({ status: "confirmed" });
+      }
+      if (url.endsWith("/api/platform/billing/subscription")) {
+        subscriptionLoads += 1;
+        return response(subscriptionLoads === 1
+          ? { status: "none" }
+          : { status: "active", plan: "inhouse", frequency: "annual", currentPeriodEnd: null, entitled: true });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    renderSetup("success", undefined, "cs_test_202");
+    expect(await screen.findByTestId("payment-confirmation-pending-page")).toBeInTheDocument();
+    expect(screen.queryByTestId("payment-success-page")).not.toBeInTheDocument();
+
+    expect(await screen.findByTestId("payment-success-page", {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(reconcileCalls).toBe(2);
+  });
+
+  it("keeps failed reconciliation actionable without showing payment success", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/onboarding")) {
+        return response({ state: { step: "billing", accessChoice: "paid" } });
+      }
+      if (url.endsWith("/api/platform/me")) return response({ accountProfile: {} });
+      if (url.endsWith("/api/platform/billing/reconcile-checkout")) {
+        return { ok: false, status: 409, json: async () => ({ error: "Payment is still being verified." }) } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/subscription")) return response({ status: "none" });
+      throw new Error(`Unexpected request: ${url}`);
+    }));
+
+    renderSetup("success", undefined, "cs_test_failed");
+    expect(await screen.findByText("Payment is still being verified.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /try payment confirmation again/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("payment-success-page")).not.toBeInTheDocument();
+    expect(screen.queryByText("Billing and payment")).not.toBeInTheDocument();
+  });
+
   it("reconciles a successful checkout return before showing the thank-you state", async () => {
     let subscriptionLoads = 0;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
@@ -249,36 +372,46 @@ describe("GuidedOnboardingPage", () => {
   });
 
   it("offers a safe retry when a success return has no session reference", async () => {
-    vi.stubGlobal("fetch", vi.fn()
-      .mockResolvedValueOnce(response({ state: { step: "billing", accessChoice: "paid" } }))
-      .mockResolvedValueOnce(response({ accountProfile: {} }))
-      .mockResolvedValue(response({
-        status: "none", plan: null, frequency: null, currentPeriodEnd: null,
-        entitled: false, applicablePlan: "inhouse", includedProjects: 1,
-        projectAllowance: 0, projectsUsed: 0, checkoutAvailable: true,
-        companyRecordComplete: true, portalAvailable: false, projects: [],
-        unassignedAddons: [], tierPrices: {},
-        prices: { annual: { yearlyTotal: 100 }, quarterly: { perQuarter: 30, yearlyTotal: 120 } },
-        trial: { status: "eligible", startedAt: null, endsAt: null, daysRemaining: 0 },
-      })));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/onboarding")) return response({ state: { step: "billing", accessChoice: "paid" } });
+      if (url.endsWith("/api/platform/me")) return response({ accountProfile: {} });
+      if (url.endsWith("/api/platform/billing/subscription")) {
+        return response({
+          status: "none", plan: null, frequency: null, currentPeriodEnd: null,
+          entitled: false, applicablePlan: "inhouse", includedProjects: 1,
+          projectAllowance: 0, projectsUsed: 0, checkoutAvailable: true,
+          companyRecordComplete: true, portalAvailable: false, projects: [],
+          unassignedAddons: [], tierPrices: {},
+          prices: { annual: { yearlyTotal: 100 }, quarterly: { perQuarter: 30, yearlyTotal: 120 } },
+          trial: { status: "eligible", startedAt: null, endsAt: null, daysRemaining: 0 },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
     renderSetup("success");
     expect(await screen.findByText(/payment return link is incomplete/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /try payment confirmation again/i })).toBeInTheDocument();
   });
 
   it("does not treat beta entitlement as paid checkout confirmation", async () => {
-    vi.stubGlobal("fetch", vi.fn()
-      .mockResolvedValueOnce(response({ state: { step: "billing", accessChoice: "paid" } }))
-      .mockResolvedValueOnce(response({ accountProfile: {} }))
-      .mockResolvedValue(response({
-        status: "none", plan: null, frequency: null, currentPeriodEnd: null,
-        entitled: true, applicablePlan: "inhouse", includedProjects: 2,
-        projectAllowance: 2, projectsUsed: 0, checkoutAvailable: true,
-        companyRecordComplete: true, portalAvailable: false, projects: [],
-        unassignedAddons: [], tierPrices: {},
-        prices: { annual: { yearlyTotal: 100 }, quarterly: { perQuarter: 30, yearlyTotal: 120 } },
-        trial: { status: "active", startedAt: "2099-01-01T00:00:00.000Z", endsAt: "2099-03-01T00:00:00.000Z", daysRemaining: 60 },
-      })));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/onboarding")) return response({ state: { step: "billing", accessChoice: "paid" } });
+      if (url.endsWith("/api/platform/me")) return response({ accountProfile: {} });
+      if (url.endsWith("/api/platform/billing/subscription")) {
+        return response({
+          status: "none", plan: null, frequency: null, currentPeriodEnd: null,
+          entitled: true, applicablePlan: "inhouse", includedProjects: 2,
+          projectAllowance: 2, projectsUsed: 0, checkoutAvailable: true,
+          companyRecordComplete: true, portalAvailable: false, projects: [],
+          unassignedAddons: [], tierPrices: {},
+          prices: { annual: { yearlyTotal: 100 }, quarterly: { perQuarter: 30, yearlyTotal: 120 } },
+          trial: { status: "active", startedAt: "2099-01-01T00:00:00.000Z", endsAt: "2099-03-01T00:00:00.000Z", daysRemaining: 60 },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    }));
 
     const { onComplete } = renderSetup("success");
     expect(await screen.findByText(/payment return link is incomplete/i)).toBeInTheDocument();

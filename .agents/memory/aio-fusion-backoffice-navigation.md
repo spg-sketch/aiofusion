@@ -17,3 +17,9 @@ React-only routing cannot prevent that marketing markup appearing before app sta
 
 **How to apply:** Keep the pre-app callback presentation and the in-app waiting
 layout consistent, and keep protected content hidden until authority resolves.
+
+Payment callbacks need payment-specific waiting content, not the sign-in shell or the editable billing form, across document startup, authentication, onboarding and payment reconciliation.
+
+**Why:** Fixing lazy navigation alone did not remove checkout flashes. Independently completing authentication, onboarding and subscription requests could still briefly reveal an unrelated screen before the thank-you page.
+
+**How to apply:** Keep the pending presentation consistent even when payment confirmation finishes before onboarding loads. Show success only after server confirmation and an authoritative active subscription; keep failures and retry controls visible rather than placing them below a full-screen loader.

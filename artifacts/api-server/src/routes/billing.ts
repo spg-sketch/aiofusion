@@ -463,6 +463,7 @@ router.post("/platform/billing/reconcile-checkout", requirePlatformAuth, async (
     const plan = session.metadata?.["plan"];
     const frequency = session.metadata?.["frequency"];
     const claimToken = session.metadata?.["claim_tok"] ?? "";
+    const kind = session.metadata?.["kind"];
     const subscriptionId = typeof session.subscription === "string"
       ? session.subscription
       : session.subscription?.id ?? null;
@@ -471,17 +472,88 @@ router.post("/platform/billing/reconcile-checkout", requirePlatformAuth, async (
       && current?.stripeSubscriptionId === subscriptionId
       && hasPaidSubscription(current);
 
+    // Add-on checkouts do not have the main-plan claim token.  They are tied
+    // to the already-paid account customer instead, and the response below is
+    // only produced from the durable add-on record after fulfilment.  Never
+    // use a projectId or tier supplied in the request body (or infer one from
+    // the account's current plan).
+    if (kind === "project-addon") {
+      const sessionCustomerId =
+        typeof session.customer === "string"
+          ? session.customer
+          : session.customer?.id ?? null;
+      if (
+        session.mode !== "subscription"
+        || slug !== ctx.slug
+        || !current
+        || !hasPaidSubscription(current)
+        || !current.stripeCustomerId
+        || sessionCustomerId !== current.stripeCustomerId
+      ) {
+        logger.warn(
+          { requestedSlug: ctx.slug, sessionId, sessionSlug: slug, sessionCustomerId },
+          "billing: rejected mismatched project add-on checkout return",
+        );
+        res.status(403).json({ error: "This payment does not belong to the signed-in workspace." });
+        return;
+      }
+
+      const tier = session.metadata?.["tier"];
+      if (!isProjectTier(tier)) {
+        // Do not fall back to the client request, current project tier, or
+        // another metadata value when Stripe metadata is malformed.
+        res.status(409).json({ error: "This project payment could not be verified." });
+        return;
+      }
+      if (!subscriptionId) {
+        res.status(202).json({ status: "processing" });
+        return;
+      }
+
+      // Stripe creates these subscriptions as active (or trialing, if the
+      // account has a trial configured).  An incomplete/cancelled/etc.
+      // subscription is not an add-on grant, even if the Checkout Session
+      // says complete.
+      const subscriptionStatus =
+        typeof session.subscription === "object" && session.subscription
+          ? session.subscription.status
+          : undefined;
+      if (
+        subscriptionStatus !== undefined
+        && subscriptionStatus !== "active"
+        && subscriptionStatus !== "trialing"
+      ) {
+        res.status(202).json({ status: "processing" });
+        return;
+      }
+    }
+
     if (
-      session.mode !== "subscription"
-      || slug !== ctx.slug
-      || plan !== ctx.plan
-      || !isBillingFrequency(frequency)
+      kind !== undefined
+      && kind !== "main-subscription"
+      && kind !== "project-addon"
+    ) {
+      res.status(403).json({ error: "This payment type cannot be confirmed here." });
+      return;
+    }
+    if (
+      kind !== "project-addon"
+      && (
+        session.mode !== "subscription"
+        || slug !== ctx.slug
+        || plan !== ctx.plan
+        || !isBillingFrequency(frequency)
+      )
     ) {
       logger.warn({ requestedSlug: ctx.slug, sessionId, sessionSlug: slug, plan }, "billing: rejected mismatched checkout return");
       res.status(403).json({ error: "This payment does not belong to the signed-in workspace." });
       return;
     }
-    if (!alreadyApplied && (!claimToken || !(await checkoutClaimMatchesSession(ctx.slug, sessionId, claimToken)))) {
+    if (
+      kind !== "project-addon"
+      && !alreadyApplied
+      && (!claimToken || !(await checkoutClaimMatchesSession(ctx.slug, sessionId, claimToken)))
+    ) {
       res.status(409).json({ error: "This checkout can no longer be matched to the payment started by this workspace." });
       return;
     }
@@ -501,6 +573,31 @@ router.post("/platform/billing/reconcile-checkout", requirePlatformAuth, async (
         data: { object: session },
       } as unknown as import("stripe").default.Event);
     }
+    if (kind === "project-addon") {
+      const addons = await getProjectAddons(ctx.slug);
+      const addon = addons.find((candidate) => candidate.subscriptionId === subscriptionId);
+      // A completed/paid Stripe session is not itself proof of an app grant:
+      // the durable add-on record is the source of truth for this response.
+      if (
+        !addon
+        || addon.tier !== session.metadata?.["tier"]
+        || (addon.projectId !== null && typeof addon.projectId !== "string")
+      ) {
+        res.status(202).json({ status: "processing" });
+        return;
+      }
+      res.setHeader("Cache-Control", "no-store");
+      res.json({
+        status: "confirmed",
+        kind: "project-addon",
+        addon: {
+          tier: addon.tier,
+          projectId: addon.projectId,
+          assigned: addon.projectId !== null,
+        },
+      });
+      return;
+    }
     if (session.subscription && typeof session.subscription !== "string") {
       await handleSubscriptionUpdated({
         id: `return-subscription:${session.id}`,
@@ -516,6 +613,7 @@ router.post("/platform/billing/reconcile-checkout", requirePlatformAuth, async (
     res.setHeader("Cache-Control", "no-store");
     res.json({
       status: "confirmed",
+      kind: "main-subscription",
       subscription: {
         plan: state.plan,
         frequency: state.frequency,
@@ -621,7 +719,7 @@ router.post("/platform/billing/project-checkout", requirePlatformAuth, async (re
       slug: ctx.slug,
       tier,
       projectId,
-      successUrl: `${base}/?account_section=billing&checkout=success`,
+      successUrl: `${base}/?account_section=billing&checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${base}/?account_section=billing&checkout=cancelled`,
     });
     res.json({ url });

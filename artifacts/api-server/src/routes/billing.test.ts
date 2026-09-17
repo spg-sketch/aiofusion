@@ -1438,6 +1438,99 @@ describe("project add-ons", () => {
     expect(params.metadata.kind).toBe("project-addon");
     expect(params.metadata.tier).toBe("max");
     expect(params.metadata.slug).toBe("addon-buyer");
+    expect(params.success_url).toContain("session_id={CHECKOUT_SESSION_ID}");
+  });
+
+  it("reconciles a paid add-on from Stripe metadata and returns the persisted assignment on replay", async () => {
+    const { sid } = await seedSubscribed("addon-return", "owner@addonreturn.test");
+    await db.insert(projectsTable).values({
+      id: "addon-return-project",
+      name: "Return project",
+      data: {},
+      owner: "addon-return",
+    });
+    const checkout = await api("/api/platform/billing/project-checkout", {
+      sid,
+      body: { tier: "premium", projectId: "addon-return-project" },
+    });
+    expect(checkout.status).toBe(200);
+    stripeCalls.sessionRetrieveOverrides["cs_test_mock"] = {
+      id: "cs_test_mock",
+      mode: "subscription",
+      status: "complete",
+      payment_status: "paid",
+      customer: "cus_addon-return",
+      subscription: {
+        id: "sub_addon-return-project",
+        customer: "cus_addon-return",
+        status: "active",
+      },
+      metadata: {
+        slug: "addon-return",
+        kind: "project-addon",
+        tier: "premium",
+        projectId: "addon-return-project",
+      },
+    };
+
+    const confirmed = await api("/api/platform/billing/reconcile-checkout", {
+      sid,
+      body: { sessionId: "cs_test_mock" },
+    });
+    expect(confirmed.status).toBe(200);
+    expect(confirmed.json).toEqual({
+      status: "confirmed",
+      kind: "project-addon",
+      addon: {
+        tier: "premium",
+        projectId: "addon-return-project",
+        assigned: true,
+      },
+    });
+    expect(await getProjectAddons("addon-return")).toMatchObject([
+      { subscriptionId: "sub_addon-return-project", tier: "premium", projectId: "addon-return-project" },
+    ]);
+
+    const replay = await api("/api/platform/billing/reconcile-checkout", {
+      sid,
+      body: { sessionId: "cs_test_mock" },
+    });
+    expect(replay.status).toBe(200);
+    expect(replay.json.addon).toEqual(confirmed.json.addon);
+    expect(await getProjectAddons("addon-return")).toHaveLength(1);
+    delete stripeCalls.sessionRetrieveOverrides["cs_test_mock"];
+  });
+
+  it("keeps an unpaid or open add-on return pending and rejects another account's customer", async () => {
+    const { sid } = await seedSubscribed("addon-pending", "owner@addonpending.test");
+    stripeCalls.sessionRetrieveOverrides["cs_test_mock"] = {
+      id: "cs_test_mock",
+      mode: "subscription",
+      status: "open",
+      payment_status: "unpaid",
+      customer: "cus_addon-pending",
+      subscription: "sub_addon-pending",
+      metadata: { slug: "addon-pending", kind: "project-addon", tier: "max" },
+    };
+    const pending = await api("/api/platform/billing/reconcile-checkout", {
+      sid,
+      body: { sessionId: "cs_test_mock" },
+    });
+    expect(pending.status).toBe(202);
+    expect(await getProjectAddons("addon-pending")).toHaveLength(0);
+
+    stripeCalls.sessionRetrieveOverrides["cs_test_mock"] = {
+      ...stripeCalls.sessionRetrieveOverrides["cs_test_mock"],
+      status: "complete",
+      payment_status: "paid",
+      customer: "cus-someone-else",
+    };
+    const unauthorized = await api("/api/platform/billing/reconcile-checkout", {
+      sid,
+      body: { sessionId: "cs_test_mock" },
+    });
+    expect(unauthorized.status).toBe(403);
+    delete stripeCalls.sessionRetrieveOverrides["cs_test_mock"];
   });
 
   it("project-checkout also enables Stripe Tax, address and VAT collection", async () => {
