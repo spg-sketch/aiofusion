@@ -5,6 +5,14 @@ description: Stripe connection quirks, webhook secret location, entitlement/tier
 
 # Stripe billing foundation (subscriptions + per-project action tiers)
 
+## Staging verification resource safety
+
+Do not assume a legacy beta connection, workspace database, and published staging database are the same. Prove the target independently before seeding, and preflight its complete required schema before creating Stripe test resources.
+
+**Why:** creating external test resources before proving the target can leave immutable test invoice history even when mutable fixtures are cleaned up.
+
+**How to apply:** stop before Stripe writes if schema or target checks fail. Persist recovery IDs before each external write, guarantee compensating database cleanup, and verify scoped cleanup. Deleting test clocks does not erase historical Stripe test invoices or charges.
+
 ## Payment recovery evidence
 
 Treat checkout acknowledgement, subscription activation, and complete Billing details as separate checks.

@@ -1,4 +1,5 @@
 // hint: Logic changed on both sides. Requires understanding intent of each change.
+- [Secret placeholders](secret-placeholders.md) — a secret-existence flag can represent an empty placeholder; do not assume missing runtime values require a compute restart.
 - [AIO Fusion profile images](aio-fusion-profile-images.md) — personal avatars are user-scoped, logos workspace-scoped; Google photos import only when no avatar/tombstone exists.
 - [GitHub Git authentication](github-git-authentication.md) — working API access does not prove Git push credentials work; diagnose Git Providers separately.
 - [AIO Fusion saved audits + App/LlmCheckPage coupling](aio-fusion-saved-audits-and-cycles.md) — fire `aio:saved-audits-changed` window event on save/delete so sidebar refreshes; beware the App<->LlmCheckPage circular import.
