@@ -13,6 +13,73 @@ const ALERT_RECIPIENTS = [
   "spg@bluhalo.com",
 ];
 
+export async function sendStripeWebhookFailureAlert(opts: {
+  environment: string;
+  failureClass: "signature_verification" | "event_processing";
+  consecutiveFailures: number;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn(
+      { environment: opts.environment, failureClass: opts.failureClass },
+      "notify-email: RESEND_API_KEY not set - Stripe webhook failure alert not sent",
+    );
+    return;
+  }
+
+  const failureLabel = opts.failureClass === "signature_verification"
+    ? "signature verification"
+    : "event processing";
+  const subject = `[AIO Fusion] Stripe webhook failures - ${opts.environment} - ${failureLabel}`;
+  const text = [
+    `Stripe webhook deliveries are repeatedly failing.`,
+    ``,
+    `Environment:          ${opts.environment}`,
+    `Failure class:        ${failureLabel}`,
+    `Consecutive failures: ${opts.consecutiveFailures}`,
+    ``,
+    `The alert is suppressed until a webhook succeeds for this failure class.`,
+    `Review the Stripe endpoint configuration and API logs.`,
+    ``,
+    `No webhook body, signature, customer details, or payment details are included in this alert.`,
+  ].join("\n");
+  const html = buildEmailHtml({
+    label: "Stripe Webhook Alert",
+    bodyHtml: `
+      <p style="margin: 0 0 16px 0;">Stripe webhook deliveries are repeatedly failing.</p>
+      ${buildDataRows([
+        ["Environment", opts.environment],
+        ["Failure class", failureLabel],
+        ["Consecutive failures", String(opts.consecutiveFailures)],
+      ])}
+      <p style="margin: 16px 0 0 0; font-size: 13px; color: #475569;">
+        The alert is suppressed until a webhook succeeds for this failure class.
+        Review the Stripe endpoint configuration and API logs. No webhook body,
+        signature, customer details, or payment details are included in this alert.
+      </p>
+    `,
+  });
+
+  try {
+    await resend.emails.send({
+      from: fromAddress(),
+      to: ALERT_RECIPIENTS,
+      subject,
+      text,
+      html,
+    });
+    logger.info(
+      { environment: opts.environment, failureClass: opts.failureClass },
+      "notify-email: Stripe webhook failure alert sent",
+    );
+  } catch (err) {
+    logger.warn(
+      { err, environment: opts.environment, failureClass: opts.failureClass },
+      "notify-email: failed to send Stripe webhook failure alert (non-fatal)",
+    );
+  }
+}
+
 function getClient(): Resend | null {
   const key = process.env.RESEND_API_KEY;
   if (!key) return null;

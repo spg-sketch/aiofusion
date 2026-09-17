@@ -10,6 +10,7 @@ import { resolvePlatformAccount } from "./middleware/platform-auth";
 import { cspMiddleware } from "./middleware/csp";
 import { randomUUID } from "node:crypto";
 import { addRequestReference } from "./lib/request-reference";
+import { stripeWebhookHealth } from "./lib/stripe-webhook-health";
 
 const app: Express = express();
 
@@ -114,6 +115,7 @@ app.post(
   async (req: Request, res: Response) => {
     const signature = req.headers["stripe-signature"];
     if (!signature || !Buffer.isBuffer(req.body)) {
+      await stripeWebhookHealth.recordFailure("signature_verification");
       res.status(400).json({ error: "Invalid webhook request" });
       return;
     }
@@ -124,6 +126,7 @@ app.post(
       const webhookSecret = await getWebhookSecret();
       if (!webhookSecret) {
         logger.error("stripe webhook: no webhook secret configured yet");
+        await stripeWebhookHealth.recordFailure("event_processing");
         res.status(500).json({ error: "Webhook not configured" });
         return;
       }
@@ -155,6 +158,7 @@ app.post(
       // Internal failure after signature verification: return 5xx so Stripe
       // retries the event (the claim has been released by handleStripeEvent).
       logger.error({ err }, "stripe webhook: processing failed");
+      await stripeWebhookHealth.recordFailure("event_processing");
       res.status(500).json({ error: "Webhook processing error" });
     }
   },
