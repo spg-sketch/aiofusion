@@ -111,6 +111,51 @@ describe("project hub excludes managed clients without projects", () => {
     await import("./App");
   });
 
+  it("starts project reads without waiting for content and joins passive refresh bursts", async () => {
+    let releaseContent!: () => void;
+    let releaseProjects!: () => void;
+    const contentPending = new Promise<void>((resolve) => { releaseContent = resolve; });
+    const projectsPending = new Promise<void>((resolve) => { releaseProjects = resolve; });
+    let contentStarted = false;
+    const originalFetch = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const path = String(url);
+      if (/\/api\/store\/(archive|planner|scoring-config)$/.test(path)) {
+        contentStarted = true;
+        await contentPending;
+        return makeResponse({ items: [], config: null });
+      }
+      if (path.includes("/api/store/projects")) {
+        await projectsPending;
+        return makeResponse({ projects: [], deletedIds: [] });
+      }
+      return originalFetch(url, init);
+    }));
+    const { default: App } = await import("./App");
+    render(<App />);
+    const requestsTo = (path: string) => vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes(path));
+    await waitFor(() => {
+      expect(contentStarted).toBe(true);
+      expect(requestsTo("/api/store/projects")).toHaveLength(1);
+      expect(requestsTo("/api/platform/accounts")).toHaveLength(1);
+    });
+    // A single app poll, not the previous overlapping 90s + 5m poll loops.
+    await waitFor(() => {
+      expect(requestsTo("/api/support/tickets?mine=true&hasUpdate=true")).toHaveLength(1);
+    });
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(requestsTo("/api/store/projects")).toHaveLength(1);
+    expect(requestsTo("/api/platform/accounts")).toHaveLength(1);
+    await act(async () => {
+      releaseProjects();
+      releaseContent();
+    });
+  });
+
   it("refreshes the account cache without adding a managed-client placeholder card", async () => {
     window.history.replaceState({}, "", "/");
     const { default: App } = await import("./App");

@@ -46,20 +46,35 @@ const h = vi.hoisted(() => {
     email: string | null;
   };
 
+  type MetaRow = {
+    key: string;
+    value: string;
+  };
+
   let faqSeq = 1;
   let ticketSeq = 1;
   let messageSeq = 1;
+
+  const platformMetaTable = {
+    __table: "platform_meta",
+    key: { __col: "key" },
+    value: { __col: "value" },
+  };
 
   const state = {
     faq: [] as FaqRow[],
     tickets: [] as TicketRow[],
     messages: [] as MessageRow[],
     accounts: [] as AccountRow[],
+    meta: [] as MetaRow[],
+    queryLog: [] as { table: string; kind: "rows" | "count" | "profiles" }[],
     reset() {
       faqSeq = 1;
       ticketSeq = 1;
       messageSeq = 1;
       state.messages = [];
+      state.meta = [];
+      state.queryLog = [];
       state.accounts = [
         { username: "alice", email: "alice@example.com" },
         { username: "bob", email: null },
@@ -177,6 +192,8 @@ const h = vi.hoisted(() => {
   type Pred =
     | { kind: "eq"; col: string; val: unknown }
     | { kind: "and"; parts: Pred[] }
+    | { kind: "or"; parts: Pred[] }
+    | { kind: "in"; col: string; vals: unknown[] }
     | { kind: "gte"; col: string; val: unknown }
     | { kind: "lte"; col: string; val: unknown };
 
@@ -184,6 +201,8 @@ const h = vi.hoisted(() => {
     if (!pred) return true;
     if (pred.kind === "eq") return row[pred.col] === pred.val;
     if (pred.kind === "and") return pred.parts.every((p) => matches(row, p));
+    if (pred.kind === "or") return pred.parts.some((p) => matches(row, p));
+    if (pred.kind === "in") return pred.vals.includes(row[pred.col]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (pred.kind === "gte") return (row[pred.col] as any) >= (pred.val as any);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -196,6 +215,7 @@ const h = vi.hoisted(() => {
     if (table === supportTicketsTable) return state.tickets as unknown as Record<string, unknown>[];
     if (table === supportTicketMessagesTable) return state.messages as unknown as Record<string, unknown>[];
     if (table === platformAccountsTable) return state.accounts as unknown as Record<string, unknown>[];
+    if (table === platformMetaTable) return state.meta as unknown as Record<string, unknown>[];
     return [];
   }
 
@@ -205,6 +225,7 @@ const h = vi.hoisted(() => {
     supportTicketsTable,
     supportTicketMessagesTable,
     platformAccountsTable,
+    platformMetaTable,
     matches,
     rowsFor,
   };
@@ -216,37 +237,59 @@ vi.mock("drizzle-orm", () => ({
   asc: (col: { __col: string }) => ({ kind: "asc", col: col.__col }),
   desc: (col: { __col: string }) => ({ kind: "desc", col: col.__col }),
   gte: (col: { __col: string }, val: unknown) => ({ kind: "gte", col: col.__col, val }),
+  inArray: (col: { __col: string }, vals: unknown[]) => ({ kind: "in", col: col.__col, vals }),
   lte: (col: { __col: string }, val: unknown) => ({ kind: "lte", col: col.__col, val }),
   ilike: (col: { __col: string }, val: unknown) => ({ kind: "ilike", col: col.__col, val }),
   or: (...parts: unknown[]) => ({ kind: "or", parts }),
-  sql: Object.assign(() => ({}), { raw: () => ({}) }),
+  sql: Object.assign(
+    (strings: TemplateStringsArray) => ({ __kind: "count", text: strings.join("?") }),
+    { raw: () => ({}) },
+  ),
 }));
 
 vi.mock("@workspace/db", () => {
   const db = {
-    select: (_proj?: unknown) => ({
+    select: (projection?: Record<string, unknown>) => ({
       from: (table: unknown) => {
+        const queryKind =
+          table === h.platformMetaTable
+            ? "profiles"
+            : projection && Object.values(projection).some((value) => (value as any)?.__kind === "count")
+              ? "count"
+              : "rows";
+        h.state.queryLog.push({ table: (table as any).__table, kind: queryKind });
+        const projectRows = (rows: Record<string, unknown>[]) => {
+          if (!projection) return rows.map((r) => ({ ...r }));
+          return rows.map((row) =>
+            Object.fromEntries(
+              Object.entries(projection).map(([key, selector]) => {
+                if ((selector as any)?.__kind === "count") return [key, rows.length];
+                return [key, row[(selector as any).__col]];
+              }),
+            ),
+          );
+        };
         const builder = {
           where: (pred: any) => ({
             orderBy: (..._order: unknown[]) => {
               const filtered = h.rowsFor(table).filter((r) => h.matches(r, pred));
-              return Promise.resolve(filtered.map((r) => ({ ...r })));
+              return Promise.resolve(projectRows(filtered));
             },
             limit: (n: number) => {
               const filtered = h.rowsFor(table).filter((r) => h.matches(r, pred));
-              return Promise.resolve(filtered.slice(0, n).map((r) => ({ ...r })));
+              return Promise.resolve(projectRows(filtered.slice(0, n)));
             },
             then: (resolve: (v: unknown) => unknown) => {
               const filtered = h.rowsFor(table).filter((r) => h.matches(r, pred));
-              return resolve(filtered.map((r) => ({ ...r })));
+              return resolve(projectRows(filtered));
             },
           }),
           orderBy: (..._order: unknown[]) => {
             const rows = h.rowsFor(table).map((r) => ({ ...r }));
-            return Promise.resolve(rows);
+            return Promise.resolve(projectRows(rows));
           },
           then: (resolve: (v: unknown) => unknown) => {
-            return resolve(h.rowsFor(table).map((r) => ({ ...r })));
+            return resolve(projectRows(h.rowsFor(table)));
           },
         };
         return builder;
@@ -316,7 +359,7 @@ vi.mock("@workspace/db", () => {
     supportFaqTable: h.supportFaqTable,
     supportTicketsTable: h.supportTicketsTable,
     supportTicketMessagesTable: h.supportTicketMessagesTable,
-    platformMetaTable: { __table: "platform_meta", key: { __col: "key" }, value: { __col: "value" } },
+    platformMetaTable: h.platformMetaTable,
     platformAccountsTable: h.platformAccountsTable,
   };
 });
@@ -678,6 +721,77 @@ describe("GET /api/support/tickets", () => {
     const { status, json } = await req(baseUrl, "GET", "/api/support/tickets?summary=outstanding");
     expect(status).toBe(200);
     expect(json).toEqual({ outstandingCount: 2 });
+    expect(h.state.queryLog.filter((query) => query.kind === "count")).toHaveLength(1);
+  });
+
+  it("scopes an outstanding summary to the caller when mine=true", async () => {
+    const app = buildWithActor(userActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status, json } = await req(
+      baseUrl,
+      "GET",
+      "/api/support/tickets?summary=outstanding&mine=true",
+    );
+    expect(status).toBe(200);
+    expect(json).toEqual({ outstandingCount: 1 });
+  });
+
+  it("rejects a non-admin outstanding summary without mine=true", async () => {
+    const app = buildWithActor(userActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status } = await req(baseUrl, "GET", "/api/support/tickets?summary=outstanding");
+    expect(status).toBe(403);
+  });
+
+  it("scopes an admin outstanding summary when mine=true", async () => {
+    h.state.tickets.push({ ...h.state.tickets[0], id: 3, accountUsername: "admin" });
+    const app = buildWithActor(adminActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status, json } = await req(
+      baseUrl,
+      "GET",
+      "/api/support/tickets?summary=outstanding&mine=true",
+    );
+    expect(status).toBe(200);
+    expect(json).toEqual({ outstandingCount: 1 });
+  });
+
+  it("returns an empty list when filters match no tickets", async () => {
+    const app = buildWithActor(adminActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status, json } = await req(baseUrl, "GET", "/api/support/tickets?status=closed");
+    expect(status).toBe(200);
+    expect(json).toEqual({ tickets: [] });
+  });
+
+  it("batch loads profile display names without exposing other profile fields", async () => {
+    h.state.meta.push(
+      {
+        key: "account:profile:user1",
+        value: JSON.stringify({ displayName: "  Alice Example  ", email: "private@example.com" }),
+      },
+      {
+        key: "account:profile:user2",
+        value: JSON.stringify({ displayName: "Bob Example", phone: "private" }),
+      },
+    );
+    const app = buildWithActor(adminActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status, json } = await req(baseUrl, "GET", "/api/support/tickets");
+    expect(status).toBe(200);
+    expect(json.tickets.map((ticket: any) => ticket.displayName)).toEqual([
+      "Alice Example",
+      "Bob Example",
+    ]);
+    expect(json.tickets.every((ticket: any) => !("email" in ticket) && !("phone" in ticket))).toBe(
+      true,
+    );
+    expect(h.state.queryLog.filter((query) => query.kind === "profiles")).toHaveLength(1);
   });
 
   it("mine=true with hasUpdate=true returns only tickets with unseen admin replies", async () => {

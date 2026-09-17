@@ -4,15 +4,18 @@ type IdleScheduler = Pick<Window, "setTimeout" | "clearTimeout"> & {
   cancelIdleCallback?: Window["cancelIdleCallback"];
 };
 
-const started = new WeakSet<RoutePreloader>();
+const started = new WeakMap<RoutePreloader, Promise<unknown>>();
 
-export function preloadRoute(load: RoutePreloader | undefined): void {
-  if (!load || started.has(load)) return;
-  started.add(load);
-  void load().catch(() => {
+export function preloadRoute(load: RoutePreloader | undefined): Promise<unknown> {
+  if (!load) return Promise.resolve();
+  const existing = started.get(load);
+  if (existing) return existing;
+  const pending = Promise.resolve().then(load).catch(() => {
     // A failed request must remain retryable when the user actually navigates.
     started.delete(load);
   });
+  started.set(load, pending);
+  return pending;
 }
 
 export function scheduleIdlePreloads(
@@ -25,9 +28,11 @@ export function scheduleIdlePreloads(
 
   const scheduleNext = () => {
     if (cancelled || index >= loads.length) return;
-    const run = () => {
+    const run = async () => {
       if (cancelled) return;
-      preloadRoute(loads[index++]);
+      // An idle CPU does not imply an idle network. Wait for this import's
+      // downloads AND evaluation before scheduling another speculative route.
+      await preloadRoute(loads[index++]);
       scheduleNext();
     };
 
@@ -38,9 +43,12 @@ export function scheduleIdlePreloads(
     }
   };
 
-  scheduleNext();
+  // Leave initial route rendering and its foreground data requests a head
+  // start. Hover/focus/navigation preloads remain immediate.
+  const startHandle = idleWindow.setTimeout(scheduleNext, 1000);
   return () => {
     cancelled = true;
+    idleWindow.clearTimeout(startHandle);
     if (handle === undefined) return;
     if (typeof idleWindow.cancelIdleCallback === "function") idleWindow.cancelIdleCallback(handle);
     else idleWindow.clearTimeout(handle);

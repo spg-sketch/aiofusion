@@ -39,6 +39,13 @@ vi.mock("openai", () => ({
   },
 }));
 
+const { collectJournalistCoverage } = vi.hoisted(() => ({
+  collectJournalistCoverage: vi.fn(),
+}));
+vi.mock("../lib/journalist-coverage-evidence", () => ({
+  collectJournalistCoverage,
+}));
+
 // ---------------------------------------------------------------------------
 // PGlite-backed in-memory database mock (same pattern as team.test.ts)
 // ---------------------------------------------------------------------------
@@ -593,6 +600,7 @@ const PAID_AI_PREFIXES = [
   "/llm-check",
   "/ai-assist",
   "/content",
+  "/store/media-db/recommendations/enrich",
 ] as const;
 
 /**
@@ -821,8 +829,6 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "GET /store/media-db/recommendations/brief",
   "PUT /store/media-db/recommendations/brief",
   "POST /store/media-db/recommendations/contact-restriction",
-  // Enrichment also enforces its own monthly-spend and project-usage limits.
-  "POST /store/media-db/recommendations/enrich",
   "PUT /store/media-db/recommendations/feedback",
   "DELETE /store/media-db/recommendations/feedback",
   "GET /store/media-db/recommendations/decisions",
@@ -995,6 +1001,70 @@ describe("blockReadOnlyMembers - AI action routes", () => {
     const res = await api("/api/ai-assist/draft-field", { sid: ownerSid, body: {} });
     expect(res.status).toBe(402);
     expect(res.json.code).toBe("BETA_TRIAL_REQUIRED");
+  });
+
+  it("rejects viewer media recommendation enrichment before any provider call", async () => {
+    collectJournalistCoverage.mockReset();
+    const { sid: ownerSid } = await seedAgency("guard-media-viewer", "owner@guard-media-viewer.test");
+    const inv = await api("/api/platform/team/invite", {
+      sid: ownerSid,
+      body: { email: "media-viewer@guard.test", role: "viewer" },
+    });
+    expect(inv.status).toBe(201);
+    const accept = await api("/api/platform/invite/accept", {
+      body: { token: inv.json.token, password: "media-viewer-pass-1" },
+    });
+    expect(accept.status).toBe(200);
+    const viewerSid = /aio_sid=([^;]+)/.exec(accept.setCookie ?? "")?.[1];
+    expect(viewerSid).toBeTruthy();
+
+    const res = await api("/api/store/media-db/recommendations/enrich", {
+      method: "POST",
+      sid: viewerSid,
+      body: { projectId: "provider-must-not-run", storyKey: "story", recommendationSetId: 1 },
+    });
+    expect(res.status).toBe(403);
+    expect(res.json.error).toMatch(/read-only/i);
+    expect(collectJournalistCoverage).not.toHaveBeenCalled();
+  });
+
+  it("rejects billing media recommendation enrichment before any provider call", async () => {
+    collectJournalistCoverage.mockReset();
+    const { sid: ownerSid } = await seedAgency("guard-media-billing", "owner@guard-media-billing.test");
+    const inv = await api("/api/platform/team/invite", {
+      sid: ownerSid,
+      body: { email: "media-billing@guard.test", role: "billing" },
+    });
+    expect(inv.status).toBe(201);
+    const accept = await api("/api/platform/invite/accept", {
+      body: { token: inv.json.token, password: "media-billing-pass-1" },
+    });
+    expect(accept.status).toBe(200);
+    const billingSid = /aio_sid=([^;]+)/.exec(accept.setCookie ?? "")?.[1];
+    expect(billingSid).toBeTruthy();
+
+    const res = await api("/api/store/media-db/recommendations/enrich", {
+      method: "POST",
+      sid: billingSid,
+      body: { projectId: "provider-must-not-run", storyKey: "story", recommendationSetId: 1 },
+    });
+    expect(res.status).toBe(403);
+    expect(res.json.error).toMatch(/billing/i);
+    expect(collectJournalistCoverage).not.toHaveBeenCalled();
+  });
+
+  it("rejects unstarted owner media recommendation enrichment before any provider call", async () => {
+    collectJournalistCoverage.mockReset();
+    const { sid: ownerSid } = await seedAgency("guard-media-unstarted", "owner@guard-media-unstarted.test");
+
+    const res = await api("/api/store/media-db/recommendations/enrich", {
+      method: "POST",
+      sid: ownerSid,
+      body: { projectId: "provider-must-not-run", storyKey: "story", recommendationSetId: 1 },
+    });
+    expect(res.status).toBe(402);
+    expect(res.json.code).toBe("BETA_TRIAL_REQUIRED");
+    expect(collectJournalistCoverage).not.toHaveBeenCalled();
   });
 });
 

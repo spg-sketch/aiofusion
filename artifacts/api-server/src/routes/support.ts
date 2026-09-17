@@ -14,6 +14,7 @@ import {
   desc,
   eq,
   gte,
+  inArray,
   ilike,
   lte,
   or,
@@ -39,6 +40,39 @@ async function getDisplayName(username: string): Promise<string | undefined> {
   } catch {
     return undefined;
   }
+}
+
+async function getDisplayNames(usernames: string[]): Promise<Record<string, string | undefined>> {
+  const uniqueUsernames = [...new Set(usernames)];
+  if (uniqueUsernames.length === 0) return {};
+
+  const keyByUsername = new Map(
+    uniqueUsernames.map((username) => [
+      username,
+      `${PROFILE_PREFIX}${username.trim().toLowerCase()}`,
+    ]),
+  );
+  const rows = await db
+    .select({ key: platformMetaTable.key, value: platformMetaTable.value })
+    .from(platformMetaTable)
+    .where(inArray(platformMetaTable.key, [...keyByUsername.values()]));
+  const valueByKey = new Map(rows.map((row) => [row.key, row.value]));
+
+  return Object.fromEntries(
+    uniqueUsernames.map((username) => {
+      const key = keyByUsername.get(username)!;
+      const value = valueByKey.get(key);
+      if (!value) return [username, undefined];
+      try {
+        const obj = JSON.parse(value) as { displayName?: unknown };
+        const displayName =
+          typeof obj?.displayName === "string" ? obj.displayName.trim() : "";
+        return [username, displayName || undefined];
+      } catch {
+        return [username, undefined];
+      }
+    }),
+  );
 }
 
 const router: IRouter = Router();
@@ -417,14 +451,22 @@ router.get(
       }
 
       if (req.query.summary === "outstanding") {
-        const outstandingTickets = await db
-          .select({ status: supportTicketsTable.status })
+        const outstandingCondition = or(
+          eq(supportTicketsTable.status, "open"),
+          eq(supportTicketsTable.status, "in_progress"),
+        );
+        const [summary] = await db
+          .select({ count: sql<number>`count(*)` })
           .from(supportTicketsTable)
-          .where(or(
-            eq(supportTicketsTable.status, "open"),
-            eq(supportTicketsTable.status, "in_progress"),
-          ));
-        res.json({ outstandingCount: outstandingTickets.length });
+          .where(
+            mine
+              ? and(
+                  eq(supportTicketsTable.accountUsername, account.username),
+                  outstandingCondition,
+                )
+              : outstandingCondition,
+          );
+        res.json({ outstandingCount: Number(summary?.count ?? 0) });
         return;
       }
 
@@ -471,11 +513,8 @@ router.get(
         .orderBy(desc(supportTicketsTable.createdAt));
 
       const uniqueUsernames = [...new Set(tickets.map((t) => t.accountUsername))];
-      const displayNameMap: Record<string, string | undefined> = {};
-      await Promise.all(
-        uniqueUsernames.map(async (username) => {
-          displayNameMap[username] = await getDisplayName(username).catch(() => undefined);
-        }),
+      const displayNameMap = await getDisplayNames(uniqueUsernames).catch(
+        () => ({} as Record<string, string | undefined>),
       );
 
       const annotated = tickets.map((t) => ({

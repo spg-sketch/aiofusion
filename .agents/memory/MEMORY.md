@@ -79,3 +79,4 @@
 - [Editorial recommendation evidence](aio-fusion-editorial-ranking.md) — separate fit, confidence and readiness; verify real page metadata and preserve evidence through failed or stale enrichment.
 - [Media contact status and correction provenance](aio-fusion-media-contact-review.md) — departed state and correction reports are workspace-scoped audit records, never silent edits to trusted contact fields.
 - [Media visibility comparison](aio-fusion-media-visibility-comparison.md) — compare phrase checks only when the effective query, provider, model, run count, and methodology version all match.
+- [Performance measurement](aio-fusion-performance-measurement.md) — separate published, anonymous and fixture-backed timings; measure destination content, not sidebar labels.

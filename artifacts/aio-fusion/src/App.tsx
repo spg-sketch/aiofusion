@@ -473,6 +473,8 @@ function App() {
   const refreshAuthoritativeSession = useRef<() => void>(() => {});
   const confirmedSessionRef = useRef<LocalSession | null>(null);
   const authLoadingRef = useRef(true);
+  const [authLoading, setAuthLoading] = useState(true);
+  const projectRefreshRef = useRef<{ signal: AbortSignal; promise: Promise<void> } | null>(null);
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
   // Lazy route chunks can take a moment on their first visit. Navigation is a
@@ -527,7 +529,7 @@ function App() {
   // context. Each chunk is queued separately during idle time, preserving route
   // splitting and yielding between downloads.
   useEffect(() => {
-    if (!routePreloadingEnabled) return;
+    if (!routePreloadingEnabled || authLoading) return;
     if (view === "platform-home") {
       return scheduleIdlePreloads([
         loadDashboardPage,
@@ -544,7 +546,7 @@ function App() {
     return scheduleIdlePreloads(
       PUBLIC_IDLE_PRELOADS[view] ?? PUBLIC_IDLE_PRELOADS.default,
     );
-  }, [view, currentPage]);
+  }, [view, currentPage, authLoading]);
 
   // Marketing navigation is mostly ordinary same-origin links. Event
   // delegation provides hover/focus warming without coupling every marketing
@@ -581,7 +583,7 @@ function App() {
   // Pull the shared project list and refresh the hub. Used on first load and
   // again whenever the tab regains focus, so a project a colleague created on
   // another device shows up without a manual page reload.
-  const resyncProjects = useCallback(async () => {
+  const resyncProjects = useCallback(async (options: { background?: boolean } = {}) => {
     // Background focus/visibility timers must never probe project/account
     // endpoints while the cookie authority check is unresolved or signed out.
     if (authLoadingRef.current || !confirmedSessionRef.current) return;
@@ -590,31 +592,44 @@ function App() {
     // project sync and keeps the existing cache on any failure.
     const generation = authRequestGeneration.current;
     const signal = authRequestAbort.current.signal;
-    const [result] = await Promise.all([syncProjectsOnLoad({ signal }), refreshAccountsCache(signal)]);
-    if (signal.aborted || generation !== authRequestGeneration.current) return;
-    if (result === "unauthorized") {
-      // Server session has expired mid-use. Re-check with /api/platform/me;
-      // if it confirms the session is gone, clear local state and redirect
-      // to the login screen so the user can re-authenticate.
-      refreshAuthoritativeSession.current();
-      return;
+    // Focus and visibility often fire together. Only passive refreshes join an
+    // in-flight read; a post-mutation refresh must always fetch fresh data.
+    if (options.background && projectRefreshRef.current?.signal === signal) {
+      return projectRefreshRef.current.promise;
     }
-    if (result) {
-      // Claim any ownerless project the sync just pulled down (e.g. a legacy
-      // NULL-owned row) before showing the list, so it is attributed to the
-      // master instead of silently vanishing.
-      await migrateAssignOwnerlessToAdmin({ signal });
+    const refresh = (async () => {
+      const [result] = await Promise.all([syncProjectsOnLoad({ signal }), refreshAccountsCache(signal)]);
       if (signal.aborted || generation !== authRequestGeneration.current) return;
-      const merged = loadStoredProjects() as unknown as Client[];
-      setStoredProjects(merged);
-      setClientLogos(result.logos);
-      // Update the module-level known-IDs cache so the integrity check inside
-      // setActiveProjectId always compares against the current project list,
-      // then run a proactive check in case the active ID drifted since the
-      // last sync (e.g. after a login change on another device).
-      const ids = merged.map((p) => p.id);
-      setKnownProjectIds(ids);
-      assertActiveProjectConsistency(ids);
+      if (result === "unauthorized") {
+        // Server session has expired mid-use. Re-check with /api/platform/me;
+        // if it confirms the session is gone, clear local state and redirect
+        // to the login screen so the user can re-authenticate.
+        refreshAuthoritativeSession.current();
+        return;
+      }
+      if (result) {
+        // Claim any ownerless project the sync just pulled down (e.g. a legacy
+        // NULL-owned row) before showing the list, so it is attributed to the
+        // master instead of silently vanishing.
+        await migrateAssignOwnerlessToAdmin({ signal });
+        if (signal.aborted || generation !== authRequestGeneration.current) return;
+        const merged = loadStoredProjects() as unknown as Client[];
+        setStoredProjects(merged);
+        setClientLogos(result.logos);
+        // Update the module-level known-IDs cache so the integrity check inside
+        // setActiveProjectId always compares against the current project list,
+        // then run a proactive check in case the active ID drifted since the
+        // last sync (e.g. after a login change on another device).
+        const ids = merged.map((p) => p.id);
+        setKnownProjectIds(ids);
+        assertActiveProjectConsistency(ids);
+      }
+    })();
+    projectRefreshRef.current = { signal, promise: refresh };
+    try {
+      await refresh;
+    } finally {
+      if (projectRefreshRef.current?.promise === refresh) projectRefreshRef.current = null;
     }
   }, []);
 
@@ -662,9 +677,9 @@ function App() {
       if (!s) return;
       await migrateLocalStorageContentToServer({ signal });
       if (generation !== authRequestGeneration.current) return;
-      await initContentStore({ signal });
-      if (generation !== authRequestGeneration.current) return;
-      await resyncProjects();
+      // Project discovery does not depend on archive/planner/scoring reads.
+      // Keep legacy migration ordered but remove the subsequent read waterfall.
+      await Promise.all([initContentStore({ signal }), resyncProjects()]);
     })();
   }, [resyncProjects]);
 
@@ -673,13 +688,13 @@ function App() {
   // without reloading. All calls are no-ops when the server is unreachable.
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === "visible") void resyncProjects();
+      if (document.visibilityState === "visible") void resyncProjects({ background: true });
     };
-    const onFocus = () => void resyncProjects();
+    const onFocus = () => void resyncProjects({ background: true });
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onFocus);
     const interval = window.setInterval(() => {
-      if (document.visibilityState === "visible") void resyncProjects();
+      if (document.visibilityState === "visible") void resyncProjects({ background: true });
     }, 60000);
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
@@ -907,7 +922,6 @@ function App() {
   // bootstrapAuth(). Guards must not redirect while this is true - the session
   // state is still provisional (localStorage only) and may not yet reflect the
   // real cookie state.
-  const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   // True when the user is signed in but hasn't chosen Agency/Partner vs Client yet
   // (new organic signups via password or SSO).
@@ -976,9 +990,7 @@ function App() {
       setAuthLoading(false);
       authLoadingRef.current = false;
       if (!confirmedSession) return;
-      await initContentStore({ signal });
-      if (signal.aborted || generation !== authRequestGeneration.current) return;
-      await resyncProjects();
+      await Promise.all([initContentStore({ signal }), resyncProjects()]);
     })();
   }, [resyncProjects]);
   refreshAuthoritativeSession.current = () => beginAuthoritativeHandoff(null);
@@ -1169,16 +1181,21 @@ function App() {
   // users own tickets; admins don't need the badge).
   useEffect(() => {
     if (!session || session.role === "admin") return;
+    const controller = new AbortController();
+    let pending = false;
 
-    const check = () => {
-      void fetch(`${apiBase()}/api/support/tickets?mine=true&hasUpdate=true`, {
-        credentials: "include",
-      })
-        .then((r) => r.json())
-        .then((d: { tickets?: unknown[] }) => {
-          setGeorgeHasUpdate(Array.isArray(d.tickets) && d.tickets.length > 0);
-        })
-        .catch(() => {});
+    const check = async () => {
+      if (pending || document.visibilityState !== "visible" || controller.signal.aborted) return;
+      pending = true;
+      try {
+        const r = await fetch(`${apiBase()}/api/support/tickets?mine=true&hasUpdate=true`, {
+          credentials: "include", signal: controller.signal,
+        });
+        if (!r.ok) return;
+        const d = await r.json() as { tickets?: unknown[] };
+        if (!controller.signal.aborted) setGeorgeHasUpdate(Array.isArray(d.tickets) && d.tickets.length > 0);
+      } catch { /* non-fatal */ }
+      finally { pending = false; }
     };
 
     check();
@@ -1190,6 +1207,7 @@ function App() {
     const interval = window.setInterval(check, 90_000);
 
     return () => {
+      controller.abort();
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onFocus);
       window.clearInterval(interval);
@@ -1213,26 +1231,6 @@ function App() {
   };
 
   useEffect(() => { removeDemoSeedData(); }, []);
-
-  // Poll for George unread replies persistently: on session load and every 5 min
-  const checkGeorgeUpdates = useCallback(async () => {
-    if (!session) return;
-    try {
-      const r = await fetch(
-        `${import.meta.env.VITE_API_BASE ?? ""}/api/support/tickets?mine=true&hasUpdate=true`,
-        { credentials: "include" },
-      );
-      if (!r.ok) return;
-      const d = (await r.json()) as { tickets?: unknown[] };
-      setGeorgeHasUpdate(Array.isArray(d.tickets) && d.tickets.length > 0);
-    } catch { /* non-fatal */ }
-  }, [session]);
-
-  useEffect(() => {
-    void checkGeorgeUpdates();
-    const id = window.setInterval(() => { void checkGeorgeUpdates(); }, 5 * 60 * 1000);
-    return () => window.clearInterval(id);
-  }, [checkGeorgeUpdates]);
 
   // Keep the sidebar trigger badge in sync when GeorgeSupport marks a reply as seen
   useEffect(() => {
