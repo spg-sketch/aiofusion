@@ -75,5 +75,6 @@
 - [Settings and onboarding visual relationship](aio-fusion-settings-onboarding-visual-system.md) — onboarding stays focused and standalone while sharing the approved Account Settings visual language.
 - [Exact Media target phrases](aio-fusion-exact-media-phrases.md) — preserve immutable phrase snapshots and distinguish exact matches, topic overlap, and AI-suggested fit.
 - [Media outreach evidence](aio-fusion-media-outreach-evidence.md) — outreach history uses project-owner scope, immutable snapshots, append-only verification provenance, and evidence-gated placed status.
+- [Editorial recommendation evidence](aio-fusion-editorial-ranking.md) — separate fit, confidence and readiness; verify real page metadata and preserve evidence through failed or stale enrichment.
 - [Media contact status and correction provenance](aio-fusion-media-contact-review.md) — departed state and correction reports are workspace-scoped audit records, never silent edits to trusted contact fields.
 - [Media visibility comparison](aio-fusion-media-visibility-comparison.md) — compare phrase checks only when the effective query, provider, model, run count, and methodology version all match.

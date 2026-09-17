@@ -85,36 +85,56 @@ vi.mock("@workspace/db", async () => {
       signal varchar(12) NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE(account_id, project_id, story_key, contact_id)
     );
+    CREATE TABLE media_outreach (
+      id serial PRIMARY KEY, account_id varchar NOT NULL, project_id varchar NOT NULL,
+      story_key varchar(200) NOT NULL, contact_id integer, outlet_id integer,
+      status varchar(20) NOT NULL DEFAULT 'planned', article_snapshot jsonb NOT NULL DEFAULT '{}',
+      contact_snapshot jsonb NOT NULL DEFAULT '{}', outlet_snapshot jsonb NOT NULL DEFAULT '{}',
+      target_phrases jsonb NOT NULL DEFAULT '[]', notes text NOT NULL DEFAULT '',
+      responsible_team_member text NOT NULL DEFAULT '', created_by varchar NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE media_recommendation_decisions (
+      id serial PRIMARY KEY, account_id varchar NOT NULL, project_id varchar NOT NULL,
+      story_key varchar(200) NOT NULL, contact_id integer NOT NULL, decision varchar(20) NOT NULL,
+      note text NOT NULL DEFAULT '', created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE TABLE platform_accounts (
       username varchar PRIMARY KEY, password_hash text NOT NULL DEFAULT '',
       role varchar NOT NULL DEFAULT 'agency', parent varchar, max_seats integer,
       created_at timestamptz NOT NULL DEFAULT now(), email varchar, website varchar,
       status varchar NOT NULL DEFAULT 'active'
     );
+    CREATE TABLE platform_companies (
+      id varchar PRIMARY KEY, slug varchar UNIQUE NOT NULL, role varchar NOT NULL DEFAULT 'agency',
+      parent_slug varchar, free_access boolean NOT NULL DEFAULT true, status varchar NOT NULL DEFAULT 'active',
+      plan varchar(16), billing_frequency varchar(16), subscription_status varchar(16),
+      stripe_customer_id text, stripe_subscription_id text, current_period_end timestamptz,
+      beta_trial_started_at timestamptz, beta_trial_ends_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE TABLE projects (
       id varchar PRIMARY KEY, name varchar NOT NULL DEFAULT '', data jsonb NOT NULL DEFAULT '{}',
       intake jsonb, logo text, owner varchar, tier varchar(16), deleted_at timestamptz,
       updated_at timestamptz NOT NULL DEFAULT now()
     );
+    CREATE TABLE archive_items (
+      id varchar PRIMARY KEY, project_id varchar NOT NULL, owner varchar NOT NULL,
+      title varchar NOT NULL DEFAULT '', deleted_at timestamptz
+    );
+    CREATE TABLE platform_meta (key varchar PRIMARY KEY, value text NOT NULL);
+    CREATE TABLE token_usage (
+      id serial PRIMARY KEY, account_id varchar(200) NOT NULL, operation varchar(80) NOT NULL,
+      model varchar(80) NOT NULL, input_tokens integer NOT NULL DEFAULT 0,
+      output_tokens integer NOT NULL DEFAULT 0, cost_gbp_estimate numeric(10,6),
+      project_id varchar(200), created_at timestamptz NOT NULL DEFAULT now()
+    );
   `);
 
-  return {
-    db,
-    mediaCategoriesTable: schema.mediaCategoriesTable,
-    mediaOutletsTable: schema.mediaOutletsTable,
-    mediaContactsTable: schema.mediaContactsTable,
-    mediaContactFieldOverridesTable: schema.mediaContactFieldOverridesTable,
-    mediaContactSourceChecksTable: schema.mediaContactSourceChecksTable,
-    mediaContactStatusEventsTable: schema.mediaContactStatusEventsTable,
-    mediaContactCorrectionReportsTable: schema.mediaContactCorrectionReportsTable,
-    mediaImportBatchesTable: schema.mediaImportBatchesTable,
-    mediaRecommendationSetsTable: schema.mediaRecommendationSetsTable,
-    mediaRecommendationItemsTable: schema.mediaRecommendationItemsTable,
-    mediaRecommendationFeedbackTable: schema.mediaRecommendationFeedbackTable,
-    mediaRecommendationDecisionsTable: schema.mediaRecommendationDecisionsTable,
-    platformAccountsTable: schema.platformAccountsTable,
-    projectsTable: schema.projectsTable,
-  };
+  // Keep this static DB mock's exports aligned with the real schema: the media
+  // router imports fair-usage tables even when exercising import routes.
+  return { ...schema, db, pool: { end: () => client.close() } };
 });
 
 import {
@@ -128,7 +148,7 @@ import {
   platformAccountsTable,
   projectsTable,
 } from "@workspace/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import mediaRouter from "./media-db";
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
@@ -362,11 +382,18 @@ describe("media import route regressions", () => {
       { username: "client-search", passwordHash: "", role: "client", parent: "agency-search" },
       { username: "unrelated-search", passwordHash: "", role: "agency", parent: null },
     ]);
+    await db.execute(sql`INSERT INTO platform_companies (id, slug, free_access, subscription_status, plan) VALUES
+      ('agency-search-company', 'agency-search', true, 'active', 'agency'),
+      ('client-search-company', 'client-search', true, 'active', 'agency'),
+      ('unrelated-search-company', 'unrelated-search', true, 'active', 'agency')`);
     await db.insert(projectsTable).values({
       id: "shared-media-search-project",
       name: "Shared media search project",
       owner: "agency-search",
     });
+    await db.execute(sql`INSERT INTO archive_items (id, project_id, owner, title) VALUES
+      ('shared-story-agency-search', 'shared-media-search-project', 'agency-search', 'Shared story'),
+      ('shared-story-client-search', 'shared-media-search-project', 'agency-search', 'Shared story')`);
     const [sharedOutlet] = await db.insert(mediaOutletsTable).values({
       name: "Shared Access News",
       category: "Technology",

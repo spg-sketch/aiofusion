@@ -66,7 +66,7 @@ async function fetchWithSsrfSafeRedirects(
   url: string,
   reqHeaders: Record<string, string>,
   timeoutMs: number,
-): Promise<{ res: UndiciResponse; agent: Agent }> {
+): Promise<{ res: UndiciResponse; agent: Agent; finalUrl: string }> {
   let currentUrl = url;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -94,7 +94,7 @@ async function fetchWithSsrfSafeRedirects(
 
       const isRedirect = res.status >= 300 && res.status < 400;
       if (!isRedirect) {
-        return { res, agent };
+        return { res, agent, finalUrl: currentUrl };
       }
 
       await res.body?.cancel().catch(() => {});
@@ -113,7 +113,11 @@ async function fetchWithSsrfSafeRedirects(
 }
 
 async function fetchHtml(url: string): Promise<string> {
-  const { res, agent } = await fetchWithSsrfSafeRedirects(
+  return (await fetchHtmlWithFinalUrl(url)).html;
+}
+
+async function fetchHtmlWithFinalUrl(url: string): Promise<{ html: string; finalUrl: string }> {
+  const { res, agent, finalUrl } = await fetchWithSsrfSafeRedirects(
     url,
     { "User-Agent": "AIOFusion-Assist/1.0 (compatible; bot)", Accept: "text/html,application/xhtml+xml" },
     FETCH_TIMEOUT,
@@ -122,7 +126,7 @@ async function fetchHtml(url: string): Promise<string> {
     if (!res.ok) throw new Error(`Site returned HTTP ${res.status}`);
     const contentLength = res.headers.get("content-length");
     if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) throw new Error("Response too large");
-    if (!res.body) return "";
+    if (!res.body) return { html: "", finalUrl };
     const reader = res.body.getReader();
     const chunks: Uint8Array[] = [];
     let received = 0;
@@ -149,7 +153,7 @@ async function fetchHtml(url: string): Promise<string> {
       buffer.set(chunk, offset);
       offset += chunk.byteLength;
     }
-    return new TextDecoder().decode(buffer);
+    return { html: new TextDecoder().decode(buffer), finalUrl };
   } finally {
     await agent.close().catch(() => {});
   }
@@ -183,12 +187,141 @@ export interface MediaSourceEvidence {
   text: string;
   emails: string[];
   roleCandidates: string[];
+  /** Facts extracted from the fetched page before scripts are removed. */
+  title?: string;
+  publishedAt?: string | null;
+  authorNames?: string[];
+  siteName?: string;
 }
 
-export async function fetchMediaSourceEvidence(url: string): Promise<MediaSourceEvidence> {
-  const normalized = /^https?:\/\//i.test(url) ? url : `https://${url}`;
-  const html = await fetchHtml(normalized);
+const ARTICLE_JSON_TYPES = new Set([
+  "article",
+  "newsarticle",
+  "reportagenewsarticle",
+  "blogposting",
+  "socialmediaposting",
+]);
+
+function asPageDate(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const raw = value.trim().slice(0, 100);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const date = new Date(`${raw}T00:00:00.000Z`);
+    return Number.isNaN(date.getTime()) ? null : raw;
+  }
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function jsonLdArticleNodes(value: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(value)) return value.flatMap(jsonLdArticleNodes);
+  if (!value || typeof value !== "object") return [];
+  const object = value as Record<string, unknown>;
+  const typeValue = object["@type"];
+  const types = Array.isArray(typeValue) ? typeValue : [typeValue];
+  const isArticle = types.some((type) => typeof type === "string" && ARTICLE_JSON_TYPES.has(type.toLowerCase()));
+  const own = isArticle ? [object] : [];
+  return own.concat(jsonLdArticleNodes(object["@graph"]));
+}
+
+function jsonLdRefersToPage(article: Record<string, unknown>, normalized: string): boolean {
+  const references: unknown[] = [article.url, article["@id"], article.mainEntityOfPage];
+  const page = new URL(normalized);
+  page.hash = "";
+  page.search = "";
+  const pagePath = page.toString().replace(/\/+$/, "");
+  return references.some((reference) => {
+    const value = reference && typeof reference === "object"
+      ? (reference as Record<string, unknown>)["@id"] ?? (reference as Record<string, unknown>).url
+      : reference;
+    if (typeof value !== "string") return false;
+    try {
+      const candidate = new URL(value, normalized);
+      candidate.hash = "";
+      candidate.search = "";
+      return candidate.toString().replace(/\/+$/, "") === pagePath;
+    } catch {
+      return false;
+    }
+  });
+}
+
+function jsonLdAuthorNames(value: unknown): string[] {
+  if (typeof value === "string") return [value.trim()].filter(Boolean);
+  if (Array.isArray(value)) return value.flatMap(jsonLdAuthorNames);
+  if (!value || typeof value !== "object") return [];
+  const name = (value as Record<string, unknown>).name;
+  return typeof name === "string" ? [name.trim()].filter(Boolean) : [];
+}
+
+function uniqueBounded(values: string[], max = 20): string[] {
+  return [...new Set(values.map((value) => value.replace(/\s+/g, " ").trim()).filter((value) => value.length >= 2 && value.length <= 300))].slice(0, max);
+}
+
+function isPublishedTime(element: any, $: cheerio.CheerioAPI): boolean {
+  const attributes = ["class", "id", "rel", "itemprop", "aria-label", "data-testid"]
+    .map((name) => $(element).attr(name) || "")
+    .join(" ")
+    .toLowerCase();
+  const text = $(element).text().replace(/\s+/g, " ").trim().toLowerCase();
+  if (/\b(modif(?:ied|ication)|updated|lastmod)\b/.test(`${attributes} ${text}`)) return false;
+  return /\b(publish(?:ed|ing)?|posted|datepublished|article:published)\b/.test(`${attributes} ${text}`);
+}
+
+/** Extract only facts represented by the supplied page HTML. */
+export function extractMediaSourceEvidence(html: string, normalized: string): MediaSourceEvidence {
   const $ = cheerio.load(html);
+  const jsonLdValues: unknown[] = [];
+  $('script[type="application/ld+json"]').each((_, element) => {
+    try {
+      const value = JSON.parse($(element).text());
+      jsonLdValues.push(value);
+    } catch {
+      // Ignore malformed structured data and retain other page evidence.
+    }
+  });
+
+  const allArticleNodes = jsonLdValues.flatMap(jsonLdArticleNodes);
+  const matchingArticleNodes = allArticleNodes.length === 1
+    ? allArticleNodes
+    : allArticleNodes.filter((article) => jsonLdRefersToPage(article, normalized));
+  const jsonLdAuthors = matchingArticleNodes.flatMap((article) => jsonLdAuthorNames(article.author));
+  const explicitAuthorNames: string[] = [];
+  $([
+    '[rel="author"]',
+    '[itemprop="author"]',
+    'meta[name="author"]',
+    '[class~="byline"]',
+    '[class~="author"]',
+    '[class*="byline"]',
+    '[class*="author"]',
+  ].join(",")).each((_, element) => {
+    const classes = ($(element).attr("class") || "").toLowerCase();
+    const isGenericAuthorClass = /\bauthor\b/.test(classes) && !/\bbyline\b/.test(classes);
+    const tagName = typeof (element as { tagName?: unknown }).tagName === "string"
+      ? (element as { tagName: string }).tagName.toLowerCase()
+      : "";
+    if (isGenericAuthorClass && tagName !== "meta" && $(element).closest("article").length === 0) return;
+    const content = $(element).attr("content") || $(element).text();
+    if (content) explicitAuthorNames.push(content);
+  });
+
+  const publishedAt =
+    matchingArticleNodes.map((article) => asPageDate(article.datePublished)).find((date): date is string => !!date) ??
+    asPageDate($('meta[property="article:published_time"]').attr("content")) ??
+    ($("time[datetime]").toArray()
+      .filter((element) => isPublishedTime(element, $))
+      .map((element) => asPageDate($(element).attr("datetime")))
+      .find((date): date is string => !!date) ?? null);
+  const title = (
+    $('meta[property="og:title"]').attr("content") ||
+    $("h1").first().text() ||
+    $("title").first().text()
+  ).replace(/\s+/g, " ").trim().slice(0, 1000);
+  const siteName = ($('meta[property="og:site_name"]').attr("content") || "").replace(/\s+/g, " ").trim().slice(0, 300) || undefined;
+  const authorNames = uniqueBounded([...explicitAuthorNames, ...jsonLdAuthors]);
+
+  // Remove non-visible content only after factual metadata has been read.
   $("script, style, noscript, svg, nav, footer, form").remove();
   const emails = new Set<string>();
   $('a[href^="mailto:"]').each((_, element) => {
@@ -206,7 +339,22 @@ export async function fetchMediaSourceEvidence(url: string): Promise<MediaSource
     .filter((value) => value.length >= 3 && value.length <= 180)
     .slice(0, 500);
   const text = visibleText.slice(0, 20_000);
-  return { url: normalized, text, emails: [...emails].slice(0, 100), roleCandidates };
+  return {
+    url: normalized,
+    text,
+    emails: [...emails].slice(0, 100),
+    roleCandidates,
+    title: title || undefined,
+    publishedAt,
+    authorNames,
+    siteName,
+  };
+}
+
+export async function fetchMediaSourceEvidence(url: string): Promise<MediaSourceEvidence> {
+  const normalized = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+  const { html, finalUrl } = await fetchHtmlWithFinalUrl(normalized);
+  return extractMediaSourceEvidence(html, finalUrl);
 }
 
 export interface PlacementPageEvidence {

@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaContactStatusEventsTable, mediaContactCorrectionReportsTable, mediaImportBatchesTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, mediaOutreachTable, mediaOutreachActivitiesTable, mediaPlacementsTable, projectsTable, type MediaOutreachStatus } from "@workspace/db";
+import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaContactStatusEventsTable, mediaContactCorrectionReportsTable, mediaImportBatchesTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, mediaOutreachTable, mediaOutreachActivitiesTable, mediaPlacementsTable, projectsTable, archiveItemsTable, platformMetaTable, tokenUsageTable, type MediaOutreachStatus } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { inAssignedScope, memberProjectGate } from "../lib/member-guards";
@@ -41,6 +41,9 @@ import {
   type ExactTargetPhrase,
 } from "../lib/exact-target-phrases";
 import { MEDIA_RECOMMENDATION_STOP_WORDS, scoreMediaRecommendation } from "../lib/media-recommendation-ranking";
+import { assessEditorialFit, type EditorialAssessment, type TargetingBrief } from "../lib/media-editorial-ranking";
+import { checkFairUsage, checkMonthlySpendLimit } from "../lib/fair-usage";
+import { collectJournalistCoverage } from "../lib/journalist-coverage-evidence";
 
 const router: IRouter = Router();
 
@@ -1651,6 +1654,153 @@ async function visibleProjectOwner(req: Request, projectId: string): Promise<str
   return project.owner;
 }
 
+async function assertCanonicalStoryVisible(req: Request, projectId: string, storyKey: string): Promise<boolean> {
+  if (!(await assertProjectVisible(req, projectId))) return false;
+  const [story] = await db.select({ id: archiveItemsTable.id }).from(archiveItemsTable).where(and(
+    eq(archiveItemsTable.id, storyKey),
+    eq(archiveItemsTable.projectId, projectId),
+    isNull(archiveItemsTable.deletedAt),
+  )).limit(1);
+  return !!story;
+}
+
+type RecommendationCriteria = {
+  terms?: string[];
+  targetPhrases?: ExactTargetPhrase[];
+  baseScores?: Record<string, number>;
+  brief?: TargetingBrief;
+  assessments?: Record<string, EditorialAssessment>;
+  evidence?: Record<string, unknown[]>;
+  warnings?: Record<string, string[]>;
+  rankingVersion?: string;
+};
+
+const emptyTargetingBrief = (terms: string[], phrases: ExactTargetPhrase[]): TargetingBrief => ({
+  topic: terms.join(", "),
+  angle: phrases.map((phrase) => phrase.text).join(", "),
+  audience: "",
+  regions: [],
+  publicationTypes: [],
+  whyNow: "",
+});
+
+function normaliseBrief(value: unknown, fallback: TargetingBrief): TargetingBrief {
+  const raw = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const strings = (input: unknown) => Array.isArray(input)
+    ? input.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean).slice(0, 20)
+    : [];
+  return {
+    topic: typeof raw.topic === "string" ? raw.topic.trim().slice(0, 1000) : fallback.topic,
+    angle: typeof raw.angle === "string" ? raw.angle.trim().slice(0, 1000) : fallback.angle,
+    audience: typeof raw.audience === "string" ? raw.audience.trim().slice(0, 1000) : fallback.audience,
+    regions: strings(raw.regions),
+    publicationTypes: strings(raw.publicationTypes),
+    whyNow: typeof raw.whyNow === "string" ? raw.whyNow.trim().slice(0, 1000) : fallback.whyNow,
+  };
+}
+
+function briefsEqual(left: TargetingBrief, right: TargetingBrief): boolean {
+  return left.topic === right.topic && left.angle === right.angle && left.audience === right.audience
+    && left.whyNow === right.whyNow
+    && JSON.stringify(left.regions) === JSON.stringify(right.regions)
+    && JSON.stringify(left.publicationTypes) === JSON.stringify(right.publicationTypes);
+}
+
+function normalisedEvidenceUrl(value: unknown): string {
+  if (typeof value !== "string") return "";
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    url.hostname = url.hostname.toLowerCase();
+    for (const key of [...url.searchParams.keys()]) if (/^(utm_|fbclid$|gclid$)/i.test(key)) url.searchParams.delete(key);
+    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return url.toString();
+  } catch {
+    return value.trim().toLowerCase();
+  }
+}
+
+function mergeCoverageEvidence(previous: unknown[], next: unknown[]): unknown[] {
+  const merged = new Map<string, unknown>();
+  for (const item of previous) {
+    const key = normalisedEvidenceUrl(item && typeof item === "object" ? (item as Record<string, unknown>).url : "");
+    if (key) merged.set(key, item);
+  }
+  for (const item of next) {
+    const key = normalisedEvidenceUrl(item && typeof item === "object" ? (item as Record<string, unknown>).url : "");
+    if (!key) continue;
+    const prior = merged.get(key);
+    const priorChecked = prior && typeof prior === "object" && (prior as Record<string, unknown>).attribution === "page_checked";
+    const freshSuggested = item && typeof item === "object" && (item as Record<string, unknown>).attribution !== "page_checked";
+    // A failed check must never downgrade a prior page verification.
+    if (!priorChecked || !freshSuggested) merged.set(key, item);
+  }
+  return [...merged.values()];
+}
+
+function recommendationMetaKey(kind: "brief" | "restriction", owner: string, projectId: string, storyKey: string, contactId?: number): string {
+  return `mediaRecommendation:${kind}:${owner}:${projectId}:${storyKey}${contactId === undefined ? "" : `:${contactId}`}`;
+}
+
+async function savedRecommendationBrief(owner: string, projectId: string, storyKey: string): Promise<TargetingBrief | null> {
+  const [row] = await db.select({ value: platformMetaTable.value }).from(platformMetaTable)
+    .where(eq(platformMetaTable.key, recommendationMetaKey("brief", owner, projectId, storyKey))).limit(1);
+  if (!row) return null;
+  try {
+    const parsed = JSON.parse(row.value);
+    return normaliseBrief(parsed, emptyTargetingBrief([], []));
+  } catch {
+    return null;
+  }
+}
+
+async function restrictedContactIds(owner: string, projectId: string, storyKey: string): Promise<Set<number>> {
+  const rows = await db.select({ key: platformMetaTable.key, value: platformMetaTable.value })
+    .from(platformMetaTable)
+    .where(sql`${platformMetaTable.key} LIKE ${`mediaRecommendation:restriction:${owner}:${projectId}:${storyKey}:%`}`);
+  return new Set(rows.filter((row) => row.value === "true").map((row) => Number(row.key.split(":").pop())).filter(Number.isFinite));
+}
+
+async function saveRecommendationMeta(key: string, value: string): Promise<void> {
+  await db.insert(platformMetaTable).values({ key, value })
+    .onConflictDoUpdate({ target: platformMetaTable.key, set: { value } });
+}
+
+async function deleteRecommendationMeta(key: string): Promise<void> {
+  await db.delete(platformMetaTable).where(eq(platformMetaTable.key, key));
+}
+
+async function departedContactIds(contactIds: number[], accountId?: string): Promise<Set<number>> {
+  if (!contactIds.length) return new Set();
+  const rows = await db.select().from(mediaContactStatusEventsTable)
+    .where(and(inArray(mediaContactStatusEventsTable.contactId, contactIds), ...(accountId ? [eq(mediaContactStatusEventsTable.accountId, accountId)] : [])))
+    .orderBy(desc(mediaContactStatusEventsTable.id));
+  const latest = new Map<number, typeof rows[number]>();
+  for (const row of rows) if (!latest.has(row.contactId)) latest.set(row.contactId, row);
+  return new Set([...latest].filter(([, row]) => row.status === "departed").map(([id]) => id));
+}
+
+async function evaluationSummary(accountId: string, projectId: string, storyKey: string, evaluated: number, shortlisted: number) {
+  const [outreach, decisions] = await Promise.all([
+    db.select({ status: mediaOutreachTable.status, contactId: mediaOutreachTable.contactId }).from(mediaOutreachTable).where(and(
+      eq(mediaOutreachTable.accountId, accountId), eq(mediaOutreachTable.projectId, projectId), eq(mediaOutreachTable.storyKey, storyKey),
+    )),
+    db.select({ decision: mediaRecommendationDecisionsTable.decision, contactId: mediaRecommendationDecisionsTable.contactId }).from(mediaRecommendationDecisionsTable).where(and(
+      eq(mediaRecommendationDecisionsTable.accountId, accountId), eq(mediaRecommendationDecisionsTable.projectId, projectId), eq(mediaRecommendationDecisionsTable.storyKey, storyKey),
+    )),
+  ]);
+  return {
+    evaluated,
+    shortlisted: decisions.filter((row) => row.decision === "shortlisted").length,
+    contacted: new Set([
+      ...outreach.filter((row) => row.status !== "planned" && row.contactId !== null).map((row) => row.contactId as number),
+      ...decisions.filter((row) => row.decision === "contacted" && row.contactId !== null).map((row) => row.contactId),
+    ]).size,
+    responded: outreach.filter((row) => ["responded", "accepted", "declined", "placed"].includes(row.status)).length,
+    placed: outreach.filter((row) => row.status === "placed").length,
+  };
+}
+
 type RefinementContact = {
   id: number;
   beats: string[];
@@ -1808,6 +1958,44 @@ async function rerankRecommendationSet(accountId: string, projectId: string, sto
   return ranked;
 }
 
+router.get("/store/media-db/recommendations/brief", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  const projectId = typeof req.query.projectId === "string" ? req.query.projectId.trim() : "";
+  const storyKey = typeof req.query.storyKey === "string" ? req.query.storyKey.trim().slice(0, 200) : "";
+  const owner = projectId ? await visibleProjectOwner(req, projectId) : null;
+  if (!owner || !storyKey || !(await assertCanonicalStoryVisible(req, projectId, storyKey))) { res.status(404).json({ error: "Project or article not found" }); return; }
+  res.json({ brief: await savedRecommendationBrief(owner, projectId, storyKey) });
+});
+
+router.put("/store/media-db/recommendations/brief", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  const projectId = typeof req.body?.projectId === "string" ? req.body.projectId.trim() : "";
+  const storyKey = typeof req.body?.storyKey === "string" ? req.body.storyKey.trim().slice(0, 200) : "";
+  const owner = projectId ? await visibleProjectOwner(req, projectId) : null;
+  if (!owner || !storyKey || !(await assertCanonicalStoryVisible(req, projectId, storyKey)) || !req.body?.brief || typeof req.body.brief !== "object") { res.status(400).json({ error: "A valid project, article and targeting brief are required." }); return; }
+  const brief = normaliseBrief(req.body.brief, emptyTargetingBrief([], []));
+  await saveRecommendationMeta(recommendationMetaKey("brief", owner, projectId, storyKey), JSON.stringify(brief));
+  res.json({ brief });
+});
+
+router.post("/store/media-db/recommendations/contact-restriction", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  const projectId = typeof req.body?.projectId === "string" ? req.body.projectId.trim() : "";
+  const storyKey = typeof req.body?.storyKey === "string" ? req.body.storyKey.trim().slice(0, 200) : "";
+  const contactId = Number(req.body?.contactId);
+  const owner = projectId ? await visibleProjectOwner(req, projectId) : null;
+  if (!owner || !storyKey || !(await assertCanonicalStoryVisible(req, projectId, storyKey)) || !Number.isInteger(contactId) || contactId < 1 || typeof req.body?.doNotContact !== "boolean") {
+    res.status(400).json({ error: "Invalid contact restriction or project" }); return;
+  }
+  const visible = await visibleAccounts(req);
+  const [contact] = await db.select({ accountId: mediaContactsTable.accountId, deletedAt: mediaContactsTable.deletedAt })
+    .from(mediaContactsTable).where(eq(mediaContactsTable.id, contactId)).limit(1);
+  if (!contact || contact.deletedAt || (contact.accountId !== null && visible !== null && !visible.includes(contact.accountId))) {
+    res.status(403).json({ error: "Contact is not available to this account" }); return;
+  }
+  const key = recommendationMetaKey("restriction", owner, projectId, storyKey, contactId);
+  if (req.body.doNotContact) await saveRecommendationMeta(key, "true");
+  else await deleteRecommendationMeta(key);
+  res.json({ doNotContact: req.body.doNotContact });
+});
+
 // Deterministic, database-only recommendations. No LLM or external lookup is
 // involved, making a story's shortlist repeatable and auditable.
 router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
@@ -1820,11 +2008,30 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
       return;
     }
     const targetPhrases = normaliseSubmittedPhrases(req.body?.targetPhrases);
-    if (!projectId || !storyKey || !(await assertProjectVisible(req, projectId))) { res.status(404).json({ error: "Project not found" }); return; }
-    const accountId = normUsername(req.account!.username);
+    if (!projectId || !storyKey || !(await assertCanonicalStoryVisible(req, projectId, storyKey))) { res.status(404).json({ error: "Project or article not found" }); return; }
+    const owner = await visibleProjectOwner(req, projectId);
+    if (!owner) { res.status(404).json({ error: "Project not found" }); return; }
+    // Recommendation archives belong to the project owner's workspace, not to
+    // the particular human member who happened to generate them.
+    const accountId = owner;
+    const derivedBrief = emptyTargetingBrief(terms, targetPhrases);
+    const brief = normaliseBrief(req.body?.brief ?? await savedRecommendationBrief(owner, projectId, storyKey), derivedBrief);
+    await saveRecommendationMeta(recommendationMetaKey("brief", owner, projectId, storyKey), JSON.stringify(brief));
+    const [previousSet] = await db.select({ criteria: mediaRecommendationSetsTable.criteria })
+      .from(mediaRecommendationSetsTable).where(and(
+        eq(mediaRecommendationSetsTable.accountId, accountId), eq(mediaRecommendationSetsTable.projectId, projectId),
+        eq(mediaRecommendationSetsTable.storyKey, storyKey),
+      )).orderBy(desc(mediaRecommendationSetsTable.id)).limit(1);
+    const previousCriteria = (previousSet?.criteria ?? {}) as RecommendationCriteria;
+    const priorEvidence = previousCriteria.evidence ?? {};
+    const priorWarnings = previousCriteria.warnings ?? {};
     const visible = await visibleAccounts(req);
     const contacts = (await db.select().from(mediaContactsTable).where(isNull(mediaContactsTable.deletedAt)))
       .filter((contact) => contact.accountId === null || visible === null || visible.includes(contact.accountId));
+    const [departed, restrictions] = await Promise.all([
+      departedContactIds(contacts.map((contact) => contact.id), owner),
+      restrictedContactIds(owner, projectId, storyKey),
+    ]);
     const outlets = await db.select().from(mediaOutletsTable).where(isNull(mediaOutletsTable.deletedAt));
     const outletById = new Map(outlets.filter((outlet) => outletVisible(outlet.accountId, visible)).map((outlet) => [outlet.id, outlet]));
     const ranked = contacts.map((contact) => {
@@ -1836,6 +2043,18 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
         ...baseRecommendation.reasons,
       ];
       const outlet = contact.outletId ? outletById.get(contact.outletId) : undefined;
+      const departedContact = departed.has(contact.id);
+      const doNotContact = restrictions.has(contact.id);
+      const assessment = assessEditorialFit({
+        contact,
+        outlet,
+        brief,
+        terms,
+        targetPhrases,
+        evidence: priorEvidence[String(contact.id)] ?? [],
+        departed: departedContact,
+        doNotContact,
+      });
       return {
         contact: {
           ...contact,
@@ -1845,8 +2064,9 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
           outletCountry: outlet?.country ?? null,
           outletReachBand: outlet?.reachBand ?? null,
         },
-        score: Math.min(100, phraseMatches.exact.length * 45 + phraseMatches.topic.length * 15 + baseRecommendation.score),
+        score: Math.max(Number(assessment.fitScore ?? 0), phraseMatches.exact.length * 15 + phraseMatches.topic.length * 5),
         reasons,
+        assessment,
         phraseAttributions: buildPhraseAttributions({
           role: contact.role,
           beats: contact.beats,
@@ -1856,12 +2076,20 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
           outletCategory: outlet?.category,
         }, targetPhrases),
       };
-    }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score || a.contact.id - b.contact.id).slice(0, 100);
+    }).filter((item) => item.score > 0 && item.assessment.readiness.status !== "blocked"
+      && (!item.contact.outletId || outletById.has(item.contact.outletId)))
+      .sort((a, b) => b.score - a.score || a.contact.id - b.contact.id).slice(0, 100);
+    const assessments = Object.fromEntries(contacts.map((contact) => {
+      const item = ranked.find((entry) => entry.contact.id === contact.id);
+      if (item) return [String(contact.id), item.assessment];
+      const outlet = contact.outletId ? outletById.get(contact.outletId) : undefined;
+      return [String(contact.id), assessEditorialFit({ contact, outlet, brief, terms, targetPhrases, evidence: priorEvidence[String(contact.id)] ?? [], departed: departed.has(contact.id), doNotContact: restrictions.has(contact.id) })];
+    }));
     const [set] = await db.insert(mediaRecommendationSetsTable).values({
       accountId,
       projectId,
       storyKey,
-      criteria: { terms, targetPhrases, baseScores: Object.fromEntries(ranked.map((item) => [String(item.contact.id), item.score])) },
+      criteria: { terms, targetPhrases, brief, assessments, evidence: priorEvidence, warnings: priorWarnings, rankingVersion: "editorial-v1", baseScores: Object.fromEntries(ranked.map((item) => [String(item.contact.id), item.score])) },
     }).returning();
     if (ranked.length) await db.insert(mediaRecommendationItemsTable).values(ranked.map((item, index) => ({ recommendationSetId: set.id, contactId: item.contact.id, score: item.score, reasons: item.reasons, phraseAttributions: item.phraseAttributions, rank: index + 1 })));
     const refined = await rerankRecommendationSet(accountId, projectId, storyKey);
@@ -1875,7 +2103,10 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
         score: entry.score,
         reasons: entry.reasons,
         phraseAttributions: entry.item.phraseAttributions,
+         assessment: (set.criteria as RecommendationCriteria).assessments?.[String(entry.item.contactId)] ?? null,
       })),
+       brief,
+       evaluation: await evaluationSummary(accountId, projectId, storyKey, contacts.length, ranked.length),
     });
   } catch (error) { req.log.error({ err: error }, "media recommendations failed"); res.status(500).json({ error: "Failed to create recommendations" }); }
 });
@@ -2053,6 +2284,204 @@ router.delete("/store/media-db/recommendations/feedback", requirePlatformAuth, a
   } catch (error) { req.log.error({ err: error }, "media refinement reset failed"); res.status(500).json({ error: "Failed to reset recommendation refinement" }); }
 });
 
+router.get("/store/media-db/recommendations", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  const projectId = typeof req.query.projectId === "string" ? req.query.projectId.trim() : "";
+  const storyKey = typeof req.query.storyKey === "string" ? req.query.storyKey.trim().slice(0, 200) : "";
+  if (!projectId || !storyKey || !(await assertCanonicalStoryVisible(req, projectId, storyKey))) { res.status(404).json({ error: "Project or article not found" }); return; }
+  const accountId = await visibleProjectOwner(req, projectId);
+  if (!accountId) { res.status(404).json({ error: "Project not found" }); return; }
+  const [set] = await db.select().from(mediaRecommendationSetsTable).where(and(
+    eq(mediaRecommendationSetsTable.accountId, accountId), eq(mediaRecommendationSetsTable.projectId, projectId), eq(mediaRecommendationSetsTable.storyKey, storyKey),
+  )).orderBy(desc(mediaRecommendationSetsTable.id)).limit(1);
+  if (!set) {
+    res.json({ ok: true, recommendationSet: null, items: [], brief: null, evaluation: await evaluationSummary(accountId, projectId, storyKey, 0, 0) });
+    return;
+  }
+  const criteria = (set.criteria ?? {}) as RecommendationCriteria;
+  const savedBrief = criteria.brief ?? await savedRecommendationBrief(accountId, projectId, storyKey);
+  const visible = await visibleAccounts(req);
+  const rows = await db.select({
+    item: mediaRecommendationItemsTable,
+    contact: mediaContactsTable,
+    outletName: mediaOutletsTable.name,
+    outletCategory: mediaOutletsTable.category,
+    outletWebsite: mediaOutletsTable.website,
+    outletCountry: mediaOutletsTable.country,
+    outletReachBand: mediaOutletsTable.reachBand,
+    outletAccountId: mediaOutletsTable.accountId,
+    outletDeletedAt: mediaOutletsTable.deletedAt,
+  }).from(mediaRecommendationItemsTable)
+    .innerJoin(mediaContactsTable, eq(mediaRecommendationItemsTable.contactId, mediaContactsTable.id))
+    .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
+    .where(and(eq(mediaRecommendationItemsTable.recommendationSetId, set.id), isNull(mediaContactsTable.deletedAt)));
+  const visibleRows = filterVisibleRecommendationItems(rows.map((row) => ({ ...row, contact: row.contact })), visible);
+  const [currentRestrictions, currentDeparted] = await Promise.all([
+    restrictedContactIds(accountId, projectId, storyKey),
+    departedContactIds(visibleRows.map((row) => row.contact.id), accountId),
+  ]);
+  const items = visibleRows.map((row) => {
+    const canSeeOutlet = !row.outletDeletedAt && outletVisible(row.outletAccountId, visible);
+    const outletFields = canSeeOutlet
+      ? { outletName: row.outletName, outletCategory: row.outletCategory, outletWebsite: row.outletWebsite, outletCountry: row.outletCountry, outletReachBand: row.outletReachBand }
+      : { outletName: null, outletCategory: null, outletWebsite: null, outletCountry: null, outletReachBand: null };
+    const baseAssessment = assessEditorialFit({
+      contact: row.contact,
+      outlet: canSeeOutlet ? { name: row.outletName, category: row.outletCategory, website: row.outletWebsite, country: row.outletCountry, reachBand: row.outletReachBand } : {},
+    brief: savedBrief ?? emptyTargetingBrief(criteria.terms ?? [], criteria.targetPhrases ?? []),
+      terms: criteria.terms,
+      targetPhrases: criteria.targetPhrases,
+      evidence: criteria.evidence?.[String(row.contact.id)] ?? [],
+      departed: currentDeparted.has(row.contact.id),
+      doNotContact: currentRestrictions.has(row.contact.id),
+    });
+    const assessment = {
+      ...baseAssessment,
+      warnings: [...baseAssessment.warnings, ...(criteria.warnings?.[String(row.contact.id)] ?? [])],
+    };
+    return {
+      rank: row.item.rank, contact: { ...row.contact, ...outletFields }, score: row.item.score, reasons: row.item.reasons,
+      phraseAttributions: row.item.phraseAttributions, assessment,
+    };
+  });
+  res.json({
+    ok: true, recommendationSet: set, items, brief: savedBrief,
+    evaluation: await evaluationSummary(accountId, projectId, storyKey, Object.keys(criteria.assessments ?? {}).length, items.length),
+  });
+});
+
+router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const projectId = typeof req.body?.projectId === "string" ? req.body.projectId.trim() : "";
+    const storyKey = typeof req.body?.storyKey === "string" ? req.body.storyKey.trim().slice(0, 200) : "";
+    const recommendationSetId = Number(req.body?.recommendationSetId);
+    if (!projectId || !storyKey || !Number.isInteger(recommendationSetId) || !(await assertCanonicalStoryVisible(req, projectId, storyKey))) {
+      res.status(400).json({ error: "Invalid recommendation set or project" }); return;
+    }
+    const owner = await visibleProjectOwner(req, projectId);
+    if (!owner) { res.status(404).json({ error: "Project not found" }); return; }
+    const accountId = owner;
+    const spend = await checkMonthlySpendLimit(accountId);
+    if (!spend.allowed) { res.status(429).json({ error: "Monthly spending limit reached." }); return; }
+    const usage = await checkFairUsage(accountId, projectId);
+    if (!usage.allowed) { res.status(429).json({ error: "This project's AI usage limit has been reached." }); return; }
+    const [set] = await db.select().from(mediaRecommendationSetsTable).where(and(
+      eq(mediaRecommendationSetsTable.id, recommendationSetId), eq(mediaRecommendationSetsTable.accountId, accountId),
+      eq(mediaRecommendationSetsTable.projectId, projectId), eq(mediaRecommendationSetsTable.storyKey, storyKey),
+    )).limit(1);
+    if (!set) { res.status(404).json({ error: "Recommendation set not found" }); return; }
+    const criteria = (set.criteria ?? {}) as RecommendationCriteria;
+    const brief = await savedRecommendationBrief(owner, projectId, storyKey);
+    if (!brief) {
+      res.status(409).json({ error: "A saved targeting brief is required before enrichment." });
+      return;
+    }
+    const rows = await db.select({ item: mediaRecommendationItemsTable, contact: mediaContactsTable, outlet: mediaOutletsTable })
+      .from(mediaRecommendationItemsTable).innerJoin(mediaContactsTable, eq(mediaRecommendationItemsTable.contactId, mediaContactsTable.id))
+      .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
+      .where(eq(mediaRecommendationItemsTable.recommendationSetId, set.id))
+      .orderBy(mediaRecommendationItemsTable.rank);
+    const enrichmentRows = rows.slice(0, 5);
+    const restrictions = await restrictedContactIds(owner, projectId, storyKey);
+    const departed = await departedContactIds(rows.map((row) => row.contact.id), owner);
+    const assessments: Record<string, EditorialAssessment> = { ...(criteria.assessments ?? {}) };
+    const evidence: Record<string, unknown[]> = { ...(criteria.evidence ?? {}) };
+    const warnings: Record<string, string[]> = { ...(criteria.warnings ?? {}) };
+    const enriched: Array<typeof rows[number] & { assessment: EditorialAssessment; score: number }> = [];
+    try {
+      // Keep provider calls bounded and auditable. The set itself is already
+      // sorted, and only its first five candidates may trigger enrichment.
+      for (const row of enrichmentRows) {
+        const collected = await collectJournalistCoverage({
+          contact: {
+            name: `${row.contact.firstName} ${row.contact.lastName}`.trim(),
+            outletName: row.outlet?.name,
+            sourceUrl: row.contact.sourceUrl,
+          },
+          brief,
+          now: new Date(),
+        });
+        const priorEvidence = criteria.evidence?.[String(row.contact.id)] ?? [];
+        evidence[String(row.contact.id)] = mergeCoverageEvidence(priorEvidence, collected.evidence);
+        warnings[String(row.contact.id)] = [...new Set([
+          ...(criteria.warnings?.[String(row.contact.id)] ?? []),
+          ...collected.warnings,
+        ])];
+        const baseAssessment = assessEditorialFit({
+          contact: row.contact, outlet: row.outlet, brief, terms: criteria.terms,
+          targetPhrases: criteria.targetPhrases, evidence: evidence[String(row.contact.id)],
+          departed: departed.has(row.contact.id), doNotContact: restrictions.has(row.contact.id),
+        });
+        const assessment = { ...baseAssessment, warnings: [...baseAssessment.warnings, ...collected.warnings] };
+        assessments[String(row.contact.id)] = assessment;
+        enriched.push({ ...row, assessment, score: assessment.fitScore ?? row.item.score });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Coverage collection failed";
+      res.status(502).json({ error: `Failed to collect journalist coverage: ${message}` });
+      return;
+    }
+    // Count the completed provider action only after all bounded collection
+    // calls succeed. A failed enrichment therefore consumes no AI usage.
+    await db.insert(tokenUsageTable).values({
+      accountId,
+      operation: "content-media-recommendations-enrich",
+      model: "gpt-5.4-mini",
+      inputTokens: 0,
+      outputTokens: 0,
+      costGbpEstimate: "0",
+      projectId,
+    });
+    const latestBrief = await savedRecommendationBrief(owner, projectId, storyKey);
+    if (latestBrief && !briefsEqual(latestBrief, brief)) {
+      res.status(409).json({ error: "Recommendations changed while enrichment was running. Reload and try again." });
+      return;
+    }
+    const nextCriteria: RecommendationCriteria = { ...criteria, brief, assessments, evidence, warnings, rankingVersion: "editorial-v1" };
+    const committed = await db.transaction(async (tx) => {
+      // Criteria is the optimistic-lock snapshot. Two slow enrichments can
+      // both finish provider calls, but only the first one may commit its
+      // evidence and item scores.
+      const [updated] = await tx.update(mediaRecommendationSetsTable)
+        .set({ criteria: nextCriteria })
+        .where(and(
+          eq(mediaRecommendationSetsTable.id, set.id),
+          sql`${mediaRecommendationSetsTable.criteria} = ${JSON.stringify(criteria)}::jsonb`,
+        ))
+        .returning();
+      if (!updated) return { race: true as const };
+      await Promise.all(enriched.map((row, index) => tx.update(mediaRecommendationItemsTable)
+        .set({ score: row.score, rank: index + 1 }).where(and(
+          eq(mediaRecommendationItemsTable.id, row.item.id),
+          eq(mediaRecommendationItemsTable.recommendationSetId, set.id),
+        ))));
+      return { race: false as const, updated };
+    });
+    if (committed.race) {
+      res.status(409).json({ error: "Recommendations changed while enrichment was running. Reload and try again." });
+      return;
+    }
+    const updatedSet = committed.updated;
+    res.json({
+      ok: true, recommendationSet: updatedSet,
+       items: rows.map((row, index) => {
+         const enrichedRow = enriched.find((candidate) => candidate.contact.id === row.contact.id);
+         return {
+           rank: index + 1,
+           contact: { ...row.contact, outletName: row.outlet?.name ?? null, outletCategory: row.outlet?.category ?? null, outletWebsite: row.outlet?.website ?? null, outletCountry: row.outlet?.country ?? null, outletReachBand: row.outlet?.reachBand ?? null },
+           score: enrichedRow?.score ?? row.item.score,
+           reasons: row.item.reasons,
+           phraseAttributions: row.item.phraseAttributions,
+           assessment: enrichedRow?.assessment ?? assessments[String(row.contact.id)] ?? null,
+         };
+       }),
+      brief, evaluation: await evaluationSummary(accountId, projectId, storyKey, Object.keys(assessments).length, enriched.length),
+    });
+  } catch (error) {
+    req.log.error({ err: error }, "media recommendation enrichment failed");
+    res.status(500).json({ error: "Failed to enrich recommendations" });
+  }
+});
+
 router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
   const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "";
   const storyKey = typeof req.query.storyKey === "string" ? req.query.storyKey : "";
@@ -2063,17 +2492,22 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
   // Re-running an automatic recommendation intentionally leaves the prior set
   // auditable. Only the newest scoped set is applicable to this view; loading
   // every historical set would render the same contact repeatedly.
-  const sets = await db.select({ id: mediaRecommendationSetsTable.id })
+  const sets = await db.select({ id: mediaRecommendationSetsTable.id, criteria: mediaRecommendationSetsTable.criteria })
     .from(mediaRecommendationSetsTable)
     .where(and(eq(mediaRecommendationSetsTable.accountId, accountId), eq(mediaRecommendationSetsTable.projectId, projectId), eq(mediaRecommendationSetsTable.storyKey, storyKey)))
     .orderBy(desc(mediaRecommendationSetsTable.createdAt), desc(mediaRecommendationSetsTable.id))
     .limit(1);
   const feedback = await db.select().from(mediaRecommendationFeedbackTable).where(and(eq(mediaRecommendationFeedbackTable.accountId, accountId), eq(mediaRecommendationFeedbackTable.projectId, projectId), eq(mediaRecommendationFeedbackTable.storyKey, storyKey)));
+  const recommendationCriteria = (sets[0]?.criteria ?? {}) as RecommendationCriteria;
   const candidateItems = sets.length ? await db.select({ id: mediaRecommendationItemsTable.id, recommendationSetId: mediaRecommendationItemsTable.recommendationSetId, score: mediaRecommendationItemsTable.score, rank: mediaRecommendationItemsTable.rank, reasons: mediaRecommendationItemsTable.reasons, phraseAttributions: mediaRecommendationItemsTable.phraseAttributions, contact: mediaContactsTable, outletName: mediaOutletsTable.name, outletCategory: mediaOutletsTable.category, outletWebsite: mediaOutletsTable.website, outletCountry: mediaOutletsTable.country, outletReachBand: mediaOutletsTable.reachBand, outletAccountId: mediaOutletsTable.accountId, outletDeletedAt: mediaOutletsTable.deletedAt })
     .from(mediaRecommendationItemsTable)
     .innerJoin(mediaContactsTable, eq(mediaRecommendationItemsTable.contactId, mediaContactsTable.id))
     .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
     .where(and(eq(mediaRecommendationItemsTable.recommendationSetId, sets[0].id), isNull(mediaContactsTable.deletedAt))) : [];
+  const [decisionRestrictions, decisionDeparted] = await Promise.all([
+    restrictedContactIds(accountId, projectId, storyKey),
+    departedContactIds(candidateItems.map((item) => item.contact.id), accountId),
+  ]);
   const seenContacts = new Set<number>();
   const items = filterVisibleRecommendationItems(candidateItems, visible).filter((item) => {
     if (seenContacts.has(item.contact.id)) return false;
@@ -2100,6 +2534,22 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
       outletAccountId: undefined,
       outletDeletedAt: undefined,
       contact: { ...item.contact, ...outletFields },
+      assessment: {
+        ...assessEditorialFit({
+          contact: item.contact,
+          outlet: canSeeOutlet ? { name: item.outletName, category: item.outletCategory, website: item.outletWebsite, country: item.outletCountry, reachBand: item.outletReachBand } : {},
+          brief: recommendationCriteria.brief ?? emptyTargetingBrief(recommendationCriteria.terms ?? [], recommendationCriteria.targetPhrases ?? []),
+          terms: recommendationCriteria.terms,
+          targetPhrases: recommendationCriteria.targetPhrases,
+          evidence: recommendationCriteria.evidence?.[String(item.contact.id)] ?? [],
+          departed: decisionDeparted.has(item.contact.id),
+          doNotContact: decisionRestrictions.has(item.contact.id),
+        }),
+        warnings: [
+          ...(recommendationCriteria.assessments?.[String(item.contact.id)]?.warnings ?? []),
+          ...(recommendationCriteria.warnings?.[String(item.contact.id)] ?? []),
+        ],
+      },
     };
   });
   // A shortlisted decision is durable user state, not a claim that the
@@ -2135,7 +2585,20 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
       outletCountry: null,
       outletReachBand: null,
     };
-    return [{ contactId: row.contact.id, contact: { ...row.contact, ...outletFields } }];
+    const baseAssessment = assessEditorialFit({
+      contact: row.contact,
+      outlet: canSeeOutlet ? { name: row.outletName, category: row.outletCategory, website: row.outletWebsite, country: row.outletCountry, reachBand: row.outletReachBand } : {},
+      brief: recommendationCriteria.brief ?? emptyTargetingBrief(recommendationCriteria.terms ?? [], recommendationCriteria.targetPhrases ?? []),
+      terms: recommendationCriteria.terms,
+      targetPhrases: recommendationCriteria.targetPhrases,
+      evidence: recommendationCriteria.evidence?.[String(row.contact.id)] ?? [],
+      departed: decisionDeparted.has(row.contact.id),
+      doNotContact: decisionRestrictions.has(row.contact.id),
+    });
+    return [{ contactId: row.contact.id, contact: { ...row.contact, ...outletFields }, assessment: {
+      ...baseAssessment,
+      warnings: [...baseAssessment.warnings, ...(recommendationCriteria.warnings?.[String(row.contact.id)] ?? [])],
+    } }];
   });
   res.json({ decisions, items, decisionContacts, feedback });
 });
@@ -2173,6 +2636,14 @@ router.post("/store/media-db/outreach", requirePlatformAuth, async (req: Request
     if (!contact || (contact.contact.accountId !== null && contact.contact.accountId !== accountId && contact.contact.accountId !== actorAccountId)) { res.status(403).json({ error: "Contact is not available to this project's workspace" }); return; }
     const existing = await db.select().from(mediaOutreachTable).where(and(eq(mediaOutreachTable.accountId, accountId), eq(mediaOutreachTable.projectId, projectId), eq(mediaOutreachTable.storyKey, storyKey), eq(mediaOutreachTable.contactId, contactId))).limit(1);
     if (existing[0]) { res.status(200).json({ ok: true, outreach: existing[0], existing: true }); return; }
+    const [blockedByStatus, restrictions] = await Promise.all([
+      departedContactIds([contactId], accountId),
+      restrictedContactIds(accountId, projectId, storyKey),
+    ]);
+    if (blockedByStatus.has(contactId) || restrictions.has(contactId)) {
+      res.status(409).json({ error: "This contact is not eligible for new outreach." });
+      return;
+    }
     const status: MediaOutreachStatus = "planned";
     const actor = req.account!.username;
     const [row] = await db.transaction(async (tx) => {
@@ -2203,6 +2674,16 @@ router.put("/store/media-db/outreach/:id", requirePlatformAuth, async (req: Requ
     if (nextStatus && nextStatus !== current.status && !OUTREACH_TRANSITIONS[current.status].includes(nextStatus)) { res.status(409).json({ error: `Cannot move outreach from ${current.status} to ${nextStatus}.` }); return; }
     if (nextStatus === "pitched" && !parseDate(req.body?.pitchDate) && !current.pitchDate) { res.status(400).json({ error: "A pitch date is required when marking outreach as pitched." }); return; }
     if (nextStatus === "responded" && !parseDate(req.body?.responseDate) && !current.responseDate) { res.status(400).json({ error: "A response date is required when recording a response." }); return; }
+    if (nextStatus === "pitched") {
+      const [blockedByStatus, restrictions] = await Promise.all([
+        current.contactId ? departedContactIds([current.contactId], accountId) : Promise.resolve(new Set<number>()),
+        current.contactId ? restrictedContactIds(accountId, current.projectId, current.storyKey) : Promise.resolve(new Set<number>()),
+      ]);
+      if ((current.contactId && blockedByStatus.has(current.contactId)) || (current.contactId && restrictions.has(current.contactId))) {
+        res.status(409).json({ error: "This contact is not eligible to be pitched." });
+        return;
+      }
+    }
     const updates = {
       status: nextStatus ?? current.status,
       pitchDate: parseDate(req.body?.pitchDate) ?? current.pitchDate,

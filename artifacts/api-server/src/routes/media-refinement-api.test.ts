@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import express from "express";
-import { getTableColumns, sql } from "drizzle-orm";
+import { eq, getTableColumns, sql } from "drizzle-orm";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
+
+const { collectJournalistCoverage } = vi.hoisted(() => ({ collectJournalistCoverage: vi.fn() }));
 
 vi.mock("@workspace/db", async () => {
   const { PGlite } = await import("@electric-sql/pglite");
@@ -12,6 +14,34 @@ vi.mock("@workspace/db", async () => {
   const db = drizzle(client, { schema });
   await client.exec(`
     CREATE TABLE projects (id varchar PRIMARY KEY, name varchar NOT NULL DEFAULT '', data jsonb NOT NULL DEFAULT '{}', intake jsonb, logo text, owner varchar, tier varchar(16), updated_at timestamptz NOT NULL DEFAULT now(), deleted_at timestamptz);
+    CREATE TABLE platform_accounts (
+      username varchar PRIMARY KEY, password_hash text NOT NULL DEFAULT '', role varchar NOT NULL DEFAULT 'agency',
+      parent varchar, max_seats integer, created_at timestamptz NOT NULL DEFAULT now(), email varchar, website varchar,
+      status varchar NOT NULL DEFAULT 'active'
+    );
+    CREATE TABLE platform_companies (
+      id varchar PRIMARY KEY, slug varchar UNIQUE NOT NULL, role varchar NOT NULL DEFAULT 'agency',
+      parent_slug varchar, free_access boolean NOT NULL DEFAULT true, status varchar NOT NULL DEFAULT 'active',
+      plan varchar(16), billing_frequency varchar(16), subscription_status varchar(16),
+      stripe_customer_id text, stripe_subscription_id text, current_period_end timestamptz,
+      beta_trial_started_at timestamptz, beta_trial_ends_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE platform_meta (key varchar PRIMARY KEY, value text NOT NULL);
+    CREATE TABLE token_usage (
+      id serial PRIMARY KEY, account_id varchar(200) NOT NULL, operation varchar(80) NOT NULL,
+      model varchar(80) NOT NULL, input_tokens integer NOT NULL DEFAULT 0,
+      output_tokens integer NOT NULL DEFAULT 0, cost_gbp_estimate numeric(10,6),
+      project_id varchar(200), created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE archive_items (
+      id varchar PRIMARY KEY, project_id varchar NOT NULL, owner varchar NOT NULL, title varchar NOT NULL DEFAULT '',
+      content_type varchar NOT NULL DEFAULT '', spokesperson varchar, status varchar NOT NULL DEFAULT 'Draft',
+      tags jsonb, headline text, standfirst text, body_copy text, action_notes text, body text,
+      selected_messages jsonb, media_cats jsonb, target_phrases jsonb, target_phrase_ids jsonb,
+      pub_date varchar, released_at varchar, release_channel varchar, source varchar,
+      created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), deleted_at timestamptz
+    );
     CREATE TABLE media_outlets (
       id serial PRIMARY KEY, name text NOT NULL, category text NOT NULL DEFAULT '', website text NOT NULL DEFAULT '',
       description text NOT NULL DEFAULT '', country text NOT NULL DEFAULT '', reach_band text NOT NULL DEFAULT '',
@@ -35,10 +65,15 @@ vi.mock("@workspace/db", async () => {
 
 vi.mock("../middleware/platform-auth", () => ({ requirePlatformAuth: (_req: unknown, _res: unknown, next: () => void) => next() }));
 vi.mock("../lib/member-guards", () => ({ memberProjectGate: (_req: unknown, _res: unknown, next: () => void) => next(), inAssignedScope: () => true }));
-vi.mock("../lib/platform-auth", () => ({ getVisibleUsernames: async (account: { username: string }) => [account.username.toLowerCase()], normUsername: (value: string) => value.toLowerCase() }));
+vi.mock("../lib/platform-auth", () => ({
+  getVisibleUsernames: async (account: { username: string }) => [account.username.toLowerCase()],
+  getAccount: async (username: string) => ({ username: username.toLowerCase(), parent: null, role: "agency", status: "active" }),
+  normUsername: (value: string) => value.toLowerCase(),
+}));
 vi.mock("../lib/safe-fetch", () => ({
   fetchPlacementPageEvidence: async (url: string) => ({ canonicalUrl: url, headline: "Verified headline", publicationDate: "2026-09-03" }),
 }));
+vi.mock("../lib/journalist-coverage-evidence", () => ({ collectJournalistCoverage }));
 
 import {
   db,
@@ -52,6 +87,9 @@ import {
   mediaOutreachActivitiesTable,
   mediaPlacementsTable,
   projectsTable,
+  archiveItemsTable,
+  platformMetaTable,
+  tokenUsageTable,
 } from "@workspace/db";
 import { ensureMediaSchema } from "../lib/ensure-media-schema";
 import { stableExactTargetPhraseId } from "../lib/exact-target-phrases";
@@ -63,7 +101,16 @@ let baseUrl = "";
 beforeAll(async () => {
   await ensureMediaSchema();
   await ensureMediaSchema();
+  await db.execute(sql`INSERT INTO platform_accounts (username, role) VALUES ('workspace-a', 'agency')`);
+  await db.execute(sql`INSERT INTO platform_companies (id, slug, free_access, subscription_status, plan) VALUES ('workspace-a-company', 'workspace-a', true, 'active', 'agency')`);
   await db.insert(projectsTable).values({ id: "project-1", owner: "workspace-a" });
+  await db.insert(archiveItemsTable).values([
+    { id: "story-1", projectId: "project-1", owner: "workspace-a", title: "Story 1" },
+    { id: "story-2", projectId: "project-1", owner: "workspace-a", title: "Story 2" },
+    { id: "phrase-story", projectId: "project-1", owner: "workspace-a", title: "Phrase story" },
+    { id: "long-phrase-story", projectId: "project-1", owner: "workspace-a", title: "Long phrase story" },
+    { id: "race-story", projectId: "project-1", owner: "workspace-a", title: "Race story" },
+  ]);
   const [outlet] = await db.insert(mediaOutletsTable).values({ name: "Energy Daily", category: "Trade press", country: "UK" }).returning();
   await db.insert(mediaContactsTable).values([
     { outletId: outlet.id, firstName: "Jane", lastName: "One", role: "Energy correspondent", beats: ["energy"], sectors: ["technology"], geography: "UK" },
@@ -364,6 +411,80 @@ describe("media recommendation refinement API", () => {
     const longBody = await longRequest.json() as { items: Array<{ phraseAttributions: unknown[] }> };
     expect(longBody.items).toBeDefined();
     expect(capped).toHaveLength(500);
+  });
+
+  it("persists briefs and restrictions, enriches only current candidates, and reloads evidence", async () => {
+    const brief = { topic: "energy", angle: "transition", audience: "trade press", regions: ["UK"], publicationTypes: ["Trade press"], whyNow: "budget" };
+    expect((await request("/store/media-db/recommendations/brief", "workspace-a", {
+      method: "PUT", body: JSON.stringify({ projectId: "project-1", storyKey: "story-1", brief }),
+    })).status).toBe(200);
+    expect(await (await request("/store/media-db/recommendations/brief?projectId=project-1&storyKey=story-1")).json()).toMatchObject({ brief });
+
+    const generated = await request("/store/media-db/recommendations", "workspace-a", {
+      method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "story-1", terms: ["energy"] }),
+    });
+    const generatedBody = await generated.json() as { recommendationSet: { id: number }; items: Array<{ contact: { id: number }; assessment: { version: string } }> };
+    expect(generatedBody.items[0]?.assessment.version).toBe("editorial-v1");
+    const contactId = generatedBody.items[0].contact.id;
+
+    expect((await request("/store/media-db/recommendations/contact-restriction", "workspace-a", {
+      method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "story-1", contactId, doNotContact: true }),
+    })).status).toBe(200);
+    const blocked = await (await request("/store/media-db/recommendations?projectId=project-1&storyKey=story-1")).json() as { items: Array<{ contact: { id: number }; assessment: { readiness: { status: string } } }> };
+    expect(blocked.items.find((item) => item.contact.id === contactId)?.assessment.readiness.status).toBe("blocked");
+    expect((await request("/store/media-db/outreach", "workspace-a", {
+      method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "story-1", contactId }),
+    })).status).toBe(409);
+
+    collectJournalistCoverage.mockResolvedValue({
+      evidence: [{ title: "Energy transition", url: "https://example.test/article", publishedAt: "2026-01-01", checkedAt: "2026-01-02T00:00:00.000Z", excerpt: "transition", attribution: "page_checked", authorMatched: true }],
+      warnings: ["checked"],
+    });
+    const enriched = await request("/store/media-db/recommendations/enrich", "workspace-a", {
+      method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "story-1", recommendationSetId: generatedBody.recommendationSet.id }),
+    });
+    expect(enriched.status).toBe(200);
+    expect(collectJournalistCoverage).toHaveBeenCalledTimes(Math.min(5, generatedBody.items.length));
+    const enrichedBody = await enriched.json() as { items: Array<{ assessment: { evidence: unknown[] } }> };
+    expect(enrichedBody.items[0].assessment.evidence).toHaveLength(1);
+    expect(await db.select().from(tokenUsageTable).where(eq(tokenUsageTable.operation, "content-media-recommendations-enrich"))).toHaveLength(1);
+    const saved = await db.select().from(mediaRecommendationSetsTable).where(eq(mediaRecommendationSetsTable.id, generatedBody.recommendationSet.id));
+    expect((saved[0].criteria as { evidence: Record<string, unknown[]> }).evidence).toBeDefined();
+    expect((await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, "mediaRecommendation:brief:workspace-a:project-1:story-1")))).toHaveLength(1);
+  });
+
+  it("does not write failed provider results and uses compare-and-swap for concurrent enrichments", async () => {
+    const generated = await request("/store/media-db/recommendations", "workspace-a", {
+      method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "race-story", terms: ["energy"] }),
+    });
+    const body = await generated.json() as { recommendationSet: { id: number; criteria: Record<string, unknown> }; items: unknown[] };
+    const before = await db.select({ criteria: mediaRecommendationSetsTable.criteria }).from(mediaRecommendationSetsTable).where(eq(mediaRecommendationSetsTable.id, body.recommendationSet.id));
+    collectJournalistCoverage.mockRejectedValueOnce(new Error("provider unavailable"));
+    const failed = await request("/store/media-db/recommendations/enrich", "workspace-a", {
+      method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "race-story", recommendationSetId: body.recommendationSet.id }),
+    });
+    expect(failed.status).toBe(502);
+    const afterFailure = await db.select({ criteria: mediaRecommendationSetsTable.criteria }).from(mediaRecommendationSetsTable).where(eq(mediaRecommendationSetsTable.id, body.recommendationSet.id));
+    expect(afterFailure[0].criteria).toEqual(before[0].criteria);
+
+    let calls = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    collectJournalistCoverage.mockImplementation(async () => {
+      calls += 1;
+      await gate;
+      return { evidence: [], warnings: [] };
+    });
+    const first = request("/store/media-db/recommendations/enrich", "workspace-a", {
+      method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "race-story", recommendationSetId: body.recommendationSet.id }),
+    });
+    const second = request("/store/media-db/recommendations/enrich", "workspace-a", {
+      method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "race-story", recommendationSetId: body.recommendationSet.id }),
+    });
+    while (calls < 2) await new Promise((resolve) => setTimeout(resolve, 1));
+    release();
+    const statuses = await Promise.all([first.then((response) => response.status), second.then((response) => response.status)]);
+    expect(statuses.sort()).toEqual([200, 409]);
   });
 
   it("tracks the complete outreach journey, preserves snapshots and updates duplicate placements safely", async () => {

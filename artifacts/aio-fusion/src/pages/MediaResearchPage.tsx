@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Database, Download, ExternalLink, Loader2, RotateCcw, Search, Target, ThumbsDown, Users } from "lucide-react";
+import { Check, Database, Download, ExternalLink, FileText, Loader2, RotateCcw, Search, Target, ThumbsDown, Users } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { escapeHtml, apiBase } from "../lib/contentAi";
 import { isContentStoreReady, loadArchive, useContentStore } from "../lib/contentStore";
@@ -9,6 +9,22 @@ import { SummaryRow } from "./shared";
 import { RecommendationCard, LiveDiscoveryCard, isSendableContactEmail, type Contact, type Recommendation, type Decision, type LiveDiscovery } from "./JournalistComponents";
 import { MediaOutreachPanel } from "./MediaOutreachPanel";
 
+export type TargetingBrief = {
+  topic: string;
+  angle: string;
+  audience: string;
+  regions: string[];
+  publicationTypes: string[];
+  whyNow: string;
+};
+
+type RecommendationEvaluation = {
+  evaluated: number;
+  shortlisted: number;
+  contacted: number;
+  responded: number;
+  placed: number;
+};
 
 type ResearchArticle = {
   title: string;
@@ -116,6 +132,26 @@ function regionForProject(regionalText: string): string[] {
   return ["Global"];
 }
 
+function defaultBrief(
+  selected: ResearchArticle,
+  categories: string[],
+  messages: string[],
+  context: ReturnType<typeof projectResearchContext>,
+  projectKeywords = context.keywords,
+): TargetingBrief {
+  const topic = context.sector || categories[0] || projectKeywords[0] || "";
+  const articleText = [selected.headline, selected.title, selected.standfirst].filter(Boolean).join(" - ").trim();
+  const angle = articleText || messages[0] || "";
+  return {
+    topic,
+    angle,
+    audience: "",
+    regions: regionForProject(context.regionalText),
+    publicationTypes: categories.length > 0 ? categories : [],
+    whyNow: ""
+  };
+}
+
 function generatedCriteria(
   selected: ResearchArticle,
   categories: string[],
@@ -150,12 +186,23 @@ function dedupeRecommendations(rawItems: unknown[]): Recommendation[] {
   return rawItems.map((item, index) => {
     const raw = (item || {}) as Record<string, unknown>;
     const contact = (raw.contact || raw) as Contact;
+    const assessment = raw.assessment && typeof raw.assessment === "object"
+      ? raw.assessment as Recommendation["assessment"]
+      : undefined;
+    const readinessReasons = assessment?.readiness?.reasons || [];
     return {
       rank: Number(raw.rank) || index + 1,
       score: Number(raw.score) || 0,
       reasons: Array.isArray(raw.reasons) ? raw.reasons.filter((reason): reason is string => typeof reason === "string") : [],
       phraseAttributions: Array.isArray(raw.phraseAttributions) ? raw.phraseAttributions : [],
       contact,
+      assessment,
+      recommendationSetId: typeof raw.recommendationSetId === "string" || typeof raw.recommendationSetId === "number"
+        ? raw.recommendationSetId
+        : undefined,
+      restricted: typeof raw.restricted === "boolean"
+        ? raw.restricted
+        : readinessReasons.some((reason) => /suppressed|do[-\s]?not[-\s]?contact/i.test(reason)),
     };
   }).filter((item) => {
     const id = Number(item.contact?.id);
@@ -262,6 +309,7 @@ function MediaResearchPage() {
   const [items, setItems] = useState<Recommendation[]>([]);
   const [decisions, setDecisions] = useState<Record<number, Decision>>({});
   const [decisionContacts, setDecisionContacts] = useState<Record<number, Contact>>({});
+  const [decisionAssessments, setDecisionAssessments] = useState<Record<number, Recommendation["assessment"]>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [noteFor, setNoteFor] = useState<number | null>(null);
@@ -280,16 +328,22 @@ function MediaResearchPage() {
   const activeTargetPhrases = resolveArticleTargetPhrases(selected, projectContext.exactPhrases);
   const storyKey = selected?.id || "";
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [regions, setRegions] = useState<string[]>(["Global"]);
-  const [sectorTopic, setSectorTopic] = useState("");
+  const [brief, setBrief] = useState<TargetingBrief>({ topic: "", angle: "", audience: "", regions: [], publicationTypes: [], whyNow: "" });
+  const [, setBriefIsDirty] = useState(false);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [briefLoadError, setBriefLoadError] = useState("");
+  const [briefReadyKey, setBriefReadyKey] = useState("");
+  const [recommendationSetId, setRecommendationSetId] = useState<number | string | null>(null);
+  const [evaluation, setEvaluation] = useState<RecommendationEvaluation | null>(null);
+  const [enrichmentWarning, setEnrichmentWarning] = useState("");
   type RequestHandle = { id: number; key: string; controller: AbortController };
   const requestSequence = useRef(0);
   const recommendationRequest = useRef<RequestHandle | null>(null);
   const liveRequest = useRef<RequestHandle | null>(null);
   const decisionRequests = useRef<Record<number, { id: number; key: string }>>({});
   const decisionLoadSequence = useRef(0);
-  const recommendationRevision = useRef(0);
+  const recommendationLoadSequence = useRef(0);
+  const briefEditRevision = useRef(0);
   const activeStoryRef = useRef(`${projectId || ""}:${storyKey}`);
   activeStoryRef.current = `${projectId || ""}:${storyKey}`;
 
@@ -329,6 +383,7 @@ function MediaResearchPage() {
     // from mutating the next article/project view.
     decisionRequests.current = {};
     decisionLoadSequence.current += 1;
+    recommendationLoadSequence.current += 1;
     requestSequence.current += 1;
   };
 
@@ -338,22 +393,10 @@ function MediaResearchPage() {
   const decisionIsCurrent = (contactId: number, id: number, key: string) =>
     decisionRequests.current[contactId]?.id === id && activeStoryRef.current === key;
 
-  const toggleRegion = (reg: string) => {
-    setRegions((prev) => {
-      if (reg === "Global") return prev.includes("Global") ? prev : ["Global"];
-      if (prev.includes(reg)) {
-        if (prev.length === 1) return prev;
-        return prev.filter((r) => r !== reg);
-      }
-      return [...prev.filter((r) => r !== "Global"), reg];
-    });
-  };
-
-  const loadDecisions = async (includeRecommendationItems = true) => {
+  const loadDecisions = async () => {
     if (!projectId || !storyKey) return;
     const loadId = ++decisionLoadSequence.current;
     const loadKey = `${projectId}:${storyKey}`;
-    const revisionAtStart = recommendationRevision.current;
     const isCurrent = () => decisionLoadSequence.current === loadId && activeStoryRef.current === loadKey;
     try {
       const response = await fetch(`${apiBase()}/api/store/media-db/recommendations/decisions?projectId=${encodeURIComponent(projectId)}&storyKey=${encodeURIComponent(storyKey)}`, { credentials: "include" });
@@ -371,11 +414,13 @@ function MediaResearchPage() {
       setDecisionContacts(Object.fromEntries((Array.isArray(data.decisionContacts) ? data.decisionContacts : [])
         .filter((entry: { contactId?: unknown; contact?: unknown }) => Number(entry.contactId) > 0 && entry.contact && typeof entry.contact === "object")
         .map((entry: { contactId: number; contact: Contact }) => [entry.contactId, entry.contact])));
-      // The decisions endpoint includes persisted recommendation records so the
-      // shortlist remains useful after a page reload, without regenerating it.
-      if (includeRecommendationItems && revisionAtStart === recommendationRevision.current && Array.isArray(data.items)) {
-        setItems(dedupeRecommendations(data.items));
-      }
+      setDecisionAssessments(Object.fromEntries((Array.isArray(data.decisionContacts) ? data.decisionContacts : [])
+        .filter((entry: { contactId?: unknown; assessment?: unknown }) => Number(entry.contactId) > 0 && entry.assessment && typeof entry.assessment === "object")
+        .map((entry: { contactId: number; assessment: Recommendation["assessment"] }) => [entry.contactId, entry.assessment])));
+      // Recommendation records are loaded from GET /recommendations. The
+      // decisions endpoint is only for durable decisions and shortlist
+      // snapshots; allowing it to replace the recommendation list can restore
+      // an old set over a newer enriched result.
     } catch (reason) {
       // A failed decision load must not leave an operator looking at an old
       // article's shortlist, and a late failure from another scope must not
@@ -385,34 +430,134 @@ function MediaResearchPage() {
   };
   useEffect(() => { void loadDecisions(); }, [projectId, storyKey]);
 
-  const recommend = async (automatic = false) => {
+  const loadRecommendations = async () => {
+    if (!projectId || !storyKey) return;
+    const loadId = ++recommendationLoadSequence.current;
+    const loadKey = `${projectId}:${storyKey}`;
+    const isCurrent = () => recommendationLoadSequence.current === loadId && activeStoryRef.current === loadKey;
+    try {
+      const response = await fetch(`${apiBase()}/api/store/media-db/recommendations?projectId=${encodeURIComponent(projectId)}&storyKey=${encodeURIComponent(storyKey)}`, { credentials: "include" });
+      let data: Record<string, unknown> = {};
+      try {
+        data = await response.json() as Record<string, unknown>;
+      } catch {
+        if (!response.ok) throw new Error(`Could not load saved recommendations (HTTP ${response.status}).`);
+        throw new Error("Could not load saved recommendations: the server returned invalid data.");
+      }
+      if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : `Could not load saved recommendations (HTTP ${response.status}).`);
+      if (!isCurrent()) return;
+      const set = data.recommendationSet && typeof data.recommendationSet === "object"
+        ? data.recommendationSet as Record<string, unknown>
+        : null;
+      setRecommendationSetId(typeof set?.id === "number" || typeof set?.id === "string" ? set.id : null);
+      setEvaluation(data.evaluation && typeof data.evaluation === "object" ? data.evaluation as RecommendationEvaluation : null);
+      setItems(Array.isArray(data.items) ? dedupeRecommendations(data.items) : []);
+    } catch (reason) {
+      // A failed refresh must not erase a previously visible, auditable set.
+      // Keep the failure visible instead of silently falling back to generated
+      // criteria or a blank recommendation list.
+      if (isCurrent()) setError(reason instanceof Error ? reason.message : "Could not load saved recommendations.");
+    }
+  };
+  useEffect(() => { void loadRecommendations(); }, [projectId, storyKey]);
+
+  const [enriching, setEnriching] = useState<boolean>(false);
+
+  const enrichRecommendations = async (recommendationSetId: number | string) => {
+    if (!projectId || !storyKey) return;
+    const requestKey = `${projectId}:${storyKey}`;
+    const loadId = ++recommendationLoadSequence.current;
+    setEnriching(true);
+    setError("");
+    setEnrichmentWarning("");
+    try {
+      const response = await fetch(`${apiBase()}/api/store/media-db/recommendations/enrich`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, storyKey, recommendationSetId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Could not enrich recommendations.");
+      if (activeStoryRef.current !== requestKey || recommendationLoadSequence.current !== loadId) return;
+      const set = data.recommendationSet && typeof data.recommendationSet === "object"
+        ? data.recommendationSet as Record<string, unknown>
+        : null;
+      setRecommendationSetId(typeof set?.id === "number" || typeof set?.id === "string" ? set.id : recommendationSetId);
+      setEvaluation(data.evaluation && typeof data.evaluation === "object" ? data.evaluation as RecommendationEvaluation : null);
+      const nextItems = Array.isArray(data.items) ? dedupeRecommendations(data.items) : [];
+      setItems(nextItems);
+      const warnings = nextItems.flatMap((item) => item.assessment?.warnings || []);
+      setEnrichmentWarning(Array.from(new Set(warnings)).join(" "));
+      await loadDecisions();
+    } catch (reason) {
+      if (activeStoryRef.current === requestKey && recommendationLoadSequence.current === loadId) {
+        setError(reason instanceof Error ? reason.message : "Could not enrich recommendations.");
+      }
+    } finally {
+      if (activeStoryRef.current === requestKey && recommendationLoadSequence.current === loadId) setEnriching(false);
+    }
+  };
+
+  const saveAndRecommend = async () => {
     if (!selected || !projectId) { setError("Choose a saved article and active project before matching contacts."); return; }
-    const terms = termsFor(selected, categories, messages, projectContext.sector, projectKeywords);
+    
+    // Save brief first
+    setLoading(true);
+    setError("");
+    let briefForMatch = brief;
+    try {
+      const briefResponse = await fetch(`${apiBase()}/api/store/media-db/recommendations/brief`, {
+        method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, storyKey, brief })
+      });
+      const savedBriefResponse = await briefResponse.json() as Record<string, unknown>;
+      if (!briefResponse.ok) throw new Error(typeof savedBriefResponse.error === "string" ? savedBriefResponse.error : "Could not save targeting brief.");
+      const savedBrief = savedBriefResponse.brief && typeof savedBriefResponse.brief === "object"
+        ? savedBriefResponse.brief as TargetingBrief
+        : brief;
+      briefForMatch = savedBrief;
+      setBrief(savedBrief);
+      setBriefIsDirty(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save targeting brief.");
+      setLoading(false);
+      return;
+    }
+
+    const terms = termsFor(selected, categories, messages, brief.topic || projectContext.sector, projectKeywords);
     if (!terms.length) {
-      if (!automatic) setError("Add meaningful article or project context before matching contacts.");
+      setError("Add meaningful article or project context before matching contacts.");
+      setLoading(false);
       return;
     }
     const requestKey = `${projectId}:${storyKey}`;
-    if (recommendationRequest.current?.key === requestKey) return;
+    if (recommendationRequest.current?.key === requestKey) {
+      setLoading(false);
+      return;
+    }
     recommendationRequest.current?.controller.abort();
     const request: RequestHandle = { id: ++requestSequence.current, key: requestKey, controller: new AbortController() };
     recommendationRequest.current = request;
-    recommendationRevision.current += 1;
-    setLoading(true); setError(""); if (!automatic) setItems([]);
+    setEnrichmentWarning("");
+    setItems([]);
     try {
       const response = await fetch(`${apiBase()}/api/store/media-db/recommendations`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         signal: request.controller.signal,
-        body: JSON.stringify({ projectId, storyKey, terms, targetPhrases: activeTargetPhrases }),
+         body: JSON.stringify({ projectId, storyKey, brief: briefForMatch, terms, targetPhrases: activeTargetPhrases }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Could not match database contacts.");
+      const data = await response.json() as Record<string, unknown>;
+      if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Could not match database contacts.");
       if (!requestIsCurrent(request, recommendationRequest.current)) return;
+      const set = data.recommendationSet && typeof data.recommendationSet === "object"
+        ? data.recommendationSet as Record<string, unknown>
+        : null;
+      setRecommendationSetId(typeof set?.id === "number" || typeof set?.id === "string" ? set.id : null);
+      setEvaluation(data.evaluation && typeof data.evaluation === "object" ? data.evaluation as RecommendationEvaluation : null);
       setItems(Array.isArray(data.items) ? dedupeRecommendations(data.items) : []);
       // The POST response is the authoritative newest set. Refetch decisions
       // for persistence, but do not let a concurrent/lagging GET replace that
       // freshly returned recommendation list.
-      await loadDecisions(false);
+    await loadDecisions();
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === "AbortError") return;
       if (requestIsCurrent(request, recommendationRequest.current)) setError(reason instanceof Error ? reason.message : "Could not match database contacts.");
@@ -424,40 +569,86 @@ function MediaResearchPage() {
     }
   };
 
+  const briefLoadSequence = useRef(0);
+
   // Criteria are refreshed only when the article changes. This means an
   // operator can edit either field before the paid stage without a rerender
   // from the content store overwriting their work. The ref also makes the
   // effect idempotent under React StrictMode.
   useEffect(() => {
-    if (!selected || !projectId || !storyKey) return;
-    const criteria = generatedCriteria(selected, categories, messages, projectContext, projectKeywords);
-    setSearchQuery(criteria.query);
-    setSectorTopic(criteria.sectorTopic);
-    setRegions(criteria.regions);
+    if (!selected || !projectId || !storyKey) {
+      invalidateRequests();
+      setItems([]);
+      setRecommendationSetId(null);
+      setEvaluation(null);
+      setDecisions({});
+      setDecisionContacts({});
+      setDecisionAssessments({});
+      setBriefReadyKey("");
+      setBriefLoadError("");
+      return;
+    }
+    
+    const loadBrief = async () => {
+      const loadId = ++briefLoadSequence.current;
+      const currentKey = `${projectId}:${storyKey}`;
+      const editRevisionAtStart = briefEditRevision.current;
+      setBriefLoading(true);
+      setBriefLoadError("");
+      setBriefReadyKey("");
+      try {
+        const response = await fetch(`${apiBase()}/api/store/media-db/recommendations/brief?projectId=${encodeURIComponent(projectId)}&storyKey=${encodeURIComponent(storyKey)}`, { credentials: "include" });
+        let data: Record<string, unknown> = {};
+        try {
+          data = await response.json() as Record<string, unknown>;
+        } catch {
+          if (!response.ok) throw new Error(`Could not load targeting brief (HTTP ${response.status}).`);
+          throw new Error("Could not load targeting brief: the server returned invalid data.");
+        }
+        if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : `Could not load targeting brief (HTTP ${response.status}).`);
+        if (briefLoadSequence.current !== loadId || activeStoryRef.current !== currentKey) return;
+        
+        if (briefEditRevision.current === editRevisionAtStart) {
+          if (data.brief && typeof data.brief === "object") {
+            setBrief(data.brief as TargetingBrief);
+          } else {
+            setBrief(defaultBrief(selected, categories, messages, projectContext, projectKeywords));
+          }
+          setBriefIsDirty(false);
+          setBriefReadyKey(currentKey);
+        }
+      } catch (e) {
+        if (briefLoadSequence.current === loadId && activeStoryRef.current === currentKey) {
+          setBriefLoadError(e instanceof Error ? e.message : "Could not load targeting brief.");
+          setBriefReadyKey("");
+        }
+      } finally {
+        if (briefLoadSequence.current === loadId) setBriefLoading(false);
+      }
+    };
+    void loadBrief();
+
     setItems([]);
+    setRecommendationSetId(null);
+    setEvaluation(null);
     setLiveItems([]);
     setDiscoveryToken("");
     setDecisions({});
     setDecisionContacts({});
+    setDecisionAssessments({});
     setError("");
     setLoading(false);
     setLiveLoading(false);
-    let cancelled = false;
-    // Deferring by one microtask lets React StrictMode's first setup/cleanup
-    // pair cancel the provisional invocation, so exactly one POST is made.
-    queueMicrotask(() => {
-      if (!cancelled) void recommend(true);
-    });
+    setEnrichmentWarning("");
+    
     // Article/project identity is deliberate: edits to generated fields are
     // user-owned and must not be replaced by unrelated store updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    return () => {
-      cancelled = true;
-      invalidateRequests();
-    };
+    return () => { invalidateRequests(); };
   }, [storyKey, projectId]);
   const discoverLive = async () => {
     if (!selected || !projectId) { setError("Choose a saved article and active project before searching the web."); return; }
+    const criteria = generatedCriteria(selected, categories, messages, projectContext, projectKeywords);
     const requestKey = `${projectId}:${storyKey}`;
     liveRequest.current?.controller.abort();
     const request: RequestHandle = { id: ++requestSequence.current, key: requestKey, controller: new AbortController() };
@@ -477,10 +668,11 @@ function MediaResearchPage() {
           },
           mediaCategories: categories,
           keyMessages: messages,
-          query: searchQuery,
-          regions,
-          sectorTopic,
-            targetPhrases: activeTargetPhrases,
+           query: criteria.query,
+           regions: brief.regions,
+           sectorTopic: brief.topic || criteria.sectorTopic,
+          brief,
+          targetPhrases: activeTargetPhrases,
         }),
       });
       const data = await response.json();
@@ -517,6 +709,31 @@ function MediaResearchPage() {
       setError(reason instanceof Error ? reason.message : "Could not save this discovery.");
     }
   };
+  const toggleRestriction = async (contactId: number, doNotContact: boolean) => {
+    if (!projectId || !storyKey) return;
+    const requestKey = `${projectId}:${storyKey}`;
+    try {
+      const response = await fetch(`${apiBase()}/api/store/media-db/recommendations/contact-restriction`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, storyKey, contactId, doNotContact }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not save restriction.");
+      
+      if (activeStoryRef.current !== requestKey) return;
+      // Update immediately, then re-read the saved set. The server recomputes
+      // readiness from the current restriction and lifecycle state; retaining
+      // the old assessment here would leave an accepted contact blocked after
+      // the operator removes a restriction.
+      setItems((oldItems) => oldItems.map(item => item.contact.id === contactId
+        ? { ...item, restricted: Boolean(data.doNotContact) }
+        : item));
+      await Promise.all([loadRecommendations(), loadDecisions()]);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not save restriction.");
+    }
+  };
+
   const saveDecision = async (contactId: number, decision: Decision["decision"], nextNote = "") => {
     if (!projectId || !storyKey) return;
     const requestKey = `${projectId}:${storyKey}`;
@@ -558,6 +775,7 @@ function MediaResearchPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not refine recommendations.");
+      await loadRecommendations();
       await loadDecisions();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not refine recommendations."); }
     finally { setRefining(null); }
@@ -572,6 +790,7 @@ function MediaResearchPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not reset refinement.");
+      await loadRecommendations();
       await loadDecisions();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not reset refinement."); }
     finally { setRefining(null); }
@@ -580,6 +799,16 @@ function MediaResearchPage() {
     .filter((d) => d.decision === "shortlisted")
     .map((d) => items.find((i) => i.contact.id === d.contactId)?.contact || decisionContacts[d.contactId])
     .filter(Boolean) as Contact[];
+    
+  const acceptedRecommendations = accepted.map((c) => items.find((i) => i.contact.id === c.id) || {
+    rank: 0,
+    contact: c,
+    score: 0,
+    reasons: [],
+    assessment: decisionAssessments[c.id],
+    restricted: decisionAssessments[c.id]?.readiness.reasons.some((reason) => /suppressed|do[-\s]?not[-\s]?contact/i.test(reason)) || false,
+  });
+
   const livePublicationCount = new Set(liveItems.map((item) => item.outletName.trim().toLowerCase()).filter(Boolean)).size;
   const liveGroups = [
     {
@@ -606,6 +835,19 @@ function MediaResearchPage() {
     const blob = new Blob([content], { type: format === "xls" ? "text/csv;charset=utf-8;" : "application/msword" });
     const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `${title}.${format === "xls" ? "csv" : "doc"}`; link.click(); URL.revokeObjectURL(url);
   };
+  const editBrief = (patch: Partial<TargetingBrief>) => {
+    briefEditRevision.current += 1;
+    setBrief((current) => ({ ...current, ...patch }));
+    setBriefIsDirty(true);
+  };
+  const toggleBriefRegion = (region: string) => {
+    const regions = brief.regions.includes(region)
+      ? brief.regions.filter((value) => value !== region)
+      : region === "Global"
+        ? ["Global"]
+        : [...brief.regions.filter((value) => value !== "Global"), region];
+    editBrief({ regions });
+  };
   const contactCard = (item: Recommendation, shortlist = false) => {
     return (
       <RecommendationCard
@@ -623,36 +865,64 @@ function MediaResearchPage() {
         refinement={feedback[item.contact.id]}
         refinementLoading={refining === item.contact.id}
         onRefine={shortlist ? undefined : (signal) => void refine(item.contact.id, signal)}
+        onToggleRestriction={toggleRestriction}
       />
     );
   };
-  return <div className="p-6 sm:p-8 max-w-6xl mx-auto"><div className="mb-6"><div className="flex gap-3 items-center"><Target color="#fff" size={28} /><h1 className="text-3xl sm:text-4xl" style={{ color: "#fff", fontFamily: "'Alice', Georgia, serif" }}>Media Research</h1></div><p className="text-[14px] mt-2" style={{ color: "rgba(255,255,255,.85)" }}>Match trusted contacts already in your database or discover current journalists from public web sources. Every live result includes evidence and a source.</p></div>
+  return <div className="p-6 sm:p-8 max-w-6xl mx-auto"><div className="mb-6"><div className="flex gap-3 items-center"><Target color="#fff" size={28} /><h1 className="text-3xl sm:text-4xl" style={{ color: "#fff", fontFamily: "'Alice', Georgia, serif" }}>Media Research</h1></div><p className="text-[14px] mt-2" style={{ color: "rgba(255,255,255,.85)" }}>Match trusted contacts already in your database or discover current journalists from public web sources. Every live result includes evidence and a source. Live search sends the selected article excerpt to OpenAI only after you explicitly run it.</p></div>
     <section className="bg-white rounded-2xl border p-5 mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><label className="block text-[12px] font-bold mb-2" style={{ color: vars.navy }}>Saved article</label><select data-testid="select-research-article" value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setItems([]); setLiveItems([]); setDiscoveryToken(""); setError(""); }} className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400"><option value="">Choose a saved article</option>{archive.map((a) => <option key={a.id} value={a.id}>{a.title} ({a.contentType})</option>)}</select>{selected && <><div className="grid sm:grid-cols-2 gap-2 mt-4"><SummaryRow label="Article" value={selected.title} /><SummaryRow label="Categories" value={categories.join(", ") || "No categories selected"} /></div><div className="mt-3 rounded-lg border px-3 py-2" style={{ borderColor: vars.g200 }}><p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: vars.g500 }}>Exact target phrases</p>{activeTargetPhrases.length ? <ul className="mt-1 list-disc pl-4 text-[13px]" style={{ color: vars.g600 }}>{activeTargetPhrases.map((phrase) => <li key={phrase.id}><span className="font-medium">{phrase.text}</span><span className="ml-2 text-[11px] text-slate-400">({phrase.intentGroup})</span></li>)}</ul> : <p className="mt-1 text-[12px] text-slate-500">No exact phrases selected for this article or project.</p>}</div></>}
        <div className="mt-5 pt-5 border-t" style={{ borderColor: vars.g100 }}>
-          <h3 className="text-[14px] font-semibold mb-1" style={{ color: vars.navy }}>Live Search Criteria</h3>
-          <p className="text-[12px] text-slate-500 mb-3">Generated from your project and selected article. Review or edit before expanding with live search.</p>
-         <div className="grid md:grid-cols-2 gap-4">
-           <div>
-             <label className="block text-[12px] font-bold mb-1" style={{ color: vars.navy }}>Natural Language Query</label>
-             <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="e.g. 'Tech reporters in London who cover AI'" className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400" />
-             <p className="text-[11px] text-slate-500 mt-1">Examples: "US consumer tech editors", "Journalists writing about renewable energy"</p>
-           </div>
-           <div>
-             <label className="block text-[12px] font-bold mb-1" style={{ color: vars.navy }}>Sector / Topic (optional)</label>
-             <input value={sectorTopic} onChange={e => setSectorTopic(e.target.value)} placeholder="e.g. Cleantech, FinTech" className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400" />
-           </div>
-         </div>
-         <div className="mt-4">
-           <label className="block text-[12px] font-bold mb-1" style={{ color: vars.navy }}>Regions</label>
-           <div className="flex gap-2">
-              {["Global", "UK", "Europe", "US"].map((region) => <button key={region} onClick={() => toggleRegion(region)} className={`px-4 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors ${regions.includes(region) ? "bg-slate-800 text-white border-slate-800 shadow-sm" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>{region}</button>)}
-           </div>
-         </div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[14px] font-semibold" style={{ color: vars.navy }}>Targeting Brief</h3>
+            {briefLoading && <span className="text-[12px] text-slate-400 flex items-center gap-1"><Loader2 size={12} className="animate-spin" /> Loading...</span>}
+          </div>
+           <p className="text-[12px] text-slate-500 mb-4">Edit the saved brief before matching contacts. This brief directs the editorial assessment.</p>
+           {briefLoadError && <p className="mb-3 rounded-lg bg-rose-50 border border-rose-100 p-3 text-[12px] text-rose-700">{briefLoadError} Matching is disabled until the saved brief can be loaded.</p>}
+          
+          <div className="grid md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-[12px] font-bold mb-1" style={{ color: vars.navy }}>Topic</label>
+               <input aria-label="Topic" value={brief.topic} onChange={e => editBrief({ topic: e.target.value })} placeholder="e.g. Cleantech, FinTech" className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400" />
+            </div>
+            <div>
+              <label className="block text-[12px] font-bold mb-1" style={{ color: vars.navy }}>Angle</label>
+               <input aria-label="Angle" value={brief.angle} onChange={e => editBrief({ angle: e.target.value })} placeholder="e.g. New product launch" className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400" />
+            </div>
+            <div>
+              <label className="block text-[12px] font-bold mb-1" style={{ color: vars.navy }}>Audience</label>
+               <input aria-label="Audience" value={brief.audience} onChange={e => editBrief({ audience: e.target.value })} placeholder="e.g. CIOs, Consumers" className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400" />
+            </div>
+            <div>
+              <label className="block text-[12px] font-bold mb-1" style={{ color: vars.navy }}>Why Now</label>
+               <input aria-label="Why now" value={brief.whyNow} onChange={e => editBrief({ whyNow: e.target.value })} placeholder="e.g. Upcoming trade show" className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400" />
+            </div>
+            <div>
+              <label className="block text-[12px] font-bold mb-1" style={{ color: vars.navy }}>Publication Types</label>
+               <input aria-label="Publication types" value={brief.publicationTypes.join(", ")} onChange={e => editBrief({ publicationTypes: e.target.value.split(",").map(t => t.trim()).filter(Boolean) })} placeholder="e.g. Technology, Finance" className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400" />
+            </div>
+          </div>
+          
+          <div className="mt-4">
+            <label className="block text-[12px] font-bold mb-1" style={{ color: vars.navy }}>Regions</label>
+            <div className="flex gap-2">
+               {["Global", "UK", "Europe", "US"].map((region) => <button type="button" key={region} onClick={() => toggleBriefRegion(region)} className={`px-4 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors ${brief.regions.includes(region) ? "bg-slate-800 text-white border-slate-800 shadow-sm" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>{region}</button>)}
+            </div>
+            {brief.regions.length === 0 && <p className="text-[11px] text-amber-600 mt-1">Please select at least one region to target.</p>}
+          </div>
        </div>
 
-     <div className="mt-5 pt-5 border-t flex flex-wrap gap-3" style={{ borderColor: vars.g100 }}><button data-testid="button-recommend-contacts" disabled={loading || liveLoading || !selected} onClick={() => void recommend()} className="px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-all shadow-sm" style={{ background: vars.coral }}>{loading ? <Loader2 className="inline animate-spin mr-1.5" size={16} /> : <Target className="inline mr-1.5" size={16} />}Match database contacts</button><button data-testid="button-discover-live" disabled={liveLoading || !selected || !searchQuery.trim()} onClick={() => void discoverLive()} className="px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-all shadow-sm" style={{ background: vars.navy }}>{liveLoading ? <Loader2 className="inline animate-spin mr-1.5" size={16} /> : <Search className="inline mr-1.5" size={16} />}Expand with live search</button></div><p className="mt-3 text-[11px]" style={{ color: vars.g500 }}>External live search is explicit and does not run automatically. It sends the selected article excerpt, media categories, key messages and your edited criteria to OpenAI. Email addresses are included only when explicitly published in a cited source.</p></section>
+      <div className="mt-5 pt-5 border-t flex flex-wrap gap-3" style={{ borderColor: vars.g100 }}><button data-testid="button-recommend-contacts" disabled={loading || briefLoading || briefReadyKey !== `${projectId}:${storyKey}` || Boolean(briefLoadError) || !selected || brief.regions.length === 0 || !brief.topic || !brief.angle} onClick={() => void saveAndRecommend()} className="px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-all shadow-sm" style={{ background: vars.coral }}>{loading ? <Loader2 className="inline animate-spin mr-1.5" size={16} /> : <Target className="inline mr-1.5" size={16} />}Save brief & match database contacts</button><button data-testid="button-discover-live" disabled={liveLoading || briefLoading || briefReadyKey !== `${projectId}:${storyKey}` || Boolean(briefLoadError) || !selected || brief.regions.length === 0} onClick={() => void discoverLive()} className="px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-all shadow-sm" style={{ background: vars.navy }}>{liveLoading ? <Loader2 className="inline animate-spin mr-1.5" size={16} /> : <Search className="inline mr-1.5" size={16} />}Expand with live search</button></div><p className="mt-3 text-[11px]" style={{ color: vars.g500 }}>External live search is explicit and does not run automatically. It uses the selected article excerpt and the saved Targeting Brief for AI evaluation. The selected article excerpt is sent to OpenAI only when you explicitly run live search; any returned email must be supported by the cited public source.</p></section>
     {error && <p data-testid="status-research-error" className="p-3 rounded bg-white text-[12px] mb-5" style={{ color: vars.red }}>{error}</p>}
-      {(loading || items.length > 0) && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b flex flex-wrap justify-between gap-3" style={{ background: vars.g50, borderColor: vars.g200 }}><div><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Recommended from your Media Database</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{loading ? "Automatically preparing recommendations from your project and selected article..." : `${items.length} contacts ranked from saved database fields and article-specific refinement. Match explanations show how feedback affected the order.`}</p></div>{Object.keys(feedback).length > 0 && <button disabled={refining !== null} onClick={() => void resetRefinement()} className="self-start text-[12px] px-3 py-2 border rounded-lg bg-white disabled:opacity-50" style={{ borderColor: vars.g200 }}><RotateCcw size={14} className={`inline mr-1 ${refining === "reset" ? "animate-spin" : ""}`} />Reset refinement</button>}</div>{items.map((item) => contactCard(item))}</section>}
+       {(loading || items.length > 0) && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b flex flex-wrap justify-between gap-3" style={{ background: vars.g50, borderColor: vars.g200 }}><div><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Recommended from your Media Database</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{loading ? "Preparing recommendations from your project and selected article..." : `${items.length} contacts ranked from saved database fields and article-specific refinement. Match explanations show how feedback affected the order.`}</p>{evaluation && <p className="text-[11px] mt-2 text-slate-500">Evaluation: {evaluation.evaluated} evaluated · {evaluation.shortlisted} shortlisted · {evaluation.contacted} contacted · {evaluation.responded} responded · {evaluation.placed} placed</p>}</div>
+       <div className="flex gap-2">
+         {items.length > 0 && recommendationSetId !== null && (
+           <button disabled={enriching} onClick={() => void enrichRecommendations(recommendationSetId)} className="self-start text-[12px] px-3 py-2 border rounded-lg bg-white disabled:opacity-50 hover:bg-slate-50 transition-colors shadow-sm" style={{ borderColor: vars.g200 }}>
+            <FileText size={14} className={`inline mr-1 ${enriching ? "animate-pulse" : ""}`} />
+            {enriching ? "Checking top 5..." : "Check top 5 recent coverage"}
+          </button>
+        )}
+        {Object.keys(feedback).length > 0 && <button disabled={refining !== null} onClick={() => void resetRefinement()} className="self-start text-[12px] px-3 py-2 border rounded-lg bg-white disabled:opacity-50" style={{ borderColor: vars.g200 }}><RotateCcw size={14} className={`inline mr-1 ${refining === "reset" ? "animate-spin" : ""}`} />Reset refinement</button>}
+       </div></div>{enrichmentWarning && <p className="mx-5 mb-3 rounded-lg bg-amber-50 border border-amber-100 p-3 text-[12px] text-amber-800">Coverage check warning: {enrichmentWarning}</p>}{items.map((item) => contactCard(item))}</section>}
     {liveItems.length > 0 && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Live public web discoveries</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{liveItems.length} current journalists across {livePublicationCount} publications, grounded in public author pages, profiles or article bylines. Review the evidence before saving.</p></div>
       {liveGroups.filter((group) => group.items.length > 0).map((group) => <div key={group.label}>
         <div className="px-5 py-2.5 border-b text-[12px] font-bold uppercase tracking-wide" style={{ color: vars.navy, background: "rgba(31,116,143,0.07)", borderColor: vars.g200 }}>{group.label} · {group.items.length}</div>
@@ -668,8 +938,8 @@ function MediaResearchPage() {
       </div>)}
     </section>}
      {!liveLoading && liveItems.length === 0 && selected && <section className="bg-white rounded-2xl border p-4 mb-5" style={{ borderColor: vars.g200 }}><h2 className="font-semibold" style={{ color: vars.navy }}>Expand with live search for additional externally verified contacts</h2><p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Run an explicit live search for current journalists and editors whose public work directly matches this article.</p></section>}
-    <section className="bg-white rounded-2xl border overflow-hidden shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 flex flex-wrap justify-between gap-2 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}><div><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Accepted shortlist</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>Persists for this article and project.</p></div>{accepted.length > 0 && <div className="flex gap-2"><button onClick={() => exportAccepted("xls")} className="text-[12px] px-3 py-1.5 border rounded-lg bg-white hover:bg-slate-50 transition-colors shadow-sm" style={{ borderColor: vars.g200 }}><Download size={14} className="inline mr-1 text-slate-400" /> Excel</button><button onClick={() => exportAccepted("doc")} className="text-[12px] px-3 py-1.5 border rounded-lg bg-white hover:bg-slate-50 transition-colors shadow-sm" style={{ borderColor: vars.g200 }}><Download size={14} className="inline mr-1 text-slate-400" /> Word</button></div>}</div>{accepted.length ? accepted.map((c) => contactCard({ rank: 0, contact: c, score: items.find((i) => i.contact.id === c.id)?.score || 0, reasons: items.find((i) => i.contact.id === c.id)?.reasons || [] }, true)) : <p className="p-8 text-[14px] text-center italic" style={{ color: vars.g500 }}>Accept contacts from your recommendations to build the shortlist.</p>}</section>
-    {selected && projectId && <MediaOutreachPanel projectId={projectId} storyKey={storyKey} articleTitle={selected.title} contacts={accepted} targetPhrases={activeTargetPhrases} />}
+    <section className="bg-white rounded-2xl border overflow-hidden shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 flex flex-wrap justify-between gap-2 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}><div><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Accepted shortlist</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>Persists for this article and project.</p></div>{accepted.length > 0 && <div className="flex gap-2"><button onClick={() => exportAccepted("xls")} className="text-[12px] px-3 py-1.5 border rounded-lg bg-white hover:bg-slate-50 transition-colors shadow-sm" style={{ borderColor: vars.g200 }}><Download size={14} className="inline mr-1 text-slate-400" /> Excel</button><button onClick={() => exportAccepted("doc")} className="text-[12px] px-3 py-1.5 border rounded-lg bg-white hover:bg-slate-50 transition-colors shadow-sm" style={{ borderColor: vars.g200 }}><Download size={14} className="inline mr-1 text-slate-400" /> Word</button></div>}</div>{acceptedRecommendations.length ? acceptedRecommendations.map((r) => contactCard(r, true)) : <p className="p-8 text-[14px] text-center italic" style={{ color: vars.g500 }}>Accept contacts from your recommendations to build the shortlist.</p>}</section>
+    {selected && projectId && <MediaOutreachPanel projectId={projectId} storyKey={storyKey} articleTitle={selected.title} recommendations={acceptedRecommendations} targetPhrases={activeTargetPhrases} />}
   </div>;
 }
 export { MediaResearchPage };

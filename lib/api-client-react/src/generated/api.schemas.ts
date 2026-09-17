@@ -5,6 +5,50 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface TargetingBrief {
+  topic: string;
+  angle: string;
+  audience: string;
+  regions: string[];
+  publicationTypes: string[];
+  whyNow: string;
+}
+
+export interface RecommendationBriefRequest {
+  projectId: string;
+  storyKey: string;
+  brief: TargetingBrief;
+}
+
+export interface RecommendationBriefEnvelope {
+  brief: TargetingBrief | null;
+}
+
+export type RecommendationRequestTargetPhrasesItem = { [key: string]: unknown };
+
+export interface RecommendationRequest {
+  projectId: string;
+  storyKey: string;
+  terms?: string[];
+  targetPhrases?: RecommendationRequestTargetPhrasesItem[];
+  brief?: TargetingBrief;
+}
+
+export interface RecommendationEnrichRequest {
+  projectId: string;
+  storyKey: string;
+  /** @minimum 1 */
+  recommendationSetId: number;
+}
+
+export interface ContactRestrictionRequest {
+  projectId: string;
+  storyKey: string;
+  /** @minimum 1 */
+  contactId: number;
+  doNotContact: boolean;
+}
+
 export interface HealthStatus {
   status: string;
   /** Names of active server-side feature flags. Empty on production; lists enabled flags on staging. */
@@ -176,6 +220,10 @@ export interface UploadUrlResponse {
  */
 export type AuthorizationSessionHeaderParameter = string;
 
+export type ProjectIdParameter = string;
+
+export type StoryKeyParameter = string;
+
 export type BeginBrowserLoginParams = {
 /**
  * Relative path to redirect to after login (must start with `/`). Defaults to `/`.
@@ -187,5 +235,31 @@ export type HandleBrowserLoginCallbackParams = {
 code?: string;
 state?: string;
 iss?: string;
+};
+
+export type GetMediaRecommendationBriefParams = {
+/**
+ * @minLength 1
+ * @maxLength 200
+ */
+projectId: ProjectIdParameter;
+/**
+ * @minLength 1
+ * @maxLength 200
+ */
+storyKey: StoryKeyParameter;
+};
+
+export type GetMediaRecommendationsParams = {
+/**
+ * @minLength 1
+ * @maxLength 200
+ */
+projectId: ProjectIdParameter;
+/**
+ * @minLength 1
+ * @maxLength 200
+ */
+storyKey: StoryKeyParameter;
 };
 

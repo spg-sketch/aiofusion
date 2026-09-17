@@ -3,7 +3,7 @@ import { CheckCircle2, ExternalLink, Loader2, Plus } from "lucide-react";
 import { apiBase } from "../lib/contentAi";
 import type { ExactTargetPhrase } from "../lib/exactTargetPhrases";
 import { vars } from "../marketing/vars";
-import type { Contact } from "./JournalistComponents";
+import type { Contact, Recommendation } from "./JournalistComponents";
 
 type Status = "planned" | "pitched" | "responded" | "accepted" | "declined" | "placed";
 type Placement = { id: number; canonicalUrl: string; publicationDate: string; headline: string; supportingEvidence: string; verification: "user_claimed" | "page_verified" };
@@ -18,8 +18,14 @@ const statuses: Status[] = ["planned", "pitched", "responded", "accepted", "decl
 const transitions: Record<Status, Status[]> = { planned: ["pitched", "declined"], pitched: ["responded", "accepted", "declined"], responded: ["accepted", "declined"], accepted: ["declined"], declined: ["planned"], placed: [] };
 const inputClass = "w-full rounded-lg border border-slate-200 px-3 py-2 text-[13px]";
 
-export function MediaOutreachPanel({ projectId, storyKey, articleTitle, contacts, targetPhrases }: {
-  projectId: string; storyKey: string; articleTitle: string; contacts: Contact[]; targetPhrases: ExactTargetPhrase[];
+export function MediaOutreachPanel({ projectId, storyKey, articleTitle, recommendations, contacts, targetPhrases }: {
+  projectId: string;
+  storyKey: string;
+  articleTitle: string;
+  recommendations?: Recommendation[];
+  /** Kept for callers from the original outreach panel contract. */
+  contacts?: Contact[];
+  targetPhrases: ExactTargetPhrase[];
 }) {
   const [rows, setRows] = useState<Outreach[]>([]);
   const [busy, setBusy] = useState<number | "load" | "create" | null>("load");
@@ -145,7 +151,13 @@ export function MediaOutreachPanel({ projectId, storyKey, articleTitle, contacts
     } catch (reason) { if (scopeRef.current === scope) { setError(reason instanceof Error ? reason.message : "Could not verify the placement page."); setBusy(null); } }
   };
 
-  const unplanned = contacts.filter((contact) => !rows.some((row) => row.contactId === contact.id));
+  const recommendationItems = recommendations ?? (contacts ?? []).map((contact): Recommendation => ({
+    rank: 0,
+    contact,
+    score: 0,
+    reasons: [],
+  }));
+  const unplanned = recommendationItems.filter((rec) => !rows.some((row) => row.contactId === rec.contact.id));
   return <section className="bg-white rounded-2xl border overflow-hidden mt-5 shadow-sm" style={{ borderColor: vars.g200 }}>
     <div className="p-5 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}>
       <h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Outreach and placements</h2>
@@ -153,7 +165,9 @@ export function MediaOutreachPanel({ projectId, storyKey, articleTitle, contacts
     </div>
     {error && <p className="m-4 rounded-lg bg-rose-50 p-3 text-[12px] text-rose-700">{error}</p>}
     {unplanned.length > 0 && <div className="p-4 border-b flex flex-wrap gap-2" style={{ borderColor: vars.g100 }}>
-      {unplanned.map((contact) => <button key={contact.id} disabled={busy !== null} onClick={() => void create(contact)} className="rounded-lg border px-3 py-2 text-[12px] font-semibold disabled:opacity-50"><Plus size={13} className="inline mr-1" />Plan outreach to {contact.firstName} {contact.lastName}</button>)}
+      {unplanned.map((rec) => (
+         <button key={rec.contact.id} disabled={busy !== null || rec.restricted || rec.assessment?.readiness.status === 'blocked'} onClick={() => void create(rec.contact)} title={rec.restricted ? "Contact is restricted from outreach" : rec.assessment?.readiness.status === 'blocked' ? "Contact assessment is blocked" : ""} className="rounded-lg border px-3 py-2 text-[12px] font-semibold disabled:opacity-50"><Plus size={13} className="inline mr-1" />Plan outreach to {rec.contact.firstName} {rec.contact.lastName}</button>
+      ))}
     </div>}
     {busy === "load" ? <p className="p-8 text-center text-sm text-slate-500"><Loader2 className="inline animate-spin mr-2" size={16} />Loading outreach...</p> : rows.length === 0 ? <p className="p-8 text-center text-sm italic text-slate-500">Add a shortlisted contact, then plan outreach here.</p> :
       <div className="divide-y">{rows.map((row) => <div key={row.id} className="p-5">

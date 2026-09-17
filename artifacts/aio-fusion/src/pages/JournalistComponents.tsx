@@ -1,6 +1,6 @@
 import React from "react";
 import { vars } from "../marketing/vars";
-import { Mail, Phone, MapPin, Globe, ExternalLink, Linkedin, Twitter, Clock, Edit, Check, ThumbsDown, ThumbsUp, Database, Target, Award, Shield, FileText, Undo2 } from "lucide-react";
+import { Mail, Phone, MapPin, Globe, ExternalLink, Linkedin, Twitter, Clock, Edit, Check, ThumbsDown, ThumbsUp, Database, Target, Award, Shield, FileText, Undo2, ChevronDown, ChevronRight, AlertCircle, Ban } from "lucide-react";
 import { MiniDonut } from "./shared";
 
 export type Contact = {
@@ -85,12 +85,36 @@ export function isSendableContactEmail(value: unknown): value is string {
     && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
+export type AssessmentFactor = {
+  key: string;
+  label: string;
+  weight: number;
+  score: number | null;
+  reason: string;
+};
+
+export type RecommendationAssessment = {
+  version: "editorial-v1";
+  fitScore: number | null;
+  confidence: "high" | "medium" | "low";
+  evidenceCoverage: number;
+  factors: AssessmentFactor[];
+  readiness: { status: "ready" | "needs_check" | "blocked"; reasons: string[] };
+  evidence: Array<{ title: string; url: string; publishedAt: string | null; checkedAt: string; excerpt: string; attribution: "page_checked" | "search_suggested"; authorMatched: boolean }>;
+  warnings: string[];
+  suggestedAngle: string | null;
+  evaluation?: { evaluated: boolean; shortlisted: boolean; contacted: boolean; responded: boolean; placed: boolean };
+};
+
 export type Recommendation = {
   rank: number;
   contact: Contact;
   score: number;
   reasons: string[];
   phraseAttributions?: PhraseAttribution[];
+  assessment?: RecommendationAssessment;
+  recommendationSetId?: number | string;
+  restricted?: boolean;
 };
 
 export type PhraseAttribution = {
@@ -213,6 +237,117 @@ function EnrichmentSections({
   );
 }
 
+function AssessmentSection({ assessment }: { assessment?: RecommendationAssessment }) {
+  const [factorsOpen, setFactorsOpen] = React.useState(false);
+  
+  return (
+    <div className="space-y-4 mb-4">
+      {assessment ? (
+        <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
+          <div className="flex flex-wrap items-start justify-between gap-4 mb-3 border-b border-slate-200 pb-3">
+            <div>
+              <span className="text-[12px] font-bold text-slate-700 block mb-1">Editorial fit</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xl font-bold text-slate-800">{assessment.fitScore ?? "?"}%</span>
+                <span className="text-[11px] px-2 py-0.5 bg-slate-200 text-slate-700 rounded-full font-medium">Confidence: {assessment.confidence}</span>
+              </div>
+            </div>
+            <div>
+              <span className="text-[12px] font-bold text-slate-700 block mb-1">Contact readiness</span>
+              <span className={`text-[12px] font-semibold px-2.5 py-1 rounded-md ${assessment.readiness.status === 'ready' ? 'bg-emerald-100 text-emerald-800' : assessment.readiness.status === 'needs_check' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'}`}>
+                {assessment.readiness.status === 'ready' ? 'Ready to contact' : assessment.readiness.status === 'needs_check' ? 'Needs verification' : 'Blocked'}
+              </span>
+            </div>
+            {assessment.readiness.status !== 'ready' && assessment.readiness.reasons.length > 0 && (
+              <div className="w-full text-[12px] text-slate-600 mt-1">
+                <ul className="list-disc pl-4 space-y-0.5">
+                  {assessment.readiness.reasons.map((r, i) => <li key={i} className={assessment.readiness.status === 'blocked' ? 'text-rose-700' : 'text-amber-700'}>{r}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          <div className="mb-3">
+             <button onClick={() => setFactorsOpen(!factorsOpen)} className="flex items-center gap-1.5 text-[12px] font-bold text-slate-700 hover:text-slate-900 transition-colors outline-none w-full text-left">
+               {factorsOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+               Weighted fit factors
+             </button>
+             {factorsOpen && (
+               <div className="mt-3 space-y-2 pl-6">
+                 {assessment.factors.map(f => (
+                   <div key={f.key} className="text-[12px]">
+                     <div className="flex justify-between items-end mb-0.5">
+                       <span className="font-semibold text-slate-700">{f.label} <span className="text-slate-400 font-normal ml-1">({f.weight}%)</span></span>
+                       <span className="font-bold text-slate-600">{f.score ?? "?"} / 100</span>
+                     </div>
+                     <p className="text-slate-600 text-[11.5px] leading-relaxed">{f.reason}</p>
+                   </div>
+                 ))}
+                 <p className="text-[10px] text-slate-400 italic mt-2">Scores are based on available evidence. Unknowns are evaluated as null, not zero.</p>
+               </div>
+             )}
+          </div>
+
+          {assessment.suggestedAngle && (
+            <div className="mb-3 p-3 bg-white rounded border border-slate-100 border-l-4 border-l-indigo-400">
+              <span className="text-[11px] font-bold text-indigo-800 uppercase tracking-wide block mb-1">Inferred Suggested Angle</span>
+              <p className="text-[12px] text-slate-700">{assessment.suggestedAngle}</p>
+              <span className="text-[10px] text-indigo-500 block mt-1">This is an AI judgement based on available data, not a verified fact. No probability of coverage claimed.</span>
+            </div>
+          )}
+
+          {assessment.warnings.length > 0 && (
+            <div className="mb-3 p-3 bg-rose-50 rounded border border-rose-100">
+              <div className="flex items-start gap-2">
+                <AlertCircle size={14} className="text-rose-600 mt-0.5" />
+                <div>
+                  <span className="text-[12px] font-bold text-rose-900 block mb-1">Warnings</span>
+                  <ul className="list-disc pl-4 text-[12px] text-rose-800 space-y-0.5">
+                    {assessment.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <div className="pt-3 border-t border-slate-200">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[12px] font-bold text-slate-700">Source evidence ({assessment.evidenceCoverage} found)</span>
+            </div>
+            {assessment.evidence.length > 0 ? (
+              <div className="space-y-2">
+                {assessment.evidence.map((ev, i) => (
+                  <div key={i} className="text-[11.5px] bg-white p-2 rounded border border-slate-100">
+                     <a href={ev.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-600 hover:underline">{ev.title}</a>
+                     <div className="flex gap-3 text-[10px] text-slate-500 mt-1 mb-1.5">
+                       {ev.publishedAt && <span>Published: {new Date(ev.publishedAt).toLocaleDateString()}</span>}
+                       <span>Checked: {new Date(ev.checkedAt).toLocaleDateString()}</span>
+                       {ev.authorMatched && <span className="text-emerald-600 font-medium">Author matched</span>}
+                       <span className="bg-slate-100 px-1.5 rounded">{ev.attribution === 'page_checked' ? 'Page checked' : 'Search suggested'}</span>
+                     </div>
+                     <p className="text-slate-600 italic line-clamp-2">"{ev.excerpt}"</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+               <p className="text-[11px] text-slate-500">No explicit evidence gathered yet. Use bounded top-5 search to check recent coverage.</p>
+            )}
+          </div>
+          
+          {assessment.evaluation && (
+            <div className="pt-3 mt-3 border-t border-slate-200">
+              <span className="text-[12px] font-bold text-slate-700 block mb-1">Previous article outcome summary</span>
+              <p className="text-[11px] text-slate-600">
+                {assessment.evaluation.placed ? "Placed a story." : assessment.evaluation.responded ? "Responded to outreach." : assessment.evaluation.contacted ? "Contacted, no response yet." : assessment.evaluation.shortlisted ? "Shortlisted, not contacted." : "Evaluated, not shortlisted."}
+              </p>
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function RecommendationCard({
   item,
   decision,
@@ -229,6 +364,7 @@ export function RecommendationCard({
   refinement,
   refinementLoading = false,
   onRefine,
+  onToggleRestriction,
 }: {
   item: Recommendation;
   decision?: Decision;
@@ -245,6 +381,7 @@ export function RecommendationCard({
   refinement?: "more" | "less";
   refinementLoading?: boolean;
   onRefine?: (signal: "more" | "less" | null) => void;
+  onToggleRestriction?: (contactId: number, restricted: boolean) => void;
 }) {
   const c = item.contact;
   const latestDiscovery = c.provenance?.latestPublicDiscovery;
@@ -367,6 +504,8 @@ export function RecommendationCard({
             mediaOpportunities={c.mediaOpportunities || latestDiscovery?.mediaOpportunities}
             legacyMediaOpportunity={latestDiscovery?.mediaOpportunity}
           />
+          
+          <AssessmentSection assessment={item.assessment} />
 
           {c.notes && (
             <div className="p-3 rounded-lg bg-amber-50 border border-amber-100 mb-4">
@@ -427,34 +566,45 @@ export function RecommendationCard({
         </div>
       </div>
 
-      {!isShortlist && onAccept && onDecline && (
-        <div className="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t" style={{ borderColor: vars.g100 }}>
-          <button 
-            data-testid={`button-accept-${c.id}`} 
-            onClick={onAccept} 
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors" 
-            style={{ background: "#3D9B6B", boxShadow: "0 1px 2px rgba(61,155,107,0.3)" }}
-          >
-            <Check size={14} /> Add to shortlist
-          </button>
-          <button 
-            data-testid={`button-decline-${c.id}`} 
-            onClick={onDecline} 
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold border transition-colors bg-white hover:bg-slate-50" 
-            style={{ borderColor: vars.g200, color: vars.g600 }}
-          >
-            <ThumbsDown size={14} /> Decline
-          </button>
-          {onRefine && <>
-            <button disabled={refinementLoading} aria-pressed={refinement === "more"} onClick={() => onRefine(refinement === "more" ? null : "more")} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-semibold border ${refinement === "more" ? "bg-emerald-50 border-emerald-300 text-emerald-800" : "bg-white border-slate-200 text-slate-600"}`}>
-              {refinement === "more" ? <Undo2 size={14} /> : <ThumbsUp size={14} />} {refinement === "more" ? "Undo More like this" : "More like this"}
+      {(!isShortlist && onAccept && onDecline) || onToggleRestriction ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-4 border-t" style={{ borderColor: vars.g100 }}>
+          <div className="flex flex-wrap items-center gap-3">
+            {!isShortlist && onAccept && onDecline && (
+              <>
+                <button 
+                  data-testid={`button-accept-${c.id}`} 
+                  onClick={onAccept} 
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors" 
+                  style={{ background: "#3D9B6B", boxShadow: "0 1px 2px rgba(61,155,107,0.3)" }}
+                >
+                  <Check size={14} /> Add to shortlist
+                </button>
+                <button 
+                  data-testid={`button-decline-${c.id}`} 
+                  onClick={onDecline} 
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold border transition-colors bg-white hover:bg-slate-50" 
+                  style={{ borderColor: vars.g200, color: vars.g600 }}
+                >
+                  <ThumbsDown size={14} /> Decline
+                </button>
+                {onRefine && <>
+                  <button disabled={refinementLoading} aria-pressed={refinement === "more"} onClick={() => onRefine(refinement === "more" ? null : "more")} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-semibold border ${refinement === "more" ? "bg-emerald-50 border-emerald-300 text-emerald-800" : "bg-white border-slate-200 text-slate-600"}`}>
+                    {refinement === "more" ? <Undo2 size={14} /> : <ThumbsUp size={14} />} {refinement === "more" ? "Undo More like this" : "More like this"}
+                  </button>
+                  <button disabled={refinementLoading} aria-pressed={refinement === "less"} onClick={() => onRefine(refinement === "less" ? null : "less")} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-semibold border ${refinement === "less" ? "bg-rose-50 border-rose-300 text-rose-800" : "bg-white border-slate-200 text-slate-600"}`}>
+                    {refinement === "less" ? <Undo2 size={14} /> : <ThumbsDown size={14} />} {refinement === "less" ? "Undo Less like this" : "Less like this"}
+                  </button>
+                </>}
+              </>
+            )}
+          </div>
+          {onToggleRestriction && (
+            <button onClick={() => onToggleRestriction(c.id, !item.restricted)} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-semibold border transition-colors ${item.restricted ? "bg-rose-50 border-rose-300 text-rose-800 hover:bg-rose-100" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
+              <Ban size={14} /> {item.restricted ? "Remove restriction" : "Do not contact"}
             </button>
-            <button disabled={refinementLoading} aria-pressed={refinement === "less"} onClick={() => onRefine(refinement === "less" ? null : "less")} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-semibold border ${refinement === "less" ? "bg-rose-50 border-rose-300 text-rose-800" : "bg-white border-slate-200 text-slate-600"}`}>
-              {refinement === "less" ? <Undo2 size={14} /> : <ThumbsDown size={14} />} {refinement === "less" ? "Undo Less like this" : "Less like this"}
-            </button>
-          </>}
+          )}
         </div>
-      )}
+      ) : null}
       
       {noteFor === c.id && setNote && onReject && (
         <div className="mt-3 flex gap-2 animate-in fade-in slide-in-from-top-2 p-3 rounded-lg bg-slate-50 border border-slate-200">

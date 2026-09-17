@@ -15,7 +15,13 @@ const projectState = vi.hoisted(() => ({ id: "project-1" }));
 const decisionState = vi.hoisted(() => ({
   payload: { decisions: [] as Record<string, unknown>[], items: [] as Record<string, unknown>[], decisionContacts: [] as Record<string, unknown>[] },
 }));
-const recommendationState = vi.hoisted(() => ({ includeContact: true }));
+const recommendationState = vi.hoisted(() => ({ includeContact: true, brief: null as Record<string, unknown> | null }));
+const featureState = vi.hoisted(() => ({
+  briefFailure: false,
+  recommendationGetFailure: false,
+  restricted: false,
+  enrich: false,
+}));
 const delayedDecision = vi.hoisted(() => ({
   pending: false,
   resolve: null as null | (() => void),
@@ -178,6 +184,63 @@ describe("MediaResearchPage live discovery", () => {
         }
         return new Response(JSON.stringify(decisionState.payload), { status: 200 });
       }
+      if (url.includes("/brief")) {
+        if (init?.method === "PUT") return new Response(JSON.stringify({ brief: JSON.parse(init.body as string).brief }), { status: 200 });
+        if (featureState.briefFailure) return new Response(JSON.stringify({ error: "Brief store unavailable" }), { status: 503 });
+        return new Response(JSON.stringify({ brief: recommendationState.brief }), { status: 200 });
+      }
+      if (url.includes("/store/media-db/recommendations?")) {
+        if (featureState.recommendationGetFailure) return new Response(JSON.stringify({ error: "Saved set unavailable" }), { status: 503 });
+        const queryStoryKey = new URL(url, "http://test.local").searchParams.get("storyKey");
+        const savedContact = {
+          id: 91, firstName: "Decision", lastName: "Contact", role: "Energy editor",
+          email: "", phone: "", notes: "", beats: ["energy"], sectors: ["Energy"],
+          outletName: "Current Energy Daily", outletCategory: "Energy",
+        };
+        return new Response(JSON.stringify({
+          ok: true,
+          recommendationSet: { id: "saved-set-1" },
+          items: recommendationState.includeContact && queryStoryKey === "story-1"
+            ? [{
+              rank: 1, score: 80, reasons: ["Coverage profile matches energy"], contact: savedContact,
+              restricted: featureState.restricted,
+              assessment: featureState.restricted ? {
+                version: "editorial-v1", fitScore: 80, confidence: "medium", evidenceCoverage: 30,
+                factors: [], readiness: { status: "blocked", reasons: ["Contact or outlet is suppressed / do-not-contact."] },
+                evidence: [], warnings: [], suggestedAngle: null,
+              } : undefined,
+            }]
+            : [],
+          brief: recommendationState.brief,
+          evaluation: { evaluated: recommendationState.includeContact ? 1 : 0, shortlisted: 0, contacted: 0, responded: 0, placed: 0 },
+        }), { status: 200 });
+      }
+      if (url.includes("/recommendations/contact-restriction") && init?.method === "POST") {
+        featureState.restricted = Boolean((JSON.parse(String(init.body)) as Record<string, unknown>).doNotContact);
+        return new Response(JSON.stringify({ ok: true, doNotContact: featureState.restricted }), { status: 200 });
+      }
+      if (url.includes("/recommendations/enrich") && init?.method === "POST") {
+        featureState.enrich = true;
+        return new Response(JSON.stringify({
+          ok: true,
+          recommendationSet: { id: "saved-set-1" },
+          items: [{
+            rank: 1, score: 84, reasons: ["Coverage profile matches energy"], contact: {
+              id: 91, firstName: "Enriched", lastName: "Contact", role: "Energy editor",
+              email: "", phone: "", notes: "", beats: ["energy"], sectors: ["Energy"],
+              outletName: "Current Energy Daily", outletCategory: "Energy",
+            },
+            assessment: {
+              version: "editorial-v1", fitScore: 84, confidence: "high", evidenceCoverage: 100,
+              factors: [], readiness: { status: "ready", reasons: [] },
+              evidence: [{ title: "Recent energy coverage", url: "https://energy.example/recent", publishedAt: "2026-08-01", checkedAt: "2026-09-01", excerpt: "Energy transition", attribution: "page_checked", authorMatched: true }],
+              warnings: [], suggestedAngle: null,
+            },
+          }],
+          brief: recommendationState.brief,
+          evaluation: { evaluated: 1, shortlisted: 0, contacted: 0, responded: 0, placed: 0 },
+        }), { status: 200 });
+      }
       if (url.endsWith("/store/media-db/recommendations")) {
         const recommendationMarker = delayedRequests.recommendations
           ? `${String(body?.storyKey || "unknown")}-response-${delayedRequests.recommendationCalls.length + 1}`
@@ -233,7 +296,15 @@ describe("MediaResearchPage live discovery", () => {
           : candidate.firstName;
         const liveResponse = new Response(JSON.stringify({
           ok: true,
-          items: [{ ...candidate, firstName: liveMarker }],
+          items: [{ ...candidate, firstName: liveMarker, phraseAttributions: [{
+            phraseId: storyOnePhrase.id,
+            phraseText: storyOnePhrase.text,
+            matchKind: "topic",
+            exactPhraseMatch: "Recorded topic overlap supports this related subject.",
+            articleFit: "The public byline matches the selected article.",
+            publicationAuthorityContext: "Cited public source.",
+            suggestedPlacementAngle: "Offer a practical operator perspective.",
+          }] }],
           discoveryToken: "signed-token",
         }), { status: 200 });
         if (delayedRequests.live) {
@@ -259,6 +330,11 @@ describe("MediaResearchPage live discovery", () => {
     };
     decisionState.payload = { decisions: [], items: [], decisionContacts: [] };
     recommendationState.includeContact = true;
+    recommendationState.brief = null;
+    featureState.briefFailure = false;
+    featureState.recommendationGetFailure = false;
+    featureState.restricted = false;
+    featureState.enrich = false;
     delayedDecision.pending = false;
     delayedDecision.resolve = null;
     delayedDecisionGets.pending = false;
@@ -280,14 +356,22 @@ describe("MediaResearchPage live discovery", () => {
   it("shows grounded live results and saves a selected contact to the Media Database", async () => {
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
-    fireEvent.change(screen.getByPlaceholderText(/tech reporters in London/i), { target: { value: "London reporters" } });
-    fireEvent.change(screen.getByPlaceholderText(/cleantech/i), { target: { value: "Renewable energy" } });
+    
+    // Wait for the brief to load and fields to appear
+    await waitFor(() => expect(screen.getAllByDisplayValue("Clean energy").length).toBeGreaterThan(0));
+    
+    // Use the region button and discover live button
+    await waitFor(() => expect(screen.getByRole("button", { name: "US" })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "US" }));
-    fireEvent.click(screen.getByTestId("button-discover-live"));
+    
+     fireEvent.click(screen.getByTestId("button-recommend-contacts"));
+     await waitFor(() => expect(requests.filter((request) => request.url.endsWith("/store/media-db/recommendations")).length).toBe(1));
+     const discoverButton = screen.getByRole("button", { name: "Expand with live search" });
+     fireEvent.click(discoverButton);
 
     expect(await screen.findByText("Jane Reporter")).toBeTruthy();
     expect(screen.getByText("Phrase fit and recorded topic overlap")).toBeTruthy();
-    expect(screen.getByText("Recorded topic/keyword overlap:")).toBeTruthy();
+     expect(screen.getAllByText("Recorded topic/keyword overlap:").length).toBeGreaterThan(0);
     const recommendationRequests = requests.filter((request) => request.url.endsWith("/store/media-db/recommendations"));
     expect(recommendationRequests).toHaveLength(1);
     expect(recommendationRequests[0].body).toMatchObject({ projectId: "project-1", storyKey: "story-1" });
@@ -296,9 +380,9 @@ describe("MediaResearchPage live discovery", () => {
     const liveRequest = requests.find((request) => request.url.includes("/content/media-discover"));
     expect(liveRequest?.body).toMatchObject({
       projectId: "project-1",
-      query: "London reporters",
+       query: expect.stringContaining("Journalists and editors covering"),
       regions: ["US"],
-      sectorTopic: "Renewable energy",
+       sectorTopic: "Clean energy",
       targetPhrases: [storyOnePhrase],
     });
     expect((liveRequest?.body?.content as Record<string, unknown>).title).toBe("New clean energy platform launches");
@@ -357,15 +441,19 @@ describe("MediaResearchPage live discovery", () => {
     expect(sessionStorage.getItem("aio.research.selection.v1::workspace-a::project-1")).toBeNull();
   });
 
-  it("runs one automatic database recommendation under StrictMode and never runs external search automatically", async () => {
+  it("never runs external search automatically when matching database contacts", async () => {
     render(<StrictMode><MediaResearchPage /></StrictMode>);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "US" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "US" }));
+    await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId("button-recommend-contacts"));
     await waitFor(() => expect(requests.filter((request) => request.url.endsWith("/store/media-db/recommendations"))).toHaveLength(1));
     expect(requests.some((request) => request.url.includes("/content/media-discover"))).toBe(false);
-    expect(screen.getByRole("button", { name: "Global" }).className).toContain("bg-slate-800");
   });
 
   it("infers an unambiguous UK, Europe or US default from canonical intake locations", async () => {
+    recommendationState.brief = null;
     intakeState.data = { formData: { "4.5": "Manchester and Leeds, UK" }, duals: {}, dualLists: {}, stringLists: {} };
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
@@ -421,13 +509,59 @@ describe("MediaResearchPage live discovery", () => {
     expect(await screen.findByText(kind === "network" ? "Decision service unavailable" : /Could not load saved shortlist: the server returned invalid data/i)).toBeTruthy();
   });
 
+  it("blocks matching and does not invent a brief when scoped brief hydration fails", async () => {
+    featureState.briefFailure = true;
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByText(/Brief store unavailable|Could not load targeting brief/i)).toBeTruthy();
+    expect(screen.getByTestId("button-recommend-contacts")).toBeDisabled();
+    expect(requests.some((request) => request.url.endsWith("/store/media-db/recommendations"))).toBe(false);
+  });
+
+  it("hydrates each Targeting Brief from the active project and article scope", async () => {
+    render(<MediaResearchPage />);
+    const selector = screen.getByTestId("select-research-article");
+    fireEvent.change(selector, { target: { value: "story-1" } });
+    await waitFor(() => expect(requests.some((request) => request.url.includes("/recommendations/brief?") && request.url.includes("projectId=project-1") && request.url.includes("storyKey=story-1"))).toBe(true));
+    fireEvent.change(selector, { target: { value: "story-2" } });
+    await waitFor(() => expect(requests.some((request) => request.url.includes("/recommendations/brief?") && request.url.includes("projectId=project-1") && request.url.includes("storyKey=story-2"))).toBe(true));
+  });
+
+  it("retains the complete enrichment result, including checked coverage evidence", async () => {
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByText("Decision Contact")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Check top 5 recent coverage" }));
+    expect(await screen.findByText("Enriched Contact")).toBeTruthy();
+    expect(screen.getByText("Recent energy coverage")).toBeTruthy();
+    expect(screen.getByText("Author matched")).toBeTruthy();
+  });
+
+  it("restores recommendation readiness after removing a contact restriction", async () => {
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByText("Decision Contact")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Do not contact" }));
+    expect(await screen.findByRole("button", { name: "Remove restriction" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Remove restriction" }));
+    expect(await screen.findByRole("button", { name: "Do not contact" })).toBeTruthy();
+  });
+
   it("does not apply an old decision-save response after switching articles", async () => {
     delayedDecision.pending = true;
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    await waitFor(() => expect(screen.getAllByDisplayValue("Clean energy").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByRole("button", { name: "US" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "US" }));
+    await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId("button-recommend-contacts"));
     expect(await screen.findByText("Decision Contact")).toBeTruthy();
     fireEvent.click(screen.getByTestId("button-accept-91"));
-    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-2" } });
+    await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+    await act(async () => {
+      fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-2" } });
+    });
     await waitFor(() => expect(screen.getByText("New retail energy briefing published")).toBeTruthy());
     delayedDecision.resolve?.();
     await waitFor(() => expect(screen.queryByText("Decision Contact")).toBeNull());
@@ -437,7 +571,18 @@ describe("MediaResearchPage live discovery", () => {
     delayedDecisionGets.pending = true;
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    await waitFor(() => expect(screen.getAllByDisplayValue("Clean energy").length).toBeGreaterThan(0));
     await waitFor(() => expect(delayedDecisionGets.calls).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByRole("button", { name: "US" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "US" }));
+    await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId("button-recommend-contacts"));
+    
+    // DEBUG
+    await waitFor(() => {
+      if (!requests.some(r => r.url.endsWith("/store/media-db/recommendations"))) throw new Error("POST recommendations never called");
+    });
+    
     expect(await screen.findByText("Decision Contact")).toBeTruthy();
     fireEvent.click(screen.getByTestId("button-accept-91"));
     await waitFor(() => expect(screen.getAllByText("Decision Contact")).toHaveLength(2));
@@ -451,10 +596,29 @@ describe("MediaResearchPage live discovery", () => {
     render(<MediaResearchPage />);
     const selector = screen.getByTestId("select-research-article");
     fireEvent.change(selector, { target: { value: "story-1" } });
+    await waitFor(() => expect(screen.getAllByDisplayValue("Clean energy").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByRole("button", { name: "US" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "US" }));
+    await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).not.toBeDisabled());
+     fireEvent.click(screen.getByTestId("button-recommend-contacts"));
     await waitFor(() => expect(delayedRequests.recommendationCalls).toHaveLength(1));
-    fireEvent.change(selector, { target: { value: "story-2" } });
+    await act(async () => { 
+      await new Promise(r => setTimeout(r, 0)); 
+      fireEvent.change(selector, { target: { value: "story-2" } });
+    });
+    await waitFor(() => expect(screen.getAllByDisplayValue("Clean energy").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByRole("button", { name: "US" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "US" }));
+    await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).not.toBeDisabled());
+     fireEvent.click(screen.getByTestId("button-recommend-contacts"));
     await waitFor(() => expect(delayedRequests.recommendationCalls).toHaveLength(2));
+    await act(async () => { await new Promise(r => setTimeout(r, 0)); });
     fireEvent.change(selector, { target: { value: "story-1" } });
+    await waitFor(() => expect(screen.getAllByDisplayValue("Clean energy").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByRole("button", { name: "US" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "US" }));
+    await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).not.toBeDisabled());
+     fireEvent.click(screen.getByTestId("button-recommend-contacts"));
     await waitFor(() => expect(delayedRequests.recommendationCalls).toHaveLength(3));
 
     const result = (name: string) => new Response(JSON.stringify({
@@ -475,16 +639,17 @@ describe("MediaResearchPage live discovery", () => {
     render(<MediaResearchPage />);
     const selector = screen.getByTestId("select-research-article");
     fireEvent.change(selector, { target: { value: "story-1" } });
-    await waitFor(() => expect(screen.getByTestId("button-discover-live")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("button-discover-live"));
+    await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).toBeTruthy());
+     fireEvent.click(screen.getByTestId("button-discover-live"));
     await waitFor(() => expect(delayedRequests.liveCalls).toHaveLength(1));
+    await act(async () => { await new Promise(r => setTimeout(r, 0)); });
     fireEvent.change(selector, { target: { value: "story-2" } });
-    await waitFor(() => expect(screen.getByTestId("button-discover-live")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("button-discover-live"));
+    await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).toBeTruthy());
+     fireEvent.click(screen.getByTestId("button-discover-live"));
     await waitFor(() => expect(delayedRequests.liveCalls).toHaveLength(2));
     fireEvent.change(selector, { target: { value: "story-1" } });
-    await waitFor(() => expect(screen.getByTestId("button-discover-live")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("button-discover-live"));
+    await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).toBeTruthy());
+     fireEvent.click(screen.getByTestId("button-discover-live"));
     await waitFor(() => expect(delayedRequests.liveCalls).toHaveLength(3));
 
     const result = (name: string) => new Response(JSON.stringify({
@@ -501,32 +666,30 @@ describe("MediaResearchPage live discovery", () => {
     expect(screen.queryByText("story-2-live-2 Reporter")).toBeNull();
   });
 
-  it("preserves edited criteria across unrelated rerenders and regenerates them for a new article", async () => {
-    const view = render(<MediaResearchPage />);
-    const selector = screen.getByTestId("select-research-article");
-    fireEvent.change(selector, { target: { value: "story-1" } });
-    const query = (await screen.findAllByDisplayValue(/New clean energy platform launches/))
-      .find((element) => element.tagName === "INPUT") as HTMLInputElement;
-    fireEvent.change(query, { target: { value: "My carefully edited query" } });
-    view.rerender(<MediaResearchPage />);
-    expect(screen.getByDisplayValue("My carefully edited query")).toBeTruthy();
-
-    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-2" } });
-    await waitFor(() => expect(screen.getAllByDisplayValue(/New retail energy briefing published/).some((element) => element.tagName === "INPUT")).toBe(true));
-    expect(screen.queryByDisplayValue("My carefully edited query")).toBeNull();
-  });
-
   it("refreshes structured phrase attribution inputs when switching articles", async () => {
     delayedRequests.recommendations = true;
     render(<MediaResearchPage />);
     const selector = screen.getByTestId("select-research-article");
     fireEvent.change(selector, { target: { value: "story-1" } });
+    await waitFor(() => expect(screen.getAllByDisplayValue("Clean energy").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByRole("button", { name: "US" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "US" }));
+    await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId("button-recommend-contacts"));
     await waitFor(() => expect(delayedRequests.recommendationCalls).toHaveLength(1));
     expect(delayedRequests.recommendationCalls[0].storyKey).toBe("story-1");
     const firstBody = requests.find((request) => request.url.endsWith("/store/media-db/recommendations") && request.body?.storyKey === "story-1")?.body;
     expect(firstBody?.targetPhrases).toEqual([storyOnePhrase]);
 
-    fireEvent.change(selector, { target: { value: "story-2" } });
+    await act(async () => { 
+      await new Promise(r => setTimeout(r, 0)); 
+      fireEvent.change(selector, { target: { value: "story-2" } });
+    });
+    await waitFor(() => expect(screen.getAllByDisplayValue("Clean energy").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByRole("button", { name: "US" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "US" }));
+    await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId("button-recommend-contacts"));
     await waitFor(() => expect(delayedRequests.recommendationCalls).toHaveLength(2));
     const secondBody = requests.find((request) => request.url.endsWith("/store/media-db/recommendations") && request.body?.storyKey === "story-2")?.body;
     expect(secondBody?.targetPhrases).toEqual([storyTwoPhrase]);
@@ -547,6 +710,10 @@ describe("MediaResearchPage recommendation refinement", () => {
     const contact = { id: 10, outletId: 1, firstName: "Jane", lastName: "Reporter", role: "Energy correspondent", email: "", phone: "", notes: "", accountId: null, beats: ["energy"], sectors: ["technology"] };
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.includes("/brief")) {
+        if (init?.method === "PUT") return new Response(JSON.stringify({ brief: JSON.parse(init.body as string).brief }), { status: 200 });
+        return new Response(JSON.stringify({ brief: { topic: "Clean energy", angle: "Launch", audience: "B2B", regions: ["UK"], publicationTypes: [], whyNow: "" } }), { status: 200 });
+      }
       if (url.includes("/recommendations/feedback") && init?.method === "PUT") {
         const body = JSON.parse(String(init.body));
         expect(body).toEqual({ projectId: "project-1", storyKey: "story-1", contactId: 10, signal: "more" });
@@ -556,6 +723,15 @@ describe("MediaResearchPage recommendation refinement", () => {
       if (url.includes("/recommendations/feedback") && init?.method === "DELETE") {
         signal = null;
         return new Response(JSON.stringify({ ok: true }));
+      }
+      if (url.includes("/store/media-db/recommendations?")) {
+        return new Response(JSON.stringify({
+          ok: true,
+          recommendationSet: { id: "saved-set-refinement" },
+          items: [{ rank: 1, score: signal ? 88 : 70, reasons: signal ? ["Marked More like this"] : ["Coverage profile matches energy"], contact }],
+          brief: { topic: "Clean energy", angle: "Launch", audience: "B2B", regions: ["UK"], publicationTypes: [], whyNow: "" },
+          evaluation: { evaluated: 1, shortlisted: 1, contacted: 0, responded: 0, placed: 0 },
+        }), { status: 200 });
       }
       if (url.endsWith("/store/media-db/recommendations") && init?.method === "POST") {
         return new Response(JSON.stringify({

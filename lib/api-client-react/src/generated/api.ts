@@ -22,7 +22,10 @@ import type {
 import type {
   AuthUserEnvelope,
   BeginBrowserLoginParams,
+  ContactRestrictionRequest,
   ErrorEnvelope,
+  GetMediaRecommendationBriefParams,
+  GetMediaRecommendationsParams,
   HandleBrowserLoginCallbackParams,
   HealthStatus,
   InsightArticle,
@@ -32,6 +35,10 @@ import type {
   LogoutSuccess,
   MobileTokenExchangeRequest,
   MobileTokenExchangeSuccess,
+  RecommendationBriefEnvelope,
+  RecommendationBriefRequest,
+  RecommendationEnrichRequest,
+  RecommendationRequest,
   UploadUrlRequest,
   UploadUrlResponse
 } from './api.schemas';
@@ -1238,6 +1245,458 @@ export const useCreateAdminInsightMedia = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateAdminInsightMediaMutationOptions(options));
+    }
+
+export const getGetMediaRecommendationBriefUrl = (params: GetMediaRecommendationBriefParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/store/media-db/recommendations/brief?${stringifiedParams}` : `/api/store/media-db/recommendations/brief`
+}
+
+export const getMediaRecommendationBrief = async (params: GetMediaRecommendationBriefParams, options?: Parameters<typeof customFetch>[1]): Promise<RecommendationBriefEnvelope> => {
+
+  return customFetch<RecommendationBriefEnvelope>(getGetMediaRecommendationBriefUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMediaRecommendationBriefQueryKey = (params?: GetMediaRecommendationBriefParams,) => {
+    return [
+    `/api/store/media-db/recommendations/brief`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetMediaRecommendationBriefQueryOptions = <TData = Awaited<ReturnType<typeof getMediaRecommendationBrief>>, TError = ErrorType<unknown>>(params: GetMediaRecommendationBriefParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMediaRecommendationBrief>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMediaRecommendationBriefQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMediaRecommendationBrief>>> = ({ signal }) => getMediaRecommendationBrief(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMediaRecommendationBrief>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMediaRecommendationBriefQueryResult = NonNullable<Awaited<ReturnType<typeof getMediaRecommendationBrief>>>
+export type GetMediaRecommendationBriefQueryError = ErrorType<unknown>
+
+
+
+export function useGetMediaRecommendationBrief<TData = Awaited<ReturnType<typeof getMediaRecommendationBrief>>, TError = ErrorType<unknown>>(
+ params: GetMediaRecommendationBriefParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMediaRecommendationBrief>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMediaRecommendationBriefQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveMediaRecommendationBriefUrl = () => {
+
+
+
+
+  return `/api/store/media-db/recommendations/brief`
+}
+
+export const saveMediaRecommendationBrief = async (recommendationBriefRequest: RecommendationBriefRequest, options?: Parameters<typeof customFetch>[1]): Promise<RecommendationBriefEnvelope> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<RecommendationBriefEnvelope>(getSaveMediaRecommendationBriefUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(recommendationBriefRequest)
+  }
+);}
+
+
+
+
+
+export const getSaveMediaRecommendationBriefMutationKey = () => ['saveMediaRecommendationBrief'] as const;
+
+export const getSaveMediaRecommendationBriefMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveMediaRecommendationBrief>>, TError,SaveMediaRecommendationBriefMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveMediaRecommendationBrief>>, TError,SaveMediaRecommendationBriefMutationVariables, TContext> => {
+
+const mutationKey = getSaveMediaRecommendationBriefMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveMediaRecommendationBrief>>, SaveMediaRecommendationBriefMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  saveMediaRecommendationBrief(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveMediaRecommendationBriefMutationResult = NonNullable<Awaited<ReturnType<typeof saveMediaRecommendationBrief>>>
+    export type SaveMediaRecommendationBriefMutationBody = BodyType<RecommendationBriefRequest>
+    export type SaveMediaRecommendationBriefMutationError = ErrorType<unknown>
+    export type SaveMediaRecommendationBriefMutationVariables = {data: BodyType<RecommendationBriefRequest>}
+
+    export const useSaveMediaRecommendationBrief = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveMediaRecommendationBrief>>, TError,SaveMediaRecommendationBriefMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveMediaRecommendationBrief>>,
+        TError,
+        SaveMediaRecommendationBriefMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSaveMediaRecommendationBriefMutationOptions(options));
+    }
+
+export const getGetMediaRecommendationsUrl = (params: GetMediaRecommendationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/store/media-db/recommendations?${stringifiedParams}` : `/api/store/media-db/recommendations`
+}
+
+export const getMediaRecommendations = async (params: GetMediaRecommendationsParams, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getGetMediaRecommendationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMediaRecommendationsQueryKey = (params?: GetMediaRecommendationsParams,) => {
+    return [
+    `/api/store/media-db/recommendations`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetMediaRecommendationsQueryOptions = <TData = Awaited<ReturnType<typeof getMediaRecommendations>>, TError = ErrorType<unknown>>(params: GetMediaRecommendationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMediaRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMediaRecommendationsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMediaRecommendations>>> = ({ signal }) => getMediaRecommendations(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMediaRecommendations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMediaRecommendationsQueryResult = NonNullable<Awaited<ReturnType<typeof getMediaRecommendations>>>
+export type GetMediaRecommendationsQueryError = ErrorType<unknown>
+
+
+
+export function useGetMediaRecommendations<TData = Awaited<ReturnType<typeof getMediaRecommendations>>, TError = ErrorType<unknown>>(
+ params: GetMediaRecommendationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMediaRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMediaRecommendationsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateMediaRecommendationsUrl = () => {
+
+
+
+
+  return `/api/store/media-db/recommendations`
+}
+
+export const createMediaRecommendations = async (recommendationRequest: RecommendationRequest, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<void>(getCreateMediaRecommendationsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(recommendationRequest)
+  }
+);}
+
+
+
+
+
+export const getCreateMediaRecommendationsMutationKey = () => ['createMediaRecommendations'] as const;
+
+export const getCreateMediaRecommendationsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMediaRecommendations>>, TError,CreateMediaRecommendationsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createMediaRecommendations>>, TError,CreateMediaRecommendationsMutationVariables, TContext> => {
+
+const mutationKey = getCreateMediaRecommendationsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createMediaRecommendations>>, CreateMediaRecommendationsMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createMediaRecommendations(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateMediaRecommendationsMutationResult = NonNullable<Awaited<ReturnType<typeof createMediaRecommendations>>>
+    export type CreateMediaRecommendationsMutationBody = BodyType<RecommendationRequest>
+    export type CreateMediaRecommendationsMutationError = ErrorType<unknown>
+    export type CreateMediaRecommendationsMutationVariables = {data: BodyType<RecommendationRequest>}
+
+    export const useCreateMediaRecommendations = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMediaRecommendations>>, TError,CreateMediaRecommendationsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createMediaRecommendations>>,
+        TError,
+        CreateMediaRecommendationsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateMediaRecommendationsMutationOptions(options));
+    }
+
+export const getEnrichMediaRecommendationsUrl = () => {
+
+
+
+
+  return `/api/store/media-db/recommendations/enrich`
+}
+
+export const enrichMediaRecommendations = async (recommendationEnrichRequest: RecommendationEnrichRequest, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<void>(getEnrichMediaRecommendationsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(recommendationEnrichRequest)
+  }
+);}
+
+
+
+
+
+export const getEnrichMediaRecommendationsMutationKey = () => ['enrichMediaRecommendations'] as const;
+
+export const getEnrichMediaRecommendationsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof enrichMediaRecommendations>>, TError,EnrichMediaRecommendationsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof enrichMediaRecommendations>>, TError,EnrichMediaRecommendationsMutationVariables, TContext> => {
+
+const mutationKey = getEnrichMediaRecommendationsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof enrichMediaRecommendations>>, EnrichMediaRecommendationsMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  enrichMediaRecommendations(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type EnrichMediaRecommendationsMutationResult = NonNullable<Awaited<ReturnType<typeof enrichMediaRecommendations>>>
+    export type EnrichMediaRecommendationsMutationBody = BodyType<RecommendationEnrichRequest>
+    export type EnrichMediaRecommendationsMutationError = ErrorType<unknown>
+    export type EnrichMediaRecommendationsMutationVariables = {data: BodyType<RecommendationEnrichRequest>}
+
+    export const useEnrichMediaRecommendations = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof enrichMediaRecommendations>>, TError,EnrichMediaRecommendationsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof enrichMediaRecommendations>>,
+        TError,
+        EnrichMediaRecommendationsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getEnrichMediaRecommendationsMutationOptions(options));
+    }
+
+export const getSetMediaRecommendationContactRestrictionUrl = () => {
+
+
+
+
+  return `/api/store/media-db/recommendations/contact-restriction`
+}
+
+export const setMediaRecommendationContactRestriction = async (contactRestrictionRequest: ContactRestrictionRequest, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<void>(getSetMediaRecommendationContactRestrictionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(contactRestrictionRequest)
+  }
+);}
+
+
+
+
+
+export const getSetMediaRecommendationContactRestrictionMutationKey = () => ['setMediaRecommendationContactRestriction'] as const;
+
+export const getSetMediaRecommendationContactRestrictionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setMediaRecommendationContactRestriction>>, TError,SetMediaRecommendationContactRestrictionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setMediaRecommendationContactRestriction>>, TError,SetMediaRecommendationContactRestrictionMutationVariables, TContext> => {
+
+const mutationKey = getSetMediaRecommendationContactRestrictionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setMediaRecommendationContactRestriction>>, SetMediaRecommendationContactRestrictionMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  setMediaRecommendationContactRestriction(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetMediaRecommendationContactRestrictionMutationResult = NonNullable<Awaited<ReturnType<typeof setMediaRecommendationContactRestriction>>>
+    export type SetMediaRecommendationContactRestrictionMutationBody = BodyType<ContactRestrictionRequest>
+    export type SetMediaRecommendationContactRestrictionMutationError = ErrorType<unknown>
+    export type SetMediaRecommendationContactRestrictionMutationVariables = {data: BodyType<ContactRestrictionRequest>}
+
+    export const useSetMediaRecommendationContactRestriction = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setMediaRecommendationContactRestriction>>, TError,SetMediaRecommendationContactRestrictionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setMediaRecommendationContactRestriction>>,
+        TError,
+        SetMediaRecommendationContactRestrictionMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSetMediaRecommendationContactRestrictionMutationOptions(options));
     }
 
 export const getRequestInsightUploadUrlUrl = () => {

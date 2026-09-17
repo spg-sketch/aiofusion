@@ -302,6 +302,74 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InsightMedia'
+  /store/media-db/recommendations/brief:
+    get:
+      tags: [Media Database]
+      operationId: getMediaRecommendationBrief
+      parameters:
+        - { $ref: '#/components/parameters/ProjectId' }
+        - { $ref: '#/components/parameters/StoryKey' }
+      responses:
+        '200':
+          description: Saved targeting brief.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecommendationBriefEnvelope' }
+    put:
+      tags: [Media Database]
+      operationId: saveMediaRecommendationBrief
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecommendationBriefRequest' }
+      responses:
+        '200':
+          description: Brief saved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecommendationBriefEnvelope' }
+  /store/media-db/recommendations:
+    get:
+      tags: [Media Database]
+      operationId: getMediaRecommendations
+      parameters:
+        - { $ref: '#/components/parameters/ProjectId' }
+        - { $ref: '#/components/parameters/StoryKey' }
+      responses:
+        '200': { description: Saved recommendation envelope. }
+    post:
+      tags: [Media Database]
+      operationId: createMediaRecommendations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecommendationRequest' }
+      responses:
+        '200': { description: Recommendation envelope. }
+  /store/media-db/recommendations/enrich:
+    post:
+      tags: [Media Database]
+      operationId: enrichMediaRecommendations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecommendationEnrichRequest' }
+      responses:
+        '200': { description: Refreshed recommendation envelope. }
+  /store/media-db/recommendations/contact-restriction:
+    post:
+      tags: [Media Database]
+      operationId: setMediaRecommendationContactRestriction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContactRestrictionRequest' }
+      responses:
+        '200': { description: Restriction saved. }
   /storage/uploads/request-url:
     post:
       tags: [Storage]
@@ -336,7 +404,66 @@ components:
       description: Browser session cookie.
       schema:
         type: string
+    ProjectId:
+      name: projectId
+      in: query
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 200 }
+    StoryKey:
+      name: storyKey
+      in: query
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 200 }
   schemas:
+    TargetingBrief:
+      type: object
+      required: [topic, angle, audience, regions, publicationTypes, whyNow]
+      properties:
+        topic: { type: string }
+        angle: { type: string }
+        audience: { type: string }
+        regions: { type: array, items: { type: string } }
+        publicationTypes: { type: array, items: { type: string } }
+        whyNow: { type: string }
+    RecommendationBriefRequest:
+      type: object
+      required: [projectId, storyKey, brief]
+      properties:
+        projectId: { type: string }
+        storyKey: { type: string }
+        brief: { $ref: '#/components/schemas/TargetingBrief' }
+    RecommendationBriefEnvelope:
+      type: object
+      required: [brief]
+      properties:
+        brief:
+          oneOf:
+            - { $ref: '#/components/schemas/TargetingBrief' }
+            - { type: 'null' }
+    RecommendationRequest:
+      type: object
+      required: [projectId, storyKey]
+      properties:
+        projectId: { type: string }
+        storyKey: { type: string }
+        terms: { type: array, items: { type: string } }
+        targetPhrases: { type: array, items: { type: object } }
+        brief: { $ref: '#/components/schemas/TargetingBrief' }
+    RecommendationEnrichRequest:
+      type: object
+      required: [projectId, storyKey, recommendationSetId]
+      properties:
+        projectId: { type: string }
+        storyKey: { type: string }
+        recommendationSetId: { type: integer, minimum: 1 }
+    ContactRestrictionRequest:
+      type: object
+      required: [projectId, storyKey, contactId, doNotContact]
+      properties:
+        projectId: { type: string }
+        storyKey: { type: string }
+        contactId: { type: integer, minimum: 1 }
+        doNotContact: { type: boolean }
     HealthStatus:
       type: object
       properties:

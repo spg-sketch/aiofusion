@@ -396,6 +396,113 @@ export const CreateAdminInsightMediaResponse = zod.object({
 })
 
 
+export const getMediaRecommendationBriefQueryProjectIdMax = 200;
+
+export const getMediaRecommendationBriefQueryStoryKeyMax = 200;
+
+
+
+export const GetMediaRecommendationBriefQueryParams = zod.object({
+  "projectId": zod.coerce.string().min(1).max(getMediaRecommendationBriefQueryProjectIdMax),
+  "storyKey": zod.coerce.string().min(1).max(getMediaRecommendationBriefQueryStoryKeyMax)
+})
+
+export const GetMediaRecommendationBriefResponse = zod.object({
+  "brief": zod.union([zod.object({
+  "topic": zod.string(),
+  "angle": zod.string(),
+  "audience": zod.string(),
+  "regions": zod.array(zod.string()),
+  "publicationTypes": zod.array(zod.string()),
+  "whyNow": zod.string()
+}),zod.null()])
+})
+
+
+export const SaveMediaRecommendationBriefBody = zod.object({
+  "projectId": zod.string(),
+  "storyKey": zod.string(),
+  "brief": zod.object({
+  "topic": zod.string(),
+  "angle": zod.string(),
+  "audience": zod.string(),
+  "regions": zod.array(zod.string()),
+  "publicationTypes": zod.array(zod.string()),
+  "whyNow": zod.string()
+})
+})
+
+export const SaveMediaRecommendationBriefResponse = zod.object({
+  "brief": zod.union([zod.object({
+  "topic": zod.string(),
+  "angle": zod.string(),
+  "audience": zod.string(),
+  "regions": zod.array(zod.string()),
+  "publicationTypes": zod.array(zod.string()),
+  "whyNow": zod.string()
+}),zod.null()])
+})
+
+
+export const getMediaRecommendationsQueryProjectIdMax = 200;
+
+export const getMediaRecommendationsQueryStoryKeyMax = 200;
+
+
+
+export const GetMediaRecommendationsQueryParams = zod.object({
+  "projectId": zod.coerce.string().min(1).max(getMediaRecommendationsQueryProjectIdMax),
+  "storyKey": zod.coerce.string().min(1).max(getMediaRecommendationsQueryStoryKeyMax)
+})
+
+export const GetMediaRecommendationsResponse = zod.unknown()
+
+
+export const CreateMediaRecommendationsBody = zod.object({
+  "projectId": zod.string(),
+  "storyKey": zod.string(),
+  "terms": zod.array(zod.string()).optional(),
+  "targetPhrases": zod.array(zod.object({
+
+}).passthrough()).optional(),
+  "brief": zod.object({
+  "topic": zod.string(),
+  "angle": zod.string(),
+  "audience": zod.string(),
+  "regions": zod.array(zod.string()),
+  "publicationTypes": zod.array(zod.string()),
+  "whyNow": zod.string()
+}).optional()
+})
+
+export const CreateMediaRecommendationsResponse = zod.unknown()
+
+
+
+
+
+export const EnrichMediaRecommendationsBody = zod.object({
+  "projectId": zod.string(),
+  "storyKey": zod.string(),
+  "recommendationSetId": zod.number().int().min(1)
+})
+
+export const EnrichMediaRecommendationsResponse = zod.unknown()
+
+
+
+
+
+export const SetMediaRecommendationContactRestrictionBody = zod.object({
+  "projectId": zod.string(),
+  "storyKey": zod.string(),
+  "contactId": zod.number().int().min(1),
+  "doNotContact": zod.boolean()
+})
+
+export const SetMediaRecommendationContactRestrictionResponse = zod.unknown()
+
+
 /**
  * @summary Request a direct image upload URL
  */
