@@ -70,6 +70,7 @@ vi.mock("@workspace/db", async () => {
     CREATE TABLE media_contact_categories (id serial PRIMARY KEY, contact_id integer, category_id integer, account_id varchar);
     CREATE TABLE media_contact_field_overrides (id serial PRIMARY KEY, contact_id integer, account_id varchar);
     CREATE TABLE media_import_batches (id serial PRIMARY KEY, account_id varchar);
+    CREATE TABLE media_discoveries (id serial PRIMARY KEY, account_id varchar);
     CREATE TABLE media_recommendation_sets (id serial PRIMARY KEY, account_id varchar, project_id varchar, story_key varchar,
       criteria jsonb DEFAULT '{}', created_at timestamptz DEFAULT now());
     CREATE TABLE media_recommendation_items (id serial PRIMARY KEY, recommendation_set_id integer, contact_id integer,

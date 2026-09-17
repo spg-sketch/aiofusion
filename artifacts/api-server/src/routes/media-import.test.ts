@@ -58,6 +58,7 @@ vi.mock("@workspace/db", async () => {
       id serial PRIMARY KEY, contact_id integer NOT NULL REFERENCES media_contacts(id) ON DELETE CASCADE,
       account_id varchar NOT NULL, fields text[] NOT NULL DEFAULT '{}', details text NOT NULL,
       status varchar(20) NOT NULL DEFAULT 'pending', reported_by varchar NOT NULL,
+      resolution_note text NOT NULL DEFAULT '', reviewed_by varchar, source_check_id integer,
       reviewed_at timestamptz, created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE media_import_batches (

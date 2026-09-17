@@ -47,7 +47,13 @@ vi.mock("@workspace/db", async () => {
     CREATE TABLE media_contact_correction_reports (
       id serial PRIMARY KEY, contact_id integer NOT NULL, account_id varchar NOT NULL,
       fields text[] NOT NULL DEFAULT '{}', details text NOT NULL, status varchar(20) NOT NULL DEFAULT 'pending',
-      reported_by varchar NOT NULL, reviewed_at timestamptz, created_at timestamptz NOT NULL DEFAULT now()
+      reported_by varchar NOT NULL, resolution_note text NOT NULL DEFAULT '', reviewed_by varchar,
+      source_check_id integer, reviewed_at timestamptz, created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE platform_users (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), email varchar(255), name varchar(128),
+      password_hash text, google_id varchar(255), microsoft_id varchar(255),
+      session_version integer NOT NULL DEFAULT 0, email_verified boolean, created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE media_source_reverification_runs (
       singleton_id integer PRIMARY KEY,
@@ -59,7 +65,8 @@ vi.mock("@workspace/db", async () => {
 
 vi.mock("../middleware/platform-auth", () => ({
   requirePlatformAuth: (req: express.Request, _res: express.Response, next: express.NextFunction) => {
-    req.account = { username: String(req.headers["x-account"] || "account-a"), role: "agency" } as NonNullable<express.Request["account"]>;
+    const username = String(req.headers["x-account"] || "account-a");
+    req.account = { username, role: username === "admin" ? "admin" : "agency", membershipRole: "owner" } as NonNullable<express.Request["account"]>;
     next();
   },
 }));
@@ -68,8 +75,10 @@ vi.mock("../lib/member-guards", () => ({
   inAssignedScope: () => true,
 }));
 vi.mock("../lib/platform-auth", () => ({
+  DEFAULT_ADMIN_USERNAME: "admin",
   normUsername: (value: string) => value.toLowerCase(),
   getVisibleUsernames: (account: { username: string }) => Promise.resolve([account.username.toLowerCase()]),
+  canWriteProjects: () => true,
 }));
 vi.mock("../lib/safe-fetch", () => ({
   fetchMediaSourceEvidence,
@@ -229,5 +238,109 @@ describe("media source health routes", () => {
     const accountB = await (await get("/store/media-db/search?topic=Editor", "account-b")).json() as { results: Array<{ contact: { lifecycleStatus: string; hasPendingCorrection: boolean; email: string } }> };
     expect(accountA.results[0].contact).toEqual(expect.objectContaining({ lifecycleStatus: "departed", hasPendingCorrection: true, email: "trusted@example.com" }));
     expect(accountB.results[0].contact).toEqual(expect.objectContaining({ lifecycleStatus: "active", hasPendingCorrection: false, email: "trusted@example.com" }));
+  });
+
+  it("lets only Master stewards list and resolve correction reports", async () => {
+    const [contact] = await db.insert(mediaContactsTable).values({
+      firstName: "Global", lastName: "Reporter", role: "Editor", email: "trusted@example.com",
+      sourceUrl: "https://example.com/global", accountId: null,
+    }).returning();
+    expect((await post(`/store/media-db/contacts/${contact.id}/corrections`, "account-a", {
+      fields: ["email"], details: "The listed address bounces.",
+    })).status).toBe(200);
+
+    expect((await get("/store/media-db/corrections", "account-a")).status).toBe(403);
+    const queue = await get("/store/media-db/corrections", "admin");
+    expect(queue.status).toBe(200);
+    const queued = await queue.json() as { corrections: Array<{ id: number; workspace: string; details: string; contact: { email: string }; reporter: { id: string } }> };
+    expect(queued.corrections).toHaveLength(1);
+    expect(queued.corrections[0]).toEqual(expect.objectContaining({
+      workspace: "account-a",
+      details: "The listed address bounces.",
+      contact: expect.objectContaining({ email: "trusted@example.com" }),
+      reporter: expect.objectContaining({ id: "account-a" }),
+    }));
+    expect((await post(`/store/media-db/corrections/${queued.corrections[0].id}/resolve`, "account-a", {
+      outcome: "rejected", note: "Not authorised.",
+    })).status).toBe(403);
+    expect((await post(`/store/media-db/corrections/${queued.corrections[0].id}/resolve`, "admin", {
+      outcome: "resolved", note: "No verifiable replacement was available.",
+    })).status).toBe(200);
+    expect(((await (await get("/store/media-db/corrections", "admin")).json()) as { corrections: unknown[] }).corrections).toHaveLength(0);
+  });
+
+  it("accepts a correction only through supported source evidence", async () => {
+    const [contact] = await db.insert(mediaContactsTable).values({
+      firstName: "Global", lastName: "Reporter", role: "Editor", email: "trusted@example.com",
+      sourceUrl: "https://example.com/global", accountId: null,
+    }).returning();
+    const submitted = await (await post(`/store/media-db/contacts/${contact.id}/corrections`, "account-a", {
+      fields: ["email"], details: "Use the current public address.",
+    })).json() as { correction: { id: number } };
+    expect((await post(`/store/media-db/corrections/${submitted.correction.id}/resolve`, "admin", {
+      outcome: "accepted", note: "No evidence yet.",
+    })).status).toBe(400);
+
+    fetchMediaSourceEvidence.mockResolvedValueOnce({
+      url: contact.sourceUrl,
+      text: "Global Reporter Editor new@example.com",
+      emails: ["new@example.com"],
+      roleCandidates: ["Global Reporter - Editor"],
+    });
+    const checked = await (await post(`/store/media-db/corrections/${submitted.correction.id}/source-check`, "admin")).json() as { sourceCheck: { id: number } };
+    const accepted = await post(`/store/media-db/corrections/${submitted.correction.id}/resolve`, "admin", {
+      outcome: "accepted", note: "Public profile confirms the replacement address.", sourceCheckId: checked.sourceCheck.id,
+    });
+    expect(accepted.status).toBe(200);
+    expect(await accepted.json()).toEqual(expect.objectContaining({ applied: ["email"] }));
+    expect((await db.select().from(mediaContactsTable))[0].email).toBe("new@example.com");
+  });
+
+  it("lets a Master steward check a private contact without granting general edit access", async () => {
+    const [contact] = await db.insert(mediaContactsTable).values({
+      firstName: "Private", lastName: "Reporter", role: "Editor", email: "old@example.com",
+      sourceUrl: "https://example.com/private", accountId: "account-a",
+    }).returning();
+    const submitted = await (await post(`/store/media-db/contacts/${contact.id}/corrections`, "account-a", {
+      fields: ["email"], details: "The profile lists a new address.",
+    })).json() as { correction: { id: number } };
+    expect((await put(`/store/media-db/contacts/${contact.id}`, "admin", { email: "forbidden@example.com" })).status).toBe(403);
+    fetchMediaSourceEvidence.mockResolvedValueOnce({
+      url: contact.sourceUrl,
+      text: "Private Reporter Editor new@example.com",
+      emails: ["new@example.com"],
+      roleCandidates: ["Private Reporter - Editor"],
+    });
+    const checked = await post(`/store/media-db/corrections/${submitted.correction.id}/source-check`, "admin");
+    expect(checked.status).toBe(200);
+    const sourceCheck = await checked.json() as { sourceCheck: { id: number } };
+    expect((await post(`/store/media-db/corrections/${submitted.correction.id}/resolve`, "admin", {
+      outcome: "accepted", note: "The public profile confirms the new address.", sourceCheckId: sourceCheck.sourceCheck.id,
+    })).status).toBe(200);
+    expect((await db.select().from(mediaContactsTable))[0].email).toBe("new@example.com");
+  });
+
+  it("refuses stale source evidence after the trusted contact changes", async () => {
+    const [contact] = await db.insert(mediaContactsTable).values({
+      firstName: "Global", lastName: "Reporter", role: "Editor", email: "old@example.com",
+      sourceUrl: "https://example.com/global", accountId: null,
+    }).returning();
+    const submitted = await (await post(`/store/media-db/contacts/${contact.id}/corrections`, "account-a", {
+      fields: ["email"], details: "The profile lists a new address.",
+    })).json() as { correction: { id: number } };
+    fetchMediaSourceEvidence.mockResolvedValueOnce({
+      url: contact.sourceUrl,
+      text: "Global Reporter Editor observed@example.com",
+      emails: ["observed@example.com"],
+      roleCandidates: ["Global Reporter - Editor"],
+    });
+    const checked = await (await post(`/store/media-db/corrections/${submitted.correction.id}/source-check`, "admin")).json() as { sourceCheck: { id: number } };
+    await db.update(mediaContactsTable).set({ email: "newer-manual@example.com" });
+    const response = await post(`/store/media-db/corrections/${submitted.correction.id}/resolve`, "admin", {
+      outcome: "accepted", note: "Attempt stale approval.", sourceCheckId: checked.sourceCheck.id,
+    });
+    expect(response.status).toBe(409);
+    expect((await db.select().from(mediaContactsTable))[0].email).toBe("newer-manual@example.com");
+    expect(((await (await get("/store/media-db/corrections", "admin")).json()) as { corrections: unknown[] }).corrections).toHaveLength(1);
   });
 });

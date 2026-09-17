@@ -281,8 +281,11 @@ export const mediaContactCorrectionReportsTable = pgTable("media_contact_correct
   accountId: varchar("account_id").notNull(),
   fields: text("fields").array().notNull().default([]),
   details: text("details").notNull(),
-  status: varchar("status", { length: 20 }).$type<"pending" | "reviewed">().notNull().default("pending"),
+  status: varchar("status", { length: 20 }).$type<"pending" | "accepted" | "rejected" | "resolved">().notNull().default("pending"),
   reportedBy: varchar("reported_by").notNull(),
+  resolutionNote: text("resolution_note").notNull().default(""),
+  reviewedBy: varchar("reviewed_by"),
+  sourceCheckId: integer("source_check_id").references(() => mediaContactSourceChecksTable.id, { onDelete: "set null" }),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

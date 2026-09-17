@@ -162,6 +162,11 @@ vi.mock("@workspace/db", async () => {
       account_id varchar NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     );
+    CREATE TABLE IF NOT EXISTS media_discoveries (
+      id serial PRIMARY KEY,
+      account_id varchar NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE TABLE IF NOT EXISTS media_contact_field_overrides (
       id serial PRIMARY KEY,
       contact_id uuid,

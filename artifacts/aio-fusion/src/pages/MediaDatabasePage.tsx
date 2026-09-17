@@ -110,6 +110,25 @@ type UnifiedResult =
   | { type: "contact"; id: number; contact: Contact; matchedFields: string[]; matchedPhrases: string[]; reasons: string[]; authority: number }
   | { type: "outlet"; id: number; outlet: Outlet; matchedFields: string[]; matchedPhrases: string[]; reasons: string[]; authority: number };
 
+type CorrectionReport = {
+  id: number;
+  fields: string[];
+  details: string;
+  status: "pending" | "accepted" | "rejected" | "resolved";
+  createdAt: string;
+  workspace: string;
+  reporter: { id: string; name: string | null; email: string | null };
+  contact: Pick<Contact, "id" | "firstName" | "lastName" | "role" | "email" | "phone" | "mobile" | "outletId" | "linkedinUrl" | "twitterHandle" | "sourceUrl" | "accountId"> & { outletName: string | null };
+  sourceCheck: {
+    id: number;
+    sourceUrl: string;
+    outcome: string;
+    checkedAt: string;
+    observedEvidence?: { excerpt?: string };
+    differences?: Array<{ field: string; storedValue: string; observedValue: string; supported: boolean }>;
+  } | null;
+};
+
 export type ImportPreview = {
   validRows: number;
   importableRows: number;
@@ -274,7 +293,7 @@ function MediaDatabasePage() {
   // Master-owner-only surface.
   const canSeeDiscoveries = Boolean(session);
   const canEditDiscoveryInstructions = isMaster && (!session?.membershipRole || session.membershipRole === "owner");
-  const [activeTab, setActiveTab] = useState<"outlets" | "contacts" | "discoveries" | "instructions">("contacts");
+  const [activeTab, setActiveTab] = useState<"outlets" | "contacts" | "discoveries" | "corrections" | "instructions">("contacts");
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [allCategories, setAllCategories] = useState<string[]>([]);
@@ -305,6 +324,11 @@ function MediaDatabasePage() {
   const [correctionFields, setCorrectionFields] = useState<string[]>([]);
   const [correctionDetails, setCorrectionDetails] = useState("");
   const [correctionBusy, setCorrectionBusy] = useState(false);
+  const [correctionReports, setCorrectionReports] = useState<CorrectionReport[]>([]);
+  const [correctionQueueLoading, setCorrectionQueueLoading] = useState(false);
+  const [correctionQueueError, setCorrectionQueueError] = useState("");
+  const [correctionResolutionNotes, setCorrectionResolutionNotes] = useState<Record<number, string>>({});
+  const [correctionResolvingId, setCorrectionResolvingId] = useState<number | null>(null);
 
   const [showOutletModal, setShowOutletModal] = useState(false);
   const [editingOutlet, setEditingOutlet] = useState<Outlet | null>(null);
@@ -376,6 +400,26 @@ function MediaDatabasePage() {
   };
 
   useEffect(() => { void loadData(); }, []);
+
+  const loadCorrectionQueue = async () => {
+    if (!isMaster || !canWriteMediaDatabase) return;
+    setCorrectionQueueLoading(true);
+    setCorrectionQueueError("");
+    try {
+      const response = await fetch(`${apiBase()}/api/store/media-db/corrections?status=pending`, { credentials: "include" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load correction reports.");
+      setCorrectionReports(Array.isArray(data.corrections) ? data.corrections : []);
+    } catch (error) {
+      setCorrectionQueueError(error instanceof Error ? error.message : "Could not load correction reports.");
+    } finally {
+      setCorrectionQueueLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "corrections") void loadCorrectionQueue();
+  }, [activeTab]);
 
   const searchActive = Boolean(searchPhrase || searchTopic || searchLocation || searchCategory || searchAuthority);
   useEffect(() => {
@@ -726,6 +770,45 @@ function MediaDatabasePage() {
     } finally { setCorrectionBusy(false); }
   };
 
+  const resolveCorrection = async (report: CorrectionReport, outcome: "accepted" | "rejected" | "resolved") => {
+    const note = correctionResolutionNotes[report.id]?.trim() ?? "";
+    if (!note) return;
+    setCorrectionResolvingId(report.id);
+    setCorrectionQueueError("");
+    try {
+      const response = await fetch(`${apiBase()}/api/store/media-db/corrections/${report.id}/resolve`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outcome, note, ...(outcome === "accepted" && report.sourceCheck ? { sourceCheckId: report.sourceCheck.id } : {}) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not resolve this correction.");
+      setCorrectionReports((current) => current.filter((item) => item.id !== report.id));
+      setCorrectionResolutionNotes((current) => { const next = { ...current }; delete next[report.id]; return next; });
+      await loadData();
+    } catch (error) {
+      setCorrectionQueueError(error instanceof Error ? error.message : "Could not resolve this correction.");
+    } finally {
+      setCorrectionResolvingId(null);
+    }
+  };
+
+  const checkCorrectionSource = async (report: CorrectionReport) => {
+    setCorrectionResolvingId(report.id);
+    setCorrectionQueueError("");
+    try {
+      const response = await fetch(`${apiBase()}/api/store/media-db/corrections/${report.id}/source-check`, { method: "POST", credentials: "include" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not check this source.");
+      await loadCorrectionQueue();
+    } catch (error) {
+      setCorrectionQueueError(error instanceof Error ? error.message : "Could not check this source.");
+    } finally {
+      setCorrectionResolvingId(null);
+    }
+  };
+
   const sourceBadge = (contact: Contact) => {
     const labels = { current: "Current", due: "Due for review", unavailable: "Unavailable", changed: "Changed", unverified: "Unverified" };
     const colors = {
@@ -987,6 +1070,7 @@ function MediaDatabasePage() {
           { id: "outlets" as const, label: `Outlets (${outlets.length})` },
           { id: "contacts" as const, label: `Contacts (${contacts.length})` },
           ...(canSeeDiscoveries ? [{ id: "discoveries" as const, label: "Discoveries" }] : []),
+          ...(isMaster && canWriteMediaDatabase ? [{ id: "corrections" as const, label: `Corrections (${correctionReports.length})` }] : []),
           ...(canEditDiscoveryInstructions ? [{ id: "instructions" as const, label: "Research instructions" }] : []),
         ]).map(({ id: t, label }) => (
           <button key={t} onClick={() => setActiveTab(t)} className="px-5 py-2 rounded-lg text-[13px] font-bold transition-all capitalize" style={{ background: activeTab === t ? "rgba(201,160,78,0.18)" : "transparent", color: activeTab === t ? "#7A5E25" : vars.g500, boxShadow: activeTab === t ? "0 1px 3px rgba(0,0,0,0.1)" : "none", border: activeTab === t ? `1px solid ${vars.gold}` : "1px solid transparent" }}>
@@ -996,6 +1080,61 @@ function MediaDatabasePage() {
       </div>
 
       {activeTab === "discoveries" && canSeeDiscoveries && <MediaDiscoveryReview onApproved={() => void loadData()} />}
+      {activeTab === "corrections" && isMaster && canWriteMediaDatabase && (
+        <section>
+          <div className="mb-4">
+            <h2 className="text-[20px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Contact correction queue</h2>
+            <p className="mt-1 text-[12px]" style={{ color: vars.g500 }}>Compare each report with saved source evidence. Accepted changes only apply fields supported by that evidence.</p>
+          </div>
+          {correctionQueueError && <p className="mb-3 rounded-lg border bg-red-50 px-3 py-2 text-[12px] text-red-700" style={{ borderColor: "#FECACA" }}>{correctionQueueError}</p>}
+          {correctionQueueLoading ? (
+            <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin" color={vars.accent} /></div>
+          ) : correctionReports.length === 0 ? (
+            <div className="rounded-2xl border bg-white py-12 text-center" style={{ borderColor: vars.g200 }}><CheckCircle2 size={28} className="mx-auto mb-2 text-emerald-600" /><p className="font-semibold" style={{ color: vars.navy }}>No pending corrections</p></div>
+          ) : (
+            <div className="space-y-4">
+              {correctionReports.map((report) => {
+                const supportedFields = new Set((report.sourceCheck?.differences ?? []).filter((difference) => difference.supported && difference.observedValue).map((difference) => difference.field));
+                const canAccept = report.fields.some((field) => supportedFields.has(field));
+                const busy = correctionResolvingId === report.id;
+                return <article key={report.id} className="rounded-2xl border bg-white p-5" style={{ borderColor: vars.g200 }}>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h3 className="text-[16px] font-semibold" style={{ color: vars.navy }}>{`${report.contact.firstName} ${report.contact.lastName}`.trim() || "Unnamed contact"}</h3>
+                      <p className="text-[12px]" style={{ color: vars.g500 }}>{[report.contact.role, report.contact.outletName].filter(Boolean).join(" at ") || "No role or publication recorded"}</p>
+                    </div>
+                    <time className="text-[11px]" style={{ color: vars.g500 }}>{new Date(report.createdAt).toLocaleString()}</time>
+                  </div>
+                  <dl className="mt-4 grid gap-3 rounded-xl p-4 sm:grid-cols-2" style={{ background: vars.g50 }}>
+                    <div><dt className="text-[10px] font-bold uppercase tracking-wide" style={{ color: vars.g500 }}>Workspace</dt><dd className="mt-1 text-[12px]" style={{ color: vars.navy }}>{report.workspace}</dd></div>
+                    <div><dt className="text-[10px] font-bold uppercase tracking-wide" style={{ color: vars.g500 }}>Reporter</dt><dd className="mt-1 text-[12px]" style={{ color: vars.navy }}>{report.reporter.name || report.reporter.email || report.reporter.id}</dd></div>
+                    <div><dt className="text-[10px] font-bold uppercase tracking-wide" style={{ color: vars.g500 }}>Fields</dt><dd className="mt-1 flex flex-wrap gap-1">{report.fields.map((field) => <span key={field} className="rounded bg-white px-2 py-1 text-[11px]" style={{ color: vars.navy }}>{field}</span>)}</dd></div>
+                    <div><dt className="text-[10px] font-bold uppercase tracking-wide" style={{ color: vars.g500 }}>Current values</dt><dd className="mt-1 text-[11px]" style={{ color: vars.g600 }}>{report.fields.map((field) => `${field}: ${String(report.contact[field as keyof typeof report.contact] ?? "Not set")}`).join(" · ")}</dd></div>
+                  </dl>
+                  <div className="mt-4"><p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: vars.g500 }}>Report details</p><p className="mt-1 whitespace-pre-wrap text-[13px]" style={{ color: vars.g600 }}>{report.details}</p></div>
+                  <div className="mt-4 rounded-xl border p-4" style={{ borderColor: vars.g200 }}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-[12px] font-semibold" style={{ color: vars.navy }}>Source evidence</p>
+                      {report.contact.sourceUrl && <button disabled={busy} onClick={() => void checkCorrectionSource(report)} className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><RefreshCw size={12} /> {report.sourceCheck ? "Check again" : "Run source check"}</button>}
+                    </div>
+                    {!report.contact.sourceUrl ? <p className="mt-2 text-[12px] text-amber-700">No public source is recorded. The report can be rejected or resolved without changing trusted data.</p>
+                      : !report.sourceCheck ? <p className="mt-2 text-[12px]" style={{ color: vars.g500 }}>No saved source check yet.</p>
+                        : <><p className="mt-2 text-[11px]" style={{ color: vars.g500 }}>{report.sourceCheck.outcome} · checked {new Date(report.sourceCheck.checkedAt).toLocaleString()}</p>
+                          {report.sourceCheck.observedEvidence?.excerpt && <p className="mt-2 rounded-lg bg-slate-50 p-3 text-[11px]" style={{ color: vars.g600 }}>{report.sourceCheck.observedEvidence.excerpt}</p>}
+                          {(report.sourceCheck.differences ?? []).map((difference) => <div key={difference.field} className="mt-2 text-[11px]" style={{ color: vars.g600 }}><strong>{difference.field}:</strong> {difference.storedValue || "Not set"} → {difference.observedValue || "Not found"} {difference.supported ? <span className="text-emerald-700">(supported)</span> : <span className="text-amber-700">(not supported)</span>}</div>)}</>}
+                  </div>
+                  <label className="mt-4 block text-[11px] font-bold uppercase tracking-wide" style={{ color: vars.g500 }}>Audit note<textarea rows={3} value={correctionResolutionNotes[report.id] ?? ""} onChange={(event) => setCorrectionResolutionNotes((current) => ({ ...current, [report.id]: event.target.value }))} className="mt-1 w-full rounded-lg border p-3 text-[13px] font-normal normal-case" style={{ borderColor: vars.g200 }} placeholder="Record what you checked and why you chose this outcome." /></label>
+                  <div className="mt-3 flex flex-wrap justify-end gap-2">
+                    <button disabled={busy || !correctionResolutionNotes[report.id]?.trim()} onClick={() => void resolveCorrection(report, "rejected")} className="rounded-lg border px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.red }}>Reject</button>
+                    <button disabled={busy || !correctionResolutionNotes[report.id]?.trim()} onClick={() => void resolveCorrection(report, "resolved")} className="rounded-lg border px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>Resolve without change</button>
+                    <button disabled={busy || !correctionResolutionNotes[report.id]?.trim() || !canAccept} onClick={() => void resolveCorrection(report, "accepted")} title={canAccept ? "Apply source-supported reported fields" : "Run a source check that supports a reported field before accepting"} className="rounded-lg px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50" style={{ background: vars.accent }}>Accept supported update</button>
+                  </div>
+                </article>;
+              })}
+            </div>
+          )}
+        </section>
+      )}
       {activeTab === "instructions" && canEditDiscoveryInstructions && <MediaDiscoveryInstructions />}
 
       {/* Outlets tab */}

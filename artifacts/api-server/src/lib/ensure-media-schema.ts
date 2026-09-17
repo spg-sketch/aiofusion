@@ -202,6 +202,9 @@ export async function ensureMediaSchema(): Promise<void> {
       details text NOT NULL,
       status varchar(20) NOT NULL DEFAULT 'pending',
       reported_by varchar NOT NULL,
+      resolution_note text NOT NULL DEFAULT '',
+      reviewed_by varchar,
+      source_check_id integer,
       reviewed_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     )
@@ -352,6 +355,12 @@ export async function ensureMediaSchema(): Promise<void> {
   `);
 
   await db.execute(sql`
+    ALTER TABLE media_contact_correction_reports
+      ADD COLUMN IF NOT EXISTS resolution_note text NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS reviewed_by varchar,
+      ADD COLUMN IF NOT EXISTS source_check_id integer
+  `);
+  await db.execute(sql`
     CREATE UNIQUE INDEX IF NOT EXISTS media_contact_categories_unique
       ON media_contact_categories (contact_id, category_name)
   `);
@@ -419,6 +428,10 @@ export async function ensureMediaSchema(): Promise<void> {
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_contact_correction_reports_contact_id_fkey') THEN
         ALTER TABLE media_contact_correction_reports ADD CONSTRAINT media_contact_correction_reports_contact_id_fkey
           FOREIGN KEY (contact_id) REFERENCES media_contacts(id) ON DELETE CASCADE NOT VALID;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_contact_correction_reports_source_check_id_fkey') THEN
+        ALTER TABLE media_contact_correction_reports ADD CONSTRAINT media_contact_correction_reports_source_check_id_fkey
+          FOREIGN KEY (source_check_id) REFERENCES media_contact_source_checks(id) ON DELETE SET NULL NOT VALID;
       END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'media_recommendation_items_recommendation_set_id_fkey') THEN
         ALTER TABLE media_recommendation_items ADD CONSTRAINT media_recommendation_items_recommendation_set_id_fkey

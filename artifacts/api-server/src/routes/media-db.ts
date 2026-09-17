@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaDiscoveriesTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaContactStatusEventsTable, mediaContactCorrectionReportsTable, mediaImportBatchesTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, mediaOutreachTable, mediaOutreachActivitiesTable, mediaPlacementsTable, projectsTable, archiveItemsTable, platformMetaTable, tokenUsageTable, type MediaOutreachStatus } from "@workspace/db";
+import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaDiscoveriesTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaContactStatusEventsTable, mediaContactCorrectionReportsTable, mediaImportBatchesTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, mediaOutreachTable, mediaOutreachActivitiesTable, mediaPlacementsTable, projectsTable, archiveItemsTable, platformMetaTable, platformUsersTable, tokenUsageTable, type MediaOutreachStatus } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { inAssignedScope, memberProjectGate } from "../lib/member-guards";
@@ -97,6 +97,12 @@ function isMasterWorkspace(req: Request): boolean {
 
 function isWritableMaster(req: Request): boolean {
   return isMasterWorkspace(req) && canWriteProjects(req.account!);
+}
+
+function requireWritableMediaSteward(req: Request, res: Response): boolean {
+  if (isWritableMaster(req)) return true;
+  res.status(403).json({ error: "Only a writable Master member may review contact corrections." });
+  return false;
 }
 
 function parseCollectionScope(value: unknown): MediaCollectionScope | null {
@@ -1239,6 +1245,151 @@ router.post("/store/media-db/contacts/:id/corrections", requirePlatformAuth, asy
     contactId: id, accountId: workspaceId, fields, details, reportedBy: actorId,
   }).returning();
   res.json({ ok: true, correction: report });
+});
+
+router.get("/store/media-db/corrections", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  if (!requireWritableMediaSteward(req, res)) return;
+  const requestedStatus = typeof req.query.status === "string" ? req.query.status : "pending";
+  if (!["pending", "accepted", "rejected", "resolved", "all"].includes(requestedStatus)) {
+    res.status(400).json({ error: "Choose a valid correction status." });
+    return;
+  }
+  const status = requestedStatus as "pending" | "accepted" | "rejected" | "resolved" | "all";
+  const rows = await db.select({
+    report: mediaContactCorrectionReportsTable,
+    contact: mediaContactsTable,
+    outletName: mediaOutletsTable.name,
+    reporterName: platformUsersTable.name,
+    reporterEmail: platformUsersTable.email,
+  }).from(mediaContactCorrectionReportsTable)
+    .innerJoin(mediaContactsTable, eq(mediaContactCorrectionReportsTable.contactId, mediaContactsTable.id))
+    .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
+    .leftJoin(platformUsersTable, sql`${platformUsersTable.id}::text = ${mediaContactCorrectionReportsTable.reportedBy}`)
+    .where(status === "all" ? undefined : eq(mediaContactCorrectionReportsTable.status, status))
+    .orderBy(desc(mediaContactCorrectionReportsTable.createdAt), desc(mediaContactCorrectionReportsTable.id));
+  const contactIds = Array.from(new Set(rows.map(({ contact }) => contact.id)));
+  const checks = contactIds.length
+    ? await db.select().from(mediaContactSourceChecksTable)
+      .where(inArray(mediaContactSourceChecksTable.contactId, contactIds))
+      .orderBy(desc(mediaContactSourceChecksTable.checkedAt), desc(mediaContactSourceChecksTable.id))
+    : [];
+  const latestCheckByContactAndSource = new Map<string, typeof checks[number]>();
+  for (const check of checks) {
+    const key = `${check.contactId}\0${check.sourceUrl}`;
+    if (!latestCheckByContactAndSource.has(key)) latestCheckByContactAndSource.set(key, check);
+  }
+  res.json({
+    corrections: rows.map(({ report, contact, outletName, reporterName, reporterEmail }) => ({
+      ...report,
+      contact: {
+        id: contact.id,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        role: contact.role,
+        email: contact.email,
+        phone: contact.phone,
+        mobile: contact.mobile,
+        outletId: contact.outletId,
+        outletName,
+        linkedinUrl: contact.linkedinUrl,
+        twitterHandle: contact.twitterHandle,
+        sourceUrl: contact.sourceUrl,
+        accountId: contact.accountId,
+      },
+      reporter: { id: report.reportedBy, name: reporterName, email: reporterEmail },
+      workspace: report.accountId,
+      sourceCheck: latestCheckByContactAndSource.get(`${contact.id}\0${contact.sourceUrl}`) ?? null,
+    })),
+  });
+});
+
+router.post("/store/media-db/corrections/:reportId/source-check", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  if (!requireWritableMediaSteward(req, res)) return;
+  const reportId = Number(req.params.reportId);
+  if (!reportId) { res.status(400).json({ error: "Invalid correction report." }); return; }
+  const [row] = await db.select({ report: mediaContactCorrectionReportsTable, contact: mediaContactsTable })
+    .from(mediaContactCorrectionReportsTable)
+    .innerJoin(mediaContactsTable, eq(mediaContactCorrectionReportsTable.contactId, mediaContactsTable.id))
+    .where(eq(mediaContactCorrectionReportsTable.id, reportId))
+    .limit(1);
+  if (!row || row.contact.deletedAt) { res.status(404).json({ error: "Correction report not found." }); return; }
+  if (row.report.status !== "pending") { res.status(409).json({ error: "This correction report has already been resolved." }); return; }
+  if (!row.contact.sourceUrl) { res.status(400).json({ error: "This contact has no public source to check." }); return; }
+  const checkedAt = new Date();
+  const claimed = await claimMediaContactForManualReverification(row.contact, checkedAt);
+  if (!claimed) { res.status(409).json({ error: "This source is already being checked. Try again shortly." }); return; }
+  const result = await reverifyClaimedMediaContact(claimed, { now: checkedAt });
+  if (result === "lost-claim") { res.status(409).json({ error: "The source changed while it was being checked. Run the check again." }); return; }
+  const [sourceCheck] = await db.select().from(mediaContactSourceChecksTable).where(and(
+    eq(mediaContactSourceChecksTable.contactId, row.contact.id),
+    eq(mediaContactSourceChecksTable.sourceUrl, claimed.sourceUrl),
+    eq(mediaContactSourceChecksTable.checkedAt, checkedAt),
+  )).orderBy(desc(mediaContactSourceChecksTable.id)).limit(1);
+  if (!sourceCheck) { res.status(500).json({ error: "The source check could not be saved." }); return; }
+  res.json({ ok: true, sourceCheck });
+});
+
+router.post("/store/media-db/corrections/:reportId/resolve", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  if (!requireWritableMediaSteward(req, res)) return;
+  const reportId = Number(req.params.reportId);
+  const requestedOutcome = req.body?.outcome;
+  const note = typeof req.body?.note === "string" ? req.body.note.trim().slice(0, 4000) : "";
+  if (!reportId || !["accepted", "rejected", "resolved"].includes(requestedOutcome) || !note) {
+    res.status(400).json({ error: "Choose an outcome and add an audit note." });
+    return;
+  }
+  const outcome = requestedOutcome as "accepted" | "rejected" | "resolved";
+  const reviewedBy = req.account!.userId ?? req.platformUser?.id ?? normUsername(req.account!.username);
+  const result = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT id FROM media_contact_correction_reports WHERE id = ${reportId} FOR UPDATE`);
+    const [report] = await tx.select().from(mediaContactCorrectionReportsTable)
+      .where(eq(mediaContactCorrectionReportsTable.id, reportId)).limit(1);
+    if (!report) return { status: 404, body: { error: "Correction report not found." } };
+    if (report.status !== "pending") return { status: 409, body: { error: "This correction report has already been resolved." } };
+
+    let sourceCheckId: number | null = null;
+    let applied: string[] = [];
+    let skipped: string[] = [];
+    if (outcome === "accepted") {
+      sourceCheckId = Number(req.body?.sourceCheckId) || null;
+      if (!sourceCheckId) return { status: 400, body: { error: "Accepted corrections require a saved source check." } };
+      await tx.execute(sql`SELECT id FROM media_contacts WHERE id = ${report.contactId} FOR UPDATE`);
+      const [contact] = await tx.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, report.contactId)).limit(1);
+      if (!contact || contact.deletedAt) return { status: 404, body: { error: "Contact not found." } };
+      const owner = mediaOverrideOwner(contact.accountId);
+      const [check] = await tx.select().from(mediaContactSourceChecksTable).where(and(
+        eq(mediaContactSourceChecksTable.id, sourceCheckId),
+        eq(mediaContactSourceChecksTable.contactId, report.contactId),
+        eq(mediaContactSourceChecksTable.sourceUrl, contact.sourceUrl),
+        contact.accountId === null
+          ? or(eq(mediaContactSourceChecksTable.accountId, owner), eq(mediaContactSourceChecksTable.accountId, "__global__"))
+          : eq(mediaContactSourceChecksTable.accountId, owner),
+      )).limit(1);
+      if (!check) return { status: 400, body: { error: "Use a source check for this contact's current source." } };
+      const overrides = await tx.select({ fieldName: mediaContactFieldOverridesTable.fieldName })
+        .from(mediaContactFieldOverridesTable)
+        .where(and(eq(mediaContactFieldOverridesTable.contactId, report.contactId), eq(mediaContactFieldOverridesTable.accountId, owner)));
+      const approved = approvedSourceUpdates(check.differences, report.fields, overrides.map((item) => item.fieldName));
+      const baselineMismatch = check.differences.some((difference) =>
+        approved.applied.includes(difference.field) && String(contact[difference.field] ?? "") !== difference.storedValue);
+      if (baselineMismatch) return { status: 409, body: { error: "The contact changed after this source check. Run the check again." } };
+      applied = approved.applied;
+      skipped = approved.skipped;
+      if (!applied.length) return { status: 400, body: { error: "This source check does not support any reported field updates.", skipped } };
+      await tx.update(mediaContactsTable).set({ ...approved.updates, updatedAt: new Date() }).where(eq(mediaContactsTable.id, report.contactId));
+      await tx.update(mediaContactSourceChecksTable).set({ reviewedAt: new Date() }).where(eq(mediaContactSourceChecksTable.id, sourceCheckId));
+    }
+
+    const [resolved] = await tx.update(mediaContactCorrectionReportsTable).set({
+      status: outcome,
+      resolutionNote: note,
+      reviewedBy,
+      sourceCheckId,
+      reviewedAt: new Date(),
+    }).where(eq(mediaContactCorrectionReportsTable.id, reportId)).returning();
+    return { status: 200, body: { ok: true, correction: resolved, applied, skipped } };
+  });
+  res.status(result.status).json(result.body);
 });
 
 router.get(
