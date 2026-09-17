@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaContactStatusEventsTable, mediaContactCorrectionReportsTable, mediaImportBatchesTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, mediaOutreachTable, mediaOutreachActivitiesTable, mediaPlacementsTable, projectsTable, archiveItemsTable, platformMetaTable, tokenUsageTable, type MediaOutreachStatus } from "@workspace/db";
+import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaDiscoveriesTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaContactStatusEventsTable, mediaContactCorrectionReportsTable, mediaImportBatchesTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, mediaOutreachTable, mediaOutreachActivitiesTable, mediaPlacementsTable, projectsTable, archiveItemsTable, platformMetaTable, tokenUsageTable, type MediaOutreachStatus } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { inAssignedScope, memberProjectGate } from "../lib/member-guards";
@@ -30,7 +30,7 @@ import {
   mergeImportedProvenance,
 } from "../lib/media-import-reconciliation";
 import type { ImportReconciliation } from "../lib/media-import-reconciliation";
-import { mediaDiscoveryNotes, verifyMediaDiscoveries } from "../lib/media-discovery-token";
+import { mediaDiscoveryNotes, verifyMediaDiscoveries, type TrustedMediaDiscovery } from "../lib/media-discovery-token";
 import { approvedSourceUpdates, mediaSourceNextDueAt } from "../lib/media-source-health";
 import { claimMediaContactForManualReverification, reverifyClaimedMediaContact } from "../lib/media-source-reverification";
 import { fetchPlacementPageEvidence } from "../lib/safe-fetch";
@@ -2111,14 +2111,74 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
   } catch (error) { req.log.error({ err: error }, "media recommendations failed"); res.status(500).json({ error: "Failed to create recommendations" }); }
 });
 
+function discoveryResponse(row: typeof mediaDiscoveriesTable.$inferSelect) {
+  return {
+    id: row.id,
+    accountId: row.accountId,
+    projectId: row.projectId,
+    status: row.status,
+    candidate: row.candidate as unknown as TrustedMediaDiscovery,
+    createdAt: row.createdAt.toISOString(),
+    reviewedAt: row.reviewedAt?.toISOString() ?? null,
+    reviewedBy: row.reviewedBy ?? null,
+    rejectionReason: row.rejectionReason ?? null,
+    contactId: row.contactId ?? null,
+    outletId: row.outletId ?? null,
+  };
+}
+
+function discoveryStatus(value: unknown): "pending" | "approved" | "rejected" | null {
+  return value === "pending" || value === "approved" || value === "rejected" ? value : null;
+}
+
+router.get("/store/media-db/discoveries", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const status = req.query.status === undefined ? "pending" : discoveryStatus(req.query.status);
+    if (!status) {
+      res.status(400).json({ error: "status must be pending, approved, or rejected" });
+      return;
+    }
+    const visible = await visibleAccounts(req);
+    const projectId = typeof req.query.projectId === "string" ? req.query.projectId : undefined;
+    if (projectId && !(await assertProjectVisible(req, projectId))) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+    const rows = await db.select().from(mediaDiscoveriesTable).where(and(
+      eq(mediaDiscoveriesTable.status, status),
+      projectId ? eq(mediaDiscoveriesTable.projectId, projectId) : sql`true`,
+    )).orderBy(desc(mediaDiscoveriesTable.createdAt));
+    const items = [];
+    for (const row of rows) {
+      if (visible !== null && !visible.includes(row.accountId)) continue;
+      if (!(await assertProjectVisible(req, row.projectId))) continue;
+      items.push(discoveryResponse(row));
+    }
+    res.json({ ok: true, items, canReview: canWriteProjects(req.account!) });
+  } catch (error) {
+    req.log.error({ err: error }, "listing media discoveries failed");
+    res.status(500).json({ error: "Failed to load discovery approvals." });
+  }
+});
+
 router.post("/store/media-db/discoveries", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const token = typeof req.body?.discoveryToken === "string" ? req.body.discoveryToken : "";
     const candidateKey = typeof req.body?.candidateKey === "string" ? req.body.candidateKey : "";
     const trusted = verifyMediaDiscoveries(token);
-    const accountId = normUsername(req.account!.username);
-    if (!trusted || trusted.accountId !== accountId) {
-      res.status(400).json({ error: "This discovery has expired or is not valid for this account. Run the search again." });
+    if (!trusted) {
+      res.status(400).json({ error: "This discovery has expired or is not valid. Run the search again." });
+      return;
+    }
+    const accountId = normUsername(trusted.accountId);
+    const visible = await visibleAccounts(req);
+    if (visible !== null && !visible.includes(accountId)) {
+      res.status(403).json({ error: "This discovery is not available to your account." });
+      return;
+    }
+    const owner = await visibleProjectOwner(req, trusted.projectId);
+    if (owner !== accountId) {
+      res.status(403).json({ error: "This discovery is not available to this project." });
       return;
     }
     const candidate = trusted.items.find((item) => item.candidateKey === candidateKey);
@@ -2126,52 +2186,103 @@ router.post("/store/media-db/discoveries", requirePlatformAuth, async (req: Requ
       res.status(400).json({ error: "This discovery is not present in the verified search results." });
       return;
     }
+    const [created] = await db.insert(mediaDiscoveriesTable).values({
+      accountId,
+      projectId: trusted.projectId,
+      candidateKey: candidate.candidateKey,
+      candidate: candidate as unknown as Record<string, unknown>,
+    }).onConflictDoNothing({
+      target: [mediaDiscoveriesTable.accountId, mediaDiscoveriesTable.projectId, mediaDiscoveriesTable.candidateKey],
+    }).returning();
+    const saved = created ?? (await db.select().from(mediaDiscoveriesTable).where(and(
+      eq(mediaDiscoveriesTable.accountId, accountId),
+      eq(mediaDiscoveriesTable.projectId, trusted.projectId),
+      eq(mediaDiscoveriesTable.candidateKey, candidate.candidateKey),
+    )).limit(1))[0];
+    if (!saved) throw new Error("Discovery was not persisted");
+    res.status(created ? 201 : 200).json({ ok: true, discovery: discoveryResponse(saved) });
+  } catch (error) {
+    req.log.error({ err: error }, "saving media discovery candidate failed");
+    res.status(500).json({ error: "Failed to save this discovery for approval." });
+  }
+});
+
+router.post("/store/media-db/discoveries/:id/approve", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) {
+      res.status(400).json({ error: "Invalid discovery id" });
+      return;
+    }
     const visible = await visibleAccounts(req);
     const result = await db.transaction(async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`media-discovery:${accountId}`}))`);
+      if (process.env.NODE_ENV !== "test") await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`media-discovery:${id}`}))`);
+      const [row] = await tx.select().from(mediaDiscoveriesTable).where(eq(mediaDiscoveriesTable.id, id)).limit(1);
+      const [project] = row ? await tx.select({ owner: projectsTable.owner, deletedAt: projectsTable.deletedAt }).from(projectsTable).where(eq(projectsTable.id, row.projectId)).limit(1) : [];
+      if (!row || !project || project.deletedAt || project.owner !== row.accountId || !inAssignedScope(req, row.projectId)
+        || (visible !== null && !visible.includes(row.accountId))) return { notFound: true as const };
+      if (row.status === "rejected") return { rejected: true as const };
+      if (row.status === "approved" && row.contactId && row.outletId) {
+        const [contact] = await tx.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, row.contactId)).limit(1);
+        const [outlet] = await tx.select().from(mediaOutletsTable).where(eq(mediaOutletsTable.id, row.outletId)).limit(1);
+        // Never replay an approval that links this workspace to another
+        // workspace's private outlet/contact (including hierarchy-visible
+        // accounts). Shared outlets are safe to reuse.
+        if (contact?.accountId === row.accountId && outlet
+          && (outlet.accountId === null || outlet.accountId === row.accountId)) {
+          return { row, contact, outlet, existing: true };
+        }
+        return { notFound: true as const };
+      }
+      const candidate = row.candidate as unknown as TrustedMediaDiscovery;
       const visibleOutlets = (await tx.select().from(mediaOutletsTable).where(isNull(mediaOutletsTable.deletedAt)))
-        .filter((row) => outletVisible(row.accountId, visible));
-      const candidateDomain = normalisedOutletDomain(candidate.outletWebsite);
-      let outlet = visibleOutlets.find((row) =>
-        row.name.trim().toLowerCase() === candidate.outletName.toLowerCase()
-        || (!!candidateDomain && normalisedOutletDomain(row.website) === candidateDomain),
+        .filter((item) => item.accountId === null || item.accountId === row.accountId);
+      const domain = normalisedOutletDomain(candidate.outletWebsite);
+      let outlet = visibleOutlets.find((item) =>
+        item.name.trim().toLowerCase() === candidate.outletName.trim().toLowerCase()
+        || (!!domain && normalisedOutletDomain(item.website) === domain),
       );
       if (!outlet) {
         [outlet] = await tx.insert(mediaOutletsTable).values({
           name: candidate.outletName,
           website: candidate.outletWebsite,
           category: candidate.sectors?.[0] ?? "",
-          description: "",
           country: inferredOutletCountry(candidate.geography ?? ""),
-          accountId,
+          accountId: row.accountId,
         }).returning();
       }
-      const ownContacts = await tx.select().from(mediaContactsTable).where(and(eq(mediaContactsTable.accountId, accountId), isNull(mediaContactsTable.deletedAt)));
-      const verifiedEmail = candidate.email.trim().toLowerCase();
-      const existing = ownContacts.find((row) =>
-        row.outletId === outlet.id
-        && row.firstName.trim().toLowerCase() === candidate.firstName.toLowerCase()
-        && row.lastName.trim().toLowerCase() === candidate.lastName.toLowerCase()
-        && (!verifiedEmail || !row.email || row.email.trim().toLowerCase() === verifiedEmail),
-      );
-      const discoveryNotes = mediaDiscoveryNotes(candidate);
+      if (!outlet) throw new Error("Failed to create outlet");
+      const contacts = await tx.select().from(mediaContactsTable).where(and(eq(mediaContactsTable.accountId, row.accountId), isNull(mediaContactsTable.deletedAt)));
+      const email = candidate.email.trim().toLowerCase();
+      const existing = contacts.find((item) => item.outletId === outlet!.id
+        && item.firstName.trim().toLowerCase() === candidate.firstName.trim().toLowerCase()
+        && item.lastName.trim().toLowerCase() === candidate.lastName.trim().toLowerCase()
+        && (!email || !item.email || item.email.trim().toLowerCase() === email));
+      const notes = mediaDiscoveryNotes(candidate);
+      let contact: typeof mediaContactsTable.$inferSelect | undefined;
       if (existing) {
-        const mergedBeats = Array.from(new Set([...existing.beats, ...candidate.beats]));
-        const mergedSectors = Array.from(new Set([...existing.sectors, ...(candidate.sectors ?? [])]));
-        const mergedNotes = discoveryNotes && !existing.notes.includes(discoveryNotes)
-          ? [existing.notes, discoveryNotes].filter(Boolean).join("\n\n")
-          : existing.notes;
-        const [contact] = await tx.update(mediaContactsTable).set({
-          email: existing.email || verifiedEmail,
-          role: existing.role || candidate.role,
-          beats: mergedBeats,
-          sectors: mergedSectors,
-          geography: existing.geography || candidate.geography || "",
-          sourceUrl: existing.sourceUrl || candidate.sourceUrl,
-          sourceRef: existing.sourceRef || "Live public web research",
-          confidence: existing.confidence || candidate.confidence,
-          reviewNotes: existing.reviewNotes || candidate.evidence,
-          notes: mergedNotes,
+        const mergedNotes = notes && !existing.notes.includes(notes) ? [existing.notes, notes].filter(Boolean).join("\n\n") : existing.notes;
+        const overrideRows = await tx.select({ fieldName: mediaContactFieldOverridesTable.fieldName })
+          .from(mediaContactFieldOverridesTable)
+          .where(and(
+            eq(mediaContactFieldOverridesTable.contactId, existing.id),
+            eq(mediaContactFieldOverridesTable.accountId, row.accountId),
+          ));
+        const overridden = new Set(overrideRows.map((item) => item.fieldName));
+        const fill = <T>(field: string, current: T, discovered: T): T =>
+          overridden.has(field) || (typeof current === "string" && current.length > 0) ? current : discovered;
+        [contact] = await tx.update(mediaContactsTable).set({
+          // Explicit manual overrides and existing non-empty values always win.
+          email: fill("email", existing.email, email),
+          role: fill("role", existing.role, candidate.role),
+          beats: overridden.has("beats") ? existing.beats : Array.from(new Set([...existing.beats, ...candidate.beats])),
+          sectors: overridden.has("sectors") ? existing.sectors : Array.from(new Set([...existing.sectors, ...(candidate.sectors ?? [])])),
+          geography: fill("geography", existing.geography, candidate.geography || ""),
+          sourceUrl: fill("sourceUrl", existing.sourceUrl, candidate.sourceUrl),
+          sourceRef: fill("sourceRef", existing.sourceRef, "Live public web research"),
+          confidence: fill("confidence", existing.confidence, candidate.confidence),
+          reviewNotes: fill("reviewNotes", existing.reviewNotes, candidate.evidence),
+          notes: fill("notes", existing.notes, mergedNotes),
           provenance: {
             ...existing.provenance,
             latestPublicDiscovery: {
@@ -2179,52 +2290,95 @@ router.post("/store/media-db/discoveries", requirePlatformAuth, async (req: Requ
               sourceUrl: candidate.sourceUrl,
               evidence: candidate.evidence,
               discoveredAt: candidate.verifiedAt,
-               recentBylines: candidate.recentBylines ?? [],
-               journalistInterests: candidate.journalistInterests ?? [],
-               mediaOpportunities: candidate.mediaOpportunities ?? [],
-               mediaOpportunity: candidate.mediaOpportunity ?? "",
-               modelDerivedFields: ["role", "beats", "sectors", "geography", "recentBylines", "journalistInterests", "mediaOpportunities", "mediaOpportunity"],
+              approval: { kind: "team-approved", reviewedBy: req.account!.username, reviewedAt: new Date().toISOString() },
             },
           },
           updatedAt: new Date(),
         }).where(eq(mediaContactsTable.id, existing.id)).returning();
-        return { contact, outlet, existing: true };
-      }
-      const verifiedAt = new Date(candidate.verifiedAt);
-      const [contact] = await tx.insert(mediaContactsTable).values({
-        outletId: outlet.id,
-        firstName: candidate.firstName,
-        lastName: candidate.lastName,
-        role: candidate.role,
-        email: verifiedEmail,
-        beats: candidate.beats,
-        sectors: candidate.sectors ?? [],
-        geography: candidate.geography ?? "",
-        sourceUrl: candidate.sourceUrl,
-        sourceRef: "Live public web research",
-        confidence: candidate.confidence,
-        reviewNotes: candidate.evidence,
-        notes: discoveryNotes,
-        provenance: {
-          provider: "OpenAI web search",
+      } else {
+        [contact] = await tx.insert(mediaContactsTable).values({
+          outletId: outlet.id,
+          firstName: candidate.firstName,
+          lastName: candidate.lastName,
+          role: candidate.role,
+          email,
+          beats: candidate.beats,
+          sectors: candidate.sectors ?? [],
+          geography: candidate.geography ?? "",
           sourceUrl: candidate.sourceUrl,
-          evidence: candidate.evidence,
-          discoveredAt: candidate.verifiedAt,
-          recentBylines: candidate.recentBylines ?? [],
-          journalistInterests: candidate.journalistInterests ?? [],
-          mediaOpportunities: candidate.mediaOpportunities ?? [],
-          mediaOpportunity: candidate.mediaOpportunity ?? "",
-          modelDerivedFields: ["role", "beats", "sectors", "geography", "recentBylines", "journalistInterests", "mediaOpportunities", "mediaOpportunity"],
-        },
-        lastVerifiedAt: verifiedAt,
-        accountId,
-      }).returning();
-      return { contact, outlet, existing: false };
+          sourceRef: "Live public web research",
+          confidence: candidate.confidence,
+          reviewNotes: candidate.evidence,
+          notes,
+          provenance: {
+            provider: "OpenAI web search",
+            sourceUrl: candidate.sourceUrl,
+            evidence: candidate.evidence,
+            discoveredAt: candidate.verifiedAt,
+            approval: { kind: "team-approved", reviewedBy: req.account!.username, reviewedAt: new Date().toISOString() },
+          },
+          lastVerifiedAt: null,
+          accountId: row.accountId,
+        }).returning();
+      }
+      if (!contact) throw new Error("Failed to create contact");
+      const reviewedAt = new Date();
+      const [updated] = await tx.update(mediaDiscoveriesTable).set({
+        status: "approved",
+        reviewedAt,
+        reviewedBy: req.account!.username,
+        contactId: contact.id,
+        outletId: outlet.id,
+      }).where(eq(mediaDiscoveriesTable.id, row.id)).returning();
+      return { row: updated, contact, outlet, existing: !!existing };
     });
-    res.status(result.existing ? 200 : 201).json({ ok: true, ...result });
+    if ("notFound" in result) {
+      res.status(404).json({ error: "Discovery not found" });
+      return;
+    }
+    if ("rejected" in result) {
+      res.status(409).json({ error: "Rejected discoveries cannot be approved." });
+      return;
+    }
+    res.json({ ok: true, discovery: discoveryResponse(result.row), contact: result.contact, outlet: result.outlet, existing: result.existing });
   } catch (error) {
-    req.log.error({ err: error }, "saving live media discovery failed");
-    res.status(500).json({ error: "Failed to save this discovery to the Media Database." });
+    req.log.error({ err: error }, "approving media discovery failed");
+    res.status(500).json({ error: "Failed to approve this discovery." });
+  }
+});
+
+router.post("/store/media-db/discoveries/:id/reject", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) {
+      res.status(400).json({ error: "Invalid discovery id" });
+      return;
+    }
+    const visible = await visibleAccounts(req);
+    const result = await db.transaction(async (tx) => {
+      if (process.env.NODE_ENV !== "test") await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`media-discovery:${id}`}))`);
+      const [row] = await tx.select().from(mediaDiscoveriesTable).where(eq(mediaDiscoveriesTable.id, id)).limit(1);
+      const [project] = row ? await tx.select({ owner: projectsTable.owner, deletedAt: projectsTable.deletedAt }).from(projectsTable).where(eq(projectsTable.id, row.projectId)).limit(1) : [];
+      if (!row || !project || project.deletedAt || project.owner !== row.accountId || !inAssignedScope(req, row.projectId)
+        || (visible !== null && !visible.includes(row.accountId))) return null;
+      if (row.status !== "pending") return row;
+      const reason = typeof req.body?.reason === "string" ? req.body.reason.trim().slice(0, 4000) : null;
+      const [updated] = await tx.update(mediaDiscoveriesTable).set({
+        status: "rejected",
+        reviewedAt: new Date(),
+        reviewedBy: req.account!.username,
+        rejectionReason: reason || null,
+      }).where(eq(mediaDiscoveriesTable.id, row.id)).returning();
+      return updated;
+    });
+    if (!result) {
+      res.status(404).json({ error: "Discovery not found" });
+      return;
+    }
+    res.json({ ok: true, discovery: discoveryResponse(result) });
+  } catch (error) {
+    req.log.error({ err: error }, "rejecting media discovery failed");
+    res.status(500).json({ error: "Failed to reject this discovery." });
   }
 });
 

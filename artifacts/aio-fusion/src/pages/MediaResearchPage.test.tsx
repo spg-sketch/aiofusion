@@ -92,7 +92,7 @@ const candidate = {
   firstName: "Jane",
   lastName: "Reporter",
   role: "Energy correspondent",
-  email: "",
+  email: "jane@energy.example",
   outletName: "Energy Today",
   outletWebsite: "https://energy.example",
   sourceUrl: "https://energy.example/authors/jane-reporter",
@@ -315,7 +315,7 @@ describe("MediaResearchPage live discovery", () => {
         return liveResponse;
       }
       if (url.includes("/store/media-db/discoveries")) {
-        return new Response(JSON.stringify({ ok: true, existing: false, contact: { id: 10 } }), { status: 201 });
+        return new Response(JSON.stringify({ ok: true, discovery: { id: 10, status: "pending" } }), { status: 201 });
       }
       return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
     }));
@@ -388,18 +388,32 @@ describe("MediaResearchPage live discovery", () => {
     expect((liveRequest?.body?.content as Record<string, unknown>).title).toBe("New clean energy platform launches");
     expect(screen.getByText(candidate.evidence)).toBeTruthy();
     expect(screen.getByRole("link", { name: /view cited source/i })).toHaveAttribute("href", candidate.sourceUrl);
+    expect(screen.queryByRole("link", { name: candidate.email })).toBeNull();
+    expect(screen.getByText(/Unverified discovery - review before sending/i)).toBeTruthy();
     expect(screen.getByText("Journalist interests/topics")).toBeTruthy();
     expect(screen.getByText("Renewable power")).toBeTruthy();
     expect(screen.getByText("Media opportunities")).toBeTruthy();
     expect(screen.getByRole("link", { name: "How renewable teams manage power" })).toHaveAttribute("href", "https://energy.example/bylines/renewable-power");
 
-    fireEvent.click(screen.getByRole("button", { name: /save to media database/i }));
-    await waitFor(() => expect(screen.getByRole("button", { name: /saved to media database/i })).toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: /send for review/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /submitted for review/i })).toBeDisabled());
   });
 
   it("explains that live email addresses must come from the cited public source", () => {
     render(<MediaResearchPage />);
     expect(screen.getByText(/sends the selected article excerpt.*to OpenAI/i)).toBeTruthy();
+  });
+
+  it("offers Find new journalists only after a persisted no-result match and runs live search explicitly", async () => {
+    recommendationState.includeContact = false;
+    render(<MediaResearchPage />);
+    expect(screen.queryByTestId("button-find-journalists")).toBeNull();
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    await waitFor(() => expect(screen.getAllByDisplayValue("Clean energy").length).toBeGreaterThan(0));
+    expect(await screen.findByTestId("button-find-journalists")).toBeTruthy();
+    expect(requests.some((request) => request.url.includes("/content/media-discover"))).toBe(false);
+    fireEvent.click(screen.getByTestId("button-find-journalists"));
+    await waitFor(() => expect(requests.some((request) => request.url.includes("/content/media-discover"))).toBe(true));
   });
 
   it("remembers the selected article after remount within the same workspace and project", async () => {
@@ -640,12 +654,12 @@ describe("MediaResearchPage live discovery", () => {
     const selector = screen.getByTestId("select-research-article");
     fireEvent.change(selector, { target: { value: "story-1" } });
     await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).toBeTruthy());
-     fireEvent.click(screen.getByTestId("button-discover-live"));
+    fireEvent.click(screen.getByTestId("button-discover-live"));
     await waitFor(() => expect(delayedRequests.liveCalls).toHaveLength(1));
     await act(async () => { await new Promise(r => setTimeout(r, 0)); });
     fireEvent.change(selector, { target: { value: "story-2" } });
     await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).toBeTruthy());
-     fireEvent.click(screen.getByTestId("button-discover-live"));
+    fireEvent.click(await screen.findByTestId("button-find-journalists"));
     await waitFor(() => expect(delayedRequests.liveCalls).toHaveLength(2));
     fireEvent.change(selector, { target: { value: "story-1" } });
     await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).toBeTruthy());

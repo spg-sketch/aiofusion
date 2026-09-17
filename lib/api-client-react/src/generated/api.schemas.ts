@@ -49,6 +49,116 @@ export interface ContactRestrictionRequest {
   doNotContact: boolean;
 }
 
+export type MediaDiscoveryCandidateConfidence = typeof MediaDiscoveryCandidateConfidence[keyof typeof MediaDiscoveryCandidateConfidence];
+
+
+export const MediaDiscoveryCandidateConfidence = {
+  High: 'High',
+  Medium: 'Medium',
+  Low: 'Low',
+} as const;
+
+export interface MediaDiscoveryCandidate {
+  candidateKey: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  email: string;
+  outletName: string;
+  outletWebsite: string;
+  sourceUrl: string;
+  evidence: string;
+  beats: string[];
+  sectors?: string[];
+  geography?: string;
+  confidence: MediaDiscoveryCandidateConfidence;
+  verifiedAt: string;
+  [key: string]: unknown;
+ }
+
+export type MediaDiscoveryStatus = typeof MediaDiscoveryStatus[keyof typeof MediaDiscoveryStatus];
+
+
+export const MediaDiscoveryStatus = {
+  pending: 'pending',
+  approved: 'approved',
+  rejected: 'rejected',
+} as const;
+
+export interface MediaDiscovery {
+  id: number;
+  accountId: string;
+  projectId: string;
+  status: MediaDiscoveryStatus;
+  candidate: MediaDiscoveryCandidate;
+  createdAt: string;
+  /** @nullable */
+  reviewedAt: string | null;
+  /** @nullable */
+  reviewedBy: string | null;
+  /** @nullable */
+  rejectionReason: string | null;
+  /** @nullable */
+  contactId: number | null;
+  /** @nullable */
+  outletId: number | null;
+}
+
+export interface MediaDiscoveryInput {
+  /** @minLength 1 */
+  discoveryToken: string;
+  /** @minLength 1 */
+  candidateKey: string;
+}
+
+export interface MediaDiscoveryRejectInput {
+  /** @maxLength 4000 */
+  reason?: string;
+}
+
+export interface MediaDiscoveryEnvelope {
+  ok: boolean;
+  discovery: MediaDiscovery;
+}
+
+export interface MediaDiscoveryListEnvelope {
+  ok: boolean;
+  items: MediaDiscovery[];
+  canReview: boolean;
+}
+
+export type MediaDiscoveryApprovalEnvelopeContact = { [key: string]: unknown };
+
+export type MediaDiscoveryApprovalEnvelopeOutlet = { [key: string]: unknown };
+
+export interface MediaDiscoveryApprovalEnvelope {
+  ok: boolean;
+  discovery: MediaDiscovery;
+  contact: MediaDiscoveryApprovalEnvelopeContact;
+  outlet: MediaDiscoveryApprovalEnvelopeOutlet;
+  existing: boolean;
+}
+
+export interface MediaDiscoveryInstructionsInput {
+  /**
+     * @minLength 50
+     * @maxLength 12000
+     */
+  instructions: string;
+  /** @minimum 0 */
+  version: number;
+}
+
+export interface MediaDiscoveryInstructionsEnvelope {
+  ok: boolean;
+  instructions: string;
+  defaultInstructions: string;
+  version: number;
+  /** @nullable */
+  updatedAt: string | null;
+  canEdit: boolean;
+}
+
 export interface HealthStatus {
   status: string;
   /** Names of active server-side feature flags. Empty on production; lists enabled flags on staging. */
@@ -222,6 +332,8 @@ export type AuthorizationSessionHeaderParameter = string;
 
 export type ProjectIdParameter = string;
 
+export type ProjectIdOptionalParameter = string;
+
 export type StoryKeyParameter = string;
 
 export type BeginBrowserLoginParams = {
@@ -249,6 +361,24 @@ projectId: ProjectIdParameter;
  */
 storyKey: StoryKeyParameter;
 };
+
+export type ListMediaDiscoveriesParams = {
+status?: ListMediaDiscoveriesStatus;
+/**
+ * @minLength 1
+ * @maxLength 200
+ */
+projectId?: ProjectIdOptionalParameter;
+};
+
+export type ListMediaDiscoveriesStatus = typeof ListMediaDiscoveriesStatus[keyof typeof ListMediaDiscoveriesStatus];
+
+
+export const ListMediaDiscoveriesStatus = {
+  pending: 'pending',
+  approved: 'approved',
+  rejected: 'rejected',
+} as const;
 
 export type GetMediaRecommendationsParams = {
 /**

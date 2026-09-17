@@ -128,6 +128,20 @@ describe("MediaDatabasePage source health", () => {
     ));
   });
 
+  it("shows the discovery queue to workspace members but instructions only to the canonical Master owner", async () => {
+    render(<MediaDatabasePage />);
+    await screen.findByText("Jane Reporter");
+    expect(screen.getByRole("button", { name: "Discoveries" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Research instructions" })).toBeNull();
+
+    cleanup();
+    localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "admin", role: "admin", membershipRole: "owner" }));
+    render(<MediaDatabasePage />);
+    await screen.findByText("Jane Reporter");
+    expect(screen.getByRole("button", { name: "Discoveries" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Research instructions" })).toBeTruthy();
+  });
+
   it("keeps rich exports safe and preserves sheet-aware import outcomes", () => {
     expect(sanitizeSpreadsheetCell("=HYPERLINK(\"https://bad.example\", \"click\")")).toBe("'=HYPERLINK(\"https://bad.example\", \"click\")");
     expect(sanitizeSpreadsheetCell("+447700900000")).toBe("'+447700900000");

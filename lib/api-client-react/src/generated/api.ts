@@ -32,7 +32,15 @@ import type {
   InsightArticleInput,
   InsightMedia,
   InsightMediaInput,
+  ListMediaDiscoveriesParams,
   LogoutSuccess,
+  MediaDiscoveryApprovalEnvelope,
+  MediaDiscoveryEnvelope,
+  MediaDiscoveryInput,
+  MediaDiscoveryInstructionsEnvelope,
+  MediaDiscoveryInstructionsInput,
+  MediaDiscoveryListEnvelope,
+  MediaDiscoveryRejectInput,
   MobileTokenExchangeRequest,
   MobileTokenExchangeSuccess,
   RecommendationBriefEnvelope,
@@ -1397,6 +1405,446 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getSaveMediaRecommendationBriefMutationOptions(options));
+    }
+
+export const getListMediaDiscoveriesUrl = (params?: ListMediaDiscoveriesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/store/media-db/discoveries?${stringifiedParams}` : `/api/store/media-db/discoveries`
+}
+
+export const listMediaDiscoveries = async (params?: ListMediaDiscoveriesParams, options?: Parameters<typeof customFetch>[1]): Promise<MediaDiscoveryListEnvelope> => {
+
+  return customFetch<MediaDiscoveryListEnvelope>(getListMediaDiscoveriesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMediaDiscoveriesQueryKey = (params?: ListMediaDiscoveriesParams,) => {
+    return [
+    `/api/store/media-db/discoveries`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListMediaDiscoveriesQueryOptions = <TData = Awaited<ReturnType<typeof listMediaDiscoveries>>, TError = ErrorType<unknown>>(params?: ListMediaDiscoveriesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMediaDiscoveries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMediaDiscoveriesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMediaDiscoveries>>> = ({ signal }) => listMediaDiscoveries(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMediaDiscoveries>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMediaDiscoveriesQueryResult = NonNullable<Awaited<ReturnType<typeof listMediaDiscoveries>>>
+export type ListMediaDiscoveriesQueryError = ErrorType<unknown>
+
+
+
+export function useListMediaDiscoveries<TData = Awaited<ReturnType<typeof listMediaDiscoveries>>, TError = ErrorType<unknown>>(
+ params?: ListMediaDiscoveriesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMediaDiscoveries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMediaDiscoveriesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveMediaDiscoveryUrl = () => {
+
+
+
+
+  return `/api/store/media-db/discoveries`
+}
+
+export const saveMediaDiscovery = async (mediaDiscoveryInput: MediaDiscoveryInput, options?: Parameters<typeof customFetch>[1]): Promise<MediaDiscoveryEnvelope> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<MediaDiscoveryEnvelope>(getSaveMediaDiscoveryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(mediaDiscoveryInput)
+  }
+);}
+
+
+
+
+
+export const getSaveMediaDiscoveryMutationKey = () => ['saveMediaDiscovery'] as const;
+
+export const getSaveMediaDiscoveryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveMediaDiscovery>>, TError,SaveMediaDiscoveryMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveMediaDiscovery>>, TError,SaveMediaDiscoveryMutationVariables, TContext> => {
+
+const mutationKey = getSaveMediaDiscoveryMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveMediaDiscovery>>, SaveMediaDiscoveryMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  saveMediaDiscovery(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveMediaDiscoveryMutationResult = NonNullable<Awaited<ReturnType<typeof saveMediaDiscovery>>>
+    export type SaveMediaDiscoveryMutationBody = BodyType<MediaDiscoveryInput>
+    export type SaveMediaDiscoveryMutationError = ErrorType<unknown>
+    export type SaveMediaDiscoveryMutationVariables = {data: BodyType<MediaDiscoveryInput>}
+
+    export const useSaveMediaDiscovery = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveMediaDiscovery>>, TError,SaveMediaDiscoveryMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveMediaDiscovery>>,
+        TError,
+        SaveMediaDiscoveryMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSaveMediaDiscoveryMutationOptions(options));
+    }
+
+export const getApproveMediaDiscoveryUrl = (id: number,) => {
+
+
+
+
+  return `/api/store/media-db/discoveries/${id}/approve`
+}
+
+export const approveMediaDiscovery = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<MediaDiscoveryApprovalEnvelope> => {
+
+  return customFetch<MediaDiscoveryApprovalEnvelope>(getApproveMediaDiscoveryUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getApproveMediaDiscoveryMutationKey = () => ['approveMediaDiscovery'] as const;
+
+export const getApproveMediaDiscoveryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveMediaDiscovery>>, TError,ApproveMediaDiscoveryMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveMediaDiscovery>>, TError,ApproveMediaDiscoveryMutationVariables, TContext> => {
+
+const mutationKey = getApproveMediaDiscoveryMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveMediaDiscovery>>, ApproveMediaDiscoveryMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  approveMediaDiscovery(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApproveMediaDiscoveryMutationResult = NonNullable<Awaited<ReturnType<typeof approveMediaDiscovery>>>
+
+    export type ApproveMediaDiscoveryMutationError = ErrorType<unknown>
+    export type ApproveMediaDiscoveryMutationVariables = {id: number}
+
+    export const useApproveMediaDiscovery = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveMediaDiscovery>>, TError,ApproveMediaDiscoveryMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof approveMediaDiscovery>>,
+        TError,
+        ApproveMediaDiscoveryMutationVariables,
+        TContext
+      > => {
+      return useMutation(getApproveMediaDiscoveryMutationOptions(options));
+    }
+
+export const getRejectMediaDiscoveryUrl = (id: number,) => {
+
+
+
+
+  return `/api/store/media-db/discoveries/${id}/reject`
+}
+
+export const rejectMediaDiscovery = async (id: number,
+    mediaDiscoveryRejectInput?: MediaDiscoveryRejectInput, options?: Parameters<typeof customFetch>[1]): Promise<MediaDiscoveryEnvelope> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<MediaDiscoveryEnvelope>(getRejectMediaDiscoveryUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(mediaDiscoveryRejectInput)
+  }
+);}
+
+
+
+
+
+export const getRejectMediaDiscoveryMutationKey = () => ['rejectMediaDiscovery'] as const;
+
+export const getRejectMediaDiscoveryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectMediaDiscovery>>, TError,RejectMediaDiscoveryMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rejectMediaDiscovery>>, TError,RejectMediaDiscoveryMutationVariables, TContext> => {
+
+const mutationKey = getRejectMediaDiscoveryMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rejectMediaDiscovery>>, RejectMediaDiscoveryMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  rejectMediaDiscovery(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RejectMediaDiscoveryMutationResult = NonNullable<Awaited<ReturnType<typeof rejectMediaDiscovery>>>
+    export type RejectMediaDiscoveryMutationBody = BodyType<MediaDiscoveryRejectInput> | undefined
+    export type RejectMediaDiscoveryMutationError = ErrorType<unknown>
+    export type RejectMediaDiscoveryMutationVariables = {id: number;data?: BodyType<MediaDiscoveryRejectInput>}
+
+    export const useRejectMediaDiscovery = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectMediaDiscovery>>, TError,RejectMediaDiscoveryMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof rejectMediaDiscovery>>,
+        TError,
+        RejectMediaDiscoveryMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRejectMediaDiscoveryMutationOptions(options));
+    }
+
+export const getGetMediaDiscoveryInstructionsUrl = () => {
+
+
+
+
+  return `/api/store/media-db/discovery-instructions`
+}
+
+export const getMediaDiscoveryInstructions = async ( options?: Parameters<typeof customFetch>[1]): Promise<MediaDiscoveryInstructionsEnvelope> => {
+
+  return customFetch<MediaDiscoveryInstructionsEnvelope>(getGetMediaDiscoveryInstructionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMediaDiscoveryInstructionsQueryKey = () => {
+    return [
+    `/api/store/media-db/discovery-instructions`
+    ] as const;
+    }
+
+
+export const getGetMediaDiscoveryInstructionsQueryOptions = <TData = Awaited<ReturnType<typeof getMediaDiscoveryInstructions>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMediaDiscoveryInstructions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMediaDiscoveryInstructionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMediaDiscoveryInstructions>>> = ({ signal }) => getMediaDiscoveryInstructions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMediaDiscoveryInstructions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMediaDiscoveryInstructionsQueryResult = NonNullable<Awaited<ReturnType<typeof getMediaDiscoveryInstructions>>>
+export type GetMediaDiscoveryInstructionsQueryError = ErrorType<unknown>
+
+
+
+export function useGetMediaDiscoveryInstructions<TData = Awaited<ReturnType<typeof getMediaDiscoveryInstructions>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMediaDiscoveryInstructions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMediaDiscoveryInstructionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateMediaDiscoveryInstructionsUrl = () => {
+
+
+
+
+  return `/api/store/media-db/discovery-instructions`
+}
+
+export const updateMediaDiscoveryInstructions = async (mediaDiscoveryInstructionsInput: MediaDiscoveryInstructionsInput, options?: Parameters<typeof customFetch>[1]): Promise<MediaDiscoveryInstructionsEnvelope> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<MediaDiscoveryInstructionsEnvelope>(getUpdateMediaDiscoveryInstructionsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(mediaDiscoveryInstructionsInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateMediaDiscoveryInstructionsMutationKey = () => ['updateMediaDiscoveryInstructions'] as const;
+
+export const getUpdateMediaDiscoveryInstructionsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMediaDiscoveryInstructions>>, TError,UpdateMediaDiscoveryInstructionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateMediaDiscoveryInstructions>>, TError,UpdateMediaDiscoveryInstructionsMutationVariables, TContext> => {
+
+const mutationKey = getUpdateMediaDiscoveryInstructionsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateMediaDiscoveryInstructions>>, UpdateMediaDiscoveryInstructionsMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateMediaDiscoveryInstructions(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateMediaDiscoveryInstructionsMutationResult = NonNullable<Awaited<ReturnType<typeof updateMediaDiscoveryInstructions>>>
+    export type UpdateMediaDiscoveryInstructionsMutationBody = BodyType<MediaDiscoveryInstructionsInput>
+    export type UpdateMediaDiscoveryInstructionsMutationError = ErrorType<unknown>
+    export type UpdateMediaDiscoveryInstructionsMutationVariables = {data: BodyType<MediaDiscoveryInstructionsInput>}
+
+    export const useUpdateMediaDiscoveryInstructions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMediaDiscoveryInstructions>>, TError,UpdateMediaDiscoveryInstructionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateMediaDiscoveryInstructions>>,
+        TError,
+        UpdateMediaDiscoveryInstructionsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateMediaDiscoveryInstructionsMutationOptions(options));
     }
 
 export const getGetMediaRecommendationsUrl = (params: GetMediaRecommendationsParams,) => {

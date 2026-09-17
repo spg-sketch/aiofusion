@@ -444,6 +444,215 @@ export const SaveMediaRecommendationBriefResponse = zod.object({
 })
 
 
+export const listMediaDiscoveriesQueryStatusDefault = `pending`;
+export const listMediaDiscoveriesQueryProjectIdMax = 200;
+
+
+
+export const ListMediaDiscoveriesQueryParams = zod.object({
+  "status": zod.enum(['pending', 'approved', 'rejected']).default(listMediaDiscoveriesQueryStatusDefault),
+  "projectId": zod.coerce.string().min(1).max(listMediaDiscoveriesQueryProjectIdMax).optional()
+})
+
+export const ListMediaDiscoveriesResponse = zod.object({
+  "ok": zod.boolean(),
+  "items": zod.array(zod.object({
+  "id": zod.number().int(),
+  "accountId": zod.string(),
+  "projectId": zod.string(),
+  "status": zod.enum(['pending', 'approved', 'rejected']),
+  "candidate": zod.object({
+  "candidateKey": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "role": zod.string(),
+  "email": zod.string(),
+  "outletName": zod.string(),
+  "outletWebsite": zod.string(),
+  "sourceUrl": zod.string(),
+  "evidence": zod.string(),
+  "beats": zod.array(zod.string()),
+  "sectors": zod.array(zod.string()).optional(),
+  "geography": zod.string().optional(),
+  "confidence": zod.enum(['High', 'Medium', 'Low']),
+  "verifiedAt": zod.date()
+}),
+  "createdAt": zod.date(),
+  "reviewedAt": zod.date().nullable(),
+  "reviewedBy": zod.string().nullable(),
+  "rejectionReason": zod.string().nullable(),
+  "contactId": zod.number().int().nullable(),
+  "outletId": zod.number().int().nullable()
+})),
+  "canReview": zod.boolean()
+})
+
+
+
+
+
+
+export const SaveMediaDiscoveryBody = zod.object({
+  "discoveryToken": zod.string().min(1),
+  "candidateKey": zod.string().min(1)
+})
+
+export const SaveMediaDiscoveryResponse = zod.object({
+  "ok": zod.boolean(),
+  "discovery": zod.object({
+  "id": zod.number().int(),
+  "accountId": zod.string(),
+  "projectId": zod.string(),
+  "status": zod.enum(['pending', 'approved', 'rejected']),
+  "candidate": zod.object({
+  "candidateKey": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "role": zod.string(),
+  "email": zod.string(),
+  "outletName": zod.string(),
+  "outletWebsite": zod.string(),
+  "sourceUrl": zod.string(),
+  "evidence": zod.string(),
+  "beats": zod.array(zod.string()),
+  "sectors": zod.array(zod.string()).optional(),
+  "geography": zod.string().optional(),
+  "confidence": zod.enum(['High', 'Medium', 'Low']),
+  "verifiedAt": zod.date()
+}),
+  "createdAt": zod.date(),
+  "reviewedAt": zod.date().nullable(),
+  "reviewedBy": zod.string().nullable(),
+  "rejectionReason": zod.string().nullable(),
+  "contactId": zod.number().int().nullable(),
+  "outletId": zod.number().int().nullable()
+})
+})
+
+
+
+
+
+export const ApproveMediaDiscoveryParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const ApproveMediaDiscoveryResponse = zod.object({
+  "ok": zod.boolean(),
+  "discovery": zod.object({
+  "id": zod.number().int(),
+  "accountId": zod.string(),
+  "projectId": zod.string(),
+  "status": zod.enum(['pending', 'approved', 'rejected']),
+  "candidate": zod.object({
+  "candidateKey": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "role": zod.string(),
+  "email": zod.string(),
+  "outletName": zod.string(),
+  "outletWebsite": zod.string(),
+  "sourceUrl": zod.string(),
+  "evidence": zod.string(),
+  "beats": zod.array(zod.string()),
+  "sectors": zod.array(zod.string()).optional(),
+  "geography": zod.string().optional(),
+  "confidence": zod.enum(['High', 'Medium', 'Low']),
+  "verifiedAt": zod.date()
+}),
+  "createdAt": zod.date(),
+  "reviewedAt": zod.date().nullable(),
+  "reviewedBy": zod.string().nullable(),
+  "rejectionReason": zod.string().nullable(),
+  "contactId": zod.number().int().nullable(),
+  "outletId": zod.number().int().nullable()
+}),
+  "contact": zod.record(zod.string(), zod.unknown()),
+  "outlet": zod.record(zod.string(), zod.unknown()),
+  "existing": zod.boolean()
+})
+
+
+
+
+
+export const RejectMediaDiscoveryParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const rejectMediaDiscoveryBodyReasonMax = 4000;
+
+
+
+export const RejectMediaDiscoveryBody = zod.object({
+  "reason": zod.string().max(rejectMediaDiscoveryBodyReasonMax).optional()
+})
+
+export const RejectMediaDiscoveryResponse = zod.object({
+  "ok": zod.boolean(),
+  "discovery": zod.object({
+  "id": zod.number().int(),
+  "accountId": zod.string(),
+  "projectId": zod.string(),
+  "status": zod.enum(['pending', 'approved', 'rejected']),
+  "candidate": zod.object({
+  "candidateKey": zod.string(),
+  "firstName": zod.string(),
+  "lastName": zod.string(),
+  "role": zod.string(),
+  "email": zod.string(),
+  "outletName": zod.string(),
+  "outletWebsite": zod.string(),
+  "sourceUrl": zod.string(),
+  "evidence": zod.string(),
+  "beats": zod.array(zod.string()),
+  "sectors": zod.array(zod.string()).optional(),
+  "geography": zod.string().optional(),
+  "confidence": zod.enum(['High', 'Medium', 'Low']),
+  "verifiedAt": zod.date()
+}),
+  "createdAt": zod.date(),
+  "reviewedAt": zod.date().nullable(),
+  "reviewedBy": zod.string().nullable(),
+  "rejectionReason": zod.string().nullable(),
+  "contactId": zod.number().int().nullable(),
+  "outletId": zod.number().int().nullable()
+})
+})
+
+
+export const GetMediaDiscoveryInstructionsResponse = zod.object({
+  "ok": zod.boolean(),
+  "instructions": zod.string(),
+  "defaultInstructions": zod.string(),
+  "version": zod.number().int(),
+  "updatedAt": zod.date().nullable(),
+  "canEdit": zod.boolean()
+})
+
+
+export const updateMediaDiscoveryInstructionsBodyInstructionsMin = 50;
+export const updateMediaDiscoveryInstructionsBodyInstructionsMax = 12000;
+
+export const updateMediaDiscoveryInstructionsBodyVersionMin = 0;
+
+
+
+export const UpdateMediaDiscoveryInstructionsBody = zod.object({
+  "instructions": zod.string().min(updateMediaDiscoveryInstructionsBodyInstructionsMin).max(updateMediaDiscoveryInstructionsBodyInstructionsMax),
+  "version": zod.number().int().min(updateMediaDiscoveryInstructionsBodyVersionMin)
+})
+
+export const UpdateMediaDiscoveryInstructionsResponse = zod.object({
+  "ok": zod.boolean(),
+  "instructions": zod.string(),
+  "defaultInstructions": zod.string(),
+  "version": zod.number().int(),
+  "updatedAt": zod.date().nullable(),
+  "canEdit": zod.boolean()
+})
+
+
 export const getMediaRecommendationsQueryProjectIdMax = 200;
 
 export const getMediaRecommendationsQueryStoryKeyMax = 200;

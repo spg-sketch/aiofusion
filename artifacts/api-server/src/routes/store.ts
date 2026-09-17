@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, projectsTable, projectSnapshotsTable } from "@workspace/db";
+import { db, mediaDiscoveriesTable, projectsTable, projectSnapshotsTable } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import {
@@ -595,6 +595,9 @@ router.post(
         res.status(409).json({ error: "You cannot delete this project." });
         return;
       }
+      // Discovery candidates can contain contact PII. A project deletion must
+      // remove its review queue even though the project row is soft-deleted.
+      await db.delete(mediaDiscoveriesTable).where(eq(mediaDiscoveriesTable.projectId, id));
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to delete project" });

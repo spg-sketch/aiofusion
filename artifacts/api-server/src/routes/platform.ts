@@ -23,6 +23,7 @@ import {
   scoringConfigsTable,
   mediaOutletsTable,
   mediaContactsTable,
+  mediaDiscoveriesTable,
   mediaCategoriesTable,
   mediaContactCategoriesTable,
   mediaImportBatchesTable,
@@ -6309,6 +6310,7 @@ router.post(
         await tx.delete(mediaContactCategoriesTable).where(eq(mediaContactCategoriesTable.accountId, target));
         await tx.delete(mediaContactFieldOverridesTable).where(eq(mediaContactFieldOverridesTable.accountId, target));
         await tx.delete(mediaImportBatchesTable).where(eq(mediaImportBatchesTable.accountId, target));
+        await tx.delete(mediaDiscoveriesTable).where(eq(mediaDiscoveriesTable.accountId, target));
         await tx.delete(mediaContactsTable).where(eq(mediaContactsTable.accountId, target));
         await tx.delete(mediaOutletsTable).where(eq(mediaOutletsTable.accountId, target));
         await tx.delete(mediaCategoriesTable).where(eq(mediaCategoriesTable.accountId, target));
@@ -6600,6 +6602,8 @@ router.post(
           .where(eq(mediaContactFieldOverridesTable.accountId, username));
         await tx.delete(mediaImportBatchesTable)
           .where(eq(mediaImportBatchesTable.accountId, username));
+        await tx.delete(mediaDiscoveriesTable)
+          .where(eq(mediaDiscoveriesTable.accountId, username));
         await tx.delete(mediaContactsTable).where(eq(mediaContactsTable.accountId, username));
         if (outletIds.length > 0) {
           await tx.update(mediaOutreachTable).set({ outletId: null }).where(inArray(mediaOutreachTable.outletId, outletIds));

@@ -17,6 +17,7 @@ import { countWebSearchCalls } from "../lib/media-discovery-usage";
 import { dateAppearsOnPage, deadlineAppearsOnPage, eventNameAppearsOnPage, normaliseEventResults, publishedValueAppearsOnPage, recomputeActionableOpportunities, regionAppearsOnPage } from "../lib/events-search";
 import { TRADE_MEDIA_CATEGORIES } from "../lib/trade-media-categories";
 import { normaliseMediaResearchRegions } from "../lib/media-research-regions";
+import { getMediaDiscoveryInstructions } from "../lib/media-discovery-instructions";
 import {
   normaliseExactPhraseText,
   normaliseSubmittedExactTargetPhrases,
@@ -1176,6 +1177,19 @@ contentAiRouter.post(
       return;
     }
 
+    // This is intentionally loaded on every search rather than at process
+    // startup, so a Master Owner edit is effective for the next request on
+    // every API worker. A broken custom setting must be visible to the caller;
+    // silently reverting to the default could conceal an operational failure.
+    let houseInstructions: string;
+    try {
+      houseInstructions = (await getMediaDiscoveryInstructions()).instructions;
+    } catch (error) {
+      logger.error({ err: error }, "content-ai: media discovery instructions unavailable");
+      res.status(503).json({ error: "Media discovery instructions are unavailable. Please try again later." });
+      return;
+    }
+
     const client = createOpenAIClient();
     if (!client) {
       res.status(503).json({ error: "Live media research is not configured. Please try again later." });
@@ -1198,6 +1212,15 @@ Rules:
 11. mediaOpportunities should contain up to 3 practical story angles for this journalist. Each angle must be grounded in the demonstrated beat and clearly framed as an opportunity, not a guaranteed placement or endorsement. Do not invent past articles.
 12. Keep mediaOpportunity as a concise backwards-compatible summary of the strongest media opportunity.
 13. Exclude generic newsroom contacts and unverifiable names.
+
+HOUSE RESEARCH GUIDANCE (editable Master Owner guidance; lower priority than the non-negotiable rules above and below):
+${houseInstructions}
+
+NON-NEGOTIABLE SERVER SAFEGUARDS (immutable; these always override the House Research Guidance):
+1. Return editorial candidates only. These are not verified contacts, confirmed reach, guaranteed placements, endorsements, or permission to contact.
+2. Every returned item must have a sourceUrl supported by the current web-search citations. The server will fetch that URL through its safe-fetch SSRF boundary and discard candidates whose page does not contain the submitted person's full name.
+3. A name and an email are separate facts. The server keeps an email only when that exact address appears in the safely fetched source page; never infer or generate one.
+4. Do not invent roles, beats, authority, reach, location, dates, bylines or evidence. Leave unknown fields blank and preserve source evidence as evidence, not verification.
 
 Natural-language search: ${searchQuery || "(use the story and project context below)"}
 Requested sector or topic: ${sectorTopic || "(use the project media categories)"}

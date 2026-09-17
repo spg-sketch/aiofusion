@@ -9,6 +9,30 @@ import { logger } from "./logger";
  * rows remain valid while the new required fields are introduced.
  */
 export async function ensureMediaSchema(): Promise<void> {
+  // Discovery candidates are additive and deliberately separate from trusted
+  // contacts/outlets. Keep the snapshot immutable at the application layer;
+  // status transitions are performed only by the approval routes.
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS media_discoveries (
+      id serial PRIMARY KEY,
+      account_id varchar NOT NULL,
+      project_id varchar NOT NULL,
+      candidate_key text NOT NULL,
+      status varchar(20) NOT NULL DEFAULT 'pending',
+      candidate jsonb NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      reviewed_at timestamptz,
+      reviewed_by varchar,
+      rejection_reason text,
+      contact_id integer REFERENCES media_contacts(id) ON DELETE SET NULL,
+      outlet_id integer REFERENCES media_outlets(id) ON DELETE SET NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS media_discoveries_account_project_candidate_unique
+      ON media_discoveries (account_id, project_id, candidate_key)
+  `);
+
   await db.execute(sql`
     ALTER TABLE media_contacts
       ADD COLUMN IF NOT EXISTS mobile text,

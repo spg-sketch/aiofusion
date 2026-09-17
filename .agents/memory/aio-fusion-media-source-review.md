@@ -14,3 +14,9 @@ Automatic reverification must use expiring database claims, workspace-fair batch
 **Why:** The API can run in multiple processes, and public-source outages must not create duplicate work, unbounded traffic, or misleading "verified" timestamps.
 
 **How to apply:** Claim eligible rows transactionally with skip-locked semantics, cap work globally and per workspace, release stale claims after a short lease, and keep successful verification dates unchanged when a fetch fails.
+
+Newly discovered journalists require human approval before becoming database contacts. Approval means the team accepted the contact, not that every role, address or claim has been independently verified. Existing database records must not be blanket-labelled verified.
+
+**Why:** The agreed workflow deliberately separates unverified discoveries from trusted database membership and from factual source verification. Search confidence and a source-check timestamp cannot substitute for those separate decisions.
+
+**How to apply:** Keep pending and rejected discoveries outside recommendations and outreach. Master-editable research guidance can change research priorities, but not approval requirements, source safeguards or the prohibition on guessed emails. The supplied spreadsheet prompt is guidance to adapt, not authorization to run its rolling maintenance cycle.

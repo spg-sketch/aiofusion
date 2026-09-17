@@ -329,6 +329,94 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RecommendationBriefEnvelope' }
+  /store/media-db/discoveries:
+    get:
+      tags: [Media Database]
+      operationId: listMediaDiscoveries
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [pending, approved, rejected], default: pending }
+        - { $ref: '#/components/parameters/ProjectIdOptional' }
+      responses:
+        '200':
+          description: Discovery approval queue.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaDiscoveryListEnvelope' }
+    post:
+      tags: [Media Database]
+      operationId: saveMediaDiscovery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MediaDiscoveryInput' }
+      responses:
+        '200':
+          description: Existing candidate returned idempotently.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaDiscoveryEnvelope' }
+        '201':
+          description: Candidate queued for explicit human approval.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaDiscoveryEnvelope' }
+  /store/media-db/discoveries/{id}/approve:
+    post:
+      tags: [Media Database]
+      operationId: approveMediaDiscovery
+      parameters:
+        - { $ref: '#/components/parameters/DiscoveryId' }
+      responses:
+        '200':
+          description: Discovery approved and promoted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaDiscoveryApprovalEnvelope' }
+  /store/media-db/discoveries/{id}/reject:
+    post:
+      tags: [Media Database]
+      operationId: rejectMediaDiscovery
+      parameters:
+        - { $ref: '#/components/parameters/DiscoveryId' }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MediaDiscoveryRejectInput' }
+      responses:
+        '200':
+          description: Discovery rejected without deleting the candidate.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaDiscoveryEnvelope' }
+  /store/media-db/discovery-instructions:
+    get:
+      tags: [Media Database]
+      operationId: getMediaDiscoveryInstructions
+      responses:
+        '200':
+          description: Workspace discovery instructions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaDiscoveryInstructionsEnvelope' }
+    put:
+      tags: [Media Database]
+      operationId: updateMediaDiscoveryInstructions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MediaDiscoveryInstructionsInput' }
+      responses:
+        '200':
+          description: Updated workspace discovery instructions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaDiscoveryInstructionsEnvelope' }
   /store/media-db/recommendations:
     get:
       tags: [Media Database]
@@ -409,6 +497,16 @@ components:
       in: query
       required: true
       schema: { type: string, minLength: 1, maxLength: 200 }
+    ProjectIdOptional:
+      name: projectId
+      in: query
+      required: false
+      schema: { type: string, minLength: 1, maxLength: 200 }
+    DiscoveryId:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
     StoryKey:
       name: storyKey
       in: query
@@ -464,6 +562,88 @@ components:
         storyKey: { type: string }
         contactId: { type: integer, minimum: 1 }
         doNotContact: { type: boolean }
+    MediaDiscoveryCandidate:
+      type: object
+      additionalProperties: true
+      required: [candidateKey, firstName, lastName, role, email, outletName, outletWebsite, sourceUrl, evidence, beats, confidence, verifiedAt]
+      properties:
+        candidateKey: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        role: { type: string }
+        email: { type: string }
+        outletName: { type: string }
+        outletWebsite: { type: string }
+        sourceUrl: { type: string }
+        evidence: { type: string }
+        beats: { type: array, items: { type: string } }
+        sectors: { type: array, items: { type: string } }
+        geography: { type: string }
+        confidence: { type: string, enum: [High, Medium, Low] }
+        verifiedAt: { type: string, format: date-time }
+    MediaDiscovery:
+      type: object
+      required: [id, accountId, projectId, status, candidate, createdAt, reviewedAt, reviewedBy, rejectionReason, contactId, outletId]
+      properties:
+        id: { type: integer }
+        accountId: { type: string }
+        projectId: { type: string }
+        status: { type: string, enum: [pending, approved, rejected] }
+        candidate: { $ref: '#/components/schemas/MediaDiscoveryCandidate' }
+        createdAt: { type: string, format: date-time }
+        reviewedAt: { type: [string, 'null'], format: date-time }
+        reviewedBy: { type: [string, 'null'] }
+        rejectionReason: { type: [string, 'null'] }
+        contactId: { type: [integer, 'null'] }
+        outletId: { type: [integer, 'null'] }
+    MediaDiscoveryInput:
+      type: object
+      required: [discoveryToken, candidateKey]
+      properties:
+        discoveryToken: { type: string, minLength: 1 }
+        candidateKey: { type: string, minLength: 1 }
+    MediaDiscoveryRejectInput:
+      type: object
+      properties:
+        reason: { type: string, maxLength: 4000 }
+    MediaDiscoveryEnvelope:
+      type: object
+      required: [ok, discovery]
+      properties:
+        ok: { type: boolean }
+        discovery: { $ref: '#/components/schemas/MediaDiscovery' }
+    MediaDiscoveryListEnvelope:
+      type: object
+      required: [ok, items, canReview]
+      properties:
+        ok: { type: boolean }
+        items: { type: array, items: { $ref: '#/components/schemas/MediaDiscovery' } }
+        canReview: { type: boolean }
+    MediaDiscoveryApprovalEnvelope:
+      type: object
+      required: [ok, discovery, contact, outlet, existing]
+      properties:
+        ok: { type: boolean }
+        discovery: { $ref: '#/components/schemas/MediaDiscovery' }
+        contact: { type: object, additionalProperties: true }
+        outlet: { type: object, additionalProperties: true }
+        existing: { type: boolean }
+    MediaDiscoveryInstructionsInput:
+      type: object
+      required: [instructions, version]
+      properties:
+        instructions: { type: string, minLength: 50, maxLength: 12000 }
+        version: { type: integer, minimum: 0 }
+    MediaDiscoveryInstructionsEnvelope:
+      type: object
+      required: [ok, instructions, defaultInstructions, version, updatedAt, canEdit]
+      properties:
+        ok: { type: boolean }
+        instructions: { type: string }
+        defaultInstructions: { type: string }
+        version: { type: integer }
+        updatedAt: { type: [string, 'null'], format: date-time }
+        canEdit: { type: boolean }
     HealthStatus:
       type: object
       properties:

@@ -156,6 +156,8 @@ export type LiveDiscovery = {
   phraseAttributions?: PhraseAttribution[];
 };
 
+export type DiscoveryReviewStatus = "saving" | "submitted" | "approved" | "rejected" | "error";
+
 function PhraseAttributionSections({ attributions, aiSuggested = false }: { attributions?: PhraseAttribution[]; aiSuggested?: boolean }) {
   if (!attributions?.length) return null;
   const hasTopicOverlap = attributions.some((attribution) => attribution.matchKind === "topic");
@@ -632,14 +634,18 @@ export function LiveDiscoveryCard({
   candidate,
   isSaving,
   isSaved,
+  status,
   onSave
 }: {
   candidate: LiveDiscovery;
   isSaving: boolean;
   isSaved: boolean;
+  status?: DiscoveryReviewStatus;
   onSave: () => void;
 }) {
   const isHighConf = candidate.confidence === "High";
+  const reviewStatus = status || (isSaving ? "saving" : isSaved ? "submitted" : undefined);
+  const canSendForReview = !reviewStatus || reviewStatus === "error";
   return (
     <div className="p-5 border-b last:border-b-0 bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200 }}>
       <div className="flex flex-wrap gap-4 items-start justify-between">
@@ -655,7 +661,7 @@ export function LiveDiscoveryCard({
                 background: isHighConf ? "#E5F5EC" : "rgba(200,73,122,0.1)" 
               }}
             >
-              {candidate.confidence} source confidence
+              Unverified discovery · {candidate.confidence} source confidence
             </span>
           </div>
           <p className="text-[14px] mb-3" style={{ color: vars.g600 }}>
@@ -672,9 +678,10 @@ export function LiveDiscoveryCard({
             {candidate.email && (
               <div className="flex items-center gap-2" style={{ color: vars.g600 }}>
                 <Mail size={14} className="text-slate-400" />
-                {isSendableContactEmail(candidate.email)
-                  ? <a href={`mailto:${candidate.email}`} className="hover:underline">{candidate.email}</a>
-                  : <span title="Review required before sending">{candidate.email} <span className="text-[11px] text-amber-700">Review - not sendable</span></span>}
+                <span title="Pending human approval. Do not send until the discovery has been approved.">
+                  {candidate.email}
+                  <span className="text-[11px] text-amber-700"> Unverified discovery - review before sending</span>
+                </span>
               </div>
             )}
             {candidate.sourceUrl && (
@@ -734,19 +741,25 @@ export function LiveDiscoveryCard({
         <div className="flex flex-col justify-start items-end min-w-[140px]">
           <button 
             onClick={onSave} 
-            disabled={isSaving || isSaved} 
+            disabled={!canSendForReview}
             className="flex items-center justify-center w-full gap-2 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-all disabled:opacity-80 disabled:cursor-not-allowed" 
             style={{ 
-              background: isSaved ? "#27734D" : vars.navy,
-              boxShadow: isSaved ? "none" : "0 2px 4px rgba(10,22,40,0.15)"
+              background: reviewStatus === "approved" ? "#27734D" : reviewStatus === "rejected" ? vars.g500 : vars.navy,
+              boxShadow: reviewStatus === "approved" || reviewStatus === "rejected" ? "none" : "0 2px 4px rgba(10,22,40,0.15)"
             }}
           >
-            {isSaving ? (
-              <><div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div> Saving...</>
-            ) : isSaved ? (
-              <><Check size={16} /> Saved to Media Database</>
+            {reviewStatus === "saving" ? (
+              <><div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div> Sending...</>
+            ) : reviewStatus === "submitted" ? (
+              <><Check size={16} /> Submitted for review</>
+            ) : reviewStatus === "approved" ? (
+              <><Check size={16} /> Approved</>
+            ) : reviewStatus === "rejected" ? (
+              <><Ban size={16} /> Rejected</>
+            ) : reviewStatus === "error" ? (
+              <><Database size={16} /> Retry send for review</>
             ) : (
-              <><Database size={16} /> Save to Media Database</>
+              <><Database size={16} /> Send for review</>
             )}
           </button>
         </div>

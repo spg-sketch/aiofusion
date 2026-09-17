@@ -16,6 +16,8 @@ import { CategoryPickerModal } from "./shared";
 import { TRADE_MEDIA_CATEGORIES } from "../tradeMediaCategories";
 import { getProjectMediaCategories } from "../IntakeForm";
 import { escapeHtml } from "../lib/contentAi";
+import MediaDiscoveryReview from "./MediaDiscoveryReview";
+import MediaDiscoveryInstructions from "./MediaDiscoveryInstructions";
 // ---------------------------------------------------------------------------
 // Searchable outlet combobox for the contact modal
 // ---------------------------------------------------------------------------
@@ -266,7 +268,13 @@ function MediaDatabasePage() {
   // sessions without a membership role), but blocks viewers and billing
   // members. Keep every mutating control behind the same decision.
   const canWriteMediaDatabase = Boolean(session && session.membershipRole !== "viewer" && session.membershipRole !== "billing");
-  const [activeTab, setActiveTab] = useState<"outlets" | "contacts">("contacts");
+  // Every authenticated Media Database member can open the discovery queue.
+  // The queue asks the server whether this session can approve/reject, so
+  // non-Master members remain safely read-only. Instructions are the separate
+  // Master-owner-only surface.
+  const canSeeDiscoveries = Boolean(session);
+  const canEditDiscoveryInstructions = isMaster && (!session?.membershipRole || session.membershipRole === "owner");
+  const [activeTab, setActiveTab] = useState<"outlets" | "contacts" | "discoveries" | "instructions">("contacts");
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [allCategories, setAllCategories] = useState<string[]>([]);
@@ -872,6 +880,7 @@ function MediaDatabasePage() {
 
   const catOptions = Array.from(new Set(outlets.map((o) => o.category).filter(Boolean))).sort();
   const outletOptions = outlets.map((o) => ({ id: o.id, name: o.name })).sort((a, b) => a.name.localeCompare(b.name));
+  const showCollectionTools = activeTab === "outlets" || activeTab === "contacts";
 
   if (loading) {
     return (
@@ -892,7 +901,7 @@ function MediaDatabasePage() {
          <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>Search publications and journalists from the shared Master collection or your private workspace collection.</p>
       </div>
 
-      <section className="mb-5 rounded-2xl border bg-white shadow-sm" style={{ borderColor: vars.g200 }}>
+      {showCollectionTools && <section className="mb-5 rounded-2xl border bg-white shadow-sm" style={{ borderColor: vars.g200 }}>
         <div className="p-4 sm:p-5">
           <label htmlFor="media-primary-search" className="block text-[12px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: vars.navy }}>Search contacts and publications</label>
           <div className="flex items-center gap-2 rounded-xl border px-3" style={{ borderColor: vars.g200 }}>
@@ -924,9 +933,9 @@ function MediaDatabasePage() {
             </>}
           </div>
         </div>
-      </section>
+      </section>}
 
-      {searchActive && <section className="mb-6">
+      {showCollectionTools && searchActive && <section className="mb-6">
         <div className="flex items-center justify-between gap-3 mb-3">
           <p className="text-[13px]" style={{ color: vars.g500 }}>{searchLoading ? "Searching..." : `${searchTotal} results: ${searchCounts.contacts} contacts and ${searchCounts.outlets} publications`}</p>
            {searchResults.some((result) => result.type === "contact") && <button disabled={exportBusy} onClick={() => void exportSearchContacts("xlsx")} className="inline-flex items-center gap-1.5 text-[12px] font-semibold disabled:opacity-50" style={{ color: vars.navy }}><Download size={13} /> Export all matches</button>}
@@ -971,15 +980,23 @@ function MediaDatabasePage() {
         {searchTotal > 25 && <div className="flex justify-end items-center gap-3 mt-3 text-[12px]" style={{ color: vars.navy }}><button disabled={searchPage === 1} onClick={() => setSearchPage((page) => page - 1)} className="px-3 py-1 border rounded disabled:opacity-40">Previous</button><span>Page {searchPage} of {Math.ceil(searchTotal / 25)}</span><button disabled={searchPage * 25 >= searchTotal} onClick={() => setSearchPage((page) => page + 1)} className="px-3 py-1 border rounded disabled:opacity-40">Next</button></div>}
       </section>}
 
-      {!searchActive && <>
+      {(!searchActive || !showCollectionTools) && <>
       {/* Tabs */}
       <div className="flex gap-1 mb-6 p-1 rounded-xl inline-flex" style={{ background: vars.g100 }}>
-        {(["outlets", "contacts"] as const).map((t) => (
+        {([
+          { id: "outlets" as const, label: `Outlets (${outlets.length})` },
+          { id: "contacts" as const, label: `Contacts (${contacts.length})` },
+          ...(canSeeDiscoveries ? [{ id: "discoveries" as const, label: "Discoveries" }] : []),
+          ...(canEditDiscoveryInstructions ? [{ id: "instructions" as const, label: "Research instructions" }] : []),
+        ]).map(({ id: t, label }) => (
           <button key={t} onClick={() => setActiveTab(t)} className="px-5 py-2 rounded-lg text-[13px] font-bold transition-all capitalize" style={{ background: activeTab === t ? "rgba(201,160,78,0.18)" : "transparent", color: activeTab === t ? "#7A5E25" : vars.g500, boxShadow: activeTab === t ? "0 1px 3px rgba(0,0,0,0.1)" : "none", border: activeTab === t ? `1px solid ${vars.gold}` : "1px solid transparent" }}>
-            {t === "outlets" ? `Outlets (${outlets.length})` : `Contacts (${contacts.length})`}
+            {label}
           </button>
         ))}
       </div>
+
+      {activeTab === "discoveries" && canSeeDiscoveries && <MediaDiscoveryReview onApproved={() => void loadData()} />}
+      {activeTab === "instructions" && canEditDiscoveryInstructions && <MediaDiscoveryInstructions />}
 
       {/* Outlets tab */}
       {activeTab === "outlets" && (
@@ -1163,7 +1180,7 @@ function MediaDatabasePage() {
       )}
       </>}
 
-      {correctionContact && <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setCorrectionContact(null)} onKeyDown={(event) => { if (event.key === "Escape") setCorrectionContact(null); }}>
+      {showCollectionTools && correctionContact && <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setCorrectionContact(null)} onKeyDown={(event) => { if (event.key === "Escape") setCorrectionContact(null); }}>
         <div role="dialog" aria-modal="true" aria-labelledby="correction-title" className="bg-white rounded-2xl max-w-lg w-full max-h-[calc(100dvh-1.5rem)] overflow-y-auto p-5" onClick={(event) => event.stopPropagation()}>
           <div className="flex items-start justify-between gap-3"><h2 id="correction-title" className="text-[17px] font-semibold" style={{ color: vars.navy }}>Flag incorrect contact details</h2><button aria-label="Close correction report" onClick={() => setCorrectionContact(null)} className="p-1"><X size={18} color={vars.g400} /></button></div>
           <p className="text-[12px] mt-1 mb-4" style={{ color: vars.g500 }}>This sends a review request. It does not overwrite the trusted record.</p>
@@ -1173,7 +1190,7 @@ function MediaDatabasePage() {
         </div>
       </div>}
 
-      {showImportModal && (
+      {showCollectionTools && showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowImportModal(false)}>
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
@@ -1404,7 +1421,7 @@ function MediaDatabasePage() {
       )}
 
       {/* Outlet modal */}
-      {showOutletModal && (
+      {showCollectionTools && showOutletModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowOutletModal(false)}>
           <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
@@ -1449,7 +1466,7 @@ function MediaDatabasePage() {
       )}
 
       {/* Contact modal */}
-      {showContactProfile && (
+      {showCollectionTools && showContactProfile && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowContactProfile(null)}>
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 flex items-center justify-between border-b" style={{ borderColor: vars.g200, background: vars.g50 }}>
@@ -1537,7 +1554,7 @@ function MediaDatabasePage() {
         </div>
       )}
 
-      {showContactModal && (
+      {showCollectionTools && showContactModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowContactModal(false)}>
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b flex items-center justify-between bg-slate-50" style={{ borderColor: vars.g200 }}>
@@ -1657,7 +1674,7 @@ function MediaDatabasePage() {
       )}
 
       {/* Category picker for outlet form */}
-      {showCatPicker && (
+      {showCollectionTools && showCatPicker && (
         <CategoryPickerModal
           all={TRADE_MEDIA_CATEGORIES}
           selected={outletForm.category ? [outletForm.category] : []}

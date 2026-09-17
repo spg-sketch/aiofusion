@@ -6,7 +6,7 @@ import { isContentStoreReady, loadArchive, useContentStore } from "../lib/conten
 import * as IntakeForm from "../IntakeForm";
 import { getExactTargetPhrases as getCanonicalExactTargetPhrases, normaliseExactTargetPhrases, type ExactTargetPhrase } from "../lib/exactTargetPhrases";
 import { SummaryRow } from "./shared";
-import { RecommendationCard, LiveDiscoveryCard, isSendableContactEmail, type Contact, type Recommendation, type Decision, type LiveDiscovery } from "./JournalistComponents";
+import { RecommendationCard, LiveDiscoveryCard, isSendableContactEmail, type Contact, type Recommendation, type Decision, type LiveDiscovery, type DiscoveryReviewStatus } from "./JournalistComponents";
 import { MediaOutreachPanel } from "./MediaOutreachPanel";
 
 export type TargetingBrief = {
@@ -316,7 +316,7 @@ function MediaResearchPage() {
   const [note, setNote] = useState("");
   const [liveItems, setLiveItems] = useState<LiveDiscovery[]>([]);
   const [liveLoading, setLiveLoading] = useState(false);
-  const [savedDiscoveries, setSavedDiscoveries] = useState<Record<string, "saving" | "saved">>({});
+  const [savedDiscoveries, setSavedDiscoveries] = useState<Record<string, DiscoveryReviewStatus>>({});
   const [discoveryToken, setDiscoveryToken] = useState("");
   const [feedback, setFeedback] = useState<Record<number, "more" | "less">>({});
   const [refining, setRefining] = useState<number | "reset" | null>(null);
@@ -334,12 +334,14 @@ function MediaResearchPage() {
   const [briefLoadError, setBriefLoadError] = useState("");
   const [briefReadyKey, setBriefReadyKey] = useState("");
   const [recommendationSetId, setRecommendationSetId] = useState<number | string | null>(null);
+  const [recommendationHasRun, setRecommendationHasRun] = useState(false);
   const [evaluation, setEvaluation] = useState<RecommendationEvaluation | null>(null);
   const [enrichmentWarning, setEnrichmentWarning] = useState("");
   type RequestHandle = { id: number; key: string; controller: AbortController };
   const requestSequence = useRef(0);
   const recommendationRequest = useRef<RequestHandle | null>(null);
   const liveRequest = useRef<RequestHandle | null>(null);
+  const discoveryRequests = useRef<Record<string, { id: number; key: string }>>({});
   const decisionRequests = useRef<Record<number, { id: number; key: string }>>({});
   const decisionLoadSequence = useRef(0);
   const recommendationLoadSequence = useRef(0);
@@ -384,6 +386,7 @@ function MediaResearchPage() {
     decisionRequests.current = {};
     decisionLoadSequence.current += 1;
     recommendationLoadSequence.current += 1;
+    discoveryRequests.current = {};
     requestSequence.current += 1;
   };
 
@@ -450,6 +453,7 @@ function MediaResearchPage() {
         ? data.recommendationSet as Record<string, unknown>
         : null;
       setRecommendationSetId(typeof set?.id === "number" || typeof set?.id === "string" ? set.id : null);
+      setRecommendationHasRun(Boolean(set?.id));
       setEvaluation(data.evaluation && typeof data.evaluation === "object" ? data.evaluation as RecommendationEvaluation : null);
       setItems(Array.isArray(data.items) ? dedupeRecommendations(data.items) : []);
     } catch (reason) {
@@ -552,6 +556,7 @@ function MediaResearchPage() {
         ? data.recommendationSet as Record<string, unknown>
         : null;
       setRecommendationSetId(typeof set?.id === "number" || typeof set?.id === "string" ? set.id : null);
+      setRecommendationHasRun(true);
       setEvaluation(data.evaluation && typeof data.evaluation === "object" ? data.evaluation as RecommendationEvaluation : null);
       setItems(Array.isArray(data.items) ? dedupeRecommendations(data.items) : []);
       // The POST response is the authoritative newest set. Refetch decisions
@@ -580,6 +585,7 @@ function MediaResearchPage() {
       invalidateRequests();
       setItems([]);
       setRecommendationSetId(null);
+      setRecommendationHasRun(false);
       setEvaluation(null);
       setDecisions({});
       setDecisionContacts({});
@@ -630,9 +636,11 @@ function MediaResearchPage() {
 
     setItems([]);
     setRecommendationSetId(null);
+    setRecommendationHasRun(false);
     setEvaluation(null);
     setLiveItems([]);
     setDiscoveryToken("");
+    setSavedDiscoveries({});
     setDecisions({});
     setDecisionContacts({});
     setDecisionAssessments({});
@@ -691,22 +699,41 @@ function MediaResearchPage() {
     }
   };
   const saveDiscovery = async (candidate: LiveDiscovery) => {
+    const requestKey = `${projectId || ""}:${storyKey}`;
+    const requestId = ++requestSequence.current;
+    const tokenForRequest = discoveryToken;
+    discoveryRequests.current[candidate.candidateKey] = { id: requestId, key: requestKey };
+    const isCurrent = () =>
+      activeStoryRef.current === requestKey
+      && discoveryRequests.current[candidate.candidateKey]?.id === requestId
+      && discoveryRequests.current[candidate.candidateKey]?.key === requestKey;
     setSavedDiscoveries((current) => ({ ...current, [candidate.candidateKey]: "saving" }));
+    setError("");
     try {
       const response = await fetch(`${apiBase()}/api/store/media-db/discoveries`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ candidateKey: candidate.candidateKey, discoveryToken }),
+        body: JSON.stringify({ candidateKey: candidate.candidateKey, discoveryToken: tokenForRequest }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not save this discovery.");
-      setSavedDiscoveries((current) => ({ ...current, [candidate.candidateKey]: "saved" }));
+      if (!isCurrent()) return;
+      const discovery = data.discovery && typeof data.discovery === "object"
+        ? data.discovery as { status?: unknown }
+        : null;
+      const serverStatus = discovery?.status;
+      const status: DiscoveryReviewStatus = serverStatus === "approved"
+        ? "approved"
+        : serverStatus === "rejected"
+          ? "rejected"
+          : "submitted";
+      setSavedDiscoveries((current) => ({ ...current, [candidate.candidateKey]: status }));
+      setError("");
     } catch (reason) {
+      if (!isCurrent()) return;
       setSavedDiscoveries((current) => {
-        const next = { ...current };
-        delete next[candidate.candidateKey];
-        return next;
+        return { ...current, [candidate.candidateKey]: "error" };
       });
-      setError(reason instanceof Error ? reason.message : "Could not save this discovery.");
+      setError(reason instanceof Error ? `${reason.message} You can retry sending it for review.` : "Could not save this discovery. You can retry sending it for review.");
     }
   };
   const toggleRestriction = async (contactId: number, doNotContact: boolean) => {
@@ -911,7 +938,7 @@ function MediaResearchPage() {
           </div>
        </div>
 
-      <div className="mt-5 pt-5 border-t flex flex-wrap gap-3" style={{ borderColor: vars.g100 }}><button data-testid="button-recommend-contacts" disabled={loading || briefLoading || briefReadyKey !== `${projectId}:${storyKey}` || Boolean(briefLoadError) || !selected || brief.regions.length === 0 || !brief.topic || !brief.angle} onClick={() => void saveAndRecommend()} className="px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-all shadow-sm" style={{ background: vars.coral }}>{loading ? <Loader2 className="inline animate-spin mr-1.5" size={16} /> : <Target className="inline mr-1.5" size={16} />}Save brief & match database contacts</button><button data-testid="button-discover-live" disabled={liveLoading || briefLoading || briefReadyKey !== `${projectId}:${storyKey}` || Boolean(briefLoadError) || !selected || brief.regions.length === 0} onClick={() => void discoverLive()} className="px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-all shadow-sm" style={{ background: vars.navy }}>{liveLoading ? <Loader2 className="inline animate-spin mr-1.5" size={16} /> : <Search className="inline mr-1.5" size={16} />}Expand with live search</button></div><p className="mt-3 text-[11px]" style={{ color: vars.g500 }}>External live search is explicit and does not run automatically. It uses the selected article excerpt and the saved Targeting Brief for AI evaluation. The selected article excerpt is sent to OpenAI only when you explicitly run live search; any returned email must be supported by the cited public source.</p></section>
+       <div className="mt-5 pt-5 border-t flex flex-wrap gap-3" style={{ borderColor: vars.g100 }}><button data-testid="button-recommend-contacts" disabled={loading || briefLoading || briefReadyKey !== `${projectId}:${storyKey}` || Boolean(briefLoadError) || !selected || brief.regions.length === 0 || !brief.topic || !brief.angle} onClick={() => void saveAndRecommend()} className="px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-all shadow-sm" style={{ background: vars.coral }}>{loading ? <Loader2 className="inline animate-spin mr-1.5" size={16} /> : <Target className="inline mr-1.5" size={16} />}Save brief & match database contacts</button>{items.length > 0 && <button data-testid="button-discover-live" disabled={liveLoading || briefLoading || briefReadyKey !== `${projectId}:${storyKey}` || Boolean(briefLoadError) || !selected || brief.regions.length === 0} onClick={() => void discoverLive()} className="px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-all shadow-sm" style={{ background: vars.navy }}>{liveLoading ? <Loader2 className="inline animate-spin mr-1.5" size={16} /> : <Search className="inline mr-1.5" size={16} />}Expand with live search</button>}</div><p className="mt-3 text-[11px]" style={{ color: vars.g500 }}>External live search is explicit and does not run automatically. It uses the selected article excerpt and the saved Targeting Brief for AI evaluation. The selected article excerpt is sent to OpenAI only when you explicitly run live search; any returned email must be supported by the cited public source.</p></section>
     {error && <p data-testid="status-research-error" className="p-3 rounded bg-white text-[12px] mb-5" style={{ color: vars.red }}>{error}</p>}
        {(loading || items.length > 0) && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b flex flex-wrap justify-between gap-3" style={{ background: vars.g50, borderColor: vars.g200 }}><div><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Recommended from your Media Database</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{loading ? "Preparing recommendations from your project and selected article..." : `${items.length} contacts ranked from saved database fields and article-specific refinement. Match explanations show how feedback affected the order.`}</p>{evaluation && <p className="text-[11px] mt-2 text-slate-500">Evaluation: {evaluation.evaluated} evaluated · {evaluation.shortlisted} shortlisted · {evaluation.contacted} contacted · {evaluation.responded} responded · {evaluation.placed} placed</p>}</div>
        <div className="flex gap-2">
@@ -923,7 +950,7 @@ function MediaResearchPage() {
         )}
         {Object.keys(feedback).length > 0 && <button disabled={refining !== null} onClick={() => void resetRefinement()} className="self-start text-[12px] px-3 py-2 border rounded-lg bg-white disabled:opacity-50" style={{ borderColor: vars.g200 }}><RotateCcw size={14} className={`inline mr-1 ${refining === "reset" ? "animate-spin" : ""}`} />Reset refinement</button>}
        </div></div>{enrichmentWarning && <p className="mx-5 mb-3 rounded-lg bg-amber-50 border border-amber-100 p-3 text-[12px] text-amber-800">Coverage check warning: {enrichmentWarning}</p>}{items.map((item) => contactCard(item))}</section>}
-    {liveItems.length > 0 && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Live public web discoveries</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{liveItems.length} current journalists across {livePublicationCount} publications, grounded in public author pages, profiles or article bylines. Review the evidence before saving.</p></div>
+     {liveItems.length > 0 && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Unverified public web discoveries</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{liveItems.length} current journalists across {livePublicationCount} publications, grounded in public author pages, profiles or article bylines. Review the evidence, then send each discovery for human approval.</p></div>
       {liveGroups.filter((group) => group.items.length > 0).map((group) => <div key={group.label}>
         <div className="px-5 py-2.5 border-b text-[12px] font-bold uppercase tracking-wide" style={{ color: vars.navy, background: "rgba(31,116,143,0.07)", borderColor: vars.g200 }}>{group.label} · {group.items.length}</div>
         {group.items.map((candidate) => (
@@ -931,13 +958,14 @@ function MediaResearchPage() {
             key={candidate.candidateKey}
             candidate={candidate}
             isSaving={savedDiscoveries[candidate.candidateKey] === "saving"}
-            isSaved={savedDiscoveries[candidate.candidateKey] === "saved"}
+             isSaved={savedDiscoveries[candidate.candidateKey] === "submitted"}
+             status={savedDiscoveries[candidate.candidateKey]}
             onSave={() => void saveDiscovery(candidate)}
           />
         ))}
       </div>)}
     </section>}
-     {!liveLoading && liveItems.length === 0 && selected && <section className="bg-white rounded-2xl border p-4 mb-5" style={{ borderColor: vars.g200 }}><h2 className="font-semibold" style={{ color: vars.navy }}>Expand with live search for additional externally verified contacts</h2><p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Run an explicit live search for current journalists and editors whose public work directly matches this article.</p></section>}
+     {!liveLoading && !loading && !briefLoading && !briefLoadError && !error && recommendationHasRun && items.length === 0 && liveItems.length === 0 && selected && <section className="bg-white rounded-2xl border p-5 mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="font-semibold text-lg" style={{ color: vars.navy }}>No suitable saved contacts found</h2><p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Find new journalists with one explicit live search. Results are unverified discoveries, not contacts, and must be sent for review before any human approval.</p></div><button data-testid="button-find-journalists" disabled={liveLoading || briefLoading || briefReadyKey !== `${projectId}:${storyKey}` || Boolean(briefLoadError)} onClick={() => void discoverLive()} className="px-4 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50" style={{ background: vars.navy }}><Search size={15} className="inline mr-1.5" />Find new journalists</button></div></section>}
     <section className="bg-white rounded-2xl border overflow-hidden shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 flex flex-wrap justify-between gap-2 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}><div><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Accepted shortlist</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>Persists for this article and project.</p></div>{accepted.length > 0 && <div className="flex gap-2"><button onClick={() => exportAccepted("xls")} className="text-[12px] px-3 py-1.5 border rounded-lg bg-white hover:bg-slate-50 transition-colors shadow-sm" style={{ borderColor: vars.g200 }}><Download size={14} className="inline mr-1 text-slate-400" /> Excel</button><button onClick={() => exportAccepted("doc")} className="text-[12px] px-3 py-1.5 border rounded-lg bg-white hover:bg-slate-50 transition-colors shadow-sm" style={{ borderColor: vars.g200 }}><Download size={14} className="inline mr-1 text-slate-400" /> Word</button></div>}</div>{acceptedRecommendations.length ? acceptedRecommendations.map((r) => contactCard(r, true)) : <p className="p-8 text-[14px] text-center italic" style={{ color: vars.g500 }}>Accept contacts from your recommendations to build the shortlist.</p>}</section>
     {selected && projectId && <MediaOutreachPanel projectId={projectId} storyKey={storyKey} articleTitle={selected.title} recommendations={acceptedRecommendations} targetPhrases={activeTargetPhrases} />}
   </div>;

@@ -67,6 +67,20 @@ vi.mock("@workspace/db", async () => {
       reason varchar NOT NULL DEFAULT '',
       created_at timestamptz NOT NULL DEFAULT now()
     );
+    CREATE TABLE media_discoveries (
+      id serial PRIMARY KEY,
+      account_id varchar NOT NULL,
+      project_id varchar NOT NULL,
+      candidate_key text NOT NULL,
+      status varchar(20) NOT NULL DEFAULT 'pending',
+      candidate jsonb NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      reviewed_at timestamptz,
+      reviewed_by varchar,
+      rejection_reason text,
+      contact_id integer,
+      outlet_id integer
+    );
   `);
 
   return {

@@ -61,6 +61,28 @@ export const mediaContactsTable = pgTable("media_contacts", {
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
+/**
+ * An immutable, workspace/project-scoped snapshot of a public search result.
+ * Discovery candidates are intentionally kept out of the trusted media tables
+ * until a human approves them.
+ */
+export const mediaDiscoveriesTable = pgTable("media_discoveries", {
+  id: serial("id").primaryKey(),
+  accountId: varchar("account_id").notNull(),
+  projectId: varchar("project_id").notNull(),
+  candidateKey: text("candidate_key").notNull(),
+  status: varchar("status", { length: 20 }).$type<"pending" | "approved" | "rejected">().notNull().default("pending"),
+  candidate: jsonb("candidate").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  reviewedBy: varchar("reviewed_by"),
+  rejectionReason: text("rejection_reason"),
+  contactId: integer("contact_id").references(() => mediaContactsTable.id, { onDelete: "set null" }),
+  outletId: integer("outlet_id").references(() => mediaOutletsTable.id, { onDelete: "set null" }),
+}, (table) => [
+  uniqueIndex("media_discoveries_account_project_candidate_unique").on(table.accountId, table.projectId, table.candidateKey),
+]);
+
 export const mediaContactCategoriesTable = pgTable("media_contact_categories", {
   id: serial("id").primaryKey(),
   contactId: integer("contact_id").notNull().references(() => mediaContactsTable.id, { onDelete: "cascade" }),
@@ -240,6 +262,7 @@ export const mediaPlacementsTable = pgTable("media_placements", {
 export type MediaCategoryRow = typeof mediaCategoriesTable.$inferSelect;
 export type MediaOutletRow = typeof mediaOutletsTable.$inferSelect;
 export type MediaContactRow = typeof mediaContactsTable.$inferSelect;
+export type MediaDiscoveryRow = typeof mediaDiscoveriesTable.$inferSelect;
 export type MediaContactSourceCheckRow = typeof mediaContactSourceChecksTable.$inferSelect;
 
 export type MediaContactStatusEventRow = typeof mediaContactStatusEventsTable.$inferSelect;

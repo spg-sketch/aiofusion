@@ -208,6 +208,20 @@ vi.mock("@workspace/db", async () => {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     );
+    CREATE TABLE IF NOT EXISTS media_discoveries (
+      id serial PRIMARY KEY,
+      account_id varchar NOT NULL,
+      project_id varchar NOT NULL,
+      candidate_key text NOT NULL,
+      status varchar(20) NOT NULL DEFAULT 'pending',
+      candidate jsonb NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      reviewed_at timestamptz,
+      reviewed_by varchar,
+      rejection_reason text,
+      contact_id integer,
+      outlet_id integer
+    );
     CREATE TABLE IF NOT EXISTS media_recommendation_sets (
       id serial PRIMARY KEY,
       account_id varchar NOT NULL,
@@ -329,6 +343,7 @@ vi.mock("@workspace/db", async () => {
   `);
 
   return {
+    ...schema,
     db,
     platformUsersTable: schema.platformUsersTable,
     platformCompaniesTable: schema.platformCompaniesTable,
