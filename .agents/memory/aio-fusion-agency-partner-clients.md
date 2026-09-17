@@ -5,6 +5,12 @@ description: Product/security rule - clients under an agency parent never hold t
 
 Clients whose parent account role is "agency" are permanently managed: they never receive, choose, or mint a sign-in of their own; the agency enters their project workspace directly and billing stays with the agency.
 
+**Agency product model:** One agency client represents one billable project workspace, not a container for multiple projects. Separate account records may remain an internal access boundary, but must not imply additional nested project capacity.
+
+**Why:** The user explicitly clarified that each PR agency client should use one of the agency plan's three included project slots; a client count beside a separate zero-project count misrepresents that model.
+
+**How to apply:** Treat the one-client/one-project relationship as a product requirement, not an assumption that existing code enforces it. Preserve agency-wide purchased allowances and existing records; never silently merge or delete older multi-project client data when applying the rule.
+
 **Why:** Product decision for agency partner resellers; hiding a UI control is not enforcement — direct API calls (caller-supplied password on create, self-targeted password set, forgot-password links) are the real attack surface.
 
 **How to apply:** Any new credential-issuance or session-entry path must consult the hierarchy for the TARGET, including self-targeted requests and existing sessions. Migrated children may have role "user", not "client", so checking only canonical child roles misses legacy credentials. Legacy parents with role "user" deliberately keep the old grant/welcome flows. Authorized management requires a live original operator session with permission to manage the target.

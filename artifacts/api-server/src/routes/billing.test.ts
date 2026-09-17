@@ -533,7 +533,18 @@ describe("card-free beta trial", () => {
     expect(started.status).toBe(201);
     expect(started.json.trial.status).toBe("active");
     expect(started.json.trial.daysRemaining).toBe(60);
-    expect(await getProjectAllowance("trial-owner")).toBe(2);
+    // Direct client trials are intentionally limited to one project.
+    expect(await getProjectAllowance("trial-owner")).toBe(1);
+    const activeSubscription = await api("/api/platform/billing/subscription", { sid });
+    expect(activeSubscription.status).toBe(200);
+    expect(activeSubscription.json.projectAllowance).toBe(1);
+    // A legacy active trial with no recorded plan still follows its direct
+    // client's role rather than retaining the former two-project cap.
+    await db
+      .update(platformCompaniesTable)
+      .set({ plan: null })
+      .where(eq(platformCompaniesTable.slug, "trial-owner"));
+    expect(await getProjectAllowance("trial-owner")).toBe(1);
     expect(await getProjectActionLimit("trial-owner")).toBe(50);
 
     const repeated = await api("/api/platform/billing/trial", { sid, method: "POST" });
@@ -568,6 +579,26 @@ describe("card-free beta trial", () => {
     });
     expect(await getProjectAllowance("trial-managed-client")).toBe(2);
     expect(await getProjectActionLimit("trial-managed-client")).toBe(50);
+  });
+
+  it("uses an in-house trial plan for legacy user-role roots", async () => {
+    await seedWorkspace("legacy-user-inhouse", "legacy-user@trial.test", { accountRole: "user" });
+    await db.update(platformCompaniesTable)
+      .set({ plan: "inhouse" })
+      .where(eq(platformCompaniesTable.slug, "legacy-user-inhouse"));
+    await db.execute(sql`
+      ALTER TABLE platform_companies
+        ADD COLUMN IF NOT EXISTS beta_trial_started_at timestamptz,
+        ADD COLUMN IF NOT EXISTS beta_trial_ends_at timestamptz
+    `);
+    await db.execute(sql`
+      UPDATE platform_companies
+      SET beta_trial_started_at = now(),
+          beta_trial_ends_at = now() + interval '60 days'
+      WHERE slug = 'legacy-user-inhouse'
+    `);
+
+    expect(await getProjectAllowance("legacy-user-inhouse")).toBe(1);
   });
 
   it("does not offer a new trial to subscribed or free-access accounts", async () => {

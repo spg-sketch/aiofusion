@@ -5,13 +5,15 @@ import { vars } from "../marketing/vars";
 const ink = "#0a1628";
 const accent = "#C8497A";
 
-export function CreateProjectModal({ onCancel, onCreate, initialName, forClientName }: {
+export function CreateProjectModal({ onCancel, onCreate, initialName, forClientName, error }: {
   onCancel: () => void;
   onCreate: (name: string, logo?: string) => void | Promise<void | { ok?: boolean }>;
   /** Pre-fills the project name (e.g. the client's company name when starting from a hub placeholder card). */
   initialName?: string;
   /** When set, the modal notes the project will be created under this client's account. */
   forClientName?: string;
+  /** Persistence failures keep the dialog open and explain why retry is needed. */
+  error?: string | null;
 }) {
   const [name, setName] = useState(initialName ?? "");
   const [logo, setLogo] = useState<string | null>(null);
@@ -108,6 +110,11 @@ export function CreateProjectModal({ onCancel, onCreate, initialName, forClientN
         {forClientName && (
           <p className="text-[13px] font-medium mb-5 px-4 py-3 rounded-xl" style={{ background: "#FBE3ED", color: accent }}>
             This project will be created in the Client Project for <strong>{forClientName}</strong>.
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="text-[13px] leading-relaxed mb-4 px-4 py-3 rounded-xl" style={{ background: "#FEF2F2", color: "#B91C1C", border: "1px solid #FECACA" }}>
+            {error}
           </p>
         )}
         <label htmlFor="create-project-name" className="block text-[11px] font-bold uppercase tracking-[0.15em] mb-2" style={{ color: vars.g500 }}>

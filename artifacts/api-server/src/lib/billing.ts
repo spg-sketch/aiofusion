@@ -23,7 +23,7 @@ import {
   type PlanPrice,
   type ProjectTier,
 } from "./billing-plans";
-import { getAccount, normUsername } from "./platform-auth";
+import { getAccount, normUsername, normalizeRole } from "./platform-auth";
 import { sendPaymentFailedEmail, sendSubscriptionCancelledEmail } from "./notify-email";
 import {
   composeStoredBillingAddress,
@@ -62,7 +62,11 @@ export interface BetaTrialSummary {
 
 export const BETA_TRIAL_DAYS = 60;
 export const BETA_TRIAL_ACTION_LIMIT = 50;
-export const BETA_TRIAL_PROJECT_CAP = 2;
+export const BETA_TRIAL_AGENCY_PROJECT_CAP = 2;
+export const BETA_TRIAL_CLIENT_PROJECT_CAP = 1;
+// Kept for callers that imported the old constant. Trial allowance decisions
+// must use getBetaTrialProjectCap(), since the cap depends on the billing root.
+export const BETA_TRIAL_PROJECT_CAP = BETA_TRIAL_AGENCY_PROJECT_CAP;
 const DAY_MS = 24 * 60 * 60 * 1000;
 let ensureBetaTrialColumnsPromise: Promise<unknown> | null = null;
 
@@ -194,6 +198,32 @@ export async function resolveBillingSlug(slug: string): Promise<string> {
     current = parent;
   }
   return current;
+}
+
+/**
+ * Return the project cap for an active beta trial at the billing root.
+ *
+ * This is intentionally derived from existing account/plan data rather than
+ * persisted as another billing field. A managed client resolves to its
+ * agency's root and therefore receives the agency cap. Direct clients get one
+ * project, including legacy active trials whose plan was never recorded.
+ */
+export async function getBetaTrialProjectCap(
+  billingSlug: string,
+  state?: Pick<BillingState, "plan"> | null,
+): Promise<number> {
+  const account = await getAccount(billingSlug);
+  const role = normalizeRole(account?.role);
+
+  // The root role is authoritative for existing active trials. In particular,
+  // a direct client with a legacy NULL plan must not retain the old cap of two.
+  if (role === "client") return BETA_TRIAL_CLIENT_PROJECT_CAP;
+  if (role === "agency") return BETA_TRIAL_AGENCY_PROJECT_CAP;
+
+  // `user` is the legacy role and historically behaved as an agency. For rows
+  // with a recorded trial plan, prefer that authoritative plan instead.
+  if (state?.plan === "inhouse") return BETA_TRIAL_CLIENT_PROJECT_CAP;
+  return BETA_TRIAL_AGENCY_PROJECT_CAP;
 }
 
 // ---------------------------------------------------------------------------
@@ -532,7 +562,11 @@ export async function getProjectAllowance(slug: string): Promise<number> {
     const billingSlug = await resolveBillingSlug(slug);
     const state = await getBillingState(billingSlug);
     if (!isEntitled(state)) return 0;
-    if (getBetaTrialSummary(state).status === "active") return BETA_TRIAL_PROJECT_CAP;
+    if (getBetaTrialSummary(state).status === "active") {
+      // Await inside the fail-closed boundary: resolving a legacy account can
+      // itself fail, and that must deny capacity rather than escape this catch.
+      return await getBetaTrialProjectCap(billingSlug, state);
+    }
     const addons = await getProjectAddons(billingSlug);
     // Entitled accounts get exactly their plan's included projects plus
     // purchased add-ons. A plan-less legacy free-access row keeps the old cap.

@@ -20,6 +20,8 @@ type TestActor = TestAccount | null;
 const h = vi.hoisted(() => ({
   accounts: [] as TestAccount[],
   actor: null as TestActor,
+  allowance: 999,
+  lockOwners: [] as string[],
   client: null as any,
   db: null as any,
 }));
@@ -137,10 +139,39 @@ vi.mock("../lib/platform-auth", () => ({
 }));
 
 vi.mock("../lib/billing", () => ({
-  getProjectAllowance: () => Promise.resolve(999),
+  getProjectAllowance: () => Promise.resolve(h.allowance),
   assignAddonToNewProjectUnlocked: () => Promise.resolve(),
-  withBillingLock: (_slug: string, fn: (slug: string) => Promise<unknown>) => fn(_slug),
-  listBillingProjects: () => Promise.resolve([]),
+  withBillingLock: async (_slug: string, fn: (slug: string) => Promise<unknown>) => {
+    let root = _slug;
+    const seen = new Set<string>();
+    while (!seen.has(root)) {
+      seen.add(root);
+      const parent = h.accounts.find((account) => account.username === root)?.parent;
+      if (!parent) break;
+      const parentAccount = h.accounts.find((account) => account.username === parent);
+      if (!parentAccount || parentAccount.role === "admin") break;
+      root = parent;
+    }
+    h.lockOwners.push(root);
+    return fn(root);
+  },
+  listBillingProjects: async (slug: string) => {
+    const allowed = new Set([slug]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const account of h.accounts) {
+        if (account.parent && allowed.has(account.parent) && !allowed.has(account.username)) {
+          allowed.add(account.username);
+          changed = true;
+        }
+      }
+    }
+    const rows = await h.client.query(
+      "SELECT id, name, tier, owner FROM projects WHERE deleted_at IS NULL",
+    );
+    return rows.rows.filter((row: { owner: string | null }) => allowed.has(row.owner ?? ""));
+  },
   detachAddonForProjectTransfer: () => Promise.resolve(),
 }));
 
@@ -148,7 +179,7 @@ vi.mock("../lib/admin-events", () => ({
   logAdminEvent: () => Promise.resolve(),
 }));
 
-import { db, projectsTable } from "@workspace/db";
+import { db, projectSnapshotsTable, projectsTable } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import storeRouter from "./store";
 
@@ -200,6 +231,7 @@ describe("protected individual project deletion", () => {
       { username: "admin", role: "admin", parent: null },
       { username: "agency", role: "agency", parent: "admin" },
       { username: "client", role: "client", parent: "agency" },
+      { username: "direct-client", role: "client", parent: null },
       { username: "other", role: "agency", parent: null },
     ];
     await h.client.query(
@@ -213,6 +245,8 @@ describe("protected individual project deletion", () => {
       ],
     );
     h.actor = { username: "admin", role: "admin", parent: null };
+    h.allowance = 999;
+    h.lockOwners = [];
   });
 
   async function seedProjects() {
@@ -254,6 +288,30 @@ describe("protected individual project deletion", () => {
     return request("/store/projects/delete", {
       method: "POST",
       body: JSON.stringify({ id }),
+    });
+  }
+
+  async function upsertProject(id: string, name = id) {
+    return request("/store/projects/upsert", {
+      method: "POST",
+      body: JSON.stringify({ id, name, data: { id, name } }),
+    });
+  }
+
+  async function intakeProject(id: string) {
+    return request("/store/projects/intake", {
+      method: "POST",
+      body: JSON.stringify({
+        id,
+        intake: { formData: { "4.1": id, "5.1": "answer" } },
+      }),
+    });
+  }
+
+  async function restoreProject(id: string, snapshotId: number) {
+    return request("/store/projects/restore", {
+      method: "POST",
+      body: JSON.stringify({ id, snapshotId }),
     });
   }
 
@@ -467,5 +525,88 @@ describe("protected individual project deletion", () => {
       owner: "client",
       deleted_at: expect.anything(),
     }));
+  });
+
+  it("enforces a direct client's one-project beta allowance for upsert, without blocking edits", async () => {
+    h.allowance = 1;
+    h.actor = { username: "direct-client", role: "client", parent: null };
+
+    expect((await upsertProject("client-one")).status).toBe(200);
+    expect((await upsertProject("client-two")).status).toBe(403);
+    expect((await upsertProject("client-one", "Edited")).status).toBe(200);
+
+    const row = await h.client.query(
+      "SELECT name FROM projects WHERE id = 'client-one'",
+    );
+    expect(row.rows[0]?.name).toBe("Edited");
+  });
+
+  it("enforces a direct client's one-project beta allowance for intake, without blocking edits", async () => {
+    h.allowance = 1;
+    h.actor = { username: "direct-client", role: "client", parent: null };
+
+    expect((await intakeProject("intake-one")).status).toBe(200);
+    expect((await intakeProject("intake-two")).status).toBe(403);
+    expect((await intakeProject("intake-one")).status).toBe(200);
+  });
+
+  it("blocks restoring a deleted project at the cap but allows restoring an active checkpoint", async () => {
+    h.allowance = 1;
+    h.actor = { username: "client", role: "client", parent: "agency" };
+    await db.insert(projectsTable).values([
+      {
+        id: "live-project",
+        name: "Live",
+        data: { version: "live" },
+        owner: "client",
+        deletedAt: null,
+      },
+      {
+        id: "deleted-project",
+        name: "Deleted",
+        data: { version: "deleted" },
+        owner: "client",
+        deletedAt: new Date(),
+      },
+    ]);
+    const [deletedSnapshot] = await db
+      .insert(projectSnapshotsTable)
+      .values({
+        projectId: "deleted-project",
+        name: "Recovered",
+        data: { version: "recovered" },
+        owner: "client",
+        reason: "upsert",
+      })
+      .returning({ id: projectSnapshotsTable.id });
+
+    const blocked = await restoreProject("deleted-project", deletedSnapshot!.id);
+    expect(blocked.status).toBe(403);
+    const deletedRow = await h.client.query(
+      "SELECT deleted_at FROM projects WHERE id = 'deleted-project'",
+    );
+    expect(deletedRow.rows[0]?.deleted_at).not.toBeNull();
+
+    const [activeSnapshot] = await db
+      .insert(projectSnapshotsTable)
+      .values({
+        projectId: "live-project",
+        name: "Checkpoint",
+        data: { version: "checkpoint" },
+        owner: "client",
+        reason: "upsert",
+      })
+      .returning({ id: projectSnapshotsTable.id });
+    h.actor = { username: "admin", role: "admin", parent: null };
+    const active = await restoreProject("live-project", activeSnapshot!.id);
+    expect(active.status).toBe(200);
+    const liveRow = await h.client.query(
+      "SELECT data FROM projects WHERE id = 'live-project'",
+    );
+    expect(liveRow.rows[0]?.data).toEqual({ version: "checkpoint" });
+
+    // The staff actor is restoring a child-owned project, so the lock must be
+    // rooted at the agency billing account rather than "admin".
+    expect(h.lockOwners).toEqual(["agency", "agency"]);
   });
 });

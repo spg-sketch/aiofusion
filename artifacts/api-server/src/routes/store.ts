@@ -714,32 +714,69 @@ router.post(
       // overwrites the live state, so if the backup cannot be written we refuse
       // to restore rather than lose the current version.
       const current = await db
-        .select(projectRowColumns)
+        .select({ ...projectRowColumns, deletedAt: projectsTable.deletedAt })
         .from(projectsTable)
         .where(eq(projectsTable.id, id))
         .limit(1);
-      if (current[0]) {
-        const backedUp = await snapshotProject(current[0] as ProjectRowSlim, "pre-restore");
-        if (!backedUp) {
-          res.status(503).json({ error: "Could not back up the current version. Please try again." });
-          return;
-        }
-      }
-
       const scope = ownerPredicate(visible);
-      const updated = await db
-        .update(projectsTable)
-        .set({
-          name: snap.name ?? "",
-          data: (snap.data ?? {}) as object,
-          intake: snap.intake ?? null,
-          logo: snap.logo ?? null,
-          deletedAt: null,
-          updatedAt: new Date(),
-        })
-        .where(scope ? and(eq(projectsTable.id, id), scope) : eq(projectsTable.id, id))
-        .returning({ id: projectsTable.id });
-      if (updated.length === 0) {
+      const restore = async (
+        currentRow: (typeof current)[number],
+      ): Promise<"ok" | "backup-failed" | "not-found"> => {
+        const backedUp = await snapshotProject(currentRow as ProjectRowSlim, "pre-restore");
+        if (!backedUp) return "backup-failed";
+        const updated = await db
+          .update(projectsTable)
+          .set({
+            name: snap.name ?? "",
+            data: (snap.data ?? {}) as object,
+            intake: snap.intake ?? null,
+            logo: snap.logo ?? null,
+            deletedAt: null,
+            updatedAt: new Date(),
+          })
+          .where(scope ? and(eq(projectsTable.id, id), scope) : eq(projectsTable.id, id))
+          .returning({ id: projectsTable.id });
+        return updated.length > 0 ? "ok" : "not-found";
+      };
+
+      // Always lock on the project's billing owner, not the actor. This is
+      // important for staff restoring a visible child project: the agency's
+      // allowance is the one that must be serialized and checked.
+      const lockOwner = normUsername(current[0]?.owner ?? req.account!.username);
+      const outcome = await withBillingLock(lockOwner, async (billingSlug) => {
+        // Re-read the tombstone after acquiring the billing lock. A project
+        // can be deleted (or restored) between the authorization read above
+        // and this critical section; using the stale row here could let a
+        // resurrection bypass the allowance.
+        const [lockedCurrent] = await db
+          .select({ ...projectRowColumns, deletedAt: projectsTable.deletedAt })
+          .from(projectsTable)
+          .where(eq(projectsTable.id, id))
+          .limit(1);
+        if (!lockedCurrent) return "not-found" as const;
+
+        // Restoring a version over an already-live project does not consume a
+        // project slot. Recovering a deleted project does, so only the latter
+        // needs the allowance check.
+        if (lockedCurrent.deletedAt && req.account!.role !== "admin") {
+          const used = (await listBillingProjects(billingSlug)).length;
+          const allowance = await getProjectAllowance(billingSlug);
+          if (used >= allowance) return { limitReached: true as const, allowance };
+        }
+        return restore(lockedCurrent);
+      });
+      if (typeof outcome === "object") {
+        res.status(403).json({
+          error: `You've reached your ${outcome.allowance}-project allowance. You can add another project from the Billing section of your account settings.`,
+          limitReached: true,
+        });
+        return;
+      }
+      if (outcome === "backup-failed") {
+        res.status(503).json({ error: "Could not back up the current version. Please try again." });
+        return;
+      }
+      if (outcome === "not-found") {
         res.status(409).json({ error: "You cannot restore this project." });
         return;
       }

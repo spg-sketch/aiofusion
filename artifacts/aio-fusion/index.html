@@ -57,7 +57,10 @@
           "aio_switched_workspace", "aio_session_expired", "account_section", "checkout"
         ];
         var params = new URLSearchParams(window.location.search);
-        if (!authKeys.some(function (key) { return params.has(key); })) return;
+         var path = window.location.pathname.replace(/\/+$/, "").toLowerCase();
+         var protectedDestination = path === "/platform" || path.endsWith("/platform") ||
+           path === "/project-hub" || path.endsWith("/project-hub");
+         if (!protectedDestination && !authKeys.some(function (key) { return params.has(key); })) return;
         var root = document.getElementById("root");
         if (!root) return;
         root.setAttribute("data-auth-redirect", "true");
@@ -73,7 +76,7 @@
             '</div>';
           return;
         }
-        root.innerHTML =
+         root.innerHTML =
           '<div role="status" aria-label="Loading sign in" style="min-height:100vh;background:#fff;color:#0a1628;font-family:Inter,sans-serif">' +
             '<div style="background:#1A647B;height:86px"></div>' +
             '<div style="max-width:1280px;margin:0 auto;padding:40px 24px">' +

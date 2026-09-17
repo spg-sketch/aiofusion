@@ -7,12 +7,15 @@ import { vars } from "../marketing/vars";
 import { useContentStore, loadArchive, loadPlannerProjects } from "../lib/contentStore";
 import { authorityIndexFor } from "../LlmCheckPage";
 import { loadServerAuditsForProject } from "../lib/auditSync";
+import { fetchProjectAllowance, type ProjectAllowance } from "../lib/billingAllowance";
 import type { Client } from "../types";
 
 const teal = "#1A647B";
 const ink = "#0a1628";
 const accent = "#C8497A";
 const accentSoft = "#FBE3ED";
+// Partner-managed client workspaces retain their pre-billing affordance.
+const LEGACY_MANAGED_CLIENT_PROJECT_CAP = 3;
 
 type AuditScoreState =
   | { status: "loading" }
@@ -62,7 +65,12 @@ export default function ClientSelectorPage({
   onArchivedProjects: () => void;
   onGuidance: () => void;
   onDeleteProject: (id: string) => void;
-  session?: { username: string; role: string } | null;
+  session?: {
+    username: string;
+    role: string;
+    membershipRole?: string | null;
+    agencyManagedClient?: boolean;
+  } | null;
   onGenerateFromUrl?: () => void;
   /** Rendered inside the header right section - workspace switcher when the user belongs to >1 workspace. */
   workspaceSwitcher?: React.ReactNode;
@@ -76,6 +84,9 @@ export default function ClientSelectorPage({
     [projects],
   );
   const [auditScores, setAuditScores] = useState<Record<string, AuditScoreState>>({});
+  const [allowanceState, setAllowanceState] = useState<
+    { status: "idle" | "loading" | "error" } | { status: "ready"; value: ProjectAllowance }
+  >({ status: "idle" });
   const projectIdsKey = displayClients.map((client) => client.id).join("\u0000");
 
   useEffect(() => {
@@ -109,6 +120,70 @@ export default function ClientSelectorPage({
 
   const isAdmin = session?.role === "admin";
   const isClient = session?.role === "client";
+  const isManagedClient = !!session?.agencyManagedClient;
+  const isDirectClient = isClient && !isManagedClient;
+  const managedClientCanCreate =
+    !isManagedClient || displayClients.length < LEGACY_MANAGED_CLIENT_PROJECT_CAP;
+  // Billing subscription is intentionally unavailable to content/viewer
+  // members. They can still create projects, so leave their existing create
+  // flow alone rather than treating a 403 as a full allowance.
+  const clientCanReadAllowance = session?.membershipRole == null || session.membershipRole === "owner";
+  const shouldCheckAllowance = isDirectClient && clientCanReadAllowance;
+
+  useEffect(() => {
+    if (!shouldCheckAllowance) {
+      setAllowanceState({ status: "idle" });
+      return;
+    }
+    let cancelled = false;
+    setAllowanceState({ status: "loading" });
+    void fetchProjectAllowance().then((allowance) => {
+      if (cancelled) return;
+      setAllowanceState(allowance ? { status: "ready", value: allowance } : { status: "error" });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldCheckAllowance, session?.username, projectIdsKey]);
+
+  const clientAtLimit = shouldCheckAllowance
+    && allowanceState.status === "ready"
+    && allowanceState.value.atLimit;
+  const createUnavailable = shouldCheckAllowance
+    && allowanceState.status !== "ready";
+  const createDisabled = clientAtLimit || createUnavailable;
+  const limitMessage = shouldCheckAllowance
+    ? allowanceState.status === "ready" && allowanceState.value.atLimit
+      ? allowanceState.value.trial?.status === "active"
+        ? "Your beta trial includes 1 project. Upgrade your plan to add another."
+        : "Your project allowance has been reached. Upgrade your plan or add a project slot to continue."
+      : allowanceState.status === "loading" || allowanceState.status === "idle"
+        ? "Checking your project allowance..."
+        : allowanceState.status === "error"
+          ? "Project allowance is unavailable. Refresh and try again."
+          : null
+    : null;
+
+  const createProjectAction = (
+    <button
+      onClick={onCreateProject}
+      disabled={createDisabled}
+      aria-disabled={createDisabled}
+      className="aio-button aio-button--primary group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-white/60 bg-[#C8497A] disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:shadow-none"
+    >
+      <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 bg-white/20 text-white">
+        <Plus size={20} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="aio-type-eyebrow text-white/75">Start a new piece of work</p>
+        <p className="aio-type-card-title mt-0.5 text-white">{clientAtLimit ? "Project limit reached" : "Create Project"}</p>
+        <p className="aio-type-supporting mt-0.5 text-white/75">
+          {limitMessage ?? "Walk through Project Set-Up."}
+        </p>
+      </div>
+      {!createDisabled && <ArrowRight size={16} className="transition-all duration-300 group-hover:translate-x-1 text-white/70" />}
+    </button>
+  );
 
   return (
     <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: teal }}>
@@ -163,22 +238,7 @@ export default function ClientSelectorPage({
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
-            {(!isClient || displayClients.length < 3) && (
-              <button
-                onClick={onCreateProject}
-                className="aio-button aio-button--primary group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-white/60 bg-[#C8497A]"
-              >
-                <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 bg-white/20 text-white">
-                  <Plus size={20} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="aio-type-eyebrow text-white/75">Start a new piece of work</p>
-                  <p className="aio-type-card-title mt-0.5 text-white">Create Project</p>
-                  <p className="aio-type-supporting mt-0.5 text-white/75">Walk through Project Set-Up.</p>
-                </div>
-                <ArrowRight size={16} className="transition-all duration-300 group-hover:translate-x-1 text-white/70" />
-              </button>
-            )}
+            {managedClientCanCreate && createProjectAction}
             <button
               onClick={onArchivedProjects}
               className="aio-button aio-button--outline group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] border border-[#e2e8f0]"
@@ -229,14 +289,21 @@ export default function ClientSelectorPage({
             <p className="aio-type-body max-w-md mx-auto mb-6" style={{ color: "rgba(255,255,255,0.7)" }}>
               A project is a single brand, product or campaign you want to optimise.
             </p>
-            {(!isClient || displayClients.length < 3) && (
+            {managedClientCanCreate && (
               <button
                 onClick={onCreateProject}
-                className="aio-button aio-button--primary rounded-full uppercase tracking-[0.15em] transition-all hover:brightness-110"
+                disabled={createDisabled}
+                aria-disabled={createDisabled}
+                className="aio-button aio-button--primary rounded-full uppercase tracking-[0.15em] transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
                 style={{ background: accent }}
               >
-                <Plus size={14} /> Create your first project
+                <Plus size={14} /> {clientAtLimit ? "Project limit reached" : createUnavailable ? "Checking project allowance..." : "Create your first project"}
               </button>
+            )}
+            {displayClients.length === 0 && limitMessage && (
+              <p className="aio-type-supporting mt-3" style={{ color: "rgba(255,255,255,0.7)" }}>
+                {limitMessage}
+              </p>
             )}
           </div>
         ) : (

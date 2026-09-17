@@ -14,15 +14,25 @@ import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 // ---------------------------------------------------------------------------
 
 vi.mock("../lib/apiHelpers", () => ({ apiBase: () => "" }));
-vi.mock("../lib/projectStore", () => ({
-  loadStoredProjects: () => [
+const projectStoreState = vi.hoisted(() => ({
+  projects: [
     { id: "proj-1", name: "Client One Project", owner: "client-one" },
     { id: "proj-2", name: "Client One Second Project", owner: "client-one" },
-  ],
+  ] as Array<Record<string, unknown>>,
+}));
+vi.mock("../lib/projectStore", () => ({
+  loadStoredProjects: () => projectStoreState.projects,
+  saveStoredProjects: (projects: Array<Record<string, unknown>>) => {
+    projectStoreState.projects = projects;
+  },
 }));
 const auditAndRecoverLocalProjects = vi.fn();
+type PushProjectResult = { ok?: boolean; error?: string; limitReached?: boolean; project?: unknown };
+const pushProjectMeta = vi.fn<
+  (project: unknown, logo?: string | null) => Promise<PushProjectResult>
+>(async (_project: unknown, _logo?: string | null) => ({}));
 vi.mock("../lib/projectSync", () => ({
-  pushProjectMeta: async () => ({}),
+  pushProjectMeta: (project: unknown, logo?: string | null) => pushProjectMeta(project, logo),
   auditAndRecoverLocalProjects: () => auditAndRecoverLocalProjects(),
 }));
 vi.mock("../lib/accountLabels", () => ({ accountLabel: (u: { username: string }) => u.username }));
@@ -38,7 +48,10 @@ vi.mock("../components/BillingDetailsCard", () => ({
 }));
 
 const serverAddUser = vi.fn(async () => ({ ok: true as const, username: "new-client" }));
-const serverImpersonate = vi.fn(async () => ({ ok: true as const }));
+type ImpersonateResult = { ok: true };
+const serverImpersonate = vi.fn<(username: string) => Promise<ImpersonateResult>>(
+  async (_username: string) => ({ ok: true as const }),
+);
 const serverSetDisplayName = vi.fn(async () => ({ ok: true as const }));
 const serverSetClientAccess = vi.fn(async () => ({ ok: true as const }));
 const getSubAccounts = vi.fn();
@@ -58,7 +71,7 @@ vi.mock("../lib/auth", () => ({
   serverArchiveUser: async () => ({ ok: true as const }),
   serverSetSeatCap: async () => ({ ok: true as const }),
   refreshAccountsCache: async () => {},
-  serverImpersonate: (...args: unknown[]) => serverImpersonate(...(args as [])),
+  serverImpersonate: (username: string) => serverImpersonate(username),
   serverSwitchToMaster: async () => ({ ok: true as const }),
   serverChangeAccountType: async () => ({ ok: true as const }),
    serverSetClientAccess: (...args: unknown[]) => serverSetClientAccess(...(args as [])),
@@ -75,6 +88,12 @@ beforeEach(() => {
    serverSetClientAccess.mockClear();
   getSubAccounts.mockReturnValue(partnerClientRows);
   auditAndRecoverLocalProjects.mockResolvedValue({ serverProjectIds: ["proj-1"], localOnly: [] });
+  projectStoreState.projects = [
+    { id: "proj-1", name: "Client One Project", owner: "client-one" },
+    { id: "proj-2", name: "Client One Second Project", owner: "client-one" },
+  ];
+  pushProjectMeta.mockReset();
+  pushProjectMeta.mockResolvedValue({});
   sessionStorage.clear();
   window.history.replaceState({}, "", "/");
 });
@@ -100,6 +119,19 @@ const agencySession = { username: "acme-agency", role: "agency" as const };
 function openClientsSection() {
   render(<SubAccountsPage {...baseProps} session={agencySession as any} />);
   fireEvent.click(screen.getAllByRole("button", { name: /^client projects$/i })[0]);
+}
+
+function captureProtectedRedirect() {
+  const originalLocation = window.location;
+  let redirectedTo: string | undefined;
+  Object.defineProperty(window, "location", {
+    writable: true,
+    value: { ...originalLocation, replace: (url: string) => { redirectedTo = url; } },
+  });
+  return {
+    get url() { return redirectedTo; },
+    restore() { Object.defineProperty(window, "location", { writable: true, value: originalLocation }); },
+  };
 }
 
 describe("agency partner client rows", () => {
@@ -146,6 +178,7 @@ describe("agency partner client rows", () => {
 
   it("Open Project Hub always enters the managed workspace without selecting a project when several exist", async () => {
     window.history.replaceState({}, "", "/?account_section=clients");
+    const redirect = captureProtectedRedirect();
     openClientsSection();
     expect(screen.getByRole("button", { name: /client one second project/i })).toBeTruthy();
     fireEvent.click(screen.getAllByRole("button", { name: /^open project hub$/i })[0]);
@@ -153,8 +186,8 @@ describe("agency partner client rows", () => {
     const raw = sessionStorage.getItem("aio:open-client-projects");
     expect(raw).toBeTruthy();
     expect(JSON.parse(raw!)).toEqual({ username: "client-one", projectId: null });
-    expect(window.location.pathname).toBe(import.meta.env.BASE_URL || "/");
-    expect(window.location.search).toBe("");
+    expect(redirect.url).toBe(`${import.meta.env.BASE_URL || "/"}project-hub`);
+    redirect.restore();
   });
 
   it("Open Project Hub enters a client with no projects without a capacity check", async () => {
@@ -188,13 +221,19 @@ describe("agency partner client rows", () => {
   });
 
   it("opens a specific project directly from its project chip", async () => {
+    const redirect = captureProtectedRedirect();
     openClientsSection();
     fireEvent.click(screen.getByRole("button", { name: /client one project/i }));
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("client-one"));
     expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({ username: "client-one", projectId: "proj-1" });
+    expect(redirect.url).toBe(`${import.meta.env.BASE_URL || "/"}project-hub`);
+    redirect.restore();
   });
 
-  it("uses the returned username to open a newly created agency client in its empty hub", async () => {
+  it("uses the returned username to save a new Client Project, then opens its hub without selecting it", async () => {
+    const redirect = captureProtectedRedirect();
+    let releasePush!: (result: { ok: true }) => void;
+    pushProjectMeta.mockImplementationOnce(() => new Promise((resolve) => { releasePush = resolve; }));
     openClientsSection();
     fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "New Client Co" } });
     fireEvent.change(screen.getByPlaceholderText(/www\.acme\.com/i), { target: { value: "newclient.example.com" } });
@@ -202,10 +241,118 @@ describe("agency partner client rows", () => {
 
     await vi.waitFor(() => expect(serverAddUser).toHaveBeenCalled());
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("new-client"));
+    await vi.waitFor(() => expect(pushProjectMeta).toHaveBeenCalledOnce());
+    const [project] = pushProjectMeta.mock.calls[0] as unknown as [{ id: string; name: string; owner: string }];
+    expect(JSON.parse(sessionStorage.getItem("aio:pending-client-project")!)).toEqual(expect.objectContaining({
+      username: "new-client",
+      operatorUsername: "acme-agency",
+      project: expect.objectContaining({ id: project.id, name: "New Client Co", owner: "new-client" }),
+    }));
+    expect(project).toEqual(expect.objectContaining({ name: "New Client Co", owner: "new-client" }));
+    releasePush({ ok: true });
+    await vi.waitFor(() => expect(sessionStorage.getItem("aio:open-client-projects")).toBeTruthy());
     expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({
       username: "new-client",
       projectId: null,
     });
+    expect(redirect.url).toBe(`${import.meta.env.BASE_URL || "/"}project-hub`);
+    redirect.restore();
+  });
+
+  it("saves the named client project only after the confirmed child session is active", async () => {
+    const order: string[] = [];
+    serverAddUser.mockResolvedValueOnce({ ok: true as const, username: "named-client" });
+    serverImpersonate.mockImplementationOnce(async (username: string) => {
+      order.push(`impersonate:${username}`);
+      return { ok: true as const };
+    });
+    pushProjectMeta.mockImplementationOnce(async (project: unknown) => {
+      order.push("save-project");
+      return { ok: true as const, project };
+    });
+
+    openClientsSection();
+    fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "Named Client Co" } });
+    fireEvent.change(screen.getByPlaceholderText(/www\.acme\.com/i), { target: { value: "named-client.example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+
+    await vi.waitFor(() => expect(pushProjectMeta).toHaveBeenCalledOnce());
+    const [project] = pushProjectMeta.mock.calls[0] as unknown as [{ id: string; name: string; owner: string }];
+    expect(order).toEqual(["impersonate:named-client", "save-project"]);
+    expect(project).toEqual(expect.objectContaining({
+      name: "Named Client Co",
+      owner: "named-client",
+    }));
+    expect(projectStoreState.projects).toContainEqual(expect.objectContaining({
+      id: project.id,
+      name: "Named Client Co",
+      owner: "named-client",
+    }));
+    expect(serverAddUser).toHaveBeenCalledOnce();
+  });
+
+  it("creates a zero-project Client Project under the child account after impersonation", async () => {
+    getSubAccounts.mockReturnValue([partnerClientRows[1]]);
+    const order: string[] = [];
+    serverImpersonate.mockImplementationOnce(async (username: string) => {
+      order.push(`impersonate:${username}`);
+      return { ok: true as const };
+    });
+    pushProjectMeta.mockImplementationOnce(async (project: unknown) => {
+      order.push("save-project");
+      return { ok: true as const, project };
+    });
+
+    const redirect = captureProtectedRedirect();
+    render(<SubAccountsPage {...baseProps} session={agencySession as any} initialSection="clients" />);
+    fireEvent.click(screen.getByRole("button", { name: /^create project$/i }));
+
+    await vi.waitFor(() => expect(pushProjectMeta).toHaveBeenCalledOnce());
+    const [project] = pushProjectMeta.mock.calls[0] as unknown as [{ id: string; name: string; owner: string }];
+    expect(order).toEqual(["impersonate:client-two", "save-project"]);
+    expect(project).toEqual(expect.objectContaining({
+      name: "client-two",
+      owner: "client-two",
+    }));
+    expect(projectStoreState.projects).toContainEqual(expect.objectContaining({
+      id: project.id,
+      owner: "client-two",
+    }));
+    expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({
+      username: "client-two",
+      projectId: null,
+    });
+    expect(redirect.url).toBe(`${import.meta.env.BASE_URL || "/"}project-hub`);
+    redirect.restore();
+    expect(serverAddUser).not.toHaveBeenCalled();
+  });
+
+  it("retries a failed pending project save with the same id without duplicating the account", async () => {
+    serverAddUser.mockResolvedValueOnce({ ok: true as const, username: "retry-client" });
+    serverImpersonate.mockResolvedValueOnce({ ok: true as const });
+    pushProjectMeta
+      .mockResolvedValueOnce({ ok: false as const, error: "Project save failed." })
+      .mockResolvedValueOnce({ ok: true as const });
+
+    openClientsSection();
+    fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "Retry Client Co" } });
+    fireEvent.change(screen.getByPlaceholderText(/www\.acme\.com/i), { target: { value: "retry-client.example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+
+    await vi.waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Project save failed."));
+    expect(serverAddUser).toHaveBeenCalledOnce();
+    expect(serverImpersonate).toHaveBeenCalledOnce();
+    expect(pushProjectMeta).toHaveBeenCalledOnce();
+    const firstProject = (pushProjectMeta.mock.calls[0] as unknown as [{ id: string }])[0];
+
+    fireEvent.click(screen.getByRole("button", { name: /retry navigation to project hub/i }));
+
+    await vi.waitFor(() => expect(pushProjectMeta).toHaveBeenCalledTimes(2));
+    const secondProject = (pushProjectMeta.mock.calls[1] as unknown as [{ id: string }])[0];
+    expect(secondProject.id).toBe(firstProject.id);
+    expect(serverAddUser).toHaveBeenCalledOnce();
+    expect(serverImpersonate).toHaveBeenCalledOnce();
+    expect(projectStoreState.projects.filter((project) => project.id === firstProject.id)).toHaveLength(1);
   });
 
   it("clears a stale handoff on navigation failure and retries navigation without creating again", async () => {
@@ -292,8 +439,15 @@ describe("agency partner client rows", () => {
       const storageSpy = failureKind === "storage"
         ? vi.spyOn(Storage.prototype, "setItem").mockImplementationOnce(() => { throw failure; })
         : null;
+      const originalLocation = window.location;
       const historySpy = failureKind === "history"
-        ? vi.spyOn(window.history, "replaceState").mockImplementationOnce(() => { throw failure; })
+        ? (() => {
+            Object.defineProperty(window, "location", {
+              writable: true,
+              value: { ...originalLocation, replace: () => { throw failure; } },
+            });
+            return { mockRestore: () => Object.defineProperty(window, "location", { writable: true, value: originalLocation }) };
+          })()
         : null;
 
       openClientsSection();
@@ -359,9 +513,9 @@ describe("agency partner client rows", () => {
         onAssignProjectOwner={onAssignProjectOwner}
       />,
     );
-    expect(await screen.findByText((_, element) =>
-      element?.tagName === "P" && element.textContent === "1 active projects are safely stored on the server.",
-    )).toBeTruthy();
+    await vi.waitFor(() => {
+      expect(screen.getByRole("combobox", { name: /owner for client one project/i })).toBeEnabled();
+    });
 
     fireEvent.change(screen.getByRole("combobox", { name: /owner for client one project/i }), {
       target: { value: "client-two" },
@@ -371,6 +525,26 @@ describe("agency partner client rows", () => {
       expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining("Client One Project"));
       expect(onAssignProjectOwner).toHaveBeenCalledWith("proj-1", "client-two");
     });
+  });
+
+  it("does not display the recovery report or old browser-only project names", async () => {
+    auditAndRecoverLocalProjects.mockResolvedValueOnce({
+      serverProjectIds: ["proj-1"],
+      localOnly: [{
+        id: "old-browser-project",
+        name: "Old Browser Project",
+        recovered: false,
+        error: "You cannot modify this project.",
+      }],
+    });
+    render(<SubAccountsPage {...baseProps} session={agencySession as any} initialSection="assign" />);
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole("combobox", { name: /owner for client one project/i })).toBeEnabled();
+    });
+    expect(screen.queryByText(/safely stored on the server|available for review|browser-only projects|not recovered/i)).toBeNull();
+    expect(screen.queryByText(/Old Browser Project|You cannot modify this project/i)).toBeNull();
+    expect(screen.getByText("Client One Project")).toBeTruthy();
   });
 
   it("keeps every owner control disabled when the audit cannot reach the server", async () => {

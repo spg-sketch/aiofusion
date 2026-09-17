@@ -130,7 +130,7 @@ import type { Client } from "./lib/projectTypes";
 import { CREATED_PROJECTS_KEY, loadStoredProjects, saveStoredProjects } from "./lib/projectStore";
 import {
   getProjectSectorLabel, loadClientLogos, saveClientLogos,
-  migrateLegacyIntakeToProject, createStoredProject,
+  migrateLegacyIntakeToProject, createStoredProject, deriveInitials,
   assignProjectOwner, migrateAssignOwnerlessToAdmin,
   migrateStoredIntakeKeys,
 } from "./lib/projects";
@@ -395,9 +395,29 @@ function publicViewFromLocation(): PublicView | null {
   return SLUG_TO_VIEW[slugFromLocation()] ?? null;
 }
 
-function directViewFromLocation(): PublicView | "insights-admin" | null {
+function directViewFromLocation(): PublicView | "insights-admin" | "platform-home" | "platform" | null {
+  const protectedDestination = protectedDestinationFromLocation();
+  if (protectedDestination === "project-hub") return "platform";
+  if (protectedDestination === "platform") return "platform-home";
   if (isInsightsAdminPath(window.location.pathname, appBase())) return "insights-admin";
   return publicViewFromLocation();
+}
+
+// Authenticated reloads use a non-public destination so prerendered marketing
+// HTML is never the first document painted. The server still serves the same
+// app shell; this marker is consumed only by the client bootstrap.
+function isProtectedDestination(): boolean {
+  return protectedDestinationFromLocation() !== null;
+}
+
+function protectedDestinationFromLocation(): "platform" | "project-hub" | null {
+  const base = appBase().replace(/\/+$/, "");
+  let path = window.location.pathname;
+  if (base && (path === base || path.startsWith(`${base}/`))) path = path.slice(base.length);
+  const slug = path.replace(/^\/+/, "").replace(/\/+$/, "").split("/")[0].toLowerCase();
+  if (slug === "project-hub") return "project-hub";
+  if (slug === "platform") return "platform";
+  return null;
 }
 
 const AUTH_REDIRECT_QUERY_KEYS = [
@@ -433,6 +453,8 @@ function isAuthenticationLanding(): boolean {
 
 function viewToUrl(v: string, insightsArticleId?: string | null): string {
   if (v === "insights-admin") return appBase() + "admin";
+  if (v === "platform") return appBase() + "project-hub";
+  if (v === "platform-home") return appBase() + "platform";
   if (v === "insights" && insightsArticleId) {
     return appBase() + "insights/" + insightsArticleId;
   }
@@ -487,6 +509,14 @@ function App() {
   );
   const [clientLogos, setClientLogos] = useState<Record<string, string>>(() => loadClientLogos());
   const [namingProject, setNamingProject] = useState(false);
+  // Keep one server-stable draft across a lost upsert response. The modal
+  // remains open on any persistence error and retries this exact id.
+  const pendingProjectDraftRef = useRef<{
+    sessionUsername: string;
+    project: Client;
+    logo?: string;
+  } | null>(null);
+  const [pendingProjectError, setPendingProjectError] = useState<string | null>(null);
   // When set, the project being named was started from a client placeholder
   // card in the hub: pre-fill the client's company name and, once created,
   // assign the project to that client account.
@@ -693,13 +723,20 @@ function App() {
 
   const beginCreateProject = () => requireSessionThen(() => {
     void (async () => {
-      if (session?.role !== "admin") {
+      const canReadBillingAllowance =
+        session?.membershipRole == null || session.membershipRole === "owner";
+      if (
+        session?.role !== "admin"
+        && canReadBillingAllowance
+      ) {
         const allowance = await fetchProjectAllowance();
         if (allowance?.atLimit) {
           await openProjectBilling();
           return;
         }
       }
+      setPendingProjectError(null);
+      pendingProjectDraftRef.current = null;
       setNamingProject(true);
     })();
   });
@@ -739,42 +776,101 @@ function App() {
   };
 
   const confirmCreateProject = async (name: string, logo?: string) => {
-    const project = createStoredProject(name);
-    const afterCreate = loadStoredProjects();
-    setStoredProjects(afterCreate);
-    // Update the known-IDs cache BEFORE setActiveProjectId so the integrity
-    // check inside that call sees the newly created project as valid.
-    setKnownProjectIds(afterCreate.map((p) => p.id));
-    setActiveProjectId(project.id);
-    setNamingProject(false);
-    if (logo) setClientLogos((prev) => ({ ...prev, [project.id]: logo }));
-    setActiveClient(logo ? { ...project, logo } : project);
-    warmRoute(loadIntakePage);
-    startTransition(() => {
-      setCurrentPage("intake");
-      setView("platform");
-    });
+    const startedSession = confirmedSessionRef.current;
+    const previousDraft = pendingProjectDraftRef.current;
+    const sessionUsername = startedSession?.username ?? session?.username;
+    const project = previousDraft && previousDraft.sessionUsername === sessionUsername
+      ? {
+          ...previousDraft.project,
+          name: name.trim() || previousDraft.project.name,
+          initials: deriveInitials(name.trim() || previousDraft.project.name),
+        }
+      : createStoredProject(name, { persist: false });
+    if (!previousDraft || previousDraft.sessionUsername !== sessionUsername) {
+      pendingProjectDraftRef.current = { sessionUsername: sessionUsername ?? "", project, logo };
+    } else {
+      pendingProjectDraftRef.current = { ...previousDraft, project, logo };
+    }
+    setPendingProjectError(null);
     const pushResult = await pushProjectMeta(
       project as unknown as Record<string, unknown> & { id: string },
       logo,
     );
-    if (!pushResult.ok && pushResult.limitReached) {
-      // Roll back the locally created project - the server rejected it.
-      const rolled = loadStoredProjects().filter((p) => p.id !== project.id);
-      saveStoredProjects(rolled);
-      setStoredProjects(rolled);
-      // Sync cache to rolled-back list before switching active ID.
-      setKnownProjectIds(rolled.map((p) => p.id));
-      const prev = rolled[0] ?? null;
-      setActiveProjectId(prev?.id ?? null);
-      setActiveClient(prev ?? null);
-      window.alert(
-        pushResult.error ??
-          "You've reached your project allowance. Add another project workspace from the Billing section of your account settings.",
-      );
-      await openProjectBilling();
-      return;
+    if (!pushResult.ok) {
+      if (pushResult.limitReached) {
+        // No local project was published, so the modal can safely retry or
+        // direct the user to billing without leaving a phantom hub card.
+        pendingProjectDraftRef.current = null;
+        setPendingProjectError(null);
+        setNamingProject(true);
+        const existing = loadStoredProjects();
+        setStoredProjects(existing);
+        setKnownProjectIds(existing.map((p) => p.id));
+        setActiveProjectId(existing[0]?.id ?? null);
+        setActiveClient(existing[0] ?? null);
+        window.alert(
+          pushResult.error ??
+            "You've reached your project allowance. Add another project workspace from the Billing section of your account settings.",
+        );
+        await openProjectBilling();
+        return { ok: false };
+      }
+      // A transient failure must not look like success. CreateProjectModal
+      // keeps its inputs and retries the same stable project id.
+      setPendingProjectError(pushResult.error ?? "The project could not be saved. Check your connection and try again.");
+      return { ok: false };
     }
+    // The account/workspace may have changed while the request was in flight.
+    // Do not publish a project from the old authority into the new workspace.
+    if (
+      startedSession?.username !== confirmedSessionRef.current?.username ||
+      startedSession?.username !== session?.username
+    ) {
+      setPendingProjectError("The workspace changed while this project was saving. Retry from the current workspace.");
+      return { ok: false };
+    }
+    const afterCreate = loadStoredProjects();
+    const nextProjects = [project, ...afterCreate.filter((p) => p.id !== project.id)];
+    saveStoredProjects(nextProjects);
+    setStoredProjects(nextProjects);
+    // Update the known-IDs cache BEFORE setActiveProjectId so the integrity
+    // check inside that call sees the newly persisted project as valid.
+    setKnownProjectIds(nextProjects.map((p) => p.id));
+    setActiveProjectId(project.id);
+    setNamingProject(false);
+    pendingProjectDraftRef.current = null;
+    setPendingProjectError(null);
+    try {
+      const rawIntent = sessionStorage.getItem("aio:pending-client-project");
+      if (rawIntent) {
+        const intent = JSON.parse(rawIntent) as { project?: { id?: string } };
+        if (intent.project?.id === project.id) sessionStorage.removeItem("aio:pending-client-project");
+      }
+    } catch { /* malformed intents are handled by the resume guard */ }
+    if (logo) setClientLogos((prev) => ({ ...prev, [project.id]: logo }));
+    setActiveClient(logo ? { ...project, logo } : project);
+    warmRoute(loadIntakePage);
+    // Commit the authenticated destination synchronously only after the
+    // server and local cache both confirm the project.
+    setCurrentPage("intake");
+    setView("platform");
+    return { ok: true };
+  };
+
+  const cancelCreateProject = () => {
+    const pendingId = pendingProjectDraftRef.current?.project.id;
+    try {
+      const rawIntent = sessionStorage.getItem("aio:pending-client-project");
+      if (pendingId && rawIntent) {
+        const intent = JSON.parse(rawIntent) as { project?: { id?: string } };
+        if (intent.project?.id === pendingId) sessionStorage.removeItem("aio:pending-client-project");
+      }
+    } catch {
+      try { sessionStorage.removeItem("aio:pending-client-project"); } catch { /* no-op */ }
+    }
+    pendingProjectDraftRef.current = null;
+    setPendingProjectError(null);
+    setNamingProject(false);
   };
 
   const completeAccountOnboarding = useCallback(async (destinationSection: "profile" | "billing" = "profile"): Promise<{ ok: boolean; error?: string }> => {
@@ -830,6 +926,8 @@ function App() {
   // accounts: the agency's name, used by the BackToAgencyLink control that
   // replaced the old full-width impersonation banner for this case.
   const [agencyImpersonatedBy, setAgencyImpersonatedBy] = useState<string | null>(null);
+  const agencyImpersonatedByRef = useRef<string | null>(null);
+  agencyImpersonatedByRef.current = agencyImpersonatedBy;
 
   const beginAuthoritativeHandoff = useCallback((provisional: LocalSession | null) => {
     authRequestAbort.current.abort();
@@ -912,6 +1010,7 @@ function App() {
   // workspace-bound destination before the authorized transition reload.
   // Row actions always open the hub; only explicit project links open a project.
   const pendingClientProjectId = useRef<string | null>(null);
+  const pendingClientProjectResumeRef = useRef<string | null>(null);
   // The shortcut is clicked from the account settings page, whose URL carries
   // ?account_section=clients. That param survives the impersonation reload and
   // its deep-link effect would otherwise navigate straight back to account
@@ -954,6 +1053,116 @@ function App() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleProjects, clientLogos]);
+
+  // If the browser was reloaded after impersonation but before the first
+  // project upsert replied, finish the durable intent from the child session.
+  // The same id is retried, so a lost response cannot create a duplicate.
+  useEffect(() => {
+    if (authLoading || !session) return;
+    let raw: string | null = null;
+    try { raw = sessionStorage.getItem("aio:pending-client-project"); } catch { return; }
+    if (!raw) return;
+    const clearPendingIntent = () => {
+      try { sessionStorage.removeItem("aio:pending-client-project"); } catch { /* no-op */ }
+      pendingClientProjectResumeRef.current = null;
+    };
+    let intent: {
+      username?: string;
+      operatorUsername?: string;
+      project?: Client;
+      logo?: string | null;
+    };
+    try {
+      intent = JSON.parse(raw) as typeof intent;
+    } catch {
+      clearPendingIntent();
+      return;
+    }
+    const username = intent.username?.trim();
+    const operatorUsername = intent.operatorUsername?.trim();
+    const pendingCandidate = intent.project;
+    const projectIsValid = !!pendingCandidate
+      && typeof pendingCandidate.id === "string"
+      && pendingCandidate.id.trim().length > 0
+      && typeof pendingCandidate.name === "string"
+      && pendingCandidate.name.trim().length > 0
+      && typeof pendingCandidate.owner === "string"
+      && !!username
+      && pendingCandidate.owner.trim().toLowerCase() === username.toLowerCase()
+      && !!operatorUsername
+      && (pendingCandidate.logo === undefined || pendingCandidate.logo === null || typeof pendingCandidate.logo === "string");
+    if (!projectIsValid || (intent.logo !== undefined && intent.logo !== null && typeof intent.logo !== "string")) {
+      clearPendingIntent();
+      return;
+    }
+    // Leave the intent alone while the agency session is still in the
+    // hand-off. A different authenticated identity must never consume it.
+    const currentUsername = session.username.trim();
+    if (username.toLowerCase() !== currentUsername.toLowerCase()) {
+      if (currentUsername.toLowerCase() !== operatorUsername.toLowerCase()) clearPendingIntent();
+      return;
+    }
+    if (agencyImpersonatedBy?.trim().toLowerCase() !== operatorUsername.toLowerCase()) {
+      clearPendingIntent();
+      return;
+    }
+    const authority = confirmedSessionRef.current;
+    const generation = authRequestGeneration.current;
+    const signal = authRequestAbort.current.signal;
+    const pendingProject = intent.project;
+    if (!pendingProject || pendingClientProjectResumeRef.current === pendingProject.id) return;
+    pendingClientProjectResumeRef.current = pendingProject.id;
+    void (async () => {
+      const result = await pushProjectMeta(
+        pendingProject as unknown as Record<string, unknown> & { id: string },
+        intent.logo,
+      );
+      // The cookie/session may have changed while the upsert was in flight.
+      // Keep the durable intent for the new authority to reconcile, but never
+      // publish this response into another workspace's local cache.
+      if (
+        signal.aborted
+        || generation !== authRequestGeneration.current
+        || confirmedSessionRef.current !== authority
+        || confirmedSessionRef.current?.username.trim().toLowerCase() !== username.toLowerCase()
+        || agencyImpersonatedByRef.current?.trim().toLowerCase() !== operatorUsername.toLowerCase()
+      ) {
+        pendingClientProjectResumeRef.current = null;
+        return;
+      }
+      if (!result.ok) {
+        pendingClientProjectResumeRef.current = null;
+        pendingProjectDraftRef.current = {
+          sessionUsername: username,
+          project: pendingProject,
+          logo: intent.logo ?? undefined,
+        };
+        setPendingProjectError(result.error ?? "The Client Project could not be saved. Try again.");
+        setNamingProject(true);
+        return;
+      }
+      const current = loadStoredProjects();
+      const next = current.some((p) => p.id === pendingProject.id)
+        ? current
+        : [pendingProject, ...current];
+      saveStoredProjects(next);
+      setStoredProjects(next);
+      setKnownProjectIds(next.map((p) => p.id));
+      try {
+        sessionStorage.removeItem("aio:pending-client-project");
+        sessionStorage.setItem(
+          "aio:open-client-projects",
+          JSON.stringify({ username, projectId: null }),
+        );
+      } catch { /* the project is still safely persisted */ }
+      pendingClientProjectId.current = null;
+      suppressAccountSectionNav.current = true;
+      setAccountSection(null);
+      setActiveClient(null);
+      setActiveProjectId(null);
+      transitionToView("platform");
+    })();
+  }, [agencyImpersonatedBy, authLoading, session, transitionToView]);
 
   // Poll for unseen admin replies so the George badge lights up even before
   // the user opens the support panel. Only runs when logged in (non-admin
@@ -1280,8 +1489,13 @@ function App() {
       const s = e.state as { __aioNav?: boolean; view?: string; currentPage?: string; insightsArticleId?: string | null; accountSection?: string | null } | null;
       // Prefer the navigation state we pushed; fall back to deriving a public
       // page from the URL (e.g. a directly typed /about or a forward nav).
+      const protectedDestination = protectedDestinationFromLocation();
       const targetView = (
-        s && s.__aioNav && s.view ? s.view : (directViewFromLocation() ?? "landing")
+        protectedDestination === "project-hub"
+          ? "platform"
+          : protectedDestination === "platform"
+            ? "platform-home"
+          : (s && s.__aioNav && s.view ? s.view : (directViewFromLocation() ?? "landing"))
       ) as typeof view;
       const targetPage = s && s.__aioNav && s.currentPage ? s.currentPage : pageRef.current;
       const targetArticleId = s && s.__aioNav
@@ -1495,6 +1709,7 @@ function App() {
         checkoutResult={checkoutResult}
         checkoutSessionId={checkoutSessionId}
         accountProfile={accountProfile}
+        accountRole={session.role === "client" || session.role === "agency" ? session.role : undefined}
         onRoleChanged={(role) => {
           setSessionState({ ...session, role });
           void refreshAccountsCache();
@@ -1600,7 +1815,14 @@ function App() {
             anonMode
           />
         )}
-        {namingProject && <CreateProjectModal onCancel={() => setNamingProject(false)} onCreate={confirmCreateProject} />}
+        {namingProject && (
+          <CreateProjectModal
+            initialName={pendingProjectDraftRef.current?.project.name}
+            error={pendingProjectError}
+            onCancel={cancelCreateProject}
+            onCreate={confirmCreateProject}
+          />
+        )}
       </Suspense>
     );
   }
@@ -1741,7 +1963,9 @@ function App() {
       />
       {namingProject && (
         <CreateProjectModal
-          onCancel={() => setNamingProject(false)}
+          initialName={pendingProjectDraftRef.current?.project.name}
+          error={pendingProjectError}
+          onCancel={cancelCreateProject}
           onCreate={confirmCreateProject}
         />
       )}

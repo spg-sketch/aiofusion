@@ -228,7 +228,7 @@ const ARTICLES: Article[] = [
           When a client programme ends, archive the project rather than deleting it. Archived projects are moved to the <strong>Archived Projects</strong> section of the Hub. All data - Set-Up, audits, content, and comms plan - is retained and fully searchable. If the client returns, you can restore the project and pick up exactly where you left off.
         </Section>
         <Section title="Project limits">
-           Agency accounts include 2 active projects as standard. Additional independent project workspaces can be added at any time - contact the team or use the billing section of your account settings. Archived projects do not count towards your active project limit. Project packs add workspaces; they do not add runtime capacity or parallel environments inside an existing project.
+           Client accounts include 1 active project during the beta trial, while Agency accounts include 2. Paid allowances and purchased project packs can add workspaces at any time - contact the team or use the billing section of your account settings. Archived projects do not count towards your active project limit. Project packs add workspaces; they do not add runtime capacity or parallel environments inside an existing project.
         </Section>
         <Tip>Use clear, specific project names that include the client or brand name. When you have multiple projects it becomes much easier to navigate quickly.</Tip>
       </div>

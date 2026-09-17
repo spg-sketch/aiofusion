@@ -164,7 +164,7 @@ describe("GuidedOnboardingPage", () => {
     renderSetup("cancelled");
     expect(await screen.findByText("Billing and payment")).toBeInTheDocument();
     expect(screen.getByText("Checkout was cancelled. No payment was taken, and you can continue here when ready.")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText("Company and billing information")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Company and billing information" })).toBeInTheDocument());
   });
 
   it("shows a dedicated thank-you state after paid checkout is confirmed", async () => {

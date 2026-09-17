@@ -4,6 +4,10 @@ export type ProjectAllowance = {
   projectsUsed: number;
   projectAllowance: number;
   atLimit: boolean;
+  /** Present when the server can identify beta-trial status. */
+  trial?: {
+    status?: string;
+  };
 };
 
 /**
@@ -21,6 +25,7 @@ export async function fetchProjectAllowance(): Promise<ProjectAllowance | null> 
     const json = (await res.json()) as {
       projectsUsed?: unknown;
       projectAllowance?: unknown;
+      trial?: { status?: unknown };
     };
     if (
       typeof json.projectsUsed !== "number" ||
@@ -32,6 +37,9 @@ export async function fetchProjectAllowance(): Promise<ProjectAllowance | null> 
       projectsUsed: json.projectsUsed,
       projectAllowance: json.projectAllowance,
       atLimit: json.projectsUsed >= json.projectAllowance,
+      ...(json.trial && typeof json.trial === "object" && typeof json.trial.status === "string"
+        ? { trial: { status: json.trial.status } }
+        : {}),
     };
   } catch {
     return null;

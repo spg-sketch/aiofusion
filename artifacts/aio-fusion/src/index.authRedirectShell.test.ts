@@ -44,4 +44,20 @@ describe("prerendered auth redirect guard", () => {
     expect(root).not.toHaveTextContent("Preparing secure sign in");
     expect(root).not.toHaveTextContent("Payment confirmed");
   });
+
+  it("suppresses marketing markup on the explicit protected reload destination", () => {
+    const root = runIndexAuthGuard("/platform");
+
+    expect(root).toHaveAttribute("data-auth-redirect", "true");
+    expect(root.querySelector('[data-testid="prerendered-marketing"]')).toBeNull();
+    expect(root.querySelector('[aria-label="Loading sign in"]')).not.toBeNull();
+  });
+
+  it("also protects the project hub reload destination", () => {
+    const root = runIndexAuthGuard("/project-hub");
+
+    expect(root).toHaveAttribute("data-auth-redirect", "true");
+    expect(root.querySelector('[data-testid="prerendered-marketing"]')).toBeNull();
+    expect(root.querySelector('[aria-label="Loading sign in"]')).not.toBeNull();
+  });
 });

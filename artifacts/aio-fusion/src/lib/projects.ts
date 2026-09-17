@@ -93,12 +93,15 @@ export function migrateLegacyIntakeToProject(): void {
   saveStoredProjects(projects);
 }
 
-export function createStoredProject(name: string): Client {
+export function createStoredProject(
+  name: string,
+  options: { id?: string; owner?: string; persist?: boolean } = {},
+): Client {
   const projects = loadStoredProjects();
   const clean = name.trim() || "New Project";
-  const owner = getLocalSession()?.username;
+  const owner = options.owner ?? getLocalSession()?.username;
   const project: Client = {
-    id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    id: options.id ?? `proj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     name: clean,
     sector: "Awaiting set-up",
     initials: deriveInitials(clean),
@@ -112,7 +115,7 @@ export function createStoredProject(name: string): Client {
     createdAt: new Date().toISOString(),
     ...(owner ? { owner } : {}),
   };
-  saveStoredProjects([project, ...projects]);
+  if (options.persist !== false) saveStoredProjects([project, ...projects]);
   return project;
 }
 

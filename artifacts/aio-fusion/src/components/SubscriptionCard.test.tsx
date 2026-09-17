@@ -1,12 +1,102 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { daysUntilRenewal, formatSubscriptionEnd, SubscriptionCard } from "./SubscriptionCard";
+import { BillingDetailsCard } from "./BillingDetailsCard";
+
+describe("payment address guidance", () => {
+  it.each([true, false])("refreshes payment eligibility only after a successful address save (success=%s)", async (saveSucceeds) => {
+    let saved = false;
+    const info = {
+      ...activeSubscription(),
+      status: "none",
+      plan: "inhouse",
+      applicablePlan: "inhouse",
+      includedProjects: 1,
+      projectAllowance: 1,
+      trial: { status: "active", startedAt: "2026-09-01", endsAt: "2099-11-01", daysRemaining: 50 },
+      tierPrices: {
+        standard: { yearlyTotal: 10000, actionsPerMonth: 50 },
+        premium: { yearlyTotal: 20000, actionsPerMonth: 100 },
+        max: { yearlyTotal: 30000, actionsPerMonth: 200 },
+      },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/billing/subscription")) {
+        return { ok: true, json: async () => ({ ...info, companyRecordComplete: saved }) } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/invoices")) {
+        return { ok: true, json: async () => ({ invoices: [] }) } as Response;
+      }
+      if (url.endsWith("/api/platform/billing-details")) {
+        if (init?.method === "POST") {
+          saved = saveSucceeds;
+          return {
+            ok: saveSucceeds,
+            json: async () => saveSucceeds
+              ? { record: JSON.parse(String(init.body)) }
+              : { error: "The address could not be saved." },
+          } as Response;
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            companyName: "Example Beta",
+            billingEmail: "billing@example.test",
+            keyAccountHolderEmail: "owner@example.test",
+            country: "GB",
+          }),
+        } as Response;
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<><SubscriptionCard /><BillingDetailsCard /></>);
+
+    await screen.findByDisplayValue("Example Beta");
+    const subscription = (await screen.findByRole("heading", { name: "Subscription" })).closest("#subscription-details") as HTMLElement;
+    const addProject = (await screen.findByRole("heading", { name: "Add a project workspace" })).parentElement as HTMLElement;
+    const payment = within(subscription).getByRole("button", { name: "Continue to payment" });
+    const timing = within(subscription).getByTestId("beta-payment-timing");
+    expect(timing).toHaveTextContent("Completing checkout starts your paid subscription immediately.");
+    expect(timing).toHaveTextContent("Unused beta days are not added to your paid billing period or credited.");
+    expect(timing).toHaveTextContent("Saving your company address alone does not start a subscription or end your trial.");
+    expect(within(subscription).queryByText(/ready to continue after the trial/i)).toBeNull();
+    expect(payment).toBeDisabled();
+    expect(within(addProject).getByText(/Additional workspaces require a paid subscription/)).toBeTruthy();
+
+    const addressSection = document.getElementById("company-billing-information")!;
+    addressSection.scrollIntoView = vi.fn();
+    fireEvent.click(within(subscription).getByRole("button", { name: "Complete company address" }));
+    expect(addressSection.scrollIntoView).toHaveBeenCalled();
+    expect(screen.getByLabelText(/Address line 1/)).toHaveFocus();
+
+    fireEvent.change(screen.getByLabelText(/Address line 1/), { target: { value: "1 Example Street" } });
+    fireEvent.change(screen.getByLabelText(/Town \/ city/), { target: { value: "London" } });
+    fireEvent.change(screen.getByLabelText(/Postcode/), { target: { value: "SW1A 1AA" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save company information" }));
+
+    if (saveSucceeds) {
+      await waitFor(() => expect(payment).toBeEnabled());
+      expect(within(subscription).queryByRole("button", { name: "Complete company address" })).toBeNull();
+    } else {
+      await screen.findByText("The address could not be saved.");
+      expect(payment).toBeDisabled();
+      expect(within(subscription).getByRole("button", { name: "Complete company address" })).toBeTruthy();
+    }
+    // Saving an address is not a subscription purchase and must not unlock
+    // extra-workspace checkout while the account is still trial-only.
+    expect(within(addProject).getByRole("button", { name: "Continue to payment" })).toBeDisabled();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/billing/project-checkout"))).toBe(false);
+  });
+});
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
+
 
 function activeSubscription() {
   return {
@@ -35,6 +125,18 @@ function activeSubscription() {
 }
 
 describe("billing descriptions", () => {
+  it("does not show the beta checkout warning for an active paid subscription", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => ({
+      ok: true,
+      json: async () => String(input).endsWith("/api/platform/billing/subscription")
+        ? activeSubscription()
+        : { invoices: [] },
+    } as Response)));
+    await render(<SubscriptionCard />);
+    await screen.findByRole("heading", { name: "Subscription" });
+    expect(screen.queryByTestId("beta-payment-timing")).toBeNull();
+  });
+
   it("describes additional workspaces and annual billing without claiming VAT is added", async () => {
     const info = {
       ...activeSubscription(),
@@ -281,5 +383,221 @@ describe("project add-on checkout return hand-off", () => {
     expect(banner).toHaveTextContent("Your Premium add-on is linked to your project.");
     expect(banner).not.toHaveTextContent("One extra workspace is now available.");
     expect(banner).not.toHaveTextContent(/your next new project will use/i);
+  });
+});
+
+describe("agency project tier controls", () => {
+  const tierPrices = {
+    standard: { yearlyTotal: 10000, actionsPerMonth: 50 },
+    premium: { yearlyTotal: 20000, actionsPerMonth: 100 },
+    max: { yearlyTotal: 30000, actionsPerMonth: 200 },
+  };
+
+  type TestBillingProject = {
+    id: string;
+    name: string;
+    tier: "standard" | "premium" | "max" | null;
+    isAddon: boolean;
+    addonSubscriptionId: string | null;
+    pendingTier: "standard" | "premium" | "max" | null;
+  };
+
+  function agencyInfo(projects: TestBillingProject[] = []) {
+    return {
+      ...activeSubscription(),
+      projects,
+      tierPrices,
+    };
+  }
+
+  function stubBilling(info: ReturnType<typeof agencyInfo>, projectTierResponse?: Response) {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/billing/subscription")) {
+        return { ok: true, json: async () => info } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/invoices")) {
+        return { ok: true, json: async () => ({ invoices: [] }) } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/project-tier")) {
+        return projectTierResponse ?? {
+          ok: true,
+          json: async () => ({ message: "Tier updated by the billing service." }),
+        } as Response;
+      }
+      throw new Error(`Unexpected request: ${url} ${init?.method ?? ""}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("shows the agency tier box with no add-ons and an included Premium project", async () => {
+    stubBilling(agencyInfo([
+      {
+        id: "included-project",
+        name: "Included client",
+        tier: "premium",
+        isAddon: false,
+        addonSubscriptionId: null,
+        pendingTier: null,
+      },
+    ]));
+
+    render(<SubscriptionCard />);
+
+    const card = await screen.findByTestId("change-tier-card");
+    expect(card).toHaveTextContent("Included Premium projects are the baseline");
+    expect(within(card).getByRole("option", { name: /Max - £300\/yr/ })).toBeInTheDocument();
+    expect(within(card).queryByRole("option", { name: /Standard -/ })).not.toBeInTheDocument();
+    expect(within(card).queryByRole("option", { name: /Premium -/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps an empty tier box visible, disables changes, and refreshes real projects", async () => {
+    const project = {
+      id: "real-project",
+      name: "Real client project",
+      tier: "premium" as const,
+      isAddon: false,
+      addonSubscriptionId: null,
+      pendingTier: null,
+    };
+    let subscriptionCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/billing/subscription")) {
+        subscriptionCalls += 1;
+        return { ok: true, json: async () => agencyInfo(subscriptionCalls === 1 ? [] : [project]) } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/invoices")) {
+        return { ok: true, json: async () => ({ invoices: [] }) } as Response;
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SubscriptionCard />);
+
+    const emptyState = await screen.findByTestId("change-tier-empty-state");
+    expect(emptyState).toHaveTextContent("No client projects are available to change yet.");
+    fireEvent.click(within(emptyState).getByRole("button", { name: "Refresh client projects" }));
+
+    expect(await screen.findByRole("option", { name: /Real client project/ })).toBeInTheDocument();
+    expect(subscriptionCalls).toBe(2);
+  });
+
+  it.each([
+    ["max", "Tier upgraded by the billing service."],
+    ["standard", "Tier downgraded by the billing service."],
+  ] as const)("sends a paid add-on %s to project-tier and surfaces its message", async (newTier, message) => {
+    const fetchMock = stubBilling(agencyInfo([
+      {
+        id: "paid-project",
+        name: "Paid client project",
+        tier: newTier === "max" ? "premium" : "max",
+        isAddon: true,
+        addonSubscriptionId: "addon-subscription",
+        pendingTier: null,
+      },
+    ]), {
+      ok: true,
+      json: async () => ({ message }),
+    } as Response);
+
+    render(<SubscriptionCard />);
+
+    const card = await screen.findByTestId("change-tier-card");
+    fireEvent.change(within(card).getByLabelText("Client project"), { target: { value: "paid-project" } });
+    fireEvent.change(within(card).getByLabelText("New tier"), { target: { value: newTier } });
+    fireEvent.click(within(card).getByRole("button", { name: "Change tier" }));
+
+    await waitFor(() => expect(screen.getByText(message)).toBeInTheDocument());
+    const call = fetchMock.mock.calls.find(([input]) => String(input).endsWith("/api/platform/billing/project-tier"));
+    expect(call?.[1]).toMatchObject({
+      method: "POST",
+      credentials: "include",
+      body: JSON.stringify({ projectId: "paid-project", tier: newTier }),
+    });
+  });
+
+  it("offers only Max for an included Premium project and uses attached project checkout", async () => {
+    const originalLocation = window.location;
+    let checkoutUrl = "";
+    Object.defineProperty(window, "location", {
+      writable: true,
+      value: { ...originalLocation, set href(value: string) { checkoutUrl = value; }, get href() { return checkoutUrl; } },
+    });
+    try {
+      const fetchMock = stubBilling(agencyInfo([
+        {
+          id: "included-project",
+          name: "Included client",
+          tier: "premium",
+          isAddon: false,
+          addonSubscriptionId: null,
+          pendingTier: null,
+        },
+      ]));
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/api/platform/billing/subscription")) return { ok: true, json: async () => agencyInfo([{
+          id: "included-project",
+          name: "Included client",
+          tier: "premium",
+          isAddon: false,
+          addonSubscriptionId: null,
+          pendingTier: null,
+        }]) } as Response;
+        if (url.endsWith("/api/platform/billing/invoices")) return { ok: true, json: async () => ({ invoices: [] }) } as Response;
+        if (url.endsWith("/api/platform/billing/project-checkout")) return { ok: true, json: async () => ({ url: "/checkout/included-max" }) } as Response;
+        throw new Error(`Unexpected request: ${url}`);
+      });
+
+      render(<SubscriptionCard />);
+
+      const card = await screen.findByTestId("change-tier-card");
+      fireEvent.change(within(card).getByLabelText("Client project"), { target: { value: "included-project" } });
+      expect(within(card).getByRole("option", { name: /Max - £300\/yr/ })).toBeInTheDocument();
+      expect(within(card).queryByRole("option", { name: /Standard -/ })).not.toBeInTheDocument();
+      fireEvent.change(within(card).getByLabelText("New tier"), { target: { value: "max" } });
+      fireEvent.click(within(card).getByRole("button", { name: "Continue to payment" }));
+
+      await waitFor(() => expect(fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/api/platform/billing/project-checkout"),
+      )).toBe(true));
+      const call = fetchMock.mock.calls.find(([input]) => String(input).endsWith("/api/platform/billing/project-checkout"));
+      expect(call?.[1]).toMatchObject({
+        method: "POST",
+        body: JSON.stringify({ projectId: "included-project", tier: "max" }),
+      });
+      expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith("/api/platform/billing/project-tier"))).toBe(false);
+    } finally {
+      Object.defineProperty(window, "location", { writable: true, value: originalLocation });
+    }
+  });
+
+  it("keeps a backend tier-change error visible", async () => {
+    stubBilling(agencyInfo([
+      {
+        id: "paid-project",
+        name: "Paid client project",
+        tier: "premium",
+        isAddon: true,
+        addonSubscriptionId: "addon-subscription",
+        pendingTier: null,
+      },
+    ]), {
+      ok: false,
+      status: 500,
+      json: async () => ({ error: "Billing service is unavailable right now." }),
+    } as Response);
+
+    render(<SubscriptionCard />);
+
+    const card = await screen.findByTestId("change-tier-card");
+    fireEvent.change(within(card).getByLabelText("Client project"), { target: { value: "paid-project" } });
+    fireEvent.change(within(card).getByLabelText("New tier"), { target: { value: "max" } });
+    fireEvent.click(within(card).getByRole("button", { name: "Change tier" }));
+
+    expect(await screen.findByText("Billing service is unavailable right now.")).toBeInTheDocument();
   });
 });

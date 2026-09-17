@@ -12,10 +12,11 @@ import {
 import { vars } from "../marketing/vars";
 import { apiBase } from "../lib/apiHelpers";
 import { accountLabel } from "../lib/accountLabels";
-import { loadStoredProjects } from "../lib/projectStore";
+import { loadStoredProjects, saveStoredProjects } from "../lib/projectStore";
 import { auditAndRecoverLocalProjects, pushProjectMeta, type ProjectReconciliationAudit } from "../lib/projectSync";
 import { fetchProjectAllowance } from "../lib/billingAllowance";
 import type { Client } from "../lib/projectTypes";
+import { createStoredProject } from "../lib/projects";
 import { TeamSection } from "./TeamSection";
 import type { AcceptedInvitation } from "../components/InvitationResult";
 import { AccountSecurityCard } from "../components/AccountSecurityCard";
@@ -30,8 +31,15 @@ type NavigationTarget = {
   projectId: string | null;
   openProjectHub: boolean;
   originalUsername: string;
+  projectIntent?: PendingClientProjectIntent;
 };
 type NavigationRetry = NavigationTarget & { switched: boolean; uncertain: boolean };
+type PendingClientProjectIntent = {
+  username: string;
+  operatorUsername: string;
+  project: Client;
+  logo?: string | null;
+};
 
 function SubAccountsPage({
   session,
@@ -211,6 +219,7 @@ function SubAccountsPage({
   const [newLogoDataUrl, setNewLogoDataUrl] = useState<string | null>(null);
   const [logoProcessing, setLogoProcessing] = useState(false);
   const [addingClient, setAddingClient] = useState(false);
+  const [pendingClientCreation, setPendingClientCreation] = useState<{ username: string; projectId: string } | null>(null);
   const [navigationRetry, setNavigationRetry] = useState<NavigationRetry | null>(null);
   // A switch changes the server session before the browser reloads. Keep a
   // lock while that transition is in flight so a double click cannot start a
@@ -702,6 +711,37 @@ function SubAccountsPage({
           return;
         }
 
+        // Agency clients are workspaces managed by the agency, not separate
+        // client logins. Create the first project only after the authorized
+        // child session is active: /api/store/projects/upsert deliberately
+        // stamps new rows from req.account, never from a client-supplied owner.
+        if (isAgencyPartner) {
+          const project = createStoredProject(companyName, {
+            owner: result.username,
+            persist: false,
+          });
+          const projectIntent: PendingClientProjectIntent = {
+            username: result.username,
+            operatorUsername: session.username,
+            project,
+            logo: newLogoDataUrl,
+          };
+          try {
+            sessionStorage.setItem("aio:pending-client-project", JSON.stringify(projectIntent));
+          } catch {
+            throw new Error("This browser could not prepare the Client Project. Check storage permissions and try again.");
+          }
+          setPendingClientCreation({ username: result.username, projectId: project.id });
+          const navigated = await navigateToAccount(
+            result.username,
+            null,
+            true,
+            session.username,
+            projectIntent,
+          );
+          if (!navigated) return;
+        }
+
         // welcomeLinkCreated === false means the account exists but the
         // set-password link could not be issued - warn instead of implying
         // the client received a working sign-in link.
@@ -724,14 +764,6 @@ function SubAccountsPage({
         setNewManaged(false);
         setNewLogoDataUrl(null);
         refresh();
-
-        // Agency clients are workspaces managed by the agency, not separate
-        // client logins. The server-returned username is authoritative (the
-        // server may have had to make the suggested username unique), so use
-        // it for the authorized workspace transition and open its empty hub.
-        if (isAgencyPartner) {
-          await handleOpenClientProjects(result.username, null);
-        }
       } catch (error) {
         setAddError(error instanceof Error ? error.message : "Failed to create the client account.");
       } finally {
@@ -746,9 +778,27 @@ function SubAccountsPage({
     } catch { /* session storage may be unavailable in a privacy-restricted browser */ }
   };
 
-  const restoreBaseUrlBeforeReload = () => {
-    const baseUrl = import.meta.env.BASE_URL || "/";
-    window.history.replaceState(window.history.state, "", baseUrl);
+  /**
+   * Persist an agency-created project while the browser is already in the
+   * child session. The intent remains in sessionStorage until the server
+   * confirms the upsert, so a lost response can safely retry the same id.
+   */
+  const persistPendingClientProject = async (intent: PendingClientProjectIntent): Promise<void> => {
+    const result = await pushProjectMeta(
+      intent.project as unknown as Record<string, unknown> & { id: string },
+      intent.logo,
+    );
+    if (!result.ok) {
+      throw new Error(result.error ?? "The Client Project could not be saved. Try again.");
+    }
+    const current = loadStoredProjects();
+    if (!current.some((p) => p.id === intent.project.id)) {
+      saveStoredProjects([intent.project, ...current]);
+    }
+    try {
+      sessionStorage.removeItem("aio:pending-client-project");
+    } catch { /* keep the in-memory navigation retry usable */ }
+    refresh();
   };
 
   const completeNavigation = (target: NavigationTarget) => {
@@ -757,7 +807,10 @@ function SubAccountsPage({
         "aio:open-client-projects",
         JSON.stringify({ username: target.username, projectId: target.projectId }),
       );
-      restoreBaseUrlBeforeReload();
+      // Use an explicit protected destination on reload. Root is prerendered
+      // marketing HTML, which would flash before the auth bootstrap runs.
+       window.location.replace(`${import.meta.env.BASE_URL || "/"}project-hub`);
+      return;
     }
     window.location.reload();
   };
@@ -817,9 +870,10 @@ function SubAccountsPage({
     projectId: string | null,
     openProjectHub: boolean,
     originalUsername = session.username,
+    projectIntent?: PendingClientProjectIntent,
   ) => {
     if (navigationLockRef.current) return false;
-    const target: NavigationTarget = { username, projectId, openProjectHub, originalUsername };
+    const target: NavigationTarget = { username, projectId, openProjectHub, originalUsername, projectIntent };
     navigationLockRef.current = true;
     setEnterError(null);
     setNavigationRetry(null);
@@ -833,6 +887,7 @@ function SubAccountsPage({
         const reconciliation = await reconcileTransition(target);
         if (reconciliation === "matched") {
           switched = true;
+          if (target.projectIntent) await persistPendingClientProject(target.projectIntent);
           completeNavigation(target);
           return true;
         }
@@ -840,6 +895,7 @@ function SubAccountsPage({
         return false;
       }
       switched = true;
+      if (target.projectIntent) await persistPendingClientProject(target.projectIntent);
       completeNavigation(target);
       return true;
     } catch (error) {
@@ -848,6 +904,7 @@ function SubAccountsPage({
         if (reconciliation === "matched") {
           switched = true;
           try {
+            if (target.projectIntent) await persistPendingClientProject(target.projectIntent);
             completeNavigation(target);
             return true;
           } catch (recoveryError) {
@@ -866,7 +923,7 @@ function SubAccountsPage({
     const target = navigationRetry;
     if (!target.switched) {
       if (!target.uncertain) {
-        void navigateToAccount(target.username, target.projectId, target.openProjectHub, target.originalUsername);
+        void navigateToAccount(target.username, target.projectId, target.openProjectHub, target.originalUsername, target.projectIntent);
         return;
       }
 
@@ -877,9 +934,10 @@ function SubAccountsPage({
       setEnterError(null);
       setNavigationRetry(null);
       setEnteringUsername(target.username);
-      void reconcileTransition(target).then((reconciliation) => {
+      void reconcileTransition(target).then(async (reconciliation) => {
         if (reconciliation === "matched") {
           try {
+            if (target.projectIntent) await persistPendingClientProject(target.projectIntent);
             completeNavigation(target);
           } catch (error) {
             showNavigationFailure(target, error, true, false);
@@ -896,7 +954,7 @@ function SubAccountsPage({
           return;
         }
         navigationLockRef.current = false;
-        void navigateToAccount(target.username, target.projectId, target.openProjectHub, target.originalUsername);
+        void navigateToAccount(target.username, target.projectId, target.openProjectHub, target.originalUsername, target.projectIntent);
       });
       return;
     }
@@ -908,15 +966,42 @@ function SubAccountsPage({
     setEnterError(null);
     setNavigationRetry(null);
     setEnteringUsername(target.username);
-    try {
-      completeNavigation(target);
-    } catch (error) {
-      showNavigationFailure(target, error, true);
-    }
+    void (async () => {
+      try {
+        if (target.projectIntent) await persistPendingClientProject(target.projectIntent);
+        completeNavigation(target);
+      } catch (error) {
+        showNavigationFailure(target, error, true);
+      }
+    })();
   };
 
   const handleEnterAccount = (username: string) => {
     void navigateToAccount(username, null, false);
+  };
+
+  // A zero-project client row has its own explicit creation action. It must
+  // not be implemented by the generic Open Project Hub action: the project
+  // needs to be saved while the child session is active and must retain its
+  // id if the response is lost and the user retries.
+  const handleCreateClientProject = async (account: LocalUser) => {
+    if (navigationLockRef.current) return;
+    const project = createStoredProject(account.displayName?.trim() || account.username, {
+      owner: account.username,
+      persist: false,
+    });
+    const intent: PendingClientProjectIntent = {
+      username: account.username,
+      operatorUsername: session.username,
+      project,
+    };
+    try {
+      sessionStorage.setItem("aio:pending-client-project", JSON.stringify(intent));
+    } catch {
+      setEnterError("This browser could not prepare the Client Project. Check storage permissions and try again.");
+      return;
+    }
+    await navigateToAccount(account.username, null, true, session.username, intent);
   };
 
   // Agency partner shortcut: enter the client's workspace and land on their
@@ -1805,11 +1890,11 @@ function SubAccountsPage({
             <div className="md:col-span-6 flex items-end">
               <button
                 type="submit"
-                disabled={addingClient || logoProcessing}
+                 disabled={addingClient || logoProcessing || pendingClientCreation !== null}
                  className="aio-button aio-button--primary w-full md:w-auto text-white"
                 style={{ background: accent }}
               >
-                {addingClient ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} {isAgencyPartner ? "Add Client Project" : "Add client"}
+                 {addingClient ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} {pendingClientCreation ? "Project save pending" : isAgencyPartner ? "Add Client Project" : "Add client"}
               </button>
             </div>
              <p className="aio-type-supporting md:col-span-12" style={{ color: vars.g500 }}>
@@ -2044,6 +2129,20 @@ function SubAccountsPage({
                     )}
                     <div className="mt-3 sm:pl-[52px]">
                       <p className="aio-type-eyebrow mb-1.5" style={{ color: vars.g500 }}>Their projects ({owned.length})</p>
+                       {isAgencyPartner && owned.length === 0 && (
+                         <button
+                           type="button"
+                           onClick={() => void handleCreateClientProject(u)}
+                           disabled={enteringUsername === u.username}
+                           className="aio-button aio-button--outline aio-button--compact mb-2"
+                           style={{ color: accent, borderColor: `${accent}60`, opacity: enteringUsername === u.username ? 0.7 : 1 }}
+                         >
+                           {enteringUsername === u.username
+                             ? <Loader2 size={12} className="animate-spin" />
+                             : <Plus size={12} />}
+                           Create Project
+                         </button>
+                       )}
                       {owned.length === 0 ? (
                         <p className="aio-type-supporting italic" style={{ color: vars.g400 }}>No projects yet.</p>
                       ) : (
@@ -2172,9 +2271,10 @@ function SubAccountsPage({
           <div className="px-6 py-4 border-b" style={{ borderColor: vars.g200 }}>
              <h2 className="aio-type-section-title" style={{ color: ink }}>Assign projects</h2>
              <p className="aio-type-supporting mt-1" style={{ color: vars.g500 }}>Review every active agency and client project before moving it. No project is matched to a client by name.</p>
+            {(reconciliationLoading || reconciliationError) && (
             <div className="aio-type-supporting mt-3 rounded-xl px-4 py-3" style={{ background: vars.g100, border: `1px solid ${vars.g200}`, color: vars.g500 }}>
               {reconciliationLoading ? (
-                <p className="flex items-center gap-2"><Loader2 size={13} className="animate-spin" /> Checking server records and this browser's cache...</p>
+                <p className="flex items-center gap-2"><Loader2 size={13} className="animate-spin" /> Loading projects...</p>
               ) : reconciliationError ? (
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-semibold" style={{ color: accent }}>{reconciliationError}</p>
@@ -2187,30 +2287,9 @@ function SubAccountsPage({
                     <RefreshCw size={11} /> Retry audit
                   </button>
                 </div>
-              ) : reconciliationAudit ? (
-                <>
-                  <p><strong style={{ color: ink }}>{reconciliationAudit.serverProjectIds.length}</strong> active projects are safely stored on the server.</p>
-                  <p className="mt-1">
-                    <strong style={{ color: ink }}>{manageable.filter((project) => (project.owner || "").toLowerCase() === session.username.toLowerCase()).length}</strong> are agency-owned and{" "}
-                    <strong style={{ color: ink }}>{subAccounts.length}</strong> managed client records are available for review.
-                  </p>
-                  {reconciliationAudit.localOnly.length === 0 ? (
-                    <p className="mt-1">No browser-only projects were found.</p>
-                  ) : (
-                    <div className="mt-2">
-                      <p className="font-semibold" style={{ color: ink }}>Browser-only projects found:</p>
-                      <ul className="mt-1 space-y-1">
-                        {reconciliationAudit.localOnly.map((item) => (
-                          <li key={item.id}>
-                            {item.name} - {item.recovered ? "recovered to the server" : `not recovered${item.error ? `: ${item.error}` : ""}`}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </>
               ) : null}
             </div>
+            )}
           </div>
           {manageable.length === 0 ? (
              <p className="aio-type-supporting px-6 py-6 italic" style={{ color: vars.g500 }}>No projects to assign yet.</p>

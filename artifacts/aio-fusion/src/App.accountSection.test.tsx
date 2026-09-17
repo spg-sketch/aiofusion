@@ -77,6 +77,8 @@ function stubClientAppFetch({
   projects = [],
   atLimit = false,
   pushLimitReached = false,
+  pushFailures = 0,
+  onUpsert,
 }: {
   username?: string;
   agencyManagedClient?: boolean;
@@ -84,13 +86,22 @@ function stubClientAppFetch({
   projects?: unknown[];
   atLimit?: boolean;
   pushLimitReached?: boolean;
+  pushFailures?: number;
+  onUpsert?: (body: unknown) => void;
 } = {}) {
-  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.includes("/api/platform/me")) {
       return clientMeResponse({ username, agencyManagedClient, impersonating });
     }
     if (url.includes("/api/store/projects/upsert")) {
+      if (init?.body) {
+        try { onUpsert?.(JSON.parse(String(init.body))); } catch { /* test fixture */ }
+      }
+      if (pushFailures > 0) {
+        pushFailures -= 1;
+        return makeResponse({ error: "Project save failed." }, 503);
+      }
       return makeResponse(pushLimitReached
         ? { error: "Project allowance reached.", limitReached: true }
         : { ok: true }, pushLimitReached ? 409 : 200);
@@ -158,6 +169,35 @@ async function renderAppAt(url: string) {
 describe("settings-section deep link survives refresh (account_section param)", () => {
   beforeAll(async () => {
     await import("./App");
+  });
+
+  it("hard-mounts the protected project hub with the saved project after reload", async () => {
+    stubClientAppFetch({
+      username: "client-289",
+      projects: [{
+        id: "saved-bob",
+        name: "Saved Bob",
+        owner: "client-289",
+        sector: "Technology",
+        initials: "SB",
+        color: "#1A647B",
+        contentCount: 0,
+        avgScore: 0,
+        scoreTrend: 0,
+        activePlans: 0,
+        lastActive: "",
+        recentActivity: "",
+      }],
+    });
+
+    await renderAppAt("/project-hub");
+
+    await waitFor(() => {
+      expect(screen.getByText("Saved Bob")).toBeInTheDocument();
+    });
+    expect(window.location.pathname).toBe("/project-hub");
+    expect(screen.getAllByText("Project Hub").length).toBeGreaterThan(0);
+    expect(screen.queryByTestId("platform-home")).toBeNull();
   });
 
   it("landing on /?account_section=security opens the Security section", async () => {
@@ -430,6 +470,93 @@ describe("client-project handoff after agency navigation", () => {
     expect(sessionStorage.getItem("aio:open-client-projects")).toBeNull();
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/api/platform/my-invites"))).toBe(false);
     expect(screen.queryByText(/could not load team invitations/i)).toBeNull();
+  });
+
+  it("opens a protected handoff at the Project Hub instead of the marketing home", async () => {
+    stubClientAppFetch({ username: "client-289", agencyManagedClient: true });
+    sessionStorage.setItem(
+      "aio:open-client-projects",
+      JSON.stringify({ username: "client-289", projectId: null }),
+    );
+
+    await renderAppAt("/platform?account_section=clients");
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /project hub/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Account type")).toBeNull();
+    expect(screen.queryByText(/The AI Authority Platform/i)).toBeNull();
+  });
+
+  it("keeps a normal create modal open after a non-limit save failure and retries its stable id", async () => {
+    const upserts: Array<{ id?: string; data?: { name?: string } }> = [];
+    stubClientAppFetch({
+      username: "client-289",
+      pushFailures: 1,
+      onUpsert: (body) => upserts.push(body as { id?: string; data?: { name?: string } }),
+    });
+
+    await renderAppAt("/platform");
+    fireEvent.click(await screen.findByRole("button", { name: /project hub/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /create your first project/i }));
+    const nameInput = await screen.findByLabelText("Project name");
+    fireEvent.change(nameInput, { target: { value: "Retryable Project" } });
+    fireEvent.click(screen.getByRole("button", { name: /create & set up/i }));
+
+    await waitFor(() => expect(upserts).toHaveLength(1));
+    expect(upserts[0].data?.name).toBe("Retryable Project");
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Name your project" })).toBeInTheDocument());
+    expect(screen.getByLabelText("Project name")).toHaveValue("Retryable Project");
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0].id).toBeTruthy();
+    expect(JSON.parse(localStorage.getItem("aio.projects.v1") ?? "[]"))
+      .not.toEqual(expect.arrayContaining([expect.objectContaining({ name: "Retryable Project" })]));
+
+    fireEvent.click(screen.getByRole("button", { name: /create & set up/i }));
+    await waitFor(() => expect(upserts).toHaveLength(2));
+    expect(upserts[1].id).toBe(upserts[0].id);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Name your project" })).toBeNull());
+    expect(JSON.parse(localStorage.getItem("aio.projects.v1") ?? "[]"))
+      .toEqual(expect.arrayContaining([expect.objectContaining({ id: upserts[0].id, name: "Retryable Project" })]));
+  });
+
+  it("clears a resumed pending Client Project intent when creation is cancelled before reload", async () => {
+    const pendingProject = {
+      id: "pending-cancel-project",
+      name: "Pending Cancel Project",
+      sector: "Awaiting set-up",
+      initials: "PC",
+      color: "#C8497A",
+      contentCount: 0,
+      avgScore: 0,
+      scoreTrend: 0,
+      activePlans: 0,
+      lastActive: "Just now",
+      recentActivity: "Project created",
+      owner: "client-289",
+    };
+    stubClientAppFetch({
+      username: "client-289",
+      agencyManagedClient: true,
+      impersonating: { by: "acme-agency", byRole: "agency" },
+      pushFailures: 1,
+    });
+    sessionStorage.setItem("aio:pending-client-project", JSON.stringify({
+      username: "client-289",
+      operatorUsername: "acme-agency",
+      project: pendingProject,
+    }));
+
+    await renderAppAt("/platform");
+    const dialog = await screen.findByRole("dialog", { name: "Name your project" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(sessionStorage.getItem("aio:pending-client-project")).toBeNull();
+
+    cleanup();
+    await renderAppAt("/platform");
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Name your project" })).toBeNull();
+    });
   });
 
   it("opens an explicit matching project directly from the handoff", async () => {

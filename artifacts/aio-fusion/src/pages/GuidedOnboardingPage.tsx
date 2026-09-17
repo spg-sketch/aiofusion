@@ -14,7 +14,7 @@ import { apiBase } from "../lib/apiHelpers";
 import { vars } from "../marketing/vars";
 
 type Step = "account_type" | "workspace_basics" | "access" | "billing" | "first_project";
-type State = { step: Step; accessChoice?: "beta" | "paid" };
+type State = { step: Step; accessChoice?: "beta" | "paid"; role?: "agency" | "client" };
 
 function OnboardingLayout({
   state,
@@ -45,6 +45,7 @@ export function GuidedOnboardingPage({
   checkoutResult,
   checkoutSessionId,
   accountProfile,
+  accountRole,
 }: {
   onSignOut: () => void;
   onRoleChanged: (role: "agency" | "client") => void;
@@ -54,12 +55,14 @@ export function GuidedOnboardingPage({
   /** Captured from App's authoritative /me bootstrap. Reusing it prevents a
    * second /me request between login and the first onboarding step. */
   accountProfile?: { displayName: string | null; website: string | null } | null;
+  accountRole?: "agency" | "client";
 }) {
   const [state, setState] = useState<State | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [website, setWebsite] = useState("");
   const [selectedAccessChoice, setSelectedAccessChoice] = useState<"beta" | "paid" | null>(null);
+  const [onboardingRole, setOnboardingRole] = useState<"agency" | "client" | null>(accountRole ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activationSummary, setActivationSummary] = useState<SubscriptionActivationSummary | null>(null);
@@ -92,6 +95,7 @@ export function GuidedOnboardingPage({
         return;
       }
       setState(setup.state);
+      if (setup.state.role) setOnboardingRole(setup.state.role);
       // Standalone callers retain the older profile lookup. The App always
       // passes null or a server-authoritative profile, so the login hand-off
       // does not pay for a duplicate /me request.
@@ -130,6 +134,12 @@ export function GuidedOnboardingPage({
     }
     void load();
   }, [checkoutResult, load]);
+
+  const betaProjectCopy = onboardingRole === "client"
+    ? "one project workspace"
+    : onboardingRole === "agency"
+      ? "two project workspaces"
+      : "the project workspace allowance for your account";
 
   async function post(path: string, body: unknown): Promise<State | null> {
     setBusy(true);
@@ -223,6 +233,7 @@ export function GuidedOnboardingPage({
         <AccountTypeSelectPage
           onSignOut={onSignOut}
           onComplete={(role) => {
+            setOnboardingRole(role);
             onRoleChanged(role);
             void load();
           }}
@@ -371,7 +382,7 @@ export function GuidedOnboardingPage({
               </span>
               <strong className="text-xl block mb-2 text-slate-900 font-bold">60-day beta</strong>
               <span className="text-sm text-slate-600 leading-relaxed block">
-                No card or billing address required. Includes two project workspaces to explore the platform.
+                 No card or billing address required. Includes {betaProjectCopy} to explore the platform.
               </span>
             </button>
 

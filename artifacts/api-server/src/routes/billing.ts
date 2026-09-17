@@ -24,8 +24,8 @@ import {
   getCheckoutErrorResponse,
   isLiveStripeMode,
   getBetaTrialSummary,
+  getBetaTrialProjectCap,
   startBetaTrial,
-  BETA_TRIAL_PROJECT_CAP,
   checkoutClaimMatchesSession,
   handleCheckoutCompleted,
   handleSubscriptionUpdated,
@@ -109,11 +109,14 @@ router.get("/platform/billing/subscription", requirePlatformAuth, async (req, re
     const prices = PLAN_PRICES[ctx.plan];
     const entitled = isEntitled(state);
     const trial = getBetaTrialSummary(state);
-    const [addons, projects, latestInvoice, companyRecord] = await Promise.all([
+    const [addons, projects, latestInvoice, companyRecord, trialAllowance] = await Promise.all([
       getProjectAddons(ctx.slug),
       listBillingProjects(ctx.slug),
       getLatestInvoiceLink(ctx.slug),
       getCompanyBillingRecord(ctx.slug),
+      trial.status === "active"
+        ? getBetaTrialProjectCap(ctx.slug, state)
+        : Promise.resolve<number | null>(null),
     ]);
     const included = state?.plan ? INCLUDED_PROJECTS[state.plan] : INCLUDED_PROJECTS[ctx.plan];
     res.setHeader("Cache-Control", "no-store");
@@ -131,9 +134,9 @@ router.get("/platform/billing/subscription", requirePlatformAuth, async (req, re
       applicablePlan: ctx.plan,
       includedProjects: included,
       // Always expose the effective allowance used by the server-side project
-      // creation guard. Unsubscribed beta accounts retain the legacy cap.
+      // creation guard. Active trials use the billing-root role-aware cap.
       projectAllowance: trial.status === "active"
-        ? BETA_TRIAL_PROJECT_CAP
+        ? trialAllowance ?? 0
         : entitled ? included + addons.length : 0,
       projectsUsed: projects.length,
       latestInvoiceUrl: latestInvoice,

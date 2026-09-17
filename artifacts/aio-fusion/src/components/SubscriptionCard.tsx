@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { vars } from "../marketing/vars";
 import { apiBase } from "../lib/apiHelpers";
 import { CheckoutReturnLoading } from "./CheckoutReturnLoading";
+import { BillingInformationPrompt, focusBillingSection } from "./BillingInformationPrompt";
 
 const ink = vars.navy;
 const accent = vars.accent;
@@ -522,7 +523,7 @@ export function SubscriptionCard({
 
   return (
     <>
-      <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+      <div id="subscription-details" tabIndex={-1} className="rounded-2xl p-6 sm:p-8 mb-6 scroll-mt-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
         <h2 className="aio-type-card-title mb-1" style={{ color: ink }}>Subscription</h2>
 
         {checkoutResult === "success" && checkoutConfirmationKind !== "project-addon" && paidSubscription && (checkoutConfirmed || !checkoutSessionId) && (
@@ -561,7 +562,7 @@ export function SubscriptionCard({
           <div className="mb-5 rounded-xl p-4" style={{ background: "#FBE3ED55", border: `1px solid ${accent}55` }}>
             <p className="aio-type-card-title mb-1" style={{ color: ink }}>Try AIO Fusion free for 60 days</p>
             <p className="aio-type-body mb-3" style={{ color: vars.g600 }}>
-              No card required. Your one-time trial starts when you confirm and includes two project workspaces.
+              No card required. Your one-time trial starts when you confirm and includes {info.applicablePlan === "inhouse" ? "one project workspace" : "two project workspaces"}.
             </p>
             <button
               type="button"
@@ -653,14 +654,16 @@ export function SubscriptionCard({
         ) : (
           <div>
             <p className="aio-type-body mb-4" style={{ color: vars.g500 }}>
-              {trial.status === "active" ? "Subscribe when you are ready to continue after the trial." : `Subscribe to the ${planLabel} plan.`} {info.includedProjects} Premium project{info.includedProjects === 1 ? "" : "s"} included. Review your total at checkout.
+              {trial.status === "active"
+                ? "You can continue your beta trial without payment, or start a paid subscription now."
+                : `Subscribe to the ${planLabel} plan. ${info.includedProjects} Premium project${info.includedProjects === 1 ? "" : "s"} included.`} Review your total at checkout.
             </p>
             <RestartChooser info={info} frequency={frequency} setFrequency={setFrequency} starting={starting} onStart={startCheckout} error={error} />
           </div>
         )}
       </div>
 
-      {info.entitled && TIER_ORDER.every((tier) => Boolean(info.tierPrices?.[tier])) && (
+      {info.entitled && (
         <>
           <AddProjectCard info={info} />
           <ChangeTierCard info={info} onChanged={() => setRefreshTick((t) => t + 1)} />
@@ -731,11 +734,21 @@ function PortalButtons() {
 // --- Add a project -------------------------------------------------------------
 
 function AddProjectCard({ info }: { info: SubscriptionInfo }) {
+  const paidSubscription = info.status === "active" || info.status === "past_due";
   const [tier, setTier] = useState<ProjectTier>("premium");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pricesReady = TIER_ORDER.every((t) => {
+    const price = info.tierPrices?.[t];
+    return Boolean(
+      price
+      && Number.isFinite(price.yearlyTotal)
+      && Number.isFinite(price.actionsPerMonth),
+    );
+  });
 
   async function buy() {
+    if (!paidSubscription || !info.companyRecordComplete || !pricesReady || !info.checkoutAvailable) return;
     setBusy(true);
     setError(null);
     try {
@@ -759,39 +772,52 @@ function AddProjectCard({ info }: { info: SubscriptionInfo }) {
   }
 
   return (
-    <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+    <div data-testid="add-project-card" className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
        <h2 className="aio-type-card-title mb-1" style={{ color: ink }}>Add a project workspace</h2>
       <p className="aio-type-body mb-4" style={{ color: vars.g500 }}>
          Add one independent project workspace for another brand, client, or programme. Billed annually. Once paid, your next new project uses the tier you choose here. This adds a separate workspace, not extra runtime capacity inside an existing project.
       </p>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 max-w-2xl">
-        {TIER_ORDER.map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTier(t)}
-            className="rounded-xl p-4 text-left transition-all"
-            style={{
-              border: tier === t ? `2px solid ${accent}` : `1.5px solid ${vars.g200}`,
-              background: tier === t ? "#FBE3ED22" : "white",
-            }}
-          >
-            <span className="aio-type-label block" style={{ color: ink }}>{TIER_LABELS[t]}</span>
-            <span className="aio-type-card-title block" style={{ color: ink }}>{pounds(info.tierPrices[t].yearlyTotal)}/yr</span>
-            <span className="aio-type-meta" style={{ color: vars.g500 }}>{info.tierPrices[t].actionsPerMonth} actions/month</span>
-          </button>
-        ))}
-      </div>
+       {pricesReady ? (
+         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 max-w-2xl">
+           {TIER_ORDER.map((t) => (
+             <button
+               key={t}
+               type="button"
+               aria-label={`Add a ${TIER_LABELS[t]} project workspace`}
+               onClick={() => setTier(t)}
+               className="rounded-xl p-4 text-left transition-all"
+               style={{
+                 border: tier === t ? `2px solid ${accent}` : `1.5px solid ${vars.g200}`,
+                 background: tier === t ? "#FBE3ED22" : "white",
+               }}
+             >
+               <span className="aio-type-label block" style={{ color: ink }}>{TIER_LABELS[t]}</span>
+               <span className="aio-type-card-title block" style={{ color: ink }}>{pounds(info.tierPrices[t].yearlyTotal)}/yr</span>
+               <span className="aio-type-meta" style={{ color: vars.g500 }}>{info.tierPrices[t].actionsPerMonth} actions/month</span>
+             </button>
+           ))}
+         </div>
+       ) : (
+         <p className="aio-type-supporting mb-4 px-3 py-2 rounded-lg" data-testid="project-tier-prices-unavailable" style={{ color: "#92400E", background: "#FEF3C7" }}>
+           Project tier pricing is temporarily unavailable. Adding a project is disabled until pricing is available.
+         </p>
+       )}
       {info.checkoutAvailable && !info.companyRecordComplete && (
-        <p className="aio-type-supporting mb-3" style={{ color: "#92400E" }}>
-          Save your company and billing information before adding another project.
-        </p>
+        <BillingInformationPrompt />
+      )}
+      {!paidSubscription && (
+        <div className="aio-type-supporting mb-3" style={{ color: vars.g600 }}>
+          <p>Additional workspaces require a paid subscription. Subscribe in the Subscription box first.</p>
+          <button type="button" className="aio-button aio-button--text aio-button--compact mt-2" onClick={() => focusBillingSection("subscription-details")}>
+            Go to Subscription
+          </button>
+        </div>
       )}
       <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={buy}
-          disabled={busy || !info.checkoutAvailable || !info.companyRecordComplete}
+           disabled={busy || !paidSubscription || !pricesReady || !info.checkoutAvailable || !info.companyRecordComplete}
           className="aio-button aio-button--primary rounded-full uppercase tracking-[0.12em]"
           style={{ background: accent }}
         >
@@ -811,9 +837,15 @@ function ChangeTierCard({ info, onChanged }: { info: SubscriptionInfo; onChanged
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
-  if (info.projects.length === 0) return null;
-
   const selected = info.projects.find((p) => p.id === projectId) ?? null;
+  const pricesReady = TIER_ORDER.every((t) => {
+    const price = info.tierPrices?.[t];
+    return Boolean(
+      price
+      && Number.isFinite(price.yearlyTotal)
+      && Number.isFinite(price.actionsPerMonth),
+    );
+  });
   // Included projects (no purchased add-on) are upgraded by buying an add-on
   // tier for them; add-on projects change tier on their existing subscription.
   const selectedIsAddon = !!selected?.isAddon;
@@ -821,7 +853,7 @@ function ChangeTierCard({ info, onChanged }: { info: SubscriptionInfo; onChanged
   const isUpgrade = tier !== "" && TIER_ORDER.indexOf(tier) > TIER_ORDER.indexOf(currentTier);
 
   async function submit() {
-    if (!selected || tier === "") return;
+    if (!selected || tier === "" || !pricesReady) return;
     setBusy(true);
     setMessage(null);
     try {
@@ -838,6 +870,11 @@ function ChangeTierCard({ info, onChanged }: { info: SubscriptionInfo; onChanged
           return;
         }
         setMessage({ kind: "ok", text: json.message ?? "Tier updated." });
+        // The server is authoritative for the current tier and any pending
+        // renewal change. Clear the controls before reloading it so a second
+        // click cannot submit the previous project against refreshed data.
+        setProjectId("");
+        setTier("");
         onChanged();
       } else {
         // Included project: purchase an add-on tier attached to this project.
@@ -862,60 +899,99 @@ function ChangeTierCard({ info, onChanged }: { info: SubscriptionInfo; onChanged
   }
 
   return (
-    <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+    <div data-testid="change-tier-card" className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
       <h2 className="aio-type-card-title mb-1" style={{ color: ink }}>Change a project's tier</h2>
       <p className="aio-type-body mb-4" style={{ color: vars.g500 }}>
-        Upgrades apply immediately (the prorated difference is charged to your card). Downgrades take effect at your next renewal.
+        Included Premium projects are the baseline in your agency plan. An included project can be upgraded to Max by purchasing a separate Max add-on at its full annual fee. Existing paid add-ons can be moved to another tier; upgrades apply immediately and downgrades take effect at the next renewal.
       </p>
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 max-w-2xl">
-        <div className="md:col-span-6">
-          <label className="aio-type-eyebrow block mb-1.5" style={{ color: ink }}>Project</label>
-          <select
-            value={projectId}
-            onChange={(e) => { setProjectId(e.target.value); setTier(""); setMessage(null); }}
-            className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
-            style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent, background: "white" }}
-          >
-            <option value="">Choose a project...</option>
-            {info.projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name || p.id} - {p.isAddon ? TIER_LABELS[(p.tier ?? "premium") as ProjectTier] : "Premium (included)"}
-                {p.pendingTier ? ` (changing to ${TIER_LABELS[p.pendingTier]} at renewal)` : ""}
-              </option>
-            ))}
-          </select>
+      {!pricesReady && (
+        <p className="aio-type-supporting mb-4 px-3 py-2 rounded-lg" data-testid="change-tier-prices-unavailable" style={{ color: "#92400E", background: "#FEF3C7" }}>
+          Project tier pricing is temporarily unavailable. Tier changes are disabled until pricing is available.
+        </p>
+      )}
+      {info.projects.length === 0 ? (
+        <div className="rounded-xl p-4" data-testid="change-tier-empty-state" style={{ background: vars.g50, border: `1px solid ${vars.g200}` }}>
+          <p className="aio-type-supporting" style={{ color: vars.g600 }}>
+            No client projects are available to change yet.
+          </p>
+          <div className="flex items-center gap-3 mt-3">
+            <button
+              type="button"
+              disabled
+              className="aio-button aio-button--primary rounded-full uppercase tracking-[0.12em]"
+              style={{ background: accent }}
+            >
+              Change tier
+            </button>
+            <button
+              type="button"
+              className="aio-button aio-button--outline aio-button--compact rounded-full uppercase tracking-[0.12em]"
+              style={{ color: ink, border: `1.5px solid ${vars.g300}`, background: "white" }}
+              aria-label="Refresh client projects"
+              onClick={() => {
+                setProjectId("");
+                setTier("");
+                setMessage(null);
+                onChanged();
+              }}
+            >
+              Refresh projects
+            </button>
+          </div>
         </div>
-        <div className="md:col-span-6">
-          <label className="aio-type-eyebrow block mb-1.5" style={{ color: ink }}>New tier</label>
-          <select
-            value={tier}
-            onChange={(e) => { setTier(e.target.value as ProjectTier | ""); setMessage(null); }}
-            disabled={!selected}
-            className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2 disabled:opacity-50"
-            style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent, background: "white" }}
-          >
-            <option value="">Choose a tier...</option>
-            {/* Add-on projects can move to any other tier; included projects
-                (already Premium) can only be upgraded to Max. */}
-            {TIER_ORDER.filter((t) =>
-              selectedIsAddon ? t !== currentTier : TIER_ORDER.indexOf(t) > TIER_ORDER.indexOf("premium"),
-            ).map((t) => (
-                <option key={t} value={t}>
-                  {TIER_LABELS[t]} - {pounds(info.tierPrices[t].yearlyTotal)}/yr, {info.tierPrices[t].actionsPerMonth} actions/month
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 max-w-2xl">
+          <div className="md:col-span-6">
+            <label className="aio-type-eyebrow block mb-1.5" htmlFor="client-project-select" style={{ color: ink }}>Client project</label>
+            <select
+              id="client-project-select"
+              aria-label="Client project"
+              value={projectId}
+              onChange={(e) => { setProjectId(e.target.value); setTier(""); setMessage(null); }}
+              className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
+              style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent, background: "white" }}
+            >
+              <option value="">Choose a client project...</option>
+              {info.projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name || p.id} - {p.isAddon ? TIER_LABELS[(p.tier ?? "premium") as ProjectTier] : "Premium (included)"}
+                  {p.pendingTier ? ` (changing to ${TIER_LABELS[p.pendingTier]} at renewal)` : ""}
                 </option>
               ))}
-          </select>
+            </select>
+          </div>
+          <div className="md:col-span-6">
+            <label className="aio-type-eyebrow block mb-1.5" htmlFor="new-tier-select" style={{ color: ink }}>New tier</label>
+            <select
+              id="new-tier-select"
+              aria-label="New tier"
+              value={tier}
+              onChange={(e) => { setTier(e.target.value as ProjectTier | ""); setMessage(null); }}
+              disabled={!selected || !pricesReady}
+              className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2 disabled:opacity-50"
+              style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent, background: "white" }}
+            >
+              <option value="">Choose a tier...</option>
+              {/* Add-on projects can move to any other tier; included projects
+                  (already Premium) can only be upgraded to Max. */}
+              {pricesReady && TIER_ORDER.filter((t) =>
+                selectedIsAddon ? t !== currentTier : TIER_ORDER.indexOf(t) > TIER_ORDER.indexOf("premium"),
+              ).map((t) => (
+                  <option key={t} value={t}>
+                    {TIER_LABELS[t]} - {pounds(info.tierPrices[t].yearlyTotal)}/yr, {info.tierPrices[t].actionsPerMonth} actions/month
+                  </option>
+                ))}
+            </select>
+          </div>
         </div>
-      </div>
-      {selected && !selectedIsAddon && (
+      )}
+      {selected && !selectedIsAddon && pricesReady && (
         <p className="aio-type-meta mt-2" style={{ color: vars.g500 }}>
           This project is included in your plan at Premium. Upgrading it adds a paid project tier ({tier !== "" ? `${pounds(info.tierPrices[tier].yearlyTotal)}/yr` : "billed annually"}) on top of your plan.
         </p>
       )}
       {selected && !selectedIsAddon && info.checkoutAvailable && !info.companyRecordComplete && (
-        <p className="aio-type-meta mt-2" style={{ color: "#92400E" }}>
-          Save your company and billing information before continuing to payment.
-        </p>
+        <BillingInformationPrompt />
       )}
       {selected && selectedIsAddon && tier !== "" && !isUpgrade && (
         <p className="aio-type-meta mt-2" style={{ color: vars.g500 }}>
@@ -926,7 +1002,7 @@ function ChangeTierCard({ info, onChanged }: { info: SubscriptionInfo; onChanged
         <button
           type="button"
           onClick={submit}
-          disabled={busy || !selected || tier === "" || (!selectedIsAddon && (!info.checkoutAvailable || !info.companyRecordComplete))}
+           disabled={busy || !pricesReady || !selected || tier === "" || (!selectedIsAddon && (!info.checkoutAvailable || !info.companyRecordComplete))}
           className="aio-button aio-button--primary rounded-full uppercase tracking-[0.12em]"
           style={{ background: accent }}
         >
@@ -1057,9 +1133,14 @@ function RestartChooser({
         </p>
       )}
       {info.checkoutAvailable && !info.companyRecordComplete && (
-        <p className="aio-type-supporting mb-3 px-3 py-2 rounded-lg" style={{ color: "#92400E", background: "#FEF3C7" }}>
-          Complete and save your company and billing information below before continuing to payment.
-        </p>
+        <BillingInformationPrompt />
+      )}
+      {info.trial?.status === "active" && (
+        <div className="aio-type-supporting mb-3 px-3 py-3 rounded-lg" data-testid="beta-payment-timing" style={{ color: ink, background: vars.g50, border: `1px solid ${vars.g200}` }}>
+          <p className="font-semibold">Completing checkout starts your paid subscription immediately.</p>
+          <p className="mt-1">It does not just save your card for the end of beta. Any amount due is shown at checkout. Unused beta days are not added to your paid billing period or credited.</p>
+          <p className="mt-1">Saving your company address alone does not start a subscription or end your trial. You can keep using your remaining beta days without entering card details.</p>
+        </div>
       )}
       <div className="flex items-center gap-3">
         <button

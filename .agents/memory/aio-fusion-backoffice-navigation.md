@@ -23,3 +23,11 @@ Payment callbacks need payment-specific waiting content, not the sign-in shell o
 **Why:** Fixing lazy navigation alone did not remove checkout flashes. Independently completing authentication, onboarding and subscription requests could still briefly reveal an unrelated screen before the thank-you page.
 
 **How to apply:** Keep the pending presentation consistent even when payment confirmation finishes before onboarding loads. Show success only after server confirmation and an authoritative active subscription; keep failures and retry controls visible rather than placing them below a full-screen loader.
+
+## Managed-client project creation
+
+Treat client-account creation, entering the client workspace, and saving its first project as separate stages of one recoverable operation. Only a saved project completes an “Add Client Project” action.
+
+**Why:** Creating only the client account and opening its empty Hub made customers think their newly named project had disappeared. Reloading through the public root also briefly showed the marketing website.
+
+**How to apply:** Keep one project identity across interrupted-save retries, bind recovery to the intended client and operator, and cancel recovery explicitly when dismissed. Confirm persistence under the intended authority before showing the project. Use a protected reload destination with pre-JavaScript loading content and land creation actions in Project Hub; reserve direct project opening for explicit project links.

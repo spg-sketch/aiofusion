@@ -91,6 +91,13 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
     await import("./App");
   });
 
+  it("keeps the protected platform destination across the initial history sync", async () => {
+    await renderAppAt("/platform?account_section=clients");
+
+    await waitFor(() => expect(window.location.pathname).toBe("/platform"));
+    expect(screen.queryByRole("heading", { name: /The AI Authority Platform/i })).not.toBeInTheDocument();
+  });
+
   it("keeps checkout returns on payment confirmation while authoritative auth is pending", async () => {
     let release!: (response: Response) => void;
     const pending = new Promise<Response>((resolve) => { release = resolve; });

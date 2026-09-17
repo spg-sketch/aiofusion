@@ -254,6 +254,7 @@ export function BillingDetailsCard({ onSaved }: { onSaved?: () => void } = {}) {
   return (
     <div
       id="company-billing-information"
+      tabIndex={-1}
       className="rounded-2xl p-6 sm:p-8 mb-6 scroll-mt-6"
       style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}
     >

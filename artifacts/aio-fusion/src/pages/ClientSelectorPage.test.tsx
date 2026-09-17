@@ -66,6 +66,108 @@ const project = {
 } as any;
 
 describe("ClientSelectorPage project-only hub", () => {
+  it("uses the server allowance for a client beta: the first project is available and the second is not", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      new Response(JSON.stringify({
+        projectsUsed: 0,
+        projectAllowance: 1,
+        trial: { status: "active" },
+      }), { status: 200 }),
+    );
+    const { rerender } = render(
+      <ClientSelectorPage
+        {...baseProps}
+        projects={[]}
+        session={{ username: "beta-client", role: "client" }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: /create your first project/i })).toBeEnabled());
+
+    vi.mocked(global.fetch).mockResolvedValue(
+      new Response(JSON.stringify({
+        projectsUsed: 1,
+        projectAllowance: 1,
+        trial: { status: "active" },
+      }), { status: 200 }),
+    );
+    rerender(
+      <ClientSelectorPage
+        {...baseProps}
+        projects={[project]}
+        session={{ username: "beta-client", role: "client" }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText("Your beta trial includes 1 project. Upgrade your plan to add another.")).toBeTruthy());
+    expect(screen.getByRole("button", { name: /project limit reached/i })).toBeDisabled();
+    expect(screen.getByRole("heading", { name: "Live Brand" })).toBeTruthy();
+  });
+
+  it("keeps a paid client's purchased project slot available", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      new Response(JSON.stringify({ projectsUsed: 1, projectAllowance: 2 }), { status: 200 }),
+    );
+    render(
+      <ClientSelectorPage
+        {...baseProps}
+        projects={[project]}
+        session={{ username: "paid-client", role: "client" }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: /create project/i })).toBeEnabled());
+  });
+
+  it("does not block a non-billing client member who can create projects", () => {
+    const fetchMock = vi.mocked(global.fetch);
+    render(
+      <ClientSelectorPage
+        {...baseProps}
+        projects={[]}
+        session={{ username: "client-member", role: "client", membershipRole: "content" }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /create your first project/i })).toBeEnabled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("fails closed while allowance is pending, and ignores a stale session response", async () => {
+    let releaseOld: (response: Response) => void = () => {};
+    const oldResponse = new Promise<Response>((resolve) => { releaseOld = resolve; });
+    const fetchMock = vi.mocked(global.fetch);
+    fetchMock.mockImplementationOnce(() => oldResponse);
+    fetchMock.mockImplementationOnce(() => new Promise<Response>(() => {}));
+    const { rerender } = render(
+      <ClientSelectorPage
+        {...baseProps}
+        projects={[]}
+        session={{ username: "old-client", role: "client" }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /checking project allowance/i })).toBeDisabled();
+    rerender(
+      <ClientSelectorPage
+        {...baseProps}
+        projects={[]}
+        session={{ username: "new-client", role: "client" }}
+      />,
+    );
+    releaseOld(new Response(JSON.stringify({ projectsUsed: 0, projectAllowance: 1 }), { status: 200 }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /checking project allowance/i })).toBeDisabled());
+  });
+
+  it("keeps projects visible when allowance loading fails", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(new Response(null, { status: 503 }));
+    render(
+      <ClientSelectorPage
+        {...baseProps}
+        projects={[project, { ...project, id: "proj-2", name: "Second Brand" }]}
+        session={{ username: "client-with-error", role: "client" }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText("Project allowance is unavailable. Refresh and try again.")).toBeTruthy());
+    expect(screen.getByRole("heading", { name: "Live Brand" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Second Brand" })).toBeTruthy();
+  });
+
   it("shows the plain empty state when the agency has no projects", () => {
     render(
       <ClientSelectorPage {...baseProps} projects={[]} session={agencySession} />,
@@ -74,7 +176,7 @@ describe("ClientSelectorPage project-only hub", () => {
     expect(screen.queryByText("Client account")).toBeNull();
   });
 
-  it("shows the client's own first-project prompt when a client signs in with no projects", () => {
+  it("shows the client's own first-project prompt when a client signs in with no projects", async () => {
     render(
       <ClientSelectorPage
         {...baseProps}
@@ -83,7 +185,7 @@ describe("ClientSelectorPage project-only hub", () => {
       />,
     );
     expect(screen.getByText("No projects yet")).toBeTruthy();
-    expect(screen.getByText(/Create your first project/i)).toBeTruthy();
+    expect(await screen.findByText(/Checking project allowance|Project allowance is unavailable/i)).toBeTruthy();
   });
 
   it("shows the latest server audit score without relying on browser storage", async () => {

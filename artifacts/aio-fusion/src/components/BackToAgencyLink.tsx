@@ -31,8 +31,8 @@ export function BackToAgencyLink({ agencyName, light = false }: { agencyName: st
     <button
       onClick={() => void handleExit()}
       disabled={exiting}
-      className="aio-button aio-button--text aio-button--compact"
-      style={{ color: light ? "#ffffff" : "#1F748F", opacity: exiting ? 0.7 : 1 }}
+      className="aio-button aio-button--secondary aio-button--compact"
+      style={{ background: "#0a1628", color: "#ffffff", borderColor: light ? "rgba(255,255,255,0.25)" : "#0a1628", opacity: exiting ? 0.7 : 1 }}
       title={`Return to your agency workspace (${agencyName})`}
     >
       {exiting ? <Loader2 size={12} className="animate-spin" /> : <ArrowLeft size={13} />}
