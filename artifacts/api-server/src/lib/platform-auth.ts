@@ -240,16 +240,12 @@ export async function ensureAutoApprovedAdmins(): Promise<void> {
       .limit(1);
     if (!user) continue;
 
-    await db
-      .insert(platformMembershipsTable)
-      .values({
+    await ensureProvisionedMembership({
         userId: user.id,
         companyId: masterCompany.id,
         companySlug: DEFAULT_ADMIN_USERNAME,
         role: "viewer",
-      })
-      .onConflictDoNothing();
-    console.log(`[platform-auth] ensured restricted Master membership for allowlisted staff: ${email}`);
+    });
   }
 }
 
@@ -436,17 +432,35 @@ export async function ensurePlatformUser(opts: {
   });
 
   // 3. Upsert membership linking user ↔ company UUID.
-  await db
-    .insert(platformMembershipsTable)
-    .values({
+  await ensureProvisionedMembership({
       userId,
       companyId,
       companySlug: normUsername(opts.companyUsername),
       role: opts.membershipRole ?? "owner",
-    })
-    .onConflictDoNothing();
+  });
 
   return userId;
+}
+
+// Automatic provisioning is not a new access grant. A deliberate removal must
+// win over login backfills and startup allowlists, including concurrent ones.
+async function ensureProvisionedMembership(
+  membership: typeof platformMembershipsTable.$inferInsert,
+): Promise<void> {
+  if (normUsername(membership.companySlug) !== DEFAULT_ADMIN_USERNAME) {
+    await db.insert(platformMembershipsTable).values(membership).onConflictDoNothing();
+    return;
+  }
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT 1 FROM platform_companies WHERE id = ${membership.companyId} FOR UPDATE`);
+    const [revocation] = await tx
+      .select({ key: platformMetaTable.key })
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, `master-membership-revoked:${membership.companyId}:${membership.userId}`))
+      .limit(1);
+    if (revocation) return;
+    await tx.insert(platformMembershipsTable).values(membership).onConflictDoNothing();
+  });
 }
 
 // Email-verification target metadata is server-owned and keyed by a hash, so
@@ -1083,11 +1097,18 @@ export async function getPlatformSessionAccount(
               ),
             )
             .limit(1);
-          if (mem) {
-            membershipRole = normalizeMembershipRole(mem.role);
-            projectAccess = parseProjectAccess(mem.projectAccess);
+          if (!mem) {
+            await deletePlatformSession(sid);
+            return null;
           }
-        } catch { /* non-fatal - treated as legacy full-access session */ }
+          membershipRole = normalizeMembershipRole(mem.role);
+          projectAccess = parseProjectAccess(mem.projectAccess);
+        } catch {
+          // A named identity is never a legacy full-access session. Missing or
+          // unavailable membership authority must fail closed.
+          try { await deletePlatformSession(sid); } catch { /* still reject */ }
+          return null;
+        }
       }
       return {
         username: company.slug,
@@ -1100,6 +1121,12 @@ export async function getPlatformSessionAccount(
     }
   }
 
+  // Only genuinely userless sessions may use legacy account authority. A
+  // user-bound session without a valid workspace cannot bypass membership.
+  if (row.userId) {
+    await deletePlatformSession(sid);
+    return null;
+  }
   // Legacy fallback: resolve from platform_accounts (the original auth record).
   const account = await getAccount(row.username);
   if (!account || account.status === "suspended") {

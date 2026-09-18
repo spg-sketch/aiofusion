@@ -64,6 +64,23 @@ vi.mock("@workspace/db", async () => {
       created_at timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (user_id, company_id)
     );
+    CREATE TABLE IF NOT EXISTS platform_invitations (
+      token varchar(64) PRIMARY KEY,
+      email varchar(255) NOT NULL,
+      company_id uuid NOT NULL REFERENCES platform_companies(id) ON DELETE CASCADE,
+      company_slug varchar(64) NOT NULL,
+      role varchar NOT NULL DEFAULT 'viewer',
+      project_access text,
+      invited_name varchar(128),
+      position varchar(128),
+      invited_by_user_id uuid,
+      expires_at timestamptz NOT NULL,
+      used_at timestamptz,
+      revoked_at timestamptz,
+      declined_at timestamptz,
+      reminder_sent_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE TABLE IF NOT EXISTS platform_accounts (
       username varchar PRIMARY KEY,
       password_hash text NOT NULL,
@@ -331,6 +348,8 @@ vi.mock("../lib/notify-email", async (importOriginal) => {
   for (const [k, v] of Object.entries(actual)) {
     if (k === "getAppBaseUrl") {
       mock[k] = () => "https://test.example.com";
+    } else if (k === "sendTeamInviteEmail") {
+      mock[k] = () => Promise.resolve(true);
     } else if (typeof v === "function") {
       mock[k] = () => Promise.resolve();
     } else {
@@ -338,14 +357,6 @@ vi.mock("../lib/notify-email", async (importOriginal) => {
     }
   }
   return mock;
-});
-vi.mock("../lib/team-invites", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/team-invites")>();
-  return {
-    ...actual,
-    getValidInvite: () => Promise.resolve(null),
-    consumeInvite: () => Promise.resolve(false),
-  };
 });
 vi.mock("../lib/mfa", () => ({
   getMfaState: () => Promise.resolve(null),
@@ -358,7 +369,7 @@ vi.mock("../lib/mfa", () => ({
   generateRecoveryCodes: () => [],
   hashRecoveryCode: (c: string) => c,
   consumeRecoveryCode: () => null,
-  createMfaPendingToken: () => "mfatoken",
+  createMfaPendingToken: vi.fn(() => "mfatoken"),
   verifyMfaPendingToken: () => null,
   TRUSTED_DEVICE_COOKIE: "aio_trusted_device",
   TRUSTED_DEVICE_TTL_MS: 2592000000,
@@ -378,10 +389,15 @@ import {
   platformMembershipsTable,
   platformSessionsTable,
   platformUsersTable,
+  platformInvitationsTable,
 } from "@workspace/db";
-import { eq, like } from "drizzle-orm";
-import { hashPassword } from "../lib/platform-auth";
+import { and, eq, like } from "drizzle-orm";
+import {
+  hashPassword, ensurePlatformUser, createPlatformSession, getPlatformSessionAccount,
+} from "../lib/platform-auth";
+import { createMfaPendingToken } from "../lib/mfa";
 import platformRouter from "./platform";
+import teamRouter from "./team";
 
 // ---------------------------------------------------------------------------
 // App + server helpers
@@ -392,12 +408,14 @@ function buildApp() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
   app.use(cookieParser());
-  app.use((req: any, _res: any, next: any) => {
+  app.use(async (req: any, _res: any, next: any) => {
     const testAccount = req.headers["x-test-account"];
-    req.account = typeof testAccount === "string" ? JSON.parse(testAccount) : null;
+    req.account = typeof testAccount === "string" ? JSON.parse(testAccount)
+      : req.cookies.aio_sid ? await getPlatformSessionAccount(req.cookies.aio_sid) : null;
     next();
   });
   app.use("/api", platformRouter);
+  app.use("/api", teamRouter);
   return app;
 }
 
@@ -1574,4 +1592,166 @@ describe("SSO discount invite email binding", () => {
     const discounts = await db.select().from(platformMetaTable).where(like(platformMetaTable.key, "account-discount:%"));
     expect(discounts.length).toBe(0);
   });
+});
+
+describe("removed Master staff OAuth access", () => {
+  let server: Server;
+  let baseUrl: string;
+  const otherSlug = "oauth-revoked-other";
+  const ownerEmail = "oauth-revocation-owner@test.test";
+
+  beforeEach(async () => {
+    vi.stubEnv("GOOGLE_CLIENT_ID", "test-google-client-id");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "test-google-client-secret");
+    vi.stubEnv("MICROSOFT_CLIENT_ID", "test-microsoft-client-id");
+    vi.stubEnv("MICROSOFT_CLIENT_SECRET", "test-microsoft-client-secret");
+    vi.stubEnv("NODE_ENV", "test");
+    await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, "admin"));
+    await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, "admin"));
+    await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, "admin"));
+    vi.mocked(createMfaPendingToken).mockClear();
+    ({ server, baseUrl } = await startServer());
+  });
+
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    await stopServer(server);
+    for (const slug of ["admin", otherSlug]) {
+      await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, slug));
+      await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, slug));
+      await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, slug));
+    }
+    await db.delete(platformUsersTable).where(eq(platformUsersTable.email, ownerEmail));
+    await db.delete(platformUsersTable).where(like(platformUsersTable.email, "revoked.oauth.%@aiofusion.ai"));
+  });
+
+  it.each(["google", "microsoft"] as const)(
+    "denies removed eligible %s staff before session/MFA and allows deliberate re-invitation",
+    async (provider) => {
+      const email = `revoked.oauth.${provider}@aiofusion.ai`;
+      await db.insert(platformAccountsTable).values({
+        username: "admin", passwordHash: hashPassword("disposable-owner-password"),
+        role: "admin", status: "active", email: ownerEmail,
+      });
+      const ownerId = await ensurePlatformUser({
+        email: ownerEmail, companyUsername: "admin", companyRole: "admin",
+        membershipRole: "owner", companyStatus: "active", companySetupComplete: true,
+      });
+      const [master] = await db.select().from(platformCompaniesTable).where(eq(platformCompaniesTable.slug, "admin"));
+      const ownerSid = await createPlatformSession("admin", null, ownerId, master!.id);
+      const state = provider === "google" ? "revoked-staff-state" : "login:revoked-staff-state";
+      const stateCookie = provider === "google" ? "aio_oauth_state" : "aio_ms_state";
+      vi.stubGlobal("fetch", provider === "google"
+        ? makeGoogleStub({ email, googleId: "revoked-oauth-google-id", verifiedEmail: true })
+        : makeMicrosoftStub({ email, microsoftId: "revoked-oauth-microsoft-id" }));
+      const callback = (inviteToken?: string) => realFetch(`${baseUrl}/api/platform/auth/${provider}/callback`, {
+        method: "POST", redirect: "manual",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie: `${stateCookie}=${encodeURIComponent(state)}${inviteToken ? `; aio_invite=${inviteToken}` : ""}`,
+        },
+        body: new URLSearchParams({ code: "disposable-provider-code", state }).toString(),
+      });
+
+      // First use proves this exact identity is eligible under the existing
+      // staff policy; revocation, not a different roster rule, blocks later use.
+      const first = await callback();
+      expect(first.headers.get("location")).toContain("oauth_status=ok");
+      const firstSid = parseCookies(first.headers).aio_sid!;
+      expect(firstSid).toBeTruthy();
+      const [target] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.email, email));
+      expect(await getPlatformSessionAccount(firstSid)).toMatchObject({
+        userId: target!.id, activeCompanyId: master!.id, membershipRole: "viewer",
+      });
+      await db.insert(platformAccountsTable).values({
+        username: otherSlug, passwordHash: hashPassword("disposable-other-password"),
+        role: "agency", status: "active",
+      });
+      const [other] = await db.insert(platformCompaniesTable).values({
+        slug: otherSlug, role: "agency", status: "active", setupComplete: true, freeAccess: true,
+      }).returning();
+      const [otherMembership] = await db.insert(platformMembershipsTable).values({
+        userId: target!.id, companyId: other!.id, companySlug: otherSlug, role: "viewer",
+      }).returning();
+
+      // Exercise the production team removal transaction, not a hand-written
+      // marker: it also invalidates old sessions and stale invitations.
+      const removed = await realFetch(`${baseUrl}/api/platform/team/members/${target!.id}/remove`, {
+        method: "POST", headers: { cookie: `aio_sid=${ownerSid}` },
+      });
+      expect(removed.status).toBe(200);
+      expect(await getPlatformSessionAccount(firstSid)).toBeNull();
+      const markerKey = `master-membership-revoked:${master!.id}:${target!.id}`;
+      const [marker] = await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, markerKey));
+      expect(JSON.parse(marker!.value)).toMatchObject({ actor: ownerId, target: target!.id, workspace: master!.id });
+
+      // Defense in depth: even a newly minted, version-current user/company
+      // session cannot fall through to legacy full-access authority.
+      const forcedSid = await createPlatformSession("admin", null, target!.id, master!.id);
+      expect(await getPlatformSessionAccount(forcedSid)).toBeNull();
+      expect(await db.select().from(platformSessionsTable).where(eq(platformSessionsTable.sid, forcedSid))).toHaveLength(0);
+
+      const otherSid = await createPlatformSession(otherSlug, null, target!.id, other!.id);
+      expect(await getPlatformSessionAccount(otherSid)).toMatchObject({
+        userId: target!.id, username: otherSlug, membershipRole: "viewer",
+      });
+      const beforeSessions = await db.select().from(platformSessionsTable).where(eq(platformSessionsTable.userId, target!.id));
+      vi.mocked(createMfaPendingToken).mockClear();
+      const denied = await callback();
+      expect(denied.status).toBe(302);
+      expect(denied.headers.get("location")).toContain("oauth_status=error");
+      expect(denied.headers.get("location")).toContain("oauth_msg=master_access_removed");
+      expect(parseCookies(denied.headers).aio_sid).toBeUndefined();
+      expect(parseCookies(denied.headers).aio_oauth_mfa_token).toBeUndefined();
+      expect(createMfaPendingToken).not.toHaveBeenCalled();
+      expect(await db.select().from(platformSessionsTable).where(eq(platformSessionsTable.userId, target!.id))).toEqual(beforeSessions);
+      expect(await db.select().from(platformMembershipsTable).where(and(
+        eq(platformMembershipsTable.companyId, master!.id), eq(platformMembershipsTable.userId, target!.id),
+      ))).toHaveLength(0);
+      expect(await getPlatformSessionAccount(otherSid)).toMatchObject({ username: otherSlug });
+      expect(await db.select().from(platformMembershipsTable).where(and(
+        eq(platformMembershipsTable.companyId, other!.id), eq(platformMembershipsTable.userId, target!.id),
+      ))).toEqual([otherMembership]);
+      const switchDenied = await realFetch(`${baseUrl}/api/platform/switch-workspace`, {
+        method: "POST", headers: { cookie: `aio_sid=${otherSid}`, "content-type": "application/json" },
+        body: JSON.stringify({ companyId: master!.id }),
+      });
+      expect(switchDenied.status).toBe(403);
+      expect(await getPlatformSessionAccount(otherSid)).toMatchObject({ username: otherSlug });
+
+      // A deliberate new invitation restores membership via the real SSO
+      // invitation handler. The historical tombstone is not an eligibility ban.
+      const invited = await realFetch(`${baseUrl}/api/platform/team/invite`, {
+        method: "POST", headers: { cookie: `aio_sid=${ownerSid}`, "content-type": "application/json" },
+        body: JSON.stringify({ email, role: "viewer" }),
+      });
+      expect(invited.status).toBe(201);
+      const invitation = await invited.json() as { token: string };
+      const restored = await callback(invitation.token);
+      expect(restored.headers.get("location")).toContain("oauth_status=ok");
+      expect(await getPlatformSessionAccount(parseCookies(restored.headers).aio_sid!)).toMatchObject({
+        activeCompanyId: master!.id, userId: target!.id, membershipRole: "viewer",
+      });
+      const [usedInvite] = await db.select().from(platformInvitationsTable)
+        .where(eq(platformInvitationsTable.token, invitation.token));
+      expect(usedInvite?.usedAt).toBeInstanceOf(Date);
+      expect(await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, markerKey))).toEqual([marker]);
+
+      // Ordinary subsequent staff login must use the restored membership, not
+      // deny on the marker or silently promote it back to Owner.
+      const returning = await callback();
+      expect(returning.headers.get("location")).toContain("oauth_status=ok");
+      const returningSid = parseCookies(returning.headers).aio_sid!;
+      expect(await getPlatformSessionAccount(returningSid)).toMatchObject({
+        activeCompanyId: master!.id, membershipRole: "viewer",
+      });
+      const switched = await realFetch(`${baseUrl}/api/platform/switch-workspace`, {
+        method: "POST", headers: { cookie: `aio_sid=${returningSid}`, "content-type": "application/json" },
+        body: JSON.stringify({ companyId: other!.id }),
+      });
+      expect(switched.status).toBe(200);
+      expect(await getPlatformSessionAccount(parseCookies(switched.headers).aio_sid!)).toMatchObject({ username: otherSlug });
+    },
+  );
 });

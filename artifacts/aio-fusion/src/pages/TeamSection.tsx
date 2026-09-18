@@ -46,6 +46,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
   const [team, setTeam] = useState<TeamOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
@@ -110,15 +111,28 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
   const projectScoped = isClient ? false : isAgency ? true : effectiveRole === "content" || effectiveRole === "viewer";
 
   const reload = () => {
-    void Promise.all([serverGetTeam(), serverGetTeamViolations()]).then(([r, violations]) => {
-      setLoading(false);
-      if (r.ok && r.team) { setTeam(r.team); setLoadError(null); }
-      else setLoadError(r.error ?? "Failed to load team.");
-      // The server only grants this report to the workspace owner. Team
-      // admins still use the rest of this page normally, just without a
-      // workspace-wide role correction control.
-      setRoleViolations(violations.ok ? (violations.violations ?? []) : []);
-    });
+    setLoading(true);
+    void Promise.all([serverGetTeam(), serverGetTeamViolations()])
+      .then(([r, violations]) => {
+        setLoading(false);
+        if (r.ok && r.team) { setTeam(r.team); setLoadError(null); }
+        else {
+          // Permissions are server-authoritative. Never leave stale controls on
+          // screen when the refresh that should re-authorize them fails.
+          setTeam(null);
+          setLoadError(r.error ?? "Failed to load team.");
+        }
+        // The server only grants this report to the workspace owner. Team
+        // admins still use the rest of this page normally, just without a
+        // workspace-wide role correction control.
+        setRoleViolations(violations.ok ? (violations.violations ?? []) : []);
+      })
+      .catch(() => {
+        setLoading(false);
+        setTeam(null);
+        setRoleViolations([]);
+        setLoadError("Failed to load team.");
+      });
   };
   useEffect(reload, []);
 
@@ -226,11 +240,14 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
   };
 
   const handleRemove = (userId: string, label: string) => {
-    if (!window.confirm(`Remove ${label} from your team? They will lose access immediately.`)) return;
+    if (!window.confirm(
+      `Remove ${label} from this workspace?\n\n${label} will lose access immediately. This does not delete their user account or their data.`,
+    )) return;
+    setActionError(null);
     setBusy(userId);
     void serverRemoveTeamMember(userId).then((r) => {
       setBusy(null);
-      if (!r.ok) alert(r.error ?? "Failed to remove team member.");
+      if (!r.ok) setActionError(r.error ?? "Failed to remove team member.");
       reload();
     });
   };
@@ -259,11 +276,24 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
     });
   };
 
-  const handleRoleChange = (userId: string, newRole: MembershipRole) => {
+  const handleRoleChange = (userId: string, label: string, currentRole: MembershipRole, newRole: MembershipRole) => {
+    if (
+      currentRole === "owner"
+      && newRole !== "owner"
+      && !window.confirm(
+        `Change ${label} from Owner to ${roleLabel(newRole)}?\n\n${label} will lose ownership privileges but will keep the access provided by the ${roleLabel(newRole)} role.`,
+      )
+    ) {
+      // Restore the controlled select after the browser has applied its
+      // temporary change event value.
+      setTeam((current) => current ? { ...current } : current);
+      return;
+    }
+    setActionError(null);
     setBusy(userId);
     void serverUpdateTeamMember(userId, { role: newRole }).then((r) => {
       setBusy(null);
-      if (!r.ok) alert(r.error ?? "Failed to update role.");
+      if (!r.ok) setActionError(r.error ?? "Failed to update role.");
       reload();
     });
   };
@@ -371,7 +401,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
   if (loading) {
     return (
       <>
-        <div className="rounded-2xl p-6 sm:p-8 mb-6 flex items-center gap-3" style={{ background: "white", border: `1px solid ${vars.g200}` }}>
+        <div className="rounded-2xl p-6 sm:p-8 mb-6 flex items-center gap-3" role="status" aria-live="polite" data-testid="status-team-loading" style={{ background: "white", border: `1px solid ${vars.g200}` }}>
           <Loader2 size={16} className="animate-spin" color={accent} />
           <span className="text-[13px]" style={{ color: vars.g600 }}>Loading team…</span>
         </div>
@@ -384,8 +414,11 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
   if (!team) {
     const errorCard = loadError && !loadError.toLowerCase().includes("not available")
       ? (
-        <div className="rounded-2xl p-6 mb-6 text-[13px]" style={{ background: "white", border: `1px solid ${vars.g200}`, color: accent }}>
-          {loadError}
+        <div className="rounded-2xl p-6 mb-6 text-[13px]" role="alert" data-testid="status-team-load-error" style={{ background: "white", border: `1px solid ${vars.g200}`, color: accent }}>
+          <p>{loadError}</p>
+          <button type="button" onClick={reload} className="mt-3 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.1em]" style={{ background: ink, color: "#fff" }}>
+            Retry team list
+          </button>
         </div>
       )
       : null;
@@ -451,6 +484,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
             ? `Invite your own staff. Account seats (up to ${team.seatLimit}) are for people managing this account - for example billing. Or assign a team member to specific projects: each project has ${projectSeatLimit} seats of its own, and project members work on those projects only.`
             : "Invite colleagues to work in this account. Each person gets their own login with the role and project access you choose."}
       </p>
+      {actionError && <p className="mb-4 text-[12px] font-semibold" role="alert" aria-live="assertive" style={{ color: "#B3261E" }}>{actionError}</p>}
 
       {/* Invite form */}
       <form onSubmit={handleInvite} className="mb-6">
@@ -594,7 +628,25 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
 
       {/* Members list */}
       <div className="space-y-2">
-        {team.members.map((m) => (
+        {team.members.map((m) => {
+          const isOwner = m.role === "owner";
+          // Legacy responses did not include per-member flags. Preserve their
+          // ordinary-member controls, but never infer authority over an Owner.
+          const canEditRole = !m.isSelf && (
+            typeof m.canEditRole === "boolean"
+              ? m.canEditRole
+              : !isOwner
+          ) && (!isOwner || team.canManageOwners === true);
+          const canRemove = !m.isSelf && (
+            typeof m.canRemove === "boolean"
+              ? m.canRemove
+              : !isOwner
+          ) && (!isOwner || team.canManageOwners === true);
+          const label = m.name || m.email || m.userId;
+          const protectionText = m.isSelf
+            ? "You cannot change your own role or remove yourself here."
+            : m.protectionReason;
+          return (
           <div key={m.userId} className="px-4 py-3 rounded-xl" style={{ background: "#f8fafc", border: `1px solid ${vars.g200}` }}>
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
             <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -618,17 +670,12 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              {m.role === "owner" || m.isSelf ? (
+              {!canEditRole ? (
                 <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.14em]" style={{ background: accentSoft, color: accent }}>
                   {roleLabel(m.role)}
                 </span>
               ) : (
-                <>
-                  {(isClient || (isAgency && m.projectAccess)) && m.role === "content" ? (
-                    // Client colleagues and agency project-seat members are
-                    // always content members - no role to choose. Legacy
-                    // members with another role keep the dropdown so their
-                    // role can be corrected.
+                (isClient || (isAgency && m.projectAccess)) && m.role === "content" ? (
                     <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.14em]" style={{ background: accentSoft, color: accent }}>
                       {roleLabel("content")}
                     </span>
@@ -637,19 +684,21 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
                       value={m.role}
                       disabled={busy === m.userId}
                       aria-label={`Role for ${m.name || m.email || m.userId}`}
-                      onChange={(e) => handleRoleChange(m.userId, e.target.value as MembershipRole)}
+                      onChange={(e) => handleRoleChange(m.userId, label, m.role, e.target.value as MembershipRole)}
                       className="px-2 py-1.5 rounded-lg border text-[12px] bg-white"
                       style={{ borderColor: vars.g200 }}
                     >
                       {ROLE_OPTIONS.map((o) => (
                         <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
-                      {team.canPromoteOwners && (
+                      {isOwner && <option value={OWNER_OPTION.value}>{OWNER_OPTION.label}</option>}
+                      {!isOwner && team.canPromoteOwners && (
                         <option value={OWNER_OPTION.value}>{OWNER_OPTION.label}</option>
                       )}
                     </select>
-                  )}
-                  {(m.role === "content" || m.role === "viewer") && (
+                   )
+              )}
+              {canEditRole && (m.role === "content" || m.role === "viewer") && (
                     <button
                       onClick={() =>
                         accessEditor?.userId === m.userId
@@ -661,22 +710,26 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
                     >
                       Manage access
                     </button>
-                  )}
-                  <button
+              )}
+              {canRemove && <button
                     type="button"
                     onClick={() => handleRemove(m.userId, m.name || m.email || "this member")}
                     disabled={busy === m.userId}
                     aria-label={`Remove ${m.name || m.email || "this member"} from team`}
-                    className="p-2 rounded-lg transition-colors hover:bg-red-50"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors hover:bg-red-50"
                     title="Remove from team"
                     style={{ color: "#B3261E" }}
                   >
                     {busy === m.userId ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                  </button>
-                </>
-              )}
+                    Remove
+              </button>}
             </div>
           </div>
+          {protectionText && (
+            <p className="mt-2 ml-11 text-[11px]" data-testid={`member-protection-${m.userId}`} style={{ color: vars.g600 }}>
+              {protectionText}
+            </p>
+          )}
           {accessEditor?.userId === m.userId && (
             <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${vars.g200}` }}>
               <label htmlFor={`team-access-restrict-${m.userId}`} className="flex items-center gap-2 text-[13px]" style={{ color: ink }}>
@@ -751,7 +804,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
             </div>
           )}
           </div>
-        ))}
+        );})}
       </div>
 
       {/* Pending invitations */}

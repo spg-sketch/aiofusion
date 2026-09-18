@@ -995,6 +995,12 @@ export type TeamMember = {
   position: string | null;
   createdAt: string;
   isSelf: boolean;
+  /** Server-authoritative permission to change this member's role. Absent only on legacy responses. */
+  canEditRole?: boolean;
+  /** Server-authoritative permission to remove this member. Absent only on legacy responses. */
+  canRemove?: boolean;
+  /** Server explanation shown when this member is protected from management actions. */
+  protectionReason?: string | null;
 };
 export async function serverSelfDeleteAccount(
   confirmation: { password: string } | { sso: true },
@@ -1357,6 +1363,8 @@ export type TeamOverview = {
   projectSeats?: Record<string, number>;
   /** Server-authoritative UI capability for promoting an existing member. */
   canPromoteOwners?: boolean;
+  /** Server-authoritative capability for managing existing Owner memberships. */
+  canManageOwners?: boolean;
 };
 
 export type TeamRoleViolation = {

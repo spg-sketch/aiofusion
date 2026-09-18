@@ -8,6 +8,9 @@ import {
   platformCompaniesTable,
   platformAccountsTable,
   projectsTable,
+  platformSessionsTable,
+  platformMetaTable,
+  adminEventsTable,
 } from "@workspace/db";
 import { and, asc, desc, eq, isNull, isNotNull, gt, lte, sql } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
@@ -24,6 +27,7 @@ import {
   getAccount,
   isAgencyPartnerClient,
   normalizeRole,
+  normalizeWorkspaceRole,
   getVisibleUsernames,
   type MembershipRole,
   DEFAULT_ADMIN_USERNAME,
@@ -52,6 +56,83 @@ import { logger } from "../lib/logger";
 const router: IRouter = Router();
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type TeamTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type TeamCompany = typeof platformCompaniesTable.$inferSelect;
+
+function isCanonicalMaster(company: Pick<TeamCompany, "slug" | "role" | "status">): boolean {
+  return normalizeWorkspaceRole(company.slug, company.role) === "admin" && company.status === "active";
+}
+
+function memberProtection(
+  isSelf: boolean,
+  role: string,
+  canManageMembers: boolean,
+  canManageOwners: boolean,
+  ownerCount: number,
+): string | null {
+  if (isSelf) return "You cannot change your own role or remove yourself from this workspace.";
+  if (!canManageMembers) return "Only current owners and admins can manage team members.";
+  if (normalizeMembershipRole(role) !== "owner") return null;
+  if (!canManageOwners) return "Only a current named Owner of the canonical Master workspace can manage other Owners.";
+  if (ownerCount <= 1) return "The workspace must retain at least one named Owner.";
+  return null;
+}
+
+// Call only after acquiring the shared company FOR UPDATE lock. Never trust a
+// role resolved by middleware before another Owner's mutation committed.
+async function currentTeamActor(tx: TeamTransaction, req: Request, company: TeamCompany) {
+  if (req.account!.userId) {
+    const [membership] = await tx.select({ role: platformMembershipsTable.role })
+      .from(platformMembershipsTable)
+      .where(and(
+        eq(platformMembershipsTable.companyId, company.id),
+        eq(platformMembershipsTable.userId, req.account!.userId),
+      )).limit(1);
+    const role = membership ? normalizeMembershipRole(membership.role) : null;
+    return {
+      canManageMembers: role === "owner" || role === "admin",
+      canManageOwners: isCanonicalMaster(company) && role === "owner",
+    };
+  }
+  const [legacy] = await tx.select().from(platformAccountsTable)
+    .where(eq(platformAccountsTable.username, company.slug)).limit(1);
+  return {
+    canManageMembers: !!legacy && legacy.status === "active" &&
+      normUsername(req.account!.username) === normUsername(company.slug) &&
+      normalizeWorkspaceRole(legacy.username, legacy.role) === normalizeWorkspaceRole(company.slug, company.role),
+    // Legacy bootstrap authority is deliberately not Owner-management authority.
+    canManageOwners: false,
+  };
+}
+
+async function namedOwnerCount(tx: TeamTransaction, companyId: string): Promise<number> {
+  const owners = await tx.select({ userId: platformMembershipsTable.userId })
+    .from(platformMembershipsTable)
+    .innerJoin(platformUsersTable, eq(platformUsersTable.id, platformMembershipsTable.userId))
+    .where(and(eq(platformMembershipsTable.companyId, companyId), eq(platformMembershipsTable.role, "owner")));
+  return owners.length;
+}
+
+async function recordMembershipMutation(
+  tx: TeamTransaction, req: Request, company: TeamCompany,
+  targetUserId: string, previousRole: string, newRole: string | null,
+) {
+  // Fail closed: mutation, immediate invalidation and audit either all commit or
+  // all roll back. Other workspace memberships and the human identity survive.
+  await tx.update(platformUsersTable)
+    .set({ sessionVersion: sql`${platformUsersTable.sessionVersion} + 1` })
+    .where(eq(platformUsersTable.id, targetUserId));
+  await tx.delete(platformSessionsTable).where(eq(platformSessionsTable.userId, targetUserId));
+  await tx.insert(adminEventsTable).values({
+    actorId: req.account!.userId ?? "",
+    actorUsername: req.account!.username,
+    action: newRole === null ? "team_member_removed" : "team_member_role_changed",
+    targetId: targetUserId,
+    targetType: "membership",
+    metadata: { companyId: company.id, companySlug: company.slug, previousRole, newRole },
+  });
+}
 
 // Resolve the caller's active company row, or null. Team management always
 // operates on the caller's own workspace - never on a sub-account's.
@@ -86,7 +167,7 @@ function isCanonicalLegacyMasterAdmin(
 export type TeamMode = "standard" | "agency" | "client";
 
 async function resolveTeamMode(company: { slug: string; role: string }): Promise<TeamMode | null> {
-  const role = normalizeRole(company.role);
+  const role = normalizeWorkspaceRole(company.slug, company.role);
   if (role === "agency") return "agency";
   if (role !== "client") return "standard";
   // A client is agency-managed when its parent account is an Agency/Partner.
@@ -107,7 +188,7 @@ const NO_TEAM_MESSAGE = "Team management is not available for this account.";
 async function getOwnedProjectIds(companySlug: string): Promise<Set<string> | null> {
   const account = await getAccount(companySlug);
   if (!account) return new Set();
-  if (account.role === "admin") return null; // master admin: any project
+  if (normalizeWorkspaceRole(account.username, account.role) === "admin") return null; // master admin: any project
   // Downward-only ownership: self plus descendant sub-accounts. Deliberately
   // NOT getVisibleUsernames - that includes a client's direct parent for read
   // visibility, and a workspace must never grant team seats on a project it
@@ -230,7 +311,7 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
     // than the session role. A stale session must not expose owner promotion.
     const actorMembership = memberRows.find((m) => m.userId === req.account!.userId);
     let canPromoteOwners =
-      normalizeRole(company.role) === "admin" &&
+      isCanonicalMaster(company) &&
       actorMembership !== undefined &&
       normalizeMembershipRole(actorMembership.role) === "owner";
     if (!canPromoteOwners && !req.account!.userId && normalizeRole(company.role) === "admin") {
@@ -241,6 +322,12 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
         .limit(1);
       canPromoteOwners = isCanonicalLegacyMasterAdmin(req.account!, company, legacyActor);
     }
+    const canManageOwners = isCanonicalMaster(company) && !!actorMembership &&
+      normalizeMembershipRole(actorMembership.role) === "owner";
+    const canManageMembers = req.account!.userId
+      ? !!actorMembership && ["owner", "admin"].includes(normalizeMembershipRole(actorMembership.role))
+      : canManageTeam(req.account!);
+    const ownerCount = memberRows.filter((m) => m.role === "owner").length;
 
     // Agency mode: the headline seat counter covers the ACCOUNT pool only
     // (members/invites with no project restriction); project-scoped people sit
@@ -267,6 +354,12 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
         position: m.position ?? null,
         createdAt: m.createdAt,
         isSelf: m.userId === req.account!.userId,
+        ...(() => {
+          const protectionReason = memberProtection(
+            m.userId === req.account!.userId, m.role, canManageMembers, canManageOwners, ownerCount,
+          );
+          return { canEditRole: protectionReason === null, canRemove: protectionReason === null, protectionReason };
+        })(),
       })),
       invites: inviteRows.map((i) => ({
         token: i.token,
@@ -284,6 +377,7 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
       seatLimit,
       seatsUsed,
       canPromoteOwners,
+      canManageOwners,
     });
   } catch (err) {
     logger.error({ err }, "team: failed to list team");
@@ -425,7 +519,7 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
         .limit(1);
       let lockedTeamMode: TeamMode | null = null;
       if (lockedCompany) {
-        const lockedRole = normalizeRole(lockedCompany.role);
+        const lockedRole = normalizeWorkspaceRole(lockedCompany.slug, lockedCompany.role);
         if (lockedRole === "agency") {
           lockedTeamMode = "agency";
         } else if (lockedRole !== "client") {
@@ -942,7 +1036,7 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
     const targetUserId = String(req.params.userId || "").trim();
     if (!targetUserId) { res.status(400).json({ error: "Member id required." }); return; }
     if (targetUserId === req.account!.userId) {
-      res.status(400).json({ error: "You cannot remove yourself from the team." });
+      res.status(400).json({ error: "You cannot change your own role or access." });
       return;
     }
 
@@ -957,11 +1051,6 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
       )
       .limit(1);
     if (!target) { res.status(404).json({ error: "Member not found." }); return; }
-    if (normalizeMembershipRole(target.role) === "owner") {
-      res.status(403).json({ error: "The account owner's role cannot be changed here." });
-      return;
-    }
-
     const updates: Record<string, unknown> = {};
     if (req.body?.role !== undefined) {
       const role = normalizeMembershipRole(req.body.role);
@@ -988,6 +1077,7 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
     const resultingRole = normalizeMembershipRole(
       updates.role !== undefined ? (updates.role as string) : target.role,
     );
+    if (resultingRole === "owner") updates.projectAccess = null;
     let resultingAccess =
       updates.projectAccess !== undefined
         ? parseProjectAccess(updates.projectAccess as string | null)
@@ -1066,7 +1156,7 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
       if (!lockedCompany) return { ok: false as const, reason: "team_unavailable" as const };
 
       let lockedTeamMode: TeamMode | null;
-      const lockedRole = normalizeRole(lockedCompany.role);
+      const lockedRole = normalizeWorkspaceRole(lockedCompany.slug, lockedCompany.role);
       if (lockedRole === "agency") {
         lockedTeamMode = "agency";
       } else if (lockedRole !== "client") {
@@ -1089,13 +1179,15 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
         }
       }
       if (!lockedTeamMode) return { ok: false as const, reason: "team_unavailable" as const };
+      const actor = await currentTeamActor(tx, req, lockedCompany);
+      if (!actor.canManageMembers) return { ok: false as const, reason: "actor_forbidden" as const };
 
       // Owner promotion is deliberately narrower than ordinary role edits:
       // only an existing canonical owner membership in the master workspace
       // may add another owner. Recheck it under the same workspace lock as the
       // update so a concurrent demotion/reconfiguration cannot authorize it.
       if (updates.role === "owner") {
-        if (normalizeRole(lockedCompany.role) !== "admin") {
+        if (!isCanonicalMaster(lockedCompany)) {
           return { ok: false as const, reason: "owner_promotion_forbidden" as const };
         }
         if (req.account!.userId) {
@@ -1136,12 +1228,17 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
         .limit(1);
       if (!freshTarget) return { ok: false as const, reason: "missing_member" as const };
       if (normalizeMembershipRole(freshTarget.role) === "owner") {
-        return { ok: false as const, reason: "owner" as const };
+        const protectionReason = memberProtection(
+          targetUserId === req.account!.userId, freshTarget.role,
+          actor.canManageMembers, actor.canManageOwners, await namedOwnerCount(tx, company.id),
+        );
+        if (protectionReason) return { ok: false as const, reason: "owner" as const, protectionReason };
       }
 
       const freshRole = normalizeMembershipRole(
         updates.role !== undefined ? (updates.role as string) : freshTarget.role,
       );
+      if (freshRole === "owner") updates.projectAccess = null;
       const freshAccess = updates.projectAccess !== undefined
         ? parseProjectAccess(updates.projectAccess as string | null)
         : parseProjectAccess(freshTarget.projectAccess);
@@ -1175,6 +1272,7 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
             eq(platformMembershipsTable.companyId, company.id),
           ),
         );
+      await recordMembershipMutation(tx, req, lockedCompany, targetUserId, freshTarget.role, freshRole);
       return { ok: true as const };
     });
     if (!allocation.ok) {
@@ -1191,7 +1289,9 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
       } else if (allocation.reason === "missing_member") {
         res.status(404).json({ error: "Member not found." });
       } else if (allocation.reason === "owner") {
-        res.status(403).json({ error: "The account owner's role cannot be changed here." });
+        res.status(403).json({ error: allocation.protectionReason });
+      } else if (allocation.reason === "actor_forbidden") {
+        res.status(403).json({ error: "Only current owners and admins can change team roles." });
       } else if (allocation.reason === "owner_promotion_forbidden") {
         res.status(403).json({ error: "Only a current owner of the master workspace can promote another owner." });
       } else if (allocation.reason === "team_unavailable") {
@@ -1204,8 +1304,6 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
       }
       return;
     }
-    // Access changed: invalidate the member's existing sessions immediately.
-    await incrementSessionVersion(targetUserId);
     res.json({ ok: true });
   } catch (err) {
     logger.error({ err }, "team: failed to update member");
@@ -1241,56 +1339,19 @@ router.post("/platform/team/members/:userId/remove", requirePlatformAuth, async 
       )
       .limit(1);
     if (!target) { res.status(404).json({ error: "Member not found." }); return; }
-    if (normalizeMembershipRole(target.role) === "owner") {
-      res.status(403).json({ error: "The account owner cannot be removed." });
-      return;
-    }
-
     // Serialize with role changes and re-read the target under the workspace
     // lock. A member promoted to owner while a removal request was waiting
     // must never be deleted using the stale non-owner read above.
     const removal = await db.transaction(async (tx) => {
       await tx.execute(sql`SELECT 1 FROM platform_companies WHERE id = ${company.id} FOR UPDATE`);
+      const [lockedCompany] = await tx.select().from(platformCompaniesTable)
+        .where(eq(platformCompaniesTable.id, company.id)).limit(1);
+      if (!lockedCompany) return { reason: "missing" as const };
       // Revalidate the actor after acquiring the same lock. This prevents a
       // request authorized by a stale owner/admin session from deleting a
       // member after that actor's canonical membership was changed.
-      if (req.account!.userId) {
-        const [freshActor] = await tx
-          .select({ role: platformMembershipsTable.role })
-          .from(platformMembershipsTable)
-          .where(
-            and(
-              eq(platformMembershipsTable.userId, req.account!.userId),
-              eq(platformMembershipsTable.companyId, company.id),
-            ),
-          )
-          .limit(1);
-        if (
-          !freshActor ||
-          (normalizeMembershipRole(freshActor.role) !== "owner" &&
-            normalizeMembershipRole(freshActor.role) !== "admin")
-        ) {
-          return "actor_forbidden" as const;
-        }
-      } else {
-        // Legacy sessions predate platform_users/memberships and intentionally
-        // use the account row as their canonical workspace identity. Recheck
-        // that identity under the lock, rather than treating the absent userId
-        // as blanket authorization.
-        const [legacyActor] = await tx
-          .select({ username: platformAccountsTable.username, role: platformAccountsTable.role, status: platformAccountsTable.status })
-          .from(platformAccountsTable)
-          .where(eq(platformAccountsTable.username, company.slug))
-          .limit(1);
-        if (
-          !legacyActor ||
-          legacyActor.status !== "active" ||
-          normUsername(req.account!.username) !== normUsername(company.slug) ||
-          normalizeRole(legacyActor.role) !== normalizeRole(company.role)
-        ) {
-          return "actor_forbidden" as const;
-        }
-      }
+      const actor = await currentTeamActor(tx, req, lockedCompany);
+      if (!actor.canManageMembers) return { reason: "actor_forbidden" as const };
       const [freshTarget] = await tx
         .select({ role: platformMembershipsTable.role })
         .from(platformMembershipsTable)
@@ -1301,8 +1362,12 @@ router.post("/platform/team/members/:userId/remove", requirePlatformAuth, async 
           ),
         )
         .limit(1);
-      if (!freshTarget) return "missing" as const;
-      if (normalizeMembershipRole(freshTarget.role) === "owner") return "owner" as const;
+      if (!freshTarget) return { reason: "missing" as const };
+      const protectionReason = memberProtection(
+        targetUserId === req.account!.userId, freshTarget.role,
+        actor.canManageMembers, actor.canManageOwners, await namedOwnerCount(tx, company.id),
+      );
+      if (protectionReason) return { reason: "protected" as const, protectionReason };
       await tx
         .delete(platformMembershipsTable)
         .where(
@@ -1311,30 +1376,45 @@ router.post("/platform/team/members/:userId/remove", requirePlatformAuth, async 
             eq(platformMembershipsTable.companyId, company.id),
           ),
         );
-      return "removed" as const;
+      if (isCanonicalMaster(lockedCompany)) {
+        // Old invitation links (including ones already resolved by an SSO
+        // request) must not restore access after this deliberate removal.
+        // consumeInvite takes the same company lock and rechecks revokedAt.
+        const [targetUser] = await tx.select({ email: platformUsersTable.email })
+          .from(platformUsersTable).where(eq(platformUsersTable.id, targetUserId)).limit(1);
+        if (targetUser?.email) {
+          await tx.update(platformInvitationsTable).set({ revokedAt: new Date() })
+            .where(and(
+              eq(platformInvitationsTable.companyId, company.id),
+              sql`lower(trim(${platformInvitationsTable.email})) = ${targetUser.email.trim().toLowerCase()}`,
+              isNull(platformInvitationsTable.usedAt),
+              isNull(platformInvitationsTable.revokedAt),
+            ));
+        }
+        const key = `master-membership-revoked:${company.id}:${targetUserId}`;
+        const value = JSON.stringify({
+          actor: req.account!.userId ?? req.account!.username,
+          target: targetUserId, workspace: company.id,
+          previousRole: freshTarget.role, removedAt: new Date().toISOString(),
+        });
+        await tx.insert(platformMetaTable).values({ key, value })
+          .onConflictDoUpdate({ target: platformMetaTable.key, set: { value } });
+      }
+      await recordMembershipMutation(tx, req, lockedCompany, targetUserId, freshTarget.role, null);
+      return { reason: "removed" as const };
     });
-    if (removal === "missing") {
+    if (removal.reason === "missing") {
       res.status(404).json({ error: "Member not found." });
       return;
     }
-    if (removal === "owner") {
-      res.status(403).json({ error: "The account owner cannot be removed." });
+    if (removal.reason === "protected") {
+      res.status(403).json({ error: removal.protectionReason });
       return;
     }
-    if (removal === "actor_forbidden") {
+    if (removal.reason === "actor_forbidden") {
       res.status(403).json({ error: "Only current owners and admins can remove team members." });
       return;
     }
-    // Revoke the removed member's sessions immediately.
-    await incrementSessionVersion(targetUserId);
-
-    void logAdminEvent(
-      { username: req.account!.username, id: req.account!.userId },
-      "team_member_removed",
-      targetUserId,
-      "membership",
-      { companySlug: company.slug },
-    );
     res.json({ ok: true });
   } catch (err) {
     logger.error({ err }, "team: failed to remove member");

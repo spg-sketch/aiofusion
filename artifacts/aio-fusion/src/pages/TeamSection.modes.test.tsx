@@ -8,6 +8,7 @@ import type { TeamOverview } from "../lib/auth";
 // ---------------------------------------------------------------------------
 const getTeamMock = vi.hoisted(() => vi.fn());
 const updateMemberMock = vi.hoisted(() => vi.fn(() => Promise.resolve({ ok: true })));
+const removeMemberMock = vi.hoisted(() => vi.fn(() => Promise.resolve({ ok: true })));
 
 vi.mock("../lib/auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/auth")>();
@@ -17,6 +18,7 @@ vi.mock("../lib/auth", async (importOriginal) => {
   }
   mock.serverGetTeam = getTeamMock;
   mock.serverUpdateTeamMember = updateMemberMock;
+  mock.serverRemoveTeamMember = removeMemberMock;
   mock.serverGetMyInvites = vi.fn(() => Promise.resolve({ ok: true, invites: [] }));
   return mock;
 });
@@ -52,6 +54,7 @@ const baseTeam = (over: Partial<TeamOverview>): TeamOverview => ({
 beforeEach(() => {
   getTeamMock.mockReset();
   updateMemberMock.mockClear();
+  removeMemberMock.mockClear();
 });
 
 describe("TeamSection team modes", () => {
@@ -189,5 +192,151 @@ describe("TeamSection team modes", () => {
     render(<TeamSection />);
     await screen.findByText("Natalie Admin View");
     expect(Array.from(document.querySelectorAll("option")).some((o) => o.value === "owner")).toBe(false);
+  });
+
+  it("lets an authorized Master Owner confirm or cancel another Owner's demotion", async () => {
+    const confirm = vi.spyOn(window, "confirm");
+    getTeamMock.mockResolvedValue({
+      ok: true,
+      team: baseTeam({
+        seatLimit: null,
+        canManageOwners: true,
+        members: [
+          ...baseTeam({}).members,
+          {
+            userId: "u-alex",
+            email: "alex@x.test",
+            name: "Alex Owner",
+            role: "owner",
+            projectAccess: null,
+            position: null,
+            createdAt: "2026-01-02",
+            isSelf: false,
+            canEditRole: true,
+            canRemove: true,
+            protectionReason: null,
+          },
+        ],
+      }),
+    });
+    render(<TeamSection />);
+    const roleSelect = await screen.findByLabelText("Role for Alex Owner");
+
+    confirm.mockReturnValueOnce(false);
+    fireEvent.change(roleSelect, { target: { value: "admin" } });
+    expect(updateMemberMock).not.toHaveBeenCalled();
+    expect(confirm.mock.calls[0]?.[0]).toContain("Alex Owner");
+    expect(confirm.mock.calls[0]?.[0]).toContain("lose ownership privileges");
+
+    confirm.mockReturnValueOnce(true);
+    fireEvent.change(roleSelect, { target: { value: "viewer" } });
+    await waitFor(() => expect(updateMemberMock).toHaveBeenCalledWith("u-alex", { role: "viewer" }));
+    confirm.mockRestore();
+  });
+
+  it("names an Owner in remove confirmation and explains account and data are not deleted", async () => {
+    const confirm = vi.spyOn(window, "confirm");
+    getTeamMock.mockResolvedValue({
+      ok: true,
+      team: baseTeam({
+        seatLimit: null,
+        canManageOwners: true,
+        members: [
+          ...baseTeam({}).members,
+          {
+            userId: "u-riley",
+            email: "riley@x.test",
+            name: "Riley Owner",
+            role: "owner",
+            projectAccess: null,
+            position: null,
+            createdAt: "2026-01-02",
+            isSelf: false,
+            canEditRole: true,
+            canRemove: true,
+            protectionReason: null,
+          },
+        ],
+      }),
+    });
+    render(<TeamSection />);
+    const remove = await screen.findByRole("button", { name: "Remove Riley Owner from team" });
+    expect(remove.textContent).toContain("Remove");
+
+    confirm.mockReturnValueOnce(false);
+    fireEvent.click(remove);
+    expect(removeMemberMock).not.toHaveBeenCalled();
+
+    confirm.mockReturnValueOnce(true);
+    fireEvent.click(remove);
+    await waitFor(() => expect(removeMemberMock).toHaveBeenCalledWith("u-riley"));
+    const message = String(confirm.mock.calls[1]?.[0]);
+    expect(message).toContain("Riley Owner");
+    expect(message).toContain("lose access immediately");
+    expect(message).toContain("does not delete their user account or their data");
+    confirm.mockRestore();
+  });
+
+  it("shows authoritative self and protected-owner denials without granting controls", async () => {
+    getTeamMock.mockResolvedValue({
+      ok: true,
+      team: baseTeam({
+        canManageOwners: true,
+        members: [
+          { ...baseTeam({}).members[0], canEditRole: false, canRemove: false, protectionReason: "You cannot manage yourself." },
+          {
+            userId: "u-protected",
+            email: "protected@x.test",
+            name: "Protected Owner",
+            role: "owner",
+            projectAccess: null,
+            position: null,
+            createdAt: "2026-01-02",
+            isSelf: false,
+            canEditRole: false,
+            canRemove: false,
+            protectionReason: "Only the Master Owner can manage this Owner.",
+          },
+        ],
+      }),
+    });
+    render(<TeamSection />);
+    await screen.findByText("Protected Owner");
+    expect(screen.getByTestId("member-protection-u-owner").textContent).toContain("cannot change your own role");
+    expect(screen.getByTestId("member-protection-u-protected").textContent).toContain("Only the Master Owner");
+    expect(screen.queryByLabelText("Role for Protected Owner")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove Protected Owner from team" })).toBeNull();
+  });
+
+  it("removes stale role controls when the authoritative post-change refresh fails", async () => {
+    getTeamMock
+      .mockResolvedValueOnce({
+        ok: true,
+        team: baseTeam({
+          members: [
+            ...baseTeam({}).members,
+            {
+              userId: "u-jordan",
+              email: "jordan@x.test",
+              name: "Jordan",
+              role: "admin",
+              projectAccess: null,
+              position: null,
+              createdAt: "2026-01-02",
+              isSelf: false,
+              canEditRole: true,
+              canRemove: true,
+              protectionReason: null,
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({ ok: false, error: "Could not refresh authoritative team." });
+    render(<TeamSection />);
+    fireEvent.change(await screen.findByLabelText("Role for Jordan"), { target: { value: "viewer" } });
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Could not refresh authoritative team.");
+    expect(screen.queryByLabelText("Role for Jordan")).toBeNull();
+    expect(screen.getByRole("button", { name: "Retry team list" })).toBeTruthy();
   });
 });

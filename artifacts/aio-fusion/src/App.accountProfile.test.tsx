@@ -82,17 +82,9 @@ function loginSuccessResponse() {
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class {
     observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
   });
   vi.stubGlobal("IntersectionObserver", class {
     observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    root = null; rootMargin = ""; thresholds = [];
-    root = null; rootMargin = ""; thresholds = [];
     root = null; rootMargin = ""; thresholds = [];
   });
   if (!window.matchMedia) {

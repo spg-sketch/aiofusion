@@ -343,6 +343,7 @@ import {
   platformSessionsTable,
   platformMetaTable,
   projectsTable,
+  adminEventsTable,
 } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
 import {
@@ -350,8 +351,10 @@ import {
   createPlatformSession,
   PLATFORM_COOKIE,
   PLATFORM_IMPERSONATION_STASH_COOKIE,
+  ensurePlatformUser,
+  ensureAutoApprovedAdmins,
 } from "../lib/platform-auth";
-import { PROJECT_TEAM_SEATS } from "../lib/team-invites";
+import { PROJECT_TEAM_SEATS, consumeInvite, getValidInvite } from "../lib/team-invites";
 import { resolvePlatformAccount } from "../middleware/platform-auth";
 import platformRouter from "./platform";
 import teamRouter from "./team";
@@ -368,6 +371,10 @@ function buildApp() {
   app.use(express.json());
   app.use(cookieParser());
   app.use(resolvePlatformAccount);
+  app.use(async (_req, _res, next) => {
+    if (afterSessionResolution) await afterSessionResolution();
+    next();
+  });
   app.use("/api", platformRouter);
   app.use("/api", teamRouter);
   app.use("/api", storeRouter);
@@ -378,6 +385,7 @@ function buildApp() {
 
 let server: Server;
 let baseUrl: string;
+let afterSessionResolution: (() => Promise<void>) | undefined;
 
 async function api(
   path: string,
@@ -430,6 +438,11 @@ async function seedAgency(slug: string, email: string) {
 }
 
 async function seedMaster(slug: string, email: string) {
+  if (slug === "admin") {
+    await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, slug));
+    await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, slug));
+    await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, slug));
+  }
   await db.insert(platformAccountsTable).values({
     username: slug,
     passwordHash: hashPassword("owner-password-1"),
@@ -485,7 +498,7 @@ describe("master workspace owner promotion", () => {
   }
 
   it("lets a canonical master owner add an owner without changing existing owners", async () => {
-    const { company, user: originalOwner, sid } = await seedMaster("promote-master", "owner@promote-master.test");
+    const { company, user: originalOwner, sid } = await seedMaster("admin", "owner@promote-master.test");
     const member = await addMember(company, "natalie@promote-master.test");
 
     const before = await api("/api/platform/team", { sid });
@@ -521,16 +534,16 @@ describe("master workspace owner promotion", () => {
       sid,
       body: { role: "admin" },
     });
-    expect(demoteAdditionalOwner.status).toBe(403);
+    expect(demoteAdditionalOwner.status).toBe(200);
     const removeAdditionalOwner = await api(`/api/platform/team/members/${member.id}/remove`, {
       method: "POST",
       sid,
     });
-    expect(removeAdditionalOwner.status).toBe(403);
+    expect(removeAdditionalOwner.status).toBe(200);
   });
 
   it("rejects master admins and owners of non-master workspaces", async () => {
-    const master = await seedMaster("admin-cannot-promote", "owner@admin-cannot-promote.test");
+    const master = await seedMaster("admin", "owner@admin-cannot-promote.test");
     const admin = await addMember(master.company, "admin@admin-cannot-promote.test", "admin");
     const target = await addMember(master.company, "target@admin-cannot-promote.test");
     const adminSid = await createPlatformSession(master.company.slug, null, admin.id, master.company.id);
@@ -555,8 +568,8 @@ describe("master workspace owner promotion", () => {
     expect(deniedAgency.status).toBe(403);
   });
 
-  it("never permits owner invitations and keeps owner rows immutable", async () => {
-    const { company, user: owner, sid } = await seedMaster("immutable-master", "owner@immutable-master.test");
+  it("never permits owner invitations or self-actions, retaining the last named Owner", async () => {
+    const { company, user: owner, sid } = await seedMaster("admin", "owner@immutable-master.test");
 
     const invite = await api("/api/platform/team/invite", {
       sid,
@@ -677,6 +690,9 @@ describe("master workspace owner promotion", () => {
   });
 
   it("allows the canonical legacy admin session to bootstrap Natalie as an owner", async () => {
+    await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, "admin"));
+    await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, "admin"));
+    await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, "admin"));
     await db.insert(platformAccountsTable).values({
       username: "admin",
       passwordHash: hashPassword("admin-password-1"),
@@ -727,7 +743,326 @@ describe("master workspace owner promotion", () => {
   });
 });
 
+describe("canonical Master Owner management", () => {
+  async function member(company: { id: string; slug: string }, email: string, role = "owner") {
+    const [user] = await db.insert(platformUsersTable).values({
+      email, name: email.split("@")[0], passwordHash: hashPassword("member-password-1"), emailVerified: true,
+    }).returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: user!.id, companyId: company.id, companySlug: company.slug, role,
+    });
+    const sid = await createPlatformSession(company.slug, null, user!.id, company.id);
+    return { user: user!, sid };
+  }
+
+  async function membership(companyId: string, userId: string) {
+    const [row] = await db.select().from(platformMembershipsTable).where(and(
+      eq(platformMembershipsTable.companyId, companyId), eq(platformMembershipsTable.userId, userId),
+    ));
+    return row;
+  }
+
+  // Deterministically model requests that passed authentication before another
+  // mutation committed. PGlite serializes transactions; production PostgreSQL
+  // additionally exercises contention on the identical company FOR UPDATE.
+  function pauseResolvedRequests(count = 1) {
+    let reached!: () => void;
+    let release!: () => void;
+    const ready = new Promise<void>((resolve) => { reached = resolve; });
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    afterSessionResolution = async () => {
+      if (--count === 0) reached();
+      await gate;
+    };
+    return { ready, release: () => { afterSessionResolution = undefined; release(); } };
+  }
+
+  it.each(["admin", "billing", "content", "viewer"])("demotes another Owner to %s, invalidates sessions and audits atomically", async (role) => {
+    const actor = await seedMaster("admin", `owner@demote-${role}.test`);
+    const target = await member(actor.company, `target@demote-${role}.test`);
+    const team = await api("/api/platform/team", { sid: actor.sid });
+    expect(team.json.canManageOwners).toBe(true);
+    expect(team.json.members.find((m: any) => m.userId === target.user.id)).toMatchObject({
+      canEditRole: true, canRemove: true, protectionReason: null,
+    });
+    expect(team.json.members.find((m: any) => m.userId === actor.user.id)).toMatchObject({
+      canEditRole: false, canRemove: false, protectionReason: expect.stringMatching(/your own/),
+    });
+
+    const changed = await api(`/api/platform/team/members/${target.user.id}`, {
+      sid: actor.sid, method: "PATCH", body: { role },
+    });
+    expect(changed.status).toBe(200);
+    expect((await membership(actor.company.id, target.user.id))?.role).toBe(role);
+    expect((await membership(actor.company.id, actor.user.id))?.role).toBe("owner");
+    const [user] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.id, target.user.id));
+    expect(user?.sessionVersion).toBe(target.user.sessionVersion + 1);
+    expect(await db.select().from(platformSessionsTable).where(eq(platformSessionsTable.userId, target.user.id))).toHaveLength(0);
+    expect((await api("/api/platform/team", { sid: target.sid })).status).toBe(401);
+    const [audit] = await db.select().from(adminEventsTable).where(eq(adminEventsTable.targetId, target.user.id));
+    expect(audit).toMatchObject({
+      actorId: actor.user.id, action: "team_member_role_changed", targetType: "membership",
+      metadata: { companyId: actor.company.id, companySlug: "admin", previousRole: "owner", newRole: role },
+    });
+  });
+
+  it.each(["owner", "viewer"])("removes a %s durably without deleting identity, other memberships or customer data", async (role) => {
+    const actor = await seedMaster("admin", `owner@remove-${role}.test`);
+    const target = await member(actor.company, `target@remove-${role}.test`, role);
+    const other = await seedAgency(`other-remove-${role}`, `other@remove-${role}.test`);
+    await db.insert(platformMembershipsTable).values({
+      userId: target.user.id, companyId: other.company.id, companySlug: other.company.slug, role: "content",
+    });
+    const otherMembership = await membership(other.company.id, target.user.id);
+    const [project] = await db.insert(projectsTable).values({
+      id: `keep-project-${role}`, owner: other.company.slug, name: "Retained customer work", data: { retained: true },
+    }).returning();
+    await db.update(platformUsersTable).set({ googleId: `disposable-google-${role}` })
+      .where(eq(platformUsersTable.id, target.user.id));
+
+    const removed = await api(`/api/platform/team/members/${target.user.id}/remove`, { sid: actor.sid, method: "POST" });
+    expect(removed.status).toBe(200);
+    expect(await membership(actor.company.id, target.user.id)).toBeUndefined();
+    expect(await membership(other.company.id, target.user.id)).toEqual(otherMembership);
+    const [user] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.id, target.user.id));
+    expect(user).toMatchObject({ id: target.user.id, email: target.user.email, sessionVersion: 1 });
+    expect(await db.select().from(projectsTable).where(eq(projectsTable.id, project!.id))).toEqual([project]);
+    expect(await db.select().from(platformCompaniesTable).where(eq(platformCompaniesTable.id, other.company.id))).toEqual([other.company]);
+    expect((await api("/api/platform/team", { sid: target.sid })).status).toBe(401);
+    const [decision] = await db.select().from(platformMetaTable)
+      .where(eq(platformMetaTable.key, `master-membership-revoked:${actor.company.id}:${target.user.id}`));
+    expect(JSON.parse(decision!.value)).toMatchObject({
+      actor: actor.user.id, target: target.user.id, workspace: actor.company.id,
+      previousRole: role, removedAt: expect.any(String),
+    });
+    const [audit] = await db.select().from(adminEventsTable).where(eq(adminEventsTable.targetId, target.user.id));
+    expect(audit).toMatchObject({
+      actorId: actor.user.id, action: "team_member_removed",
+      metadata: { companyId: actor.company.id, previousRole: role, newRole: null },
+    });
+
+    // Authentication and startup provisioning must both respect deliberate
+    // revocation, even for an otherwise eligible Google-verified identity.
+    await ensurePlatformUser({
+      email: target.user.email!, companyUsername: "admin", companyRole: "admin", membershipRole: "owner",
+    });
+    expect(await membership(actor.company.id, target.user.id)).toBeUndefined();
+    vi.stubEnv("PLATFORM_AUTO_APPROVE_ADMIN_EMAILS", target.user.email!);
+    try {
+      await ensureAutoApprovedAdmins();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(await membership(actor.company.id, target.user.id)).toBeUndefined();
+    expect(await membership(other.company.id, target.user.id)).toEqual(otherMembership);
+  });
+
+  it("revokes old Master invitations on removal without affecting other workspaces or a deliberate new invitation", async () => {
+    const actor = await seedMaster("admin", "owner@revoke-old-invite.test");
+    const target = await member(actor.company, "target@revoke-old-invite.test");
+    const other = await seedAgency("other-old-invite", "owner@other-old-invite.test");
+    const [staleInvite, otherWorkspaceInvite, otherPersonInvite] = await db.insert(platformInvitationsTable).values([
+      {
+        token: "stale-master-invite", companyId: actor.company.id, companySlug: actor.company.slug,
+        email: target.user.email!.toUpperCase(), role: "viewer", expiresAt: new Date(Date.now() + 60_000),
+      },
+      {
+        token: "retained-other-workspace-invite", companyId: other.company.id, companySlug: other.company.slug,
+        email: target.user.email!, role: "viewer", expiresAt: new Date(Date.now() + 60_000),
+      },
+      {
+        token: "retained-other-person-invite", companyId: actor.company.id, companySlug: actor.company.slug,
+        email: "another@revoke-old-invite.test", role: "viewer", expiresAt: new Date(Date.now() + 60_000),
+      },
+    ]).returning();
+
+    expect((await api(`/api/platform/team/members/${target.user.id}/remove`, {
+      sid: actor.sid, method: "POST",
+    })).status).toBe(200);
+    const [revoked] = await db.select().from(platformInvitationsTable)
+      .where(eq(platformInvitationsTable.token, staleInvite!.token));
+    expect(revoked?.revokedAt).toBeInstanceOf(Date);
+    expect(revoked?.usedAt).toBeNull();
+    expect(await getValidInvite(staleInvite!.token)).toBeNull();
+    // Model SSO having already read the invitation before removal committed.
+    expect(await consumeInvite(staleInvite!, target.user.id)).toBe(false);
+    expect(await membership(actor.company.id, target.user.id)).toBeUndefined();
+    expect(await db.select().from(platformInvitationsTable)
+      .where(eq(platformInvitationsTable.token, otherWorkspaceInvite!.token))).toEqual([otherWorkspaceInvite]);
+    expect(await db.select().from(platformInvitationsTable)
+      .where(eq(platformInvitationsTable.token, otherPersonInvite!.token))).toEqual([otherPersonInvite]);
+
+    const invited = await api("/api/platform/team/invite", {
+      sid: actor.sid, body: { email: target.user.email, role: "viewer" },
+    });
+    expect(invited.status).toBe(201);
+    const newInvite = await getValidInvite(invited.json.token);
+    expect(newInvite).not.toBeNull();
+    expect(await consumeInvite(newInvite!, target.user.id)).toBe(true);
+    expect((await membership(actor.company.id, target.user.id))?.role).toBe("viewer");
+  });
+
+  it.each(["admin", "viewer", "billing", "content"])("denies %s actors Owner changes and removals", async (role) => {
+    const owner = await seedMaster("admin", `owner@denied-${role}.test`);
+    const actor = await member(owner.company, `actor@denied-${role}.test`, role);
+    const target = await member(owner.company, `target@denied-${role}.test`);
+    if (role === "admin") {
+      const team = await api("/api/platform/team", { sid: actor.sid });
+      expect(team.json.canManageOwners).toBe(false);
+      expect(team.json.members.find((m: any) => m.userId === target.user.id)).toMatchObject({
+        canEditRole: false, canRemove: false, protectionReason: expect.stringMatching(/named Owner/),
+      });
+    }
+    expect((await api(`/api/platform/team/members/${target.user.id}`, {
+      sid: actor.sid, method: "PATCH", body: { role: "viewer" },
+    })).status).toBe(403);
+    expect((await api(`/api/platform/team/members/${target.user.id}/remove`, { sid: actor.sid, method: "POST" })).status).toBe(403);
+    expect((await membership(owner.company.id, target.user.id))?.role).toBe("owner");
+    const [user] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.id, target.user.id));
+    expect(user?.sessionVersion).toBe(0);
+  });
+
+  it.each(["agency", "client", "admin"])("keeps Owner protections in a noncanonical %s workspace", async (role) => {
+    const actor = await seedAgency(`noncanonical-${role}`, `owner@noncanonical-${role}.test`);
+    await db.update(platformCompaniesTable).set({ role }).where(eq(platformCompaniesTable.id, actor.company.id));
+    await db.update(platformAccountsTable).set({ role }).where(eq(platformAccountsTable.username, actor.company.slug));
+    const target = await member(actor.company, `target@noncanonical-${role}.test`);
+    const team = await api("/api/platform/team", { sid: actor.sid });
+    expect(team.json.canManageOwners).toBe(false);
+    expect(team.json.canPromoteOwners).toBe(false);
+    expect(team.json.members.find((m: any) => m.userId === target.user.id).canRemove).toBe(false);
+    expect((await api(`/api/platform/team/members/${target.user.id}`, {
+      sid: actor.sid, method: "PATCH", body: { role: "viewer" },
+    })).status).toBe(403);
+    expect((await api(`/api/platform/team/members/${target.user.id}/remove`, { sid: actor.sid, method: "POST" })).status).toBe(403);
+    expect((await membership(actor.company.id, target.user.id))?.role).toBe("owner");
+  });
+
+  it("does not extend legacy Master bootstrap privileges to Owner management", async () => {
+    const master = await seedMaster("admin", "owner@legacy-manage.test");
+    const legacySid = await createPlatformSession("admin", null, null, null);
+    const team = await api("/api/platform/team", { sid: legacySid });
+    expect(team.json.canPromoteOwners).toBe(true);
+    expect(team.json.canManageOwners).toBe(false);
+    expect((await api(`/api/platform/team/members/${master.user.id}`, {
+      sid: legacySid, method: "PATCH", body: { role: "admin" },
+    })).status).toBe(403);
+    expect((await api(`/api/platform/team/members/${master.user.id}/remove`, { sid: legacySid, method: "POST" })).status).toBe(403);
+  });
+
+  it("keeps an Owner's access unrestricted on project-only edits", async () => {
+    const actor = await seedMaster("admin", "owner@unrestricted-owner.test");
+    const target = await member(actor.company, "target@unrestricted-owner.test");
+    expect((await api(`/api/platform/team/members/${target.user.id}`, {
+      sid: actor.sid, method: "PATCH", body: { projectIds: ["must-not-scope-owner"] },
+    })).status).toBe(200);
+    expect(await membership(actor.company.id, target.user.id)).toMatchObject({ role: "owner", projectAccess: null });
+  });
+
+  it.each(["remove", "demote"])("preserves a named Owner under concurrent cross-%s requests", async (action) => {
+    const a = await seedMaster("admin", `owner@cross-${action}.test`);
+    const b = await member(a.company, `target@cross-${action}.test`);
+    const gate = pauseResolvedRequests(2);
+    const mutate = (sid: string, target: string) => api(`/api/platform/team/members/${target}${action === "remove" ? "/remove" : ""}`, {
+      sid, method: action === "remove" ? "POST" : "PATCH", ...(action === "demote" ? { body: { role: "admin" } } : {}),
+    });
+    const requests = [mutate(a.sid, b.user.id), mutate(b.sid, a.user.id)];
+    await gate.ready;
+    gate.release();
+    const results = await Promise.all(requests);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 403]);
+    const owners = await db.select().from(platformMembershipsTable).where(and(
+      eq(platformMembershipsTable.companyId, a.company.id), eq(platformMembershipsTable.role, "owner"),
+    ));
+    expect(owners).toHaveLength(1);
+  });
+
+  it.each(["remove", "demote"])("rejects a stale Owner's in-flight %s after demotion to Admin", async (action) => {
+    const actor = await seedMaster("admin", `owner@stale-${action}.test`);
+    const target = await member(actor.company, `target@stale-${action}.test`);
+    const gate = pauseResolvedRequests();
+    const pending = api(`/api/platform/team/members/${target.user.id}${action === "remove" ? "/remove" : ""}`, {
+      sid: actor.sid, method: action === "remove" ? "POST" : "PATCH", ...(action === "demote" ? { body: { role: "viewer" } } : {}),
+    });
+    await gate.ready;
+    await db.update(platformMembershipsTable).set({ role: "admin" }).where(and(
+      eq(platformMembershipsTable.companyId, actor.company.id), eq(platformMembershipsTable.userId, actor.user.id),
+    ));
+    gate.release();
+    expect((await pending).status).toBe(403);
+    expect((await membership(actor.company.id, target.user.id))?.role).toBe("owner");
+  });
+
+  it.each(["remove", "demote"])("rejects an in-flight %s after the actor's membership is removed", async (action) => {
+    const actor = await seedMaster("admin", `owner@removed-actor-${action}.test`);
+    const target = await member(actor.company, `target@removed-actor-${action}.test`, "viewer");
+    const gate = pauseResolvedRequests();
+    const pending = api(`/api/platform/team/members/${target.user.id}${action === "remove" ? "/remove" : ""}`, {
+      sid: actor.sid, method: action === "remove" ? "POST" : "PATCH", ...(action === "demote" ? { body: { role: "content" } } : {}),
+    });
+    await gate.ready;
+    await db.delete(platformMembershipsTable).where(and(
+      eq(platformMembershipsTable.companyId, actor.company.id), eq(platformMembershipsTable.userId, actor.user.id),
+    ));
+    gate.release();
+    expect((await pending).status).toBe(403);
+    expect((await membership(actor.company.id, target.user.id))?.role).toBe("viewer");
+  });
+
+  it("rechecks the canonical workspace under lock rather than trusting the resolved company", async () => {
+    const actor = await seedMaster("admin", "owner@changed-workspace.test");
+    const target = await member(actor.company, "target@changed-workspace.test");
+    const gate = pauseResolvedRequests();
+    const pending = api(`/api/platform/team/members/${target.user.id}/remove`, { sid: actor.sid, method: "POST" });
+    await gate.ready;
+    await db.update(platformCompaniesTable).set({ role: "agency" }).where(eq(platformCompaniesTable.id, actor.company.id));
+    gate.release();
+    expect((await pending).status).toBe(403);
+    expect((await membership(actor.company.id, target.user.id))?.role).toBe("owner");
+  });
+
+  it("rejects a stale Admin removal if the target became an Owner before the lock", async () => {
+    const owner = await seedMaster("admin", "owner@promoted-target.test");
+    const actor = await member(owner.company, "actor@promoted-target.test", "admin");
+    const target = await member(owner.company, "target@promoted-target.test", "viewer");
+    const gate = pauseResolvedRequests();
+    const pending = api(`/api/platform/team/members/${target.user.id}/remove`, { sid: actor.sid, method: "POST" });
+    await gate.ready;
+    await db.update(platformMembershipsTable).set({ role: "owner" }).where(and(
+      eq(platformMembershipsTable.companyId, owner.company.id), eq(platformMembershipsTable.userId, target.user.id),
+    ));
+    gate.release();
+    expect((await pending).status).toBe(403);
+    expect((await membership(owner.company.id, target.user.id))?.role).toBe("owner");
+  });
+
+  it.each(["remove", "demote"])("rolls %s, revocation marker and invalidation back if the atomic audit fails", async (action) => {
+    const actor = await seedMaster("admin", `owner@atomic-${action}.test`);
+    const target = await member(actor.company, `target@atomic-${action}.test`);
+    await db.execute(sql`CREATE FUNCTION reject_test_team_audit() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'test audit failure'; END $$`);
+    await db.execute(sql`CREATE TRIGGER reject_test_team_audit BEFORE INSERT ON admin_events
+      FOR EACH ROW EXECUTE FUNCTION reject_test_team_audit()`);
+    try {
+      const removed = await api(`/api/platform/team/members/${target.user.id}${action === "remove" ? "/remove" : ""}`, {
+        sid: actor.sid, method: action === "remove" ? "POST" : "PATCH", ...(action === "demote" ? { body: { role: "admin" } } : {}),
+      });
+      expect(removed.status).toBe(500);
+      expect((await membership(actor.company.id, target.user.id))?.role).toBe("owner");
+      const [user] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.id, target.user.id));
+      expect(user?.sessionVersion).toBe(0);
+      expect(await db.select().from(platformSessionsTable).where(eq(platformSessionsTable.sid, target.sid))).toHaveLength(1);
+      expect(await db.select().from(platformMetaTable)
+        .where(eq(platformMetaTable.key, `master-membership-revoked:${actor.company.id}:${target.user.id}`))).toHaveLength(0);
+    } finally {
+      await db.execute(sql`DROP TRIGGER reject_test_team_audit ON admin_events`);
+      await db.execute(sql`DROP FUNCTION reject_test_team_audit()`);
+    }
+  });
+});
+
 beforeEach(() => {
+  afterSessionResolution = undefined;
   inviteEmailShouldSucceed.value = true;
   sentInvites.length = 0;
 });
@@ -901,7 +1236,7 @@ describe("team invitations", () => {
   });
 
   it("does not apply a team seat limit to a Master workspace", async () => {
-    const { sid } = await seedMaster("unlimited-master", "owner@unlimited-master.test");
+    const { sid } = await seedMaster("admin", "owner@unlimited-master.test");
 
     for (const email of ["one@master.test", "two@master.test", "three@master.test", "four@master.test"]) {
       const invite = await api("/api/platform/team/invite", {

@@ -1786,6 +1786,7 @@ describe("POST /api/platform/request-set-password", () => {
   const USERNAME = "sso-setpw-agency";
   const NEW_PASSWORD = "brandnewpass123!";
   let userId: string;
+  let activeCompanyId: string;
 
   // Uses the same real-session middleware as the change-password suite so
   // requirePlatformAuth actually checks the cookie/bearer token.
@@ -1820,6 +1821,7 @@ describe("POST /api/platform/request-set-password", () => {
       .insert(platformCompaniesTable)
       .values({ slug: USERNAME, role: "agency", status: "active", email: EMAIL })
       .returning({ id: platformCompaniesTable.id });
+    activeCompanyId = company.id;
     const [user] = await db
       .insert(platformUsersTable)
       .values({
@@ -1853,7 +1855,7 @@ describe("POST /api/platform/request-set-password", () => {
   async function createSsoSession(): Promise<string> {
     const { createPlatformSession: cps, setPlatformCookie: spc } = await import("../lib/platform-auth");
     void spc; // unused - we just need the sid
-    const sid = await cps(USERNAME, "127.0.0.1", userId, undefined);
+    const sid = await cps(USERNAME, "127.0.0.1", userId, activeCompanyId);
     return sid;
   }
 

@@ -36,6 +36,7 @@ const mock = vi.hoisted(() => {
   // For session_version checks: userId → { sessionVersion }
   const usersById = new Map<string, { id: string; sessionVersion: number }>();
   let emailVerificationLookupError = false;
+  let membershipLookupError = false;
 
   type FullAccountRow = {
     username: string; passwordHash: string; role: string; parent: string | null;
@@ -100,6 +101,18 @@ const mock = vi.hoisted(() => {
                 const sid = pred.__eq;
                 const row = sid ? sessionRows.get(sid) : undefined;
                 return Promise.resolve(row ? [row] : []);
+              },
+            }),
+          };
+        }
+        if (tbl.__table === "platform_memberships") {
+          return {
+            where: (pred: { __and: { __eq: string }[] }) => ({
+              limit: () => {
+                if (membershipLookupError) return Promise.reject(new Error("membership lookup unavailable"));
+                const [userId, companyId] = pred.__and.map((p) => p.__eq);
+                return Promise.resolve(memberships.has(`${userId}::${companyId}`)
+                  ? [{ role: "owner", projectAccess: null }] : []);
               },
             }),
           };
@@ -173,7 +186,12 @@ const mock = vi.hoisted(() => {
         };
       },
     }),
-    delete: () => ({ where: () => Promise.resolve() }),
+    delete: (table: { __table?: string }) => ({
+      where: (pred: { __eq?: string }) => {
+        if (table.__table === "platform_sessions" && pred.__eq) sessionRows.delete(pred.__eq);
+        return Promise.resolve();
+      },
+    }),
     update: (table: unknown) => ({
       set: (values: Record<string, unknown>) => ({
         where: (pred: { __eq?: string }) => {
@@ -212,6 +230,10 @@ const mock = vi.hoisted(() => {
     emailVerificationLookupError: {
       get value() { return emailVerificationLookupError; },
       set value(next: boolean) { emailVerificationLookupError = next; },
+    },
+    membershipLookupError: {
+      get value() { return membershipLookupError; },
+      set value(next: boolean) { membershipLookupError = next; },
     },
     db,
   };
@@ -477,8 +499,8 @@ describe("ensurePlatformUser (idempotency)", () => {
 // getPlatformSessionAccount - fallback paths
 //
 // The function tries platform_companies (by activeCompanyId) first, then falls
-// back to platform_accounts. These tests verify the fallback works correctly
-// so a missing company row does not silently lock out a user.
+// back to platform_accounts for genuinely userless legacy sessions only.
+// Named sessions must always have current workspace membership.
 // ---------------------------------------------------------------------------
 describe("getPlatformSessionAccount (session resolution + fallback)", () => {
   const FUTURE = new Date(Date.now() + 1_000_000_000);
@@ -489,6 +511,8 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
     mock.fullAccountRows.clear();
     mock.companiesById.clear();
     mock.emailVerificationLookupError.value = false;
+    mock.memberships.clear();
+    mock.membershipLookupError.value = false;
   });
 
   it("returns null for an unknown session id", async () => {
@@ -508,6 +532,7 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
     });
     const result = await getPlatformSessionAccount("expired-sid");
     expect(result).toBeNull();
+    expect(mock.sessionRows.has("expired-sid")).toBe(false);
   });
 
   it("resolves via platform_companies when activeCompanyId is present and the row exists", async () => {
@@ -530,12 +555,28 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
       createdAt: new Date(),
     });
 
+    mock.memberships.add(`user-uuid-001::${companyId}`);
     const result = await getPlatformSessionAccount("valid-new-sid");
     expect(result).not.toBeNull();
     expect(result!.username).toBe("myagency");
     expect(result!.role).toBe("agency");
     expect(result!.userId).toBe("user-uuid-001");
     expect(result!.activeCompanyId).toBe(companyId);
+  });
+
+  it.each(["missing", "lookup error"])("rejects a named Master session with %s membership authority", async (failure) => {
+    mock.companiesById.set("master-company", {
+      id: "master-company", slug: "admin", role: "admin",
+      parentSlug: null, maxSeats: null, status: "active",
+    });
+    mock.sessionRows.set("revoked-member-session", {
+      sid: "revoked-member-session", username: "admin",
+      userId: "removed-user", activeCompanyId: "master-company",
+      expiresAt: FUTURE, createdAt: new Date(), ipHint: null,
+    });
+    mock.membershipLookupError.value = failure === "lookup error";
+    expect(await getPlatformSessionAccount("revoked-member-session")).toBeNull();
+    expect(mock.sessionRows.has("revoked-member-session")).toBe(false);
   });
 
   it("fails closed when a user-bound email verification lookup errors", async () => {
@@ -562,7 +603,7 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
     expect(await getPlatformSessionAccount("verification-error-sid")).toBeNull();
   });
 
-  it("falls back to platform_accounts when activeCompanyId points to a missing company row", async () => {
+  it("rejects a user-bound session when activeCompanyId points to a missing company row", async () => {
     mock.fullAccountRows.set("myagency", {
       username: "myagency",
       passwordHash: "scrypt$salt$hash",
@@ -584,9 +625,8 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
     });
 
     const result = await getPlatformSessionAccount("orphan-company-sid");
-    expect(result).not.toBeNull();
-    expect(result!.username).toBe("myagency");
-    expect(result!.role).toBe("agency");
+    expect(result).toBeNull();
+    expect(mock.sessionRows.has("orphan-company-sid")).toBe(false);
   });
 
   it("resolves a legacy session (no activeCompanyId, no userId) via platform_accounts only", async () => {
@@ -654,6 +694,7 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
       createdAt: new Date(),
     });
 
+    mock.memberships.add(`user-uuid-role-change::${companyId}`);
     // First call: should return the original role.
     const before = await getPlatformSessionAccount("role-change-new-sid");
     expect(before).not.toBeNull();
@@ -798,6 +839,7 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
       createdAt: new Date(),
     });
 
+    mock.memberships.add(`user-pend-001::${companyId}`);
     const result = await getPlatformSessionAccount("new-path-pending-sid");
     expect(result).not.toBeNull();
     expect(result?.username).toBe("pending-co");
@@ -841,6 +883,7 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
       sessionVersion: 3,
     });
 
+    mock.memberships.add(`user-ok-v3::${companyId}`);
     const result = await getPlatformSessionAccount("ok-version-sid");
     expect(result).not.toBeNull();
     expect(result!.username).toBe("ok-version-co");
@@ -861,6 +904,7 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
       sessionVersion: null, // legacy - skip version check
     });
 
+    mock.memberships.add(`user-legacy-v5::${companyId}`);
     const result = await getPlatformSessionAccount("legacy-null-version-sid");
     expect(result).not.toBeNull();
     expect(result!.username).toBe("legacy-nocheck-co");

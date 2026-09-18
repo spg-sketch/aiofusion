@@ -503,7 +503,7 @@ async function provisionAioFusionStaffMembership(opts: {
   name: string;
   googleId?: string;
   microsoftId?: string;
-}): Promise<{ username: string; role: Role; userId: string; activeCompanyId: string }> {
+}): Promise<{ username: string; role: Role; userId: string; activeCompanyId: string } | null> {
   const masterAccount = await getAccount(DEFAULT_ADMIN_USERNAME);
   if (!masterAccount || normalizeRole(masterAccount.role) !== "admin" || masterAccount.status === "suspended") {
     throw new Error("The Master workspace is unavailable.");
@@ -529,6 +529,17 @@ async function provisionAioFusionStaffMembership(opts: {
 
   const masterCompany = await getCompanyBySlug(masterAccount.username);
   if (!masterCompany) throw new Error("The Master workspace company record is unavailable.");
+  // Provisioning can deliberately decline to recreate a removed membership.
+  // The human identity alone never authorizes Master sign-in or an MFA token.
+  // Check the actual membership, not just its revocation marker: an explicit
+  // later invitation may legitimately have restored access.
+  const [membership] = await db.select({ userId: platformMembershipsTable.userId })
+    .from(platformMembershipsTable)
+    .where(and(
+      eq(platformMembershipsTable.userId, userId),
+      eq(platformMembershipsTable.companyId, masterCompany.id),
+    )).limit(1);
+  if (!membership) return null;
 
   return {
     username: masterAccount.username,
@@ -3653,6 +3664,10 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
         name: userInfo.name || userInfo.given_name || userInfo.email.split("@")[0],
         googleId: googleId || undefined,
       });
+      if (!staff) {
+        res.redirect(`${origin}/?oauth_status=error&oauth_msg=master_access_removed`);
+        return;
+      }
       await finishOauthLoginOrChallenge(req, res, origin, {
         ...staff,
         needsSetup: false,
@@ -4100,6 +4115,10 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
         name: displayName,
         microsoftId,
       });
+      if (!staff) {
+        res.redirect(`${origin}/?oauth_status=error&oauth_msg=master_access_removed`);
+        return;
+      }
       await finishOauthLoginOrChallenge(req, res, origin, {
         ...staff,
         needsSetup: false,

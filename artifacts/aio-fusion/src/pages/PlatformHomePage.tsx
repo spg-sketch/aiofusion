@@ -274,6 +274,7 @@ function PlatformHomePage({
         no_email: "Your account does not have a verified email address. Please use password sign-in.",
         unexpected: "An unexpected error occurred. Please try again.",
         access_denied: "Sign-in was cancelled.",
+        master_access_removed: "Your access to the Master workspace has been removed. Contact a current Master Owner if you need access restored. Your user account and data have not been deleted.",
         microsoft_already_linked: "That Microsoft account is already linked to a different AIO Fusion account.",
         not_signed_in: "You need to be signed in to link an account. Please sign in and try again.",
       };
