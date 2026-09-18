@@ -2,8 +2,8 @@ Both original uploads match their pre-edit SHA-256 hashes.
 All ten sections and 51 original questions/content blocks are mapped; no unclassified body text.
 Both DOCX packages open and parse; no comments, tracked revisions, hidden-text flags, embedded objects or custom XML.
 Clean package uses fresh properties and contains no source metadata or withheld recipes. No em dashes in clean text.
-All source plan/tier prices, monthly equivalents, allowances and beta financial/date terms retained with confirmation caveats.
-Rendering checked from the actual DOCX files, converted with LibreOffice.
-internal: 42 pages rendered in LibreOffice. All pages have status footers; text stays within page bounds.
-clean: 14 pages rendered in LibreOffice. All pages have status footers; text stays within page bounds.
-Visual checks: page contact sheets and full-size commercial tables inspected. Tables are readable, headings are distinct and status labels remain visible.
+Owner-approved indicative prices, allowances, 60-day trial and payment-aligned 30% refund terms are present with unresolved terms explicit.
+Rendering check follows separately.
+internal: 43 pages rendered in LibreOffice. No empty pages; every page has the INTERNAL ONLY status footer.
+clean: 14 pages rendered in LibreOffice. No empty pages; every page has the RELEASE NOT AUTHORISED status footer.
+Visual checks: contact sheets inspected. Tables are readable, headings are distinct and status labels remain visible.

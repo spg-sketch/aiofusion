@@ -1,4 +1,142 @@
 {
+  "owner_decisions": [
+    {
+      "topic": "Prices, included projects and monthly action allowances",
+      "checklist_item": 9,
+      "status": "approved_as_indicative_beta_pricing",
+      "approver": "Spencer Gallagher",
+      "approver_role": null,
+      "decision_date": "2026-09-18",
+      "owner_statement": "Approve as indicative beta pricing",
+      "approved_scope": {
+        "currency": "GBP",
+        "vat": "All prices exclude VAT",
+        "plans": [
+          {"name": "In-House", "annual_billing_total": 4000, "quarterly_billing_annual_total": 4600, "included_premium_projects": 1},
+          {"name": "Agency", "annual_billing_total": 5000, "quarterly_billing_annual_total": 5750, "included_premium_projects": 3}
+        ],
+        "additional_project_tiers": [
+          {"name": "Standard", "annual_price": 500, "monthly_actions": 50},
+          {"name": "Premium", "annual_price": 650, "monthly_actions": 75},
+          {"name": "Max", "annual_price": 800, "monthly_actions": 150}
+        ]
+      },
+      "supporting_evidence": {
+        "url": "https://www.aiofusion.ai/pricing",
+        "checked_date": "2026-09-18",
+        "finding": "Published pricing-page values match the approved figures. The visible page banner states that pricing is indicative during beta.",
+        "scope_limit": "Website comparison and owner approval only; checkout configuration and enforced usage allowances were not verified."
+      },
+      "remaining_open": [
+        "Chargeable-action definitions, exclusions, repeated work, resets and limit behaviour",
+        "Support commitments, contract terms and any additional charges",
+        "Beta terms are recorded separately below; unresolved details still require confirmation",
+        "Approver role for the final approval record"
+      ],
+      "release_authorised": false
+    },
+    {
+      "topic": "Beta offer, trial duration and post-trial payment",
+      "checklist_item": 10,
+      "status": "approved_offer_and_refund_basis_with_operational_terms_pending",
+      "approver": "Spencer Gallagher",
+      "approver_role": null,
+      "decision_date": "2026-09-18",
+      "owner_statements": {
+        "offer": "Approve the offer listed above",
+        "trial_duration": "60 daya",
+        "post_trial_payment": "Pay in Full and a credit for 30% is issued",
+        "credit_type": "30% is refunded to the customer's payment method",
+        "credit_basis": "30% of the first 12 months bill",
+        "refund_cadence": "refunds are made in line with their payment so they pay quarterly 30% is paid quarterly if they pay annually it's paid annually"
+      },
+      "approved_scope": {
+        "free_trial_days": 60,
+        "trial_duration_editorial_note": "Obvious typo normalised to 60 days; do not substitute two calendar months.",
+        "structured_feedback_required": true,
+        "programme_opens": "2026-10-05",
+        "programme_endpoint": "December 2026",
+        "support": "Webinars and how-to guides from early October 2026",
+        "post_trial_payment": "During the first 12 months, customers pay each scheduled bill in full and receive a 30% refund to their payment method. Quarterly payments receive quarterly refunds; annual payments receive an annual refund.",
+        "refund_percentage": 30,
+        "refund_basis": "The first 12 months' bill",
+        "refund_destination": "The customer's payment method",
+        "refund_cadence": "Refunds follow the customer's payment frequency: quarterly for quarterly payments and annually for annual payments, limited to the first 12 months.",
+        "credit_context": "The owner clarified that the credit is a refund, not an upfront discount or a balance towards future invoices. Pay in full means each scheduled bill, not mandatory annual prepayment. Refund processing time and detailed tax and additional-project treatment remain unconfirmed.",
+        "refund_clarification_date": "2026-09-18"
+      },
+      "supporting_evidence": {
+        "source": "Direct owner response",
+        "evidence_date": "2026-09-18",
+        "scope_limit": "Document terms only; no billing configuration or live conversion behaviour verified."
+      },
+      "remaining_open": [
+        "What starts the 60-day period and how individual trials relate to the December programme endpoint",
+        "Refund processing time after each payment, tax treatment, treatment of additional projects and any eligibility restrictions",
+        "Eligibility, payment-card requirements, opt-in versus automatic conversion, cancellation and renewal terms",
+        "Approver role for the final approval record"
+      ],
+      "release_authorised": false
+    },
+    {
+      "topic": "Measurement disclosures and unsupported-claim omissions",
+      "checklist_items": [1, 2, 3, 4, 5],
+      "status": "qualified_disclosures_approved_not_methodology_certification",
+      "approver": "Spencer Gallagher",
+      "approver_role": null,
+      "decision_date": "2026-09-18",
+      "owner_statement": "Approve these disclosures and omissions",
+      "approved_scope": [
+        "Audits sample API responses; they do not reproduce every customer's experience in ChatGPT or Claude.",
+        "The Authority Index is a 0–100 AI-assisted assessment, not a purely objective count or a universal ranking.",
+        "Planner scores are planning estimates, not forecasts or proof that an activity caused an improvement.",
+        "Comparisons require comparable questions, inputs and methodology. Identical results are not guaranteed.",
+        "Omit unsupported claims such as 99% blind, 80–90% of AI influence coming from earned media, and guaranteed repeatability. Detailed sampling and scoring mechanics remain unverified."
+      ],
+      "supporting_evidence": {
+        "source": "Direct owner approval of the proposed qualified disclosures",
+        "evidence_date": "2026-09-18",
+        "scope_limit": "Approval of disclosures and omissions only. No prompt payloads, model configurations, scoring implementation or repeat-run evidence supplied or certified."
+      },
+      "remaining_open": [
+        "Prompt independence and identity exposure at each stage",
+        "Sampling counts, weights, aggregation, denominators and failure handling",
+        "Exact deployed provider/model configurations and repeatability evidence",
+        "Detailed Planner scoring implementation and publication-time content scoring",
+        "Evidence for stronger external influence, superiority or competitor-comparison claims"
+      ],
+      "release_authorised": false
+    },
+    {
+      "topic": "Current live product descriptions and limits",
+      "checklist_items": [6, 7, 8, 11],
+      "status": "owner_confirmed_live_descriptions_not_independently_tested",
+      "approver": "Spencer Gallagher",
+      "approver_role": null,
+      "decision_date": "2026-09-18",
+      "owner_statement": "Yes, approve these descriptions and limits",
+      "approved_scope": [
+        "Website-assisted Project Set-Up, ChatGPT and Claude audits, and a website audit of fetched pages with a downloadable developer brief.",
+        "Content Creator, Content Optimiser, a project-specific Content Library, press-release Word export and the Communications Planner.",
+        "Saved audit history, separate ChatGPT and Claude responses and mention rates, a combined Authority Index, and links when the model supplies them.",
+        "An in-house-researched UK/US media database and Market Intelligence for events, speaking opportunities and awards. Coverage, contact currency and organiser details still require checking.",
+        "No beta white-labelling or direct press-release distribution, no Google AI Overviews/AI Mode audits, and no promised dates for future features."
+      ],
+      "supporting_evidence": {
+        "source": "Direct owner confirmation of current live availability",
+        "evidence_date": "2026-09-18",
+        "scope_limit": "Owner confirmation, not an independent live-product test. No dated live screenshots or report exports were supplied. Staging-only features must not be added as current live capabilities."
+      },
+      "remaining_open": [
+        "Detailed report breakdowns beyond those confirmed, append-only history and retention guarantees",
+        "Whole-site or page-speed coverage, detailed save/handoff behaviour and specific website checks beyond fetched-page scope",
+        "Exact category counts, listing horizons, record-level currency, refresh guarantees and sourcing/privacy evidence",
+        "Post-beta branding or scoring-customisation scope and package entitlement",
+        "Support commitments and Ask GEOrge routing/behaviour"
+      ],
+      "release_authorised": false
+    }
+  ],
   "sections": [
     {"number": 1, "title": "Positioning and background", "items": [
       {"start": 22, "end": 28, "question": "How should we describe AIO Fusion?", "category": "simplify; factual confirmation required", "reason": "Preserve the authors' integrated-workflow positioning. Remove unsubstantiated first, unique, enterprise and win claims, the predictive label and the implication of causal measurement. The source label 'Approved boilerplate' does not approve this new draft.", "answer": ["AIO Fusion is a generative engine optimisation (GEO) platform for PR, communications and marketing teams. It brings together AI visibility audits, content creation and optimisation, media research, communications planning and reporting in one project-based workflow.", "It helps teams understand how a brand appears in sampled AI answers, prioritise communications work and monitor subsequent changes. It does not control AI providers' answers or guarantee an improvement in visibility.", "AI authority for PR and marketing. | www.aiofusion.ai"]},
@@ -6,7 +144,7 @@
       {"start": 30, "end": 36, "question": "Who built it, and why?", "category": "simplify; factual confirmation required", "reason": "Keep named leadership and relevant experience. Omit detailed career, client and exit claims, recruitment instructions, future-build commitments and 'uniquely qualified'. Leadership titles and biographies still require owner sign-off.", "answer": ["AIO Fusion was created by communications professionals with PR, journalism, research and digital-agency experience. Patrick Barrett is CEO and Co-Founder; Natalie Linder is Co-Founder and Chief Product & Experience Officer; Spencer Gallagher leads platform development.", "The aim is to connect AI visibility work with the activities communications teams already manage: brand messaging, evidence, editorial content, media relations and reporting."]},
       {"start": 36, "end": 41, "question": "How is it different from AI visibility trackers?", "category": "simplify; factual confirmation required", "reason": "Replace blanket competitor comparisons and profitable-service claims with product-specific value. A consistent process is not evidence that repeatability or robustness has been proven.", "answer": ["AIO Fusion combines visibility diagnostics with tools for acting on the findings: content creation and optimisation, media research and communications planning. Teams can move from an audit to a prioritised programme of work without treating measurement as a separate activity.", "A consistent audit setup helps make comparisons more interpretable, but model answers can still vary. We do not claim that the process eliminates variation or that every competing tool lacks these capabilities."]},
       {"start": 41, "end": 43, "question": "Who is it for?", "category": "retain; simplify", "reason": "Retain agency and in-house audiences and flexible project concept; remove unsubstantiated superiority over heritage platforms.", "answer": ["It is designed for PR and communications agencies managing client brands, and in-house communications or marketing teams. A project can represent a client, business, business unit or brand. Agency users can organise work across multiple clients."]},
-      {"start": 43, "end": 49, "question": "What does it cost?", "category": "retain; factual confirmation required", "reason": "Keep source annual prices and allowances, with the complete table in section 9. Remove 'no hidden costs', which requires a complete approved commercial schedule. Do not silently revise beta prices.", "answer": ["The indicative beta pricing is £4,000 a year for In-House, including one Premium project, and £5,000 a year for Agency, including three Premium projects. Quarterly billing has a higher annual total: £4,600 for In-House and £5,750 for Agency. All prices exclude VAT.", "Additional projects are £500, £650 or £800 per project per year, depending on the monthly action allowance. Section 9 sets out the supplied terms in full. Prices, inclusions and beta terms remain subject to owner confirmation and the agreed order."]}
+      {"start": 43, "end": 49, "question": "What does it cost?", "category": "retain; owner-approved indicative beta pricing", "reason": "Owner approved the published figures as indicative beta pricing on 18 September 2026. Keep the complete table in section 9. Remove 'no hidden costs', which still requires a complete approved commercial schedule.", "answer": ["The owner-approved indicative beta pricing is £4,000 a year for In-House, including one Premium project, and £5,000 a year for Agency, including three Premium projects. Quarterly billing has a higher annual total: £4,600 for In-House and £5,750 for Agency. All prices exclude VAT.", "Additional projects are £500, £650 or £800 per project per year, depending on the monthly action allowance. Section 9 sets out the approved figures in full. Action-counting rules, support commitments and the agreed order still apply."]}
     ]},
     {"number": 2, "title": "The platform", "items": [
       {"start": 51, "end": 53, "question": "How is the platform structured?", "category": "retain; simplify", "reason": "Retain the project dashboard and cross-client workflow, but avoid implying that a project boundary alone establishes complete security. Procurement detail remains in section 10.", "answer": ["The platform is organised around projects, each representing a client or brand. The dashboard brings together setup progress, earned media and website visibility audits, and the content pipeline. Agency users can move between authorised client projects from one account. Access is intended to follow account and project permissions; section 10 explains the procurement position."]},
@@ -58,8 +196,8 @@
       {"start": 222, "end": 225, "question": "What about social media?", "category": "simplify; factual confirmation required", "reason": "Remove uncited research, platform-weighting assertions and LinkedIn gateway commitment. Preserve a useful but limited explanation of social's role.", "answer": ["Social content can form part of a wider communications programme. Its visibility to AI services depends on the provider, content accessibility and other conditions, so this draft makes no fixed claim about how social platforms are weighted.", "AIO Fusion's audit coverage should not be read as a direct measurement of LinkedIn or other social channels. No social-distribution integration is committed here."]}
     ]},
     {"number": 9, "title": "Commercials, beta and onboarding", "items": [
-      {"start": 227, "end": 230, "question": "What is the beta programme?", "category": "retain; factual confirmation required", "reason": "Preserve all supplied beta financial and dated participation terms for owner confirmation, not as an approved offer. Distinguish expectation of continuation from a contractual obligation; do not invent cancellation or conversion mechanics.", "answer": ["The proposed beta offer is a two-month free trial in exchange for structured feedback, followed by a 30% reduction on the first year. The supplied schedule opens on 5 October 2026 and runs to December 2026, with webinars and how-to guides from early October.", "These dates, eligibility and discount terms require owner confirmation. The source expresses an expectation that participants continue afterwards; any renewal, payment, cancellation or conversion obligation must be set out in the agreed trial terms rather than inferred from that expectation."]},
-      {"start": 230, "end": 234, "question": "What does it cost?", "category": "retain; factual confirmation required", "reason": "Transcribe source figures without changing prices or inventing monthly subscriptions. Monthly numbers are the source's rounded equivalents, not instalments. Quarterly column is annual total. Preserve inclusions/support subject to approval; remove 'no hidden costs'.", "answer": ["The following are the supplied indicative beta terms, subject to owner confirmation and the agreed order. All prices exclude VAT. Subscriptions are annual; payments are handled through Stripe. Monthly figures are rounded equivalents from the source, not a monthly subscription option."], "table": {"headers": ["Plan", "Annual billing", "Quarterly billing: annual total", "Included projects"], "rows": [["In-House", "£4,000/year\n£333/month equivalent", "£4,600/year\n£383/month equivalent", "1 Premium"], ["Agency", "£5,000/year\n£417/month equivalent", "£5,750/year\n£479/month equivalent", "3 Premium"]]}, "after": ["Both plans are described as including the full standard platform: AI visibility audit and GEO strategy builder; Communications Planner; Content Optimiser and editor; Content Creator; Media Research; Market Intelligence; Website Content GEO; Website Technical GEO; Measure and Report; and Content Library.", "In-House includes email support. Agency adds multi-client working, an agency dashboard, client sub-accounts and reporting, and priority email and chat support. Confirm the current scope of each module, support arrangements and any additional charges in the order. Proposed features are not included as current capabilities merely because the plan includes the standard platform."]},
+      {"start": 227, "end": 230, "question": "What is the beta programme?", "category": "retain; owner-approved with explicit open terms", "reason": "Record the owner's 18 September 2026 decisions: 60-day trial, structured feedback and payment-aligned 30% refunds during the first 12 months. Keep unresolved operational and contract terms explicit.", "answer": ["The owner-approved beta offer is a 60-day free trial in exchange for structured feedback. The programme opens on 5 October 2026 and runs to December 2026, with webinars and how-to guides from early October.", "After the trial, customers who proceed pay each scheduled bill in full. During the first 12 months, 30% of each payment is refunded to the customer's payment method. Quarterly payments receive quarterly refunds; annual payments receive an annual refund.", "Eligibility, when the 60-day period starts, refund processing time, tax treatment, treatment of additional projects, cancellation and renewal terms must be confirmed in the agreed trial and order terms. There is no automatic-conversion commitment in this Q&A."]},
+      {"start": 230, "end": 234, "question": "What does it cost?", "category": "retain; owner-approved indicative beta pricing", "reason": "Owner approved the published figures as indicative beta pricing on 18 September 2026. Monthly numbers are rounded equivalents, not instalments. Quarterly column is annual total. Preserve open support and order terms; remove 'no hidden costs'.", "answer": ["The following indicative beta figures were approved by Spencer Gallagher on 18 September 2026 and match the published pricing page checked on that date. All prices exclude VAT. Subscriptions are annual; payments are handled through Stripe. Monthly figures are rounded equivalents, not a monthly subscription option. The agreed order controls the final terms."], "table": {"headers": ["Plan", "Annual billing", "Quarterly billing: annual total", "Included projects"], "rows": [["In-House", "£4,000/year\n£333/month equivalent", "£4,600/year\n£383/month equivalent", "1 Premium"], ["Agency", "£5,000/year\n£417/month equivalent", "£5,750/year\n£479/month equivalent", "3 Premium"]]}, "after": ["Both plans are described as including the full standard platform: AI visibility audit and GEO strategy builder; Communications Planner; Content Optimiser and editor; Content Creator; Media Research; Market Intelligence; Website Content GEO; Website Technical GEO; Measure and Report; and Content Library.", "In-House includes email support. Agency adds multi-client working, an agency dashboard, client sub-accounts and reporting, and priority email and chat support. Confirm support arrangements and any additional charges in the order. Proposed features are not included as current capabilities merely because the plan includes the standard platform."]},
       {"start": 234, "end": 241, "question": "How do additional project tiers work?", "category": "retain; simplify; factual confirmation required", "reason": "Keep exact source prices, allowances and action definition. Exclude fee bands, worked workloads, headroom and action arithmetic as internal commercial modelling, not confidential technical methodology. Confirm actual allowance enforcement and exclusions before selling.", "answer": ["Additional projects are priced per project per year with a monthly action allowance. These are the supplied commercial terms, not independently verified live entitlements."], "table": {"headers": ["Tier", "Annual price, excluding VAT", "Actions per month"], "rows": [["Standard", "£500", "50"], ["Premium", "£650", "75"], ["Max", "£800", "150"]]}, "after": ["The supplied definition of an action is a piece of content created or optimised, or a marketing or media intelligence search run. Confirm exactly which operations count, how repeated work is charged, when allowances reset, and what happens at the limit before agreeing the order. This draft does not introduce rollover, overage or unlimited-use terms."]},
       {"start": 241, "end": 245, "question": "Why is it priced this way?", "category": "simplify; factual confirmation required", "reason": "Remove internal targeting economics, expected 5–20 additional projects, competitor price assertions and guaranteed offset/profitability. Preserve the commercial rationale in customer terms.", "answer": ["The plans reflect two common ways of working: an in-house team managing a brand and an agency managing several client programmes. Additional project tiers let buyers choose an activity allowance appropriate to each programme.", "Agencies can incorporate the workflow into their services, but client fees, margins and return on investment depend on how they operate. The subscription does not guarantee a profitable service line."]},
       {"start": 245, "end": 249, "question": "How ready does a team need to be to get value?", "category": "retain; simplify", "reason": "Keep familiar workflow and website-assisted setup. Remove 'will see results faster' and the implication no technical capability is needed to implement web changes.", "answer": ["The workflow is designed for account managers and in-house communications or marketing teams. Website-assisted setup can reduce data entry, and audit recommendations can help structure the programme.", "Teams still need time to review project information, check drafts and evidence, and carry out the work. Website changes may need a developer or SEO specialist. Technical expertise is not required to start planning, but implementation and outcomes depend on the work undertaken."]},

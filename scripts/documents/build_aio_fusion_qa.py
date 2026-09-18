@@ -77,14 +77,14 @@ def document(internal=False):
     h.runs[0].font.size = Pt(8)
     h.runs[0].font.color.rgb = RGBColor.from_string(TEAL)
     f = s.footer.paragraphs[0]
-    f.text = "INTERNAL ONLY - separate from prospect copy" if internal else "DRAFT FOR OWNER APPROVAL - NOT APPROVED FOR RELEASE"
+    f.text = "INTERNAL ONLY - separate from prospect copy" if internal else "OWNER-APPROVED SALES DRAFT - RELEASE NOT AUTHORISED"
     for r in f.runs:
         r.font.size = Pt(8)
     f.add_run("  |  ").font.size = Pt(8)
     field(f, "PAGE")
     cp = d.core_properties
     cp.title = "AIO Fusion Master Q&A v1.5" + (" - Internal annotated review" if internal else "")
-    cp.subject = "Internal editorial review" if internal else "Sales-ready copy: draft for owner approval"
+    cp.subject = "Internal editorial review" if internal else "Owner-approved sales draft: release not authorised"
     cp.author = "AIO Fusion"
     cp.last_modified_by = "AIO Fusion"
     cp.comments = ""
@@ -154,10 +154,10 @@ def new_page_heading(d, text):
 def clean_document():
     d = document()
     d.add_heading("AIO Fusion\nMaster Q&A v1.5", 0)
-    para(d, "Sales-ready copy | Draft for owner approval", "Subtitle")
+    para(d, "Owner-approved sales draft | Not authorised for release", "Subtitle")
     para(d, DATE)
     para(d, "Status: not approved for release. This editorial draft is intended for sales conversations and prospect follow-up after owner approval. It is not a binding offer, a security certification or a guarantee of results.")
-    para(d, "Commercial terms and dated beta arrangements are preserved from the supplied v1.4 and remain subject to confirmation. Where a factual answer is not yet established, the draft says so rather than filling the gap.")
+    para(d, "Spencer Gallagher approved the qualified pricing, beta, measurement and live-feature wording on 18 September 2026. Procurement wording was not approved, so that section retains explicit limitations. Where a factual answer is not established, the draft says so rather than filling the gap. Publishing or sending this document has not been authorised.")
     d.add_heading("How to read the answers", 2)
     para(d, "An observation is something found in the sampled AI response or fetched website content. An AI assessment interprets evidence and context. A planning estimate uses assumptions to help organise future work. These are different forms of information and should not be treated as interchangeable.")
     d.add_heading("Contents", 2)
@@ -227,6 +227,15 @@ def internal_document(src):
     para(d, "Purpose: constructive editorial comparison with Master Q&A v1.4, dated 17 September 2026, and the accompanying email draft. The original provides a useful integrated-workflow explanation, practical commercial detail and important limitations. This revision preserves that substance while separating routine sales answers from confidential mechanics, commercial modelling and detailed procurement evidence.")
     para(d, "Status: draft for owner approval, not approved for release. This is an editorial exercise, not a product, security or legal audit. No live capability, commercial configuration or third-party claim has been independently certified. Neither original upload has been changed. No documents have been published or sent externally.")
     para(d, "The comparison covers 51 source questions or content blocks across all ten sections, including the boilerplate, explanatory subsections and unheaded Market Intelligence paragraph. Full visible source wording is reproduced by block, followed by the exact v1.5 replacement and rationale. Source quotations retain original punctuation, including any original em dashes; new copy does not use em dashes.")
+    d.add_heading("Owner decisions recorded 18 September 2026", 1)
+    table(d, ["Area", "Decision", "Remaining limitation"], [
+        ["Pricing", "Spencer Gallagher approved the published figures as indicative beta pricing.", "Action-counting, support, extra charges and order terms remain subject to the agreed order."],
+        ["Beta", "Approved a 60-day free trial with structured feedback. Customers who proceed pay each bill in full and receive a 30% refund on each payment during the first 12 months. Refund cadence follows payment cadence.", "Trial start trigger, refund processing time, tax, additional-project treatment, cancellation and renewal remain unconfirmed."],
+        ["Measurement", "Approved the qualified disclosures and omission of unsupported blindness, influence and repeatability claims.", "Detailed prompts, sampling, scoring and repeatability evidence remain unverified."],
+        ["Live features", "Approved the clean descriptions and explicit current-feature limits.", "Owner confirmation was not independently tested; do not add staging-only features."],
+        ["Procurement", "No approval recorded.", "Keep the explicit security, privacy, processor, location, retention and certification limitations."],
+        ["Release", "No authorisation recorded.", "Do not publish or send either document without separate explicit authorisation."]
+    ])
     d.add_heading("Audience and handling", 1)
     table(d, ["Audience", "Appropriate material", "Handling"], [
         ["Routine prospect conversations", "Owner-approved clean v1.5: workflow, scope, limitations, commercial terms.", "Send only the clean file after approval. Do not attach this review."],
@@ -291,10 +300,10 @@ def internal_document(src):
     ]:
         para(d, "[ ] " + text)
     table(d, ["Approval record", "To be completed by owners"], [
-        ["Commercial and beta terms", "Name / date / evidence / decision"],
-        ["Product and measurement claims", "Name / date / evidence / decision"],
-        ["Security and privacy claims", "Name / date / evidence / decision"],
-        ["Final external release", "Approver / date / approved version / intended audience"]
+        ["Commercial and beta terms", "Spencer Gallagher | 18 September 2026 | approved with explicit open terms"],
+        ["Product and measurement claims", "Spencer Gallagher | 18 September 2026 | qualified wording approved"],
+        ["Security and privacy claims", "Not approved | limitations retained"],
+        ["Final external release", "Not authorised | do not publish or send"]
     ])
     d.add_heading("Source record", 2)
     para(d, "Source A: AIO-Fusion-Master-QA-sales_conversations_1789740507981.docx, labelled v1.4, 17 September 2026.")
@@ -336,9 +345,9 @@ def validate(clean_path, review_path, src):
     clean = Document(clean_path)
     assert len(clean.tables) == 3
     text = "\n".join(p.text for p in clean.paragraphs) + "\n".join(c.text for t in clean.tables for r in t.rows for c in r.cells)
-    for value in ["£4,000", "£4,600", "£5,000", "£5,750", "£333", "£383", "£417", "£479", "£500", "£650", "£800", "50", "75", "150", "30%", "5 October 2026", "two-month", "December 2026"]:
+    for value in ["£4,000", "£4,600", "£5,000", "£5,750", "£333", "£383", "£417", "£479", "£500", "£650", "£800", "50", "75", "150", "30%", "5 October 2026", "60-day", "December 2026"]:
         assert value in text, value
-    report.append("All source plan/tier prices, monthly equivalents, allowances and beta financial/date terms retained with confirmation caveats.")
+    report.append("Owner-approved indicative prices, allowances, 60-day trial and payment-aligned 30% refund terms are present with unresolved terms explicit.")
     (OUT / "verification.txt").write_text("\n".join(report) + "\nRendering check follows separately.\n")
     print("\n".join(report))
 

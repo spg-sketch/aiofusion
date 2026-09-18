@@ -14,7 +14,7 @@ for file in sorted(RENDER.glob("*.pdf")):
     for i, page in enumerate(pdf):
         text = page.get_text()
         assert text.strip(), (file, i, "empty page")
-        expected = "INTERNAL ONLY" if internal else "NOT APPROVED FOR RELEASE"
+        expected = "INTERNAL ONLY" if internal else "RELEASE NOT AUTHORISED"
         assert expected in text, (file, i, "missing status")
         for word in page.get_text("words"):
             x0, y0, x1, y1 = word[:4]
