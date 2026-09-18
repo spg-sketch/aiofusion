@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import express from "express";
 import cookieParser from "cookie-parser";
+import crypto from "node:crypto";
 
 vi.mock("@workspace/db", async () => {
   const { PGlite } = await import("@electric-sql/pglite");
@@ -41,6 +42,11 @@ vi.mock("@workspace/db", async () => {
       email varchar, website varchar, status varchar NOT NULL DEFAULT 'active'
     );
     CREATE TABLE platform_meta (key varchar PRIMARY KEY, value text NOT NULL);
+    CREATE TABLE admin_events (
+      id serial PRIMARY KEY, actor_id varchar(200) NOT NULL DEFAULT '', actor_username varchar(200) NOT NULL,
+      action varchar(100) NOT NULL, target_id varchar(300), target_type varchar(100), metadata jsonb,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE TABLE platform_sessions (
       sid varchar PRIMARY KEY, username varchar NOT NULL, user_id uuid, active_company_id uuid,
       session_version integer, created_at timestamptz NOT NULL DEFAULT now(),
@@ -72,13 +78,14 @@ vi.mock("../lib/notify-email", async (original) => {
   const actual = await original<typeof import("../lib/notify-email")>();
   return Object.fromEntries(Object.entries(actual).map(([key, value]) => [
     key, key === "getAppBaseUrl" ? () => "https://example.test"
-      : key === "sendMfaChangedEmail" || key === "sendNewTrustedDeviceEmail" ? notice
+      : key === "sendMfaChangedEmail" || key === "sendNewTrustedDeviceEmail" || key === "sendMfaLegacyRecoveryEmail" ? notice
         : typeof value === "function" ? vi.fn(async () => {}) : value,
   ]));
 });
 import {
   db, platformUsersTable, platformCompaniesTable, platformMembershipsTable,
   platformAccountsTable, platformMetaTable, platformSessionsTable, platformInvitationsTable,
+  adminEventsTable,
 } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import {
@@ -89,6 +96,7 @@ import {
   generateTotpSecret, hashRecoveryCode, resetPersonalMfa, addTrustedDevice,
   listTrustedDevices, getMfaGeneration, createMfaPendingToken, validateMfaPendingToken,
   recordMfaSession, getPersonalMfaStatus, mfaKey,
+  verifyMfaPendingToken, legacyRecoveryAuthorizationKey, migrationApprovalKey, trustedKey,
 } from "../lib/mfa";
 import {
   inspectLegacyMfaMigration, approvePersonalMfaRecovery, migrateAttributableLegacyMfa,
@@ -96,6 +104,7 @@ import {
 import { resolvePlatformAccount } from "../middleware/platform-auth";
 import platformRouter from "./platform";
 import teamRouter from "./team";
+import { issueGoogleLegacyRecovery, LEGACY_RECOVERY_TTL_MS } from "../lib/mfa-legacy-recovery";
 
 let server: Server;
 let baseUrl: string;
@@ -158,7 +167,7 @@ beforeAll(async () => {
 afterAll(async () => { await new Promise<void>(resolve => server.close(() => resolve())); });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 beforeEach(async () => {
-  for (const table of [platformInvitationsTable, platformSessionsTable, platformMetaTable, platformMembershipsTable, platformUsersTable, platformCompaniesTable, platformAccountsTable]) await db.delete(table);
+  for (const table of [adminEventsTable, platformInvitationsTable, platformSessionsTable, platformMetaTable, platformMembershipsTable, platformUsersTable, platformCompaniesTable, platformAccountsTable]) await db.delete(table);
   notice.mockClear();
   await db.insert(platformAccountsTable).values({ username: "admin", passwordHash: hashPassword(password), role: "admin", status: "active" });
   const [company] = await db.insert(platformCompaniesTable).values({ slug: "admin", role: "admin", status: "active", setupComplete: true }).returning();
@@ -171,6 +180,285 @@ beforeEach(async () => {
   await db.insert(platformMembershipsTable).values(people.map((person, index) => ({
     userId: person.id, companyId, companySlug: "admin", role: index === 2 ? "viewer" : "owner",
   })));
+});
+
+describe("staging Google and legacy TOTP individual recovery", () => {
+  let legacySecret: string;
+  const recoverPath = "/platform/mfa/legacy-recovery";
+  const proof = (index = 0) => ({
+    provider: "google" as const, googleId: `existing-google-${index}`,
+    email: people[index].email!, emailVerified: true,
+  });
+  const issue = (index = 0) => issueGoogleLegacyRecovery(proof(index));
+  const status = (recoveryToken: unknown) => request(`${recoverPath}/status`, { recoveryToken });
+  const recover = (recoveryToken: unknown, code = totpCode(legacySecret)) => request(recoverPath, { recoveryToken, code });
+  const meta = async (key: string, value = "true") => db.insert(platformMetaTable).values({ key, value });
+  const signRecovery = (payload: Record<string, unknown>) => {
+    const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+    return `${body}.${crypto.createHmac("sha256", process.env.SESSION_SECRET!)
+      .update(`staging-master-google-legacy-recovery:v1:${body}`).digest("base64url")}`;
+  };
+  async function oauth(index = 0, verified = true, extraCookie = "", state = "fresh-state") {
+    vi.stubEnv("GOOGLE_CLIENT_ID", "disposable-google-client");
+    vi.stubEnv("GOOGLE_CLIENT_SECRET", "disposable-google-secret");
+    const originalFetch = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn(async (input: any, init?: any) => {
+      const url = String(input);
+      if (url.includes("oauth2.googleapis.com/token")) return new Response(JSON.stringify({ access_token: "fixture-only" }));
+      if (url.includes("googleapis.com/oauth2/v2/userinfo")) return new Response(JSON.stringify({
+        id: proof(index).googleId, email: proof(index).email, verified_email: verified, name: "Disposable Owner",
+      }));
+      return originalFetch(input, init);
+    }));
+    const result = await originalFetch(`${baseUrl}/api/platform/auth/google/callback`, {
+      method: "POST", redirect: "manual",
+      headers: { "content-type": "application/json", cookie: `aio_oauth_state=${state};${extraCookie}` },
+      body: JSON.stringify({ code: "fresh-provider-code", state }),
+    });
+    const cookie = cookieNamed(result.headers.getSetCookie(), "aio_oauth_mfa_token");
+    return {
+      location: result.headers.get("location"), cookies: result.headers.getSetCookie(),
+      token: cookie ? decodeURIComponent(cookie.slice("aio_oauth_mfa_token=".length)) : "",
+    };
+  }
+  beforeEach(async () => {
+    vi.stubEnv("DEPLOYMENT_ENV", "staging");
+    vi.stubEnv("SESSION_SECRET", "disposable-recovery-signature-secret-not-a-real-secret");
+    legacySecret = generateTotpSecret();
+    await saveMfaState("legacy:admin", { secret: legacySecret, enabled: true, recoveryHashes: [hashRecoveryCode("ABCD-EFGH")] });
+    for (let index = 0; index < people.length; index++) {
+      await db.update(platformUsersTable).set({ googleId: proof(index).googleId }).where(eq(platformUsersTable.id, people[index].id));
+    }
+  });
+
+  it("hands off fresh Google proof, authorises only that Owner, then requires NEW setup and personal login", async () => {
+    const roster = await db.select().from(platformMembershipsTable);
+    const company = await db.select().from(platformCompaniesTable);
+    const accounts = await db.select().from(platformAccountsTable);
+    const legacy = await getMfaState("legacy:admin");
+    await meta(trustedKey("legacy:admin"), JSON.stringify([{ id: "shared-trust-must-stay" }]));
+    const otherSecret = generateTotpSecret();
+    await saveMfaState(subject(1), { secret: otherSecret, enabled: true, recoveryHashes: [] });
+    const otherState = await getMfaState(subject(1));
+    const staleToken = createMfaPendingToken({ u: "admin", uid: people[0].id, cid: companyId, role: "admin", mode: "enroll", g: 0 });
+    const staleSession = await createPlatformSession("admin", undefined, people[0].id, companyId);
+    const handoff = await oauth();
+    expect(handoff.location).toContain("?oauth_status=mfa&mfa_mode=recover");
+    expect(cookieNamed(handoff.cookies, "aio_sid")).toBe("");
+    expect(handoff.cookies.join(";")).toContain("Max-Age=300");
+    expect(verifyMfaPendingToken(handoff.token)).toBeNull();
+    expect((await status(handoff.token)).json).toEqual({ email: people[0].email });
+    for (const route of ["setup", "enable", "verify"]) {
+      const denied = await request(`/platform/mfa/${route}`, { mfaToken: handoff.token, code: totpCode(legacySecret) });
+      expect(denied.status).not.toBe(200);
+    }
+    const recovered = await request(recoverPath, {
+      recoveryToken: handoff.token, code: totpCode(legacySecret),
+      userId: people[1].id, email: people[1].email, username: "another-workspace",
+    });
+    expect(recovered.status).toBe(200);
+    expect(recovered.json).toMatchObject({ mfaEnrollRequired: true, email: people[0].email });
+    expect(cookieNamed(recovered.cookies, "aio_sid")).toBe("");
+    expect(await getMfaState(subject(0))).toBeNull();
+    expect(await db.select().from(platformSessionsTable)).toHaveLength(0);
+    expect(await getPlatformSessionAccount(staleSession)).toBeNull();
+    expect(await validateMfaPendingToken(staleToken)).toBeNull();
+    expect(await getMfaGeneration(subject(0))).toBe(1);
+    expect(await getMfaGeneration(subject(1))).toBe(0);
+    expect(notice).toHaveBeenCalledWith({ toEmail: people[0].email, toName: "Owner One" });
+    expect(await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, migrationApprovalKey(people[0].id)))).toHaveLength(0);
+    expect((await status(handoff.token)).status).toBe(403);
+    expect((await recover(handoff.token)).status).toBe(403);
+    const setup = await request("/platform/mfa/setup", { mfaToken: recovered.json.mfaToken });
+    expect(setup.status).toBe(200);
+    expect(setup.json.secret).not.toBe(legacySecret);
+    expect(setup.json.secret).not.toBe(otherSecret);
+    const enabled = await request("/platform/mfa/enable", {
+      mfaToken: recovered.json.mfaToken, code: totpCode(setup.json.secret),
+    });
+    expect(enabled.status).toBe(200);
+    expect(enabled.json.recoveryCodes).toHaveLength(10);
+    expect(cookieNamed(enabled.cookies, "aio_sid")).not.toBe("");
+    const challenge = await login(0);
+    expect(challenge.json.mfaRequired).toBe(true);
+    const loggedIn = await request("/platform/mfa/verify", { mfaToken: challenge.json.mfaToken, code: totpCode(setup.json.secret) });
+    expect(loggedIn.status).toBe(200);
+    expect(await getPlatformSessionAccount(cookieNamed(loggedIn.cookies, "aio_sid").slice(8))).toMatchObject({ userId: people[0].id, membershipRole: "owner" });
+    expect(await getMfaState("legacy:admin")).toEqual(legacy);
+    expect(await getMfaState(subject(1))).toEqual(otherState);
+    expect(await db.select().from(platformMembershipsTable)).toEqual(roster);
+    expect(await db.select().from(platformCompaniesTable)).toEqual(company);
+    expect(await db.select().from(platformAccountsTable)).toEqual(accounts);
+    expect(await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, trustedKey("legacy:admin"))))
+      .toMatchObject([{ value: JSON.stringify([{ id: "shared-trust-must-stay" }]) }]);
+    const audits = await db.select().from(adminEventsTable);
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({ actorId: people[0].id, targetId: people[0].id, action: "mfa_legacy_individual_recovery" });
+    expect(JSON.stringify(audits)).not.toContain(legacySecret);
+    expect(JSON.stringify(audits)).not.toContain(handoff.token);
+  });
+
+  it("rejects bad, expired, oversized-lifetime, forged-nonce, stale and wrong-purpose tokens", async () => {
+    const token = (await issue())!;
+    const payload = JSON.parse(Buffer.from(token.split(".")[0], "base64url").toString());
+    const now = Date.now();
+    const invalid = [
+      "", `${token}x`, token.slice(2), "not-a-token",
+      signRecovery({ ...payload, iat: now - LEGACY_RECOVERY_TTL_MS - 1000, exp: now - 1 }),
+      signRecovery({ ...payload, iat: now + 5000, exp: now + 6000 }),
+      signRecovery({ ...payload, exp: payload.iat + LEGACY_RECOVERY_TTL_MS + 1 }),
+      signRecovery({ ...payload, jti: crypto.randomUUID() }),
+      signRecovery({ ...payload, uid: people[1].id }),
+      signRecovery({ ...payload, purpose: "verify" }),
+      createMfaPendingToken({ u: "admin", uid: people[0].id, cid: companyId, role: "admin", mode: "enroll", g: 0 }),
+    ];
+    for (const bad of invalid) {
+      expect((await status(bad)).status).toBe(403);
+      expect((await recover(bad)).status).toBe(403);
+    }
+    await db.update(platformUsersTable).set({ sessionVersion: 1 }).where(eq(platformUsersTable.id, people[0].id));
+    expect((await recover(token)).status).toBe(403);
+    expect(await getMfaState(subject(0))).toBeNull();
+    expect(await db.select().from(adminEventsTable)).toHaveLength(0);
+  });
+
+  it.each([
+    "viewer", "deleted", "demoted", "revoked", "unverified", "null-verified", "google-unbound", "google-changed",
+    "email-changed", "account-suspended", "account-pending", "company-suspended", "managed", "archived",
+    "other-workspace", "wrong-company", "wrong-account-role", "wrong-company-role", "agency-parent",
+    "legacy-disabled", "legacy-deleted", "personal-enabled", "personal-pending", "approved", "recovery-marker", "revocation-marker",
+  ])("rechecks %s live after issuance, without changing any recovery state", async condition => {
+    const token = (await issue())!;
+    if (condition === "viewer" || condition === "demoted") await db.update(platformMembershipsTable).set({ role: "viewer" }).where(eq(platformMembershipsTable.userId, people[0].id));
+    if (condition === "deleted") await db.delete(platformUsersTable).where(eq(platformUsersTable.id, people[0].id));
+    if (condition === "revoked") await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.userId, people[0].id));
+    if (condition === "unverified" || condition === "null-verified") await db.update(platformUsersTable).set({ emailVerified: condition === "unverified" ? false : null }).where(eq(platformUsersTable.id, people[0].id));
+    if (condition === "google-unbound" || condition === "google-changed") await db.update(platformUsersTable).set({ googleId: condition === "google-unbound" ? null : "other-google" }).where(eq(platformUsersTable.id, people[0].id));
+    if (condition === "email-changed") await db.update(platformUsersTable).set({ email: "different@example.test" }).where(eq(platformUsersTable.id, people[0].id));
+    if (condition === "account-suspended" || condition === "account-pending") await db.update(platformAccountsTable).set({ status: condition === "account-suspended" ? "suspended" : "pending_approval" });
+    if (condition === "company-suspended") await db.update(platformCompaniesTable).set({ status: "suspended" });
+    if (condition === "managed" || condition === "archived") await meta(`account:${condition}:admin`);
+    if (condition === "other-workspace") await db.update(platformMembershipsTable).set({ companySlug: "other" }).where(eq(platformMembershipsTable.userId, people[0].id));
+    if (condition === "wrong-company") {
+      const [other] = await db.insert(platformCompaniesTable).values({ slug: "other" }).returning();
+      await db.update(platformMembershipsTable).set({ companyId: other.id }).where(eq(platformMembershipsTable.userId, people[0].id));
+    }
+    if (condition === "wrong-account-role") await db.update(platformAccountsTable).set({ role: "agency" });
+    if (condition === "wrong-company-role") await db.update(platformCompaniesTable).set({ role: "agency" });
+    if (condition === "agency-parent") await db.update(platformAccountsTable).set({ parent: "agency" });
+    if (condition === "legacy-disabled") await saveMfaState("legacy:admin", { secret: legacySecret, enabled: false, recoveryHashes: [] });
+    if (condition === "legacy-deleted") await db.delete(platformMetaTable).where(eq(platformMetaTable.key, mfaKey("legacy:admin")));
+    if (condition.startsWith("personal-")) await saveMfaState(subject(0), { secret: generateTotpSecret(), enabled: condition === "personal-enabled", recoveryHashes: [] });
+    if (condition === "approved") await meta(migrationApprovalKey(people[0].id));
+    if (condition === "recovery-marker") await meta(legacyRecoveryAuthorizationKey(people[0].id));
+    if (condition === "revocation-marker") await meta(`master-membership-revoked:${companyId}:${people[0].id}`);
+    const before = await db.select().from(platformMetaTable);
+    expect((await status(token)).status).toBe(403);
+    expect((await recover(token)).status).toBe(403);
+    expect(await issue()).toBeNull();
+    expect(await db.select().from(platformMetaTable)).toEqual(before);
+    expect(await db.select().from(adminEventsTable)).toHaveLength(0);
+    expect(await db.select().from(platformSessionsTable)).toHaveLength(0);
+  });
+
+  it("never starts recovery for viewers, unverified Google email, copied email, unbound ID or non-Google proof", async () => {
+    expect(await issue(2)).toBeNull();
+    expect(await issueGoogleLegacyRecovery({ ...proof(), emailVerified: false })).toBeNull();
+    expect(await issueGoogleLegacyRecovery({ ...proof(), googleId: "attacker-google" })).toBeNull();
+    expect(await issueGoogleLegacyRecovery({ ...proof(), email: people[1].email! })).toBeNull();
+    expect(await issueGoogleLegacyRecovery({ ...proof(), provider: "microsoft" } as any)).toBeNull();
+    expect(await issueGoogleLegacyRecovery({ ...proof(), provider: "password" } as any)).toBeNull();
+    const unverified = await oauth(0, false);
+    expect(unverified.location).not.toContain("mfa_mode=recover");
+    expect(unverified.token).toBe("");
+    expect((await login(0)).json.code).toBe("MFA_MIGRATION_REQUIRED");
+    expect(await db.select().from(platformSessionsTable)).toHaveLength(0);
+  });
+
+  it.each(["production", "development", ""])("disables issuance and token use outside staging (%s)", async environment => {
+    const token = (await issue())!;
+    vi.stubEnv("DEPLOYMENT_ENV", environment);
+    expect(await issue()).toBeNull();
+    expect((await status(token)).status).toBe(403);
+    expect((await recover(token)).status).toBe(403);
+    expect(await db.select().from(platformSessionsTable)).toHaveLength(0);
+  });
+
+  it("commits invalid-code lockout across fresh OAuth tokens; rejects legacy recovery codes", async () => {
+    let token = (await issue())!;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      expect((await recover(token, "ABCD-EFGH")).status).toBe(400);
+      token = (await issue())!;
+    }
+    expect((await recover(token)).status).toBe(429);
+    expect(await getMfaState(subject(0))).toBeNull();
+    expect(await db.select().from(adminEventsTable)).toHaveLength(0);
+  });
+
+  it("does not grant personal enrollment on a different deployment or after a security change", async () => {
+    const recovered = await recover(await issue());
+    expect(recovered.status).toBe(200);
+    vi.stubEnv("DEPLOYMENT_ENV", "production");
+    expect(await validateMfaPendingToken(recovered.json.mfaToken)).toBeNull();
+    vi.stubEnv("DEPLOYMENT_ENV", "staging");
+    await db.update(platformUsersTable).set({ sessionVersion: 2 }).where(eq(platformUsersTable.id, people[0].id));
+    expect((await request("/platform/mfa/setup", { mfaToken: recovered.json.mfaToken })).status).not.toBe(200);
+    expect(await getMfaState(subject(0))).toBeNull();
+    expect(await db.select().from(platformSessionsTable)).toHaveLength(0);
+  });
+
+  it("excludes Google invitation, link and delete-reauth flows from recovery", async () => {
+    const invited = await oauth(0, true, " aio_invite=invalid-disposable-invite");
+    expect(invited.location).toContain("invite_invalid");
+    expect(invited.token).toBe("");
+    const linked = await oauth(0, true, " aio_oauth_link=admin");
+    expect(linked.location).toContain("link_google=error");
+    expect(linked.token).toBe("");
+    const deletion = await oauth(0, true, "", "delete:fresh-state");
+    expect(deletion.location).toContain("delete_reauth=not_allowed");
+    expect(deletion.token).toBe("");
+    expect(await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, legacyRecoveryAuthorizationKey(people[0].id)))).toHaveLength(0);
+  });
+
+  it("rejects recovery endpoints and Google handoff during live impersonation", async () => {
+    const token = (await issue())!;
+    const enrolledSecret = generateTotpSecret();
+    await saveMfaState(subject(1), { secret: enrolledSecret, enabled: true, recoveryHashes: [] });
+    const sid = await createPlatformSession("admin", undefined, people[1].id, companyId);
+    await recordMfaSession(sid, subject(1), 0);
+    const cookie = `aio_admin_sid=${sid}`;
+    expect((await request(`${recoverPath}/status`, { recoveryToken: token }, cookie)).status).toBe(403);
+    expect((await request(recoverPath, { recoveryToken: token, code: totpCode(legacySecret) }, cookie)).status).toBe(403);
+    const handoff = await oauth(0, true, ` ${cookie}`);
+    expect(handoff.location).not.toContain("mfa_mode=recover");
+    expect(handoff.token).toBe("");
+    expect(await getMfaState(subject(0))).toBeNull();
+  });
+
+  it("serializes same-token and different-token retries and consumes the shared timestep across Owners", async () => {
+    const [first, retry, other] = await Promise.all([issue(), issue(), issue(1)]);
+    const code = totpCode(legacySecret);
+    const results = await Promise.all([recover(first, code), recover(first, code), recover(retry, code)]);
+    expect(results.filter(result => result.status === 200)).toHaveLength(1);
+    expect((await recover(other, code)).status).toBe(400);
+    expect(await getMfaGeneration(subject(0))).toBe(1);
+    expect(await getMfaGeneration(subject(1))).toBe(0);
+    expect(await getMfaState(subject(0))).toBeNull();
+    expect(await getMfaState(subject(1))).toBeNull();
+    expect(await db.select().from(adminEventsTable)).toHaveLength(1);
+    expect(await db.select().from(platformMembershipsTable)).toHaveLength(3);
+  });
+
+  it("allows only one concurrent Owner per shared code, leaving the losing Owner untouched", async () => {
+    const [first, other] = await Promise.all([issue(), issue(1)]);
+    const code = totpCode(legacySecret);
+    const results = await Promise.all([recover(first, code), recover(other, code)]);
+    expect(results.map(result => result.status).sort()).toEqual([200, 400]);
+    const versions = await Promise.all([getMfaGeneration(subject(0)), getMfaGeneration(subject(1))]);
+    expect(versions.sort()).toEqual([0, 1]);
+    expect(await db.select().from(adminEventsTable)).toHaveLength(1);
+    expect(await getMfaState("legacy:admin")).toMatchObject({ secret: legacySecret, enabled: true });
+  });
 });
 
 describe("personal Master MFA", () => {
@@ -385,6 +673,16 @@ describe.each(["google", "microsoft"] as const)("personal %s OAuth MFA", provide
       body: new URLSearchParams({ state, code: "disposable-code" }).toString(),
     });
   }
+  if (provider === "microsoft") it("cannot start staging legacy recovery through a fresh Microsoft callback", async () => {
+    vi.stubEnv("DEPLOYMENT_ENV", "staging");
+    await saveMfaState("legacy:admin", { secret: generateTotpSecret(), enabled: true, recoveryHashes: [] });
+    await db.update(platformUsersTable).set({ googleId: "bound-google", microsoftId: "microsoft-0" }).where(eq(platformUsersTable.id, people[0].id));
+    const response = await callback(0);
+    expect(response.headers.get("location")).toContain("oauth_status=mfa_recovery_required");
+    expect(cookieNamed(response.headers.getSetCookie(), "aio_oauth_mfa_token")).toBe("");
+    expect(cookieNamed(response.headers.getSetCookie(), "aio_sid")).toBe("");
+    expect(await getMfaState(subject(0))).toBeNull();
+  });
   it.each(["enroll", "verify"] as const)("invited Master Viewer completes personal %s before receiving a usable session", async mode => {
     const invite = await masterViewerInvite(mode);
     const response = await callback(2, invite.token);

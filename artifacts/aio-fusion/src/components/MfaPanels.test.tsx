@@ -1,15 +1,20 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 
 // Mock the auth module before importing the component under test.
 const serverMfaVerify = vi.hoisted(() => vi.fn());
 const serverMfaSetup = vi.hoisted(() => vi.fn());
+const serverMfaEnable = vi.hoisted(() => vi.fn());
 const serverMfaStatus = vi.hoisted(() => vi.fn());
+const serverLegacyMfaRecoveryStatus = vi.hoisted(() => vi.fn());
+const serverLegacyMfaRecovery = vi.hoisted(() => vi.fn());
 vi.mock("../lib/auth", () => ({
   serverMfaVerify,
   serverMfaSetup,
-  serverMfaEnable: vi.fn(),
+  serverMfaEnable,
   serverMfaStatus,
+  serverLegacyMfaRecoveryStatus,
+  serverLegacyMfaRecovery,
   serverMfaTrustedDevices: vi.fn(async () => ({ ok: true, devices: [] })),
   serverMfaRevokeTrustedDevice: vi.fn(),
   serverMfaDisable: vi.fn(),
@@ -20,7 +25,7 @@ vi.mock("../lib/auth", () => ({
 // jsdom) and leaves stray timers that fire after test-environment teardown.
 // These tests exercise the recovery-code path, which doesn't use the boxes.
 vi.mock("./ui/input-otp", () => ({
-  InputOTP: (props: any) => <input data-testid="otp" value={props.value ?? ""} onChange={() => {}} />,
+  InputOTP: (props: any) => <input aria-label={props["aria-label"]} data-testid="otp" disabled={props.disabled} value={props.value ?? ""} onChange={(event) => props.onChange?.(event.target.value)} />,
   InputOTPGroup: (props: any) => <div>{props.children}</div>,
   InputOTPSlot: () => <div />,
 }));
@@ -158,5 +163,96 @@ describe("MfaLoginStep recovery-code warning", () => {
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith(SESSION, false));
     expect(screen.queryByText("You signed in with a recovery code")).toBeNull();
+  });
+});
+
+describe("legacy MFA recovery", () => {
+  const recoveryChallenge = { mfaToken: "recovery-token", enroll: false, recover: true };
+
+  it("loads the verified identity and submits only the dedicated recovery payload", async () => {
+    serverLegacyMfaRecoveryStatus.mockResolvedValue({ ok: true, email: "owner@example.test" });
+    serverLegacyMfaRecovery.mockResolvedValue({ ok: false, error: "That original code is not valid." });
+    render(<MfaLoginStep challenge={recoveryChallenge} onSuccess={vi.fn()} onCancel={vi.fn()} />);
+
+    expect(await screen.findByText("owner@example.test")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Authenticator code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue to personal setup" }));
+
+    await waitFor(() => expect(serverLegacyMfaRecovery).toHaveBeenCalledWith("recovery-token", "123456"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("That original code is not valid.");
+    expect(serverMfaVerify).not.toHaveBeenCalled();
+    expect(serverMfaSetup).not.toHaveBeenCalledWith("recovery-token");
+    expect(serverMfaEnable).not.toHaveBeenCalledWith(expect.anything(), "recovery-token");
+  });
+
+  it("shows expired status guidance, supports retry, and cancellation", async () => {
+    serverLegacyMfaRecoveryStatus
+      .mockResolvedValueOnce({ ok: false, error: "This recovery sign-in has expired." })
+      .mockResolvedValueOnce({ ok: true, email: "owner@example.test" });
+    const onCancel = vi.fn();
+    render(<MfaLoginStep challenge={recoveryChallenge} onSuccess={vi.fn()} onCancel={onCancel} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("expired");
+    expect(screen.getByText("Start a fresh Google sign-in to request a new personal recovery check.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry recovery check" }));
+    expect(await screen.findByText("owner@example.test")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel and start a fresh Google sign-in" }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("locks submission while busy then transitions to fresh enrolment without creating a session", async () => {
+    let resolveRecovery!: (value: any) => void;
+    serverLegacyMfaRecoveryStatus.mockResolvedValue({ ok: true, email: "owner@example.test" });
+    serverLegacyMfaRecovery.mockImplementation(() => new Promise((resolve) => { resolveRecovery = resolve; }));
+    serverMfaSetup.mockResolvedValue({
+      ok: true,
+      email: "owner@example.test",
+      secret: "FRESH-PERSONAL-SECRET",
+      otpauthUrl: "otpauth://totp/owner?secret=FRESH",
+    });
+    const onSuccess = vi.fn();
+    render(<MfaLoginStep challenge={recoveryChallenge} onSuccess={onSuccess} onCancel={vi.fn()} />);
+    await screen.findByText("owner@example.test");
+    fireEvent.change(screen.getByLabelText("Authenticator code"), { target: { value: "123456" } });
+    const submit = screen.getByRole("button", { name: "Continue to personal setup" });
+    fireEvent.click(submit);
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(submit);
+    expect(serverLegacyMfaRecovery).toHaveBeenCalledTimes(1);
+    expect(onSuccess).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveRecovery({ ok: true, mfaEnrollRequired: true, mfaToken: "fresh-enrol-token", email: "owner@example.test" });
+    });
+    expect(await screen.findByText("Set up two-factor authentication")).toBeTruthy();
+    expect(await screen.findByText("FRESH-PERSONAL-SECRET")).toBeTruthy();
+    expect(serverMfaSetup).toHaveBeenCalledWith("fresh-enrol-token");
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it("finishes the existing fresh enrolment and save-codes flow before exposing the session", async () => {
+    serverLegacyMfaRecoveryStatus.mockResolvedValue({ ok: true, email: "owner@example.test" });
+    serverLegacyMfaRecovery.mockResolvedValue({
+      ok: true, mfaEnrollRequired: true, mfaToken: "fresh-enrol-token", email: "owner@example.test",
+    });
+    serverMfaSetup.mockResolvedValue({
+      ok: true, email: "owner@example.test", secret: "FRESH", otpauthUrl: "otpauth://totp/owner?secret=FRESH",
+    });
+    serverMfaEnable.mockResolvedValue({ ok: true, session: SESSION, recoveryCodes: ["NEW-ONE", "NEW-TWO"] });
+    const onSuccess = vi.fn();
+    render(<MfaLoginStep challenge={recoveryChallenge} onSuccess={onSuccess} onCancel={vi.fn()} />);
+    await screen.findByText("owner@example.test");
+    fireEvent.change(screen.getByLabelText("Authenticator code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue to personal setup" }));
+    await screen.findByText("Set up two-factor authentication");
+    fireEvent.change(screen.getByLabelText("Authenticator code"), { target: { value: "654321" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify & enable" }));
+
+    expect(await screen.findByText("NEW-ONE")).toBeTruthy();
+    expect(serverMfaEnable).toHaveBeenCalledWith("654321", "fresh-enrol-token");
+    expect(onSuccess).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByLabelText("I have saved my recovery codes somewhere safe."));
+    fireEvent.click(screen.getByRole("button", { name: "Continue to AIO Fusion" }));
+    expect(onSuccess).toHaveBeenCalledWith(SESSION, false);
   });
 });

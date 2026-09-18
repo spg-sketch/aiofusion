@@ -406,7 +406,7 @@ async function runMigrationIfNeeded(role: Role, signal?: AbortSignal): Promise<v
   }
 }
 
-export type MfaChallenge = { mfaToken: string; enroll: boolean; email?: string };
+export type MfaChallenge = { mfaToken: string; enroll: boolean; email?: string; recover?: boolean };
 export async function serverLogin(
   username: string,
   password: string,
@@ -1311,6 +1311,30 @@ export async function serverMfaVerify(
   const recoveryCodesRemaining =
     typeof json?.recoveryCodesRemaining === "number" ? json.recoveryCodesRemaining : undefined;
   return recoveryCodesRemaining === undefined ? done : { ...done, recoveryCodesRemaining };
+}
+
+export async function serverLegacyMfaRecoveryStatus(
+  recoveryToken: string,
+): Promise<{ ok: true; email: string } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/mfa/legacy-recovery/status", { recoveryToken });
+  if (!ok || typeof json?.email !== "string") {
+    return { ok: false, error: json?.error || "This recovery sign-in has expired. Start a fresh Google sign-in and try again." };
+  }
+  return { ok: true, email: json.email };
+}
+
+export async function serverLegacyMfaRecovery(
+  recoveryToken: string,
+  code: string,
+): Promise<
+  | { ok: true; mfaEnrollRequired: true; mfaToken: string; email: string }
+  | { ok: false; error: string }
+> {
+  const { ok, json } = await postJson("/api/platform/mfa/legacy-recovery", { recoveryToken, code });
+  if (!ok || json?.mfaEnrollRequired !== true || typeof json?.mfaToken !== "string" || typeof json?.email !== "string") {
+    return { ok: false, error: json?.error || "That authenticator code is not valid." };
+  }
+  return { ok: true, mfaEnrollRequired: true, mfaToken: json.mfaToken, email: json.email };
 }
 
 export type TrustedDevice = {

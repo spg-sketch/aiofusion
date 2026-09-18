@@ -16,6 +16,23 @@ import { apiBase } from "../lib/apiHelpers";
 import { roleLabel } from "../lib/accountLabels";
 import { BetaTrialBanner } from "../components/BetaTrialBanner";
 
+export function consumeOauthMfaToken(): string {
+  const cookieName = "aio_oauth_mfa_token";
+  const match = document.cookie.split("; ").find((cookie) => cookie.startsWith(`${cookieName}=`));
+  document.cookie = `${cookieName}=; path=/; max-age=0`;
+  if (!match) return "";
+  try {
+    return decodeURIComponent(match.slice(cookieName.length + 1));
+  } catch {
+    return "";
+  }
+}
+
+export function parseOauthMfaMode(params: URLSearchParams): Pick<MfaChallenge, "enroll" | "recover"> {
+  const mode = params.get("mfa_mode");
+  return { enroll: mode === "enroll", ...(mode === "recover" ? { recover: true } : {}) };
+}
+
 function membershipRoleLabel(role: NonNullable<LocalSession["membershipRole"]>): string {
   if (role === "content") return "Content Team Member";
   return role.charAt(0).toUpperCase() + role.slice(1);
@@ -235,18 +252,13 @@ function PlatformHomePage({
       // cookie holding the pending token (kept out of the URL so it never
       // lands in browser history or logs). Read it once, clear it, and show
       // the MFA panel.
-      const cookieName = "aio_oauth_mfa_token";
-      const match = document.cookie
-        .split("; ")
-        .find((c) => c.startsWith(`${cookieName}=`));
-      const mfaToken = match ? decodeURIComponent(match.slice(cookieName.length + 1)) : "";
-      // Clear the cookie immediately - it is single-use.
-      document.cookie = `${cookieName}=; path=/; max-age=0`;
-      const mfaMode = params.get("mfa_mode") ?? "verify";
+      const mfaToken = consumeOauthMfaToken();
       if (mfaToken) {
-        setMfaChallenge({ mfaToken, enroll: mfaMode === "enroll" });
+        setMfaChallenge({ mfaToken, ...parseOauthMfaMode(params) });
       } else {
-        setLoginError("Two-factor sign-in could not be started. Please try again.");
+        setLoginError(params.get("mfa_mode") === "recover"
+          ? "Personal authenticator recovery could not be started. Start a fresh Google sign-in and try again."
+          : "Two-factor sign-in could not be started. Please try again.");
       }
     } else if (status === "mfa_recovery_required") {
       setMfaChallenge(null);

@@ -25,6 +25,8 @@ import {
   serverMfaRegenerateRecoveryCodes,
   serverMfaTrustedDevices,
   serverMfaRevokeTrustedDevice,
+  serverLegacyMfaRecoveryStatus,
+  serverLegacyMfaRecovery,
 } from "../lib/auth";
 import { vars } from "../marketing/vars";
 
@@ -135,7 +137,101 @@ type MfaLoginStepProps = {
 };
 
 export function MfaLoginStep(props: MfaLoginStepProps) {
-  return <PersonalMfaLoginStep key={props.challenge.mfaToken} {...props} />;
+  return <MfaLoginFlow key={props.challenge.mfaToken} {...props} />;
+}
+
+function MfaLoginFlow(props: MfaLoginStepProps) {
+  const [challenge, setChallenge] = useState(props.challenge);
+  if (challenge.recover) {
+    return (
+      <LegacyMfaRecoveryStep
+        key={challenge.mfaToken}
+        recoveryToken={challenge.mfaToken}
+        onCancel={props.onCancel}
+        onRecovered={(next) => setChallenge(next)}
+      />
+    );
+  }
+  return <PersonalMfaLoginStep key={challenge.mfaToken} {...props} challenge={challenge} />;
+}
+
+function LegacyMfaRecoveryStep({ recoveryToken, onRecovered, onCancel }: {
+  recoveryToken: string;
+  onRecovered: (challenge: MfaChallenge) => void;
+  onCancel: () => void;
+}) {
+  const [email, setEmail] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadStatus = () => {
+    setLoading(true);
+    setError(null);
+    void serverLegacyMfaRecoveryStatus(recoveryToken).then((result) => {
+      if (result.ok) setEmail(result.email);
+      else setError(result.error);
+    }).finally(() => setLoading(false));
+  };
+
+  useEffect(loadStatus, [recoveryToken]);
+
+  const submit = () => {
+    if (busy || code.length !== 6 || !email) return;
+    setBusy(true);
+    setError(null);
+    void serverLegacyMfaRecovery(recoveryToken, code).then((result) => {
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      // The recovery credential is finished here. Only the newly issued,
+      // ordinary enrolment token may reach the normal setup/enable flow.
+      onRecovered({ mfaToken: result.mfaToken, enroll: true, email: result.email });
+    }).finally(() => setBusy(false));
+  };
+
+  return (
+    <div className="rounded-2xl p-6 bg-white">
+      <div className="flex items-center gap-2 mb-2">
+        <ShieldCheck size={18} style={{ color: "#C8497A" }} />
+        <h3 className="aio-type-card-title" style={{ color: "#0a1628" }}>Recover your personal authenticator</h3>
+      </div>
+      {loading ? (
+        <p className="aio-type-supporting flex items-center gap-2 mb-4" aria-live="polite" style={{ color: vars.g400 }}>
+          <Loader2 size={14} className="animate-spin" /> Verifying your recovery sign-in…
+        </p>
+      ) : email ? (
+        <>
+          <p className="aio-type-body mb-3" style={{ color: vars.g500 }}>
+            This recovery is only for <strong>{email}</strong>. Enter the 6-digit code from the original shared authenticator to confirm this transition.
+          </p>
+          <p className="aio-type-supporting mb-4" style={{ color: vars.g500 }}>
+            Continuing replaces this person's authenticator with a fresh personal setup. It does not alter workspace data, permissions, or any other user's sign-in.
+          </p>
+          <div className="mb-4"><OtpBoxes value={code} onChange={setCode} onComplete={submit} disabled={busy} /></div>
+        </>
+      ) : (
+        <p className="aio-type-body mb-3" style={{ color: vars.g500 }}>
+          Start a fresh Google sign-in to request a new personal recovery check.
+        </p>
+      )}
+      {error && <p role="alert" aria-live="assertive" className="aio-type-supporting font-semibold mb-3" style={{ color: vars.red }}>{error}</p>}
+      <div className="flex flex-wrap items-center gap-3">
+        {email ? (
+          <button type="button" onClick={submit} disabled={busy || code.length !== 6} className="aio-button aio-button--primary" style={{ background: "#C8497A" }}>
+            {busy && <Loader2 size={14} className="animate-spin" />} Continue to personal setup
+          </button>
+        ) : !loading ? (
+          <button type="button" onClick={loadStatus} className="aio-button aio-button--outline">Retry recovery check</button>
+        ) : null}
+        <button type="button" onClick={onCancel} disabled={busy} className="aio-button aio-button--text aio-button--compact" style={{ color: vars.g400 }}>
+          Cancel and start a fresh Google sign-in
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function PersonalMfaLoginStep({ challenge, onSuccess, onCancel }: MfaLoginStepProps) {

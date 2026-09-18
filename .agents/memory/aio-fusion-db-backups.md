@@ -18,7 +18,7 @@ non-zero, and **existing backups are NOT pruned**.
 **Why:** the 2026-06-12 one-off dump captured ZERO project rows while live data
 existed, so there was nothing to restore from when data was lost. An unverified
 empty dump silently masquerading as a backup is the exact failure this prevents.
-`backups/aio-fusion-db-20260612-*.sql(.gz)` are kept tracked as evidence only.
+Keep only aggregate verification metadata as evidence, never database contents.
 
 ## Durable storage, not the local folder
 Verified dumps + JSON manifests go to **object storage** under
@@ -38,3 +38,16 @@ carry the same DATABASE_URL + object-storage env vars.
 asserts row count matches the manifest. It refuses to run if
 `TARGET_DATABASE_URL === DATABASE_URL` (anti-footgun). pg_dump/psql 16.x come
 from the `postgresql-16` nix module and match the server version.
+
+## Download containment
+Check the actual download directory and Git ignore coverage before downloading
+a database backup. Keep local restore inputs in a restricted, ignored directory.
+
+**Why:** A filtered pnpm script runs in its package directory. A relative
+`backups/` destination can therefore be `scripts/backups/`, outside an ignore
+rule anchored to the repository root. Automatic checkpoints can then capture
+the dump, including authentication material and customer data.
+
+**How to apply:** Verify ignore coverage for the resolved path before download,
+check tracked files before completion, and retain only private object-storage
+copies plus non-sensitive verification documentation.

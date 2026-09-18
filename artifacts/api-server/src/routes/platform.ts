@@ -2,6 +2,8 @@ import crypto from "crypto";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { logger } from "../lib/logger";
 import { finishPersonalLogin, personalMfaPolicy, type LoginIdentity } from "../lib/login-mfa";
+import mfaLegacyRecoveryRouter from "./mfa-legacy-recovery";
+import { issueGoogleLegacyRecovery, LEGACY_RECOVERY_TTL_MS } from "../lib/mfa-legacy-recovery";
 import {
   getDeployedAppOrigin,
   isStagingDeployment,
@@ -170,6 +172,7 @@ import {
 import type { PlanKey } from "../lib/billing-plans";
 
 const router: IRouter = Router();
+router.use(mfaLegacyRecoveryRouter);
 const DELETE_CONFIRMATION_COOKIE = "aio_delete_confirmation";
 const DELETE_CONFIRMATION_TTL_MS = 10 * 60 * 1000;
 
@@ -3604,6 +3607,22 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
     }
 
     // --- User-first identity resolution ------------------------------------
+    // Only fresh, verified Google primary auth of an already-bound human can
+    // start staging recovery. This runs before any linking/verification writes,
+    // and after the separate delete/link/invite flows have returned.
+    if (!await isImpersonatedRequest(req)) {
+      const recoveryToken = await issueGoogleLegacyRecovery({
+        provider: "google", googleId, email: userInfo.email, emailVerified: userInfo.verified_email === true,
+      });
+      if (recoveryToken) {
+        res.setHeader("Cache-Control", "no-store");
+        res.cookie(OAUTH_MFA_TOKEN_COOKIE, recoveryToken, {
+          httpOnly: false, secure: true, sameSite: "lax", maxAge: LEGACY_RECOVERY_TTL_MS, path: "/",
+        });
+        res.redirect(`${origin}/?oauth_status=mfa&mfa_mode=recover`);
+        return;
+      }
+    }
     // Step 1: resolve the human user by Google id (stable across email changes)
     // then fall back to email lookup in platform_users.
     let existingUser = googleId ? await getUserByGoogleId(googleId) : null;
@@ -3833,8 +3852,9 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       activeCompanyId: newActiveCompanyId,
       needsSetup: true,
     });
-  } catch (err) {
-    console.error("Google OAuth callback error:", err);
+  } catch {
+    // Provider/DB errors may embed authentication material or recovery claims.
+    logger.warn("Google OAuth callback failed");
     res.redirect(`${origin}/?oauth_status=error&oauth_msg=unexpected`);
   }
 });

@@ -110,6 +110,69 @@ from a lost terminal response or repeat a different reset command to compensate.
 
 ## User-assisted enrolment (including Natalie)
 
+### Staging recovery using fresh Google sign-in and legacy-factor proof
+
+The staging application includes a narrowly scoped alternative for an existing
+verified canonical Master Owner who cannot reach Team because the legacy MFA
+transition blocks sign-in. This is not an unattended reset or a production-wide
+relaxation of MFA. Publishing the code does not approve or recover any identity.
+
+The intended attended sequence is:
+
+1. Start a fresh Google sign-in on `https://staging.aiofusion.ai`, not the Replit
+   hostname. The OAuth state cookie must remain on the callback's hostname.
+2. The server checks the existing verified Google identity and active Master
+   Owner membership before offering a short-lived, purpose-bound recovery
+   challenge. Password login, Microsoft login and ordinary enrollment tokens
+   cannot start this recovery.
+3. The recovery screen displays the verified personal email. The person enters
+   a current six-digit code from the old authenticator privately in the app.
+   Never collect codes, QR images or secrets through chat or operator logs.
+4. The server rechecks eligibility and security state when consuming proof. Only
+   that individual's transition is approved; their old sessions are invalidated.
+   The legacy factor, other people's factors, memberships, projects and content
+   remain unchanged. The shared secret is neither copied nor assigned to them.
+5. The person enrolls a new personal authenticator, verifies its code, and saves
+   the new recovery codes. Recovery proof alone does not grant an app session.
+6. Confirm a fresh sign-out/sign-in works before helping another person.
+
+Expired challenges require another Google sign-in. Already enrolled people
+cannot use this route to reset their personal MFA. If fresh Google identity or
+legacy-factor proof is unavailable, use independently verified assisted recovery
+below; do not bypass either requirement.
+
+These routes use the existing manually typed authentication API conventions:
+
+- `POST /api/platform/mfa/legacy-recovery/status` accepts `recoveryToken` and
+  returns the verified `email`, or an error.
+- `POST /api/platform/mfa/legacy-recovery` accepts `recoveryToken` and `code`,
+  returning a new ordinary enrollment challenge (`mfaEnrollRequired`,
+  `mfaToken`, `email`), not a signed-in session.
+- OAuth hands the recovery challenge through the existing short-lived cookie
+  with `oauth_status=mfa&mfa_mode=recover`. It is not stored in the URL or
+  persistent browser storage and is not accepted by generic MFA endpoints.
+
+Development verification for this alternative:
+
+- 119 focused API tests passed using isolated PGlite data and mocked providers,
+  covering recovery/enrollment, access changes, expiry, replay, lockout and
+  preservation of other Owners and legacy protection.
+- 15 focused frontend tests passed for the recovery panel and OAuth handoff.
+- A fixture-backed browser pass confirmed invalid-code feedback, individual
+  enrollment, save-code acknowledgment and authenticated handoff. The final
+  handoff fixture was corrected to return an authenticated `/me` after enable;
+  a permanently anonymous fixture had forced a logout.
+- API and web workflows built and started. The two pre-existing scrambled test
+  files were repaired without skipping scenarios: API guards passed 12 tests,
+  and the frontend in-session login file passed 6. API and frontend type checks
+  now pass; the full completion suite has not yet been rerun after these repairs.
+- Release is on hold for backup-history containment, independently of the MFA
+  implementation. See `backup-containment-status.md`.
+- No real person's factor was reset. Published Google redirects, notification
+  delivery and attended recovery on the target domain remain unverified.
+
+### Independently verified assisted recovery
+
 This is a procedure, not a performed reset.
 
 1. Independently verify the person's identity using the agreed support process.

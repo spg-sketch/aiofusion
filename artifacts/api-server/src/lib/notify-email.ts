@@ -299,6 +299,25 @@ export async function sendInviteReminderEmail(opts: {
   logger.info({ toEmail: opts.toEmail }, "notify-email: invite reminder email sent");
   return true;
 }
+export async function sendMfaLegacyRecoveryEmail(opts: { toEmail: string; toName: string }): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn("notify-email: MFA individual recovery notice not sent (mail not configured)");
+    return;
+  }
+  const subject = "Security alert: personal authenticator enrollment authorised";
+  const message = "Your verified Google sign-in and the previous shared authenticator authorised new personal two-factor enrollment on staging. No shared authenticator was copied or removed. You must set up and confirm your own new authenticator before accessing Master. Other members and shared workspace data are unchanged. If you did not request this, contact the AIO Fusion team immediately.";
+  await resend.emails.send({
+    from: fromAddress(), to: [opts.toEmail], subject,
+    text: `Hi ${opts.toName},\n\n${message}`,
+    html: buildEmailHtml({
+      label: "Security Alert",
+      bodyHtml: `<p>Hi ${escHtml(opts.toName)},</p><p>${escHtml(message)}</p>`,
+      cta: { text: "Open AIO Fusion", href: getAppBaseUrl() },
+    }),
+  });
+}
+
 export async function sendMfaChangedEmail(opts: {
   toEmail: string;
   toName: string;

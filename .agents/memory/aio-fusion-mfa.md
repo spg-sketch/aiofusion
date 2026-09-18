@@ -30,3 +30,19 @@ configuration or a real person's ability to recover.
 **How to apply:** Follow the rollout handoff in the repository, inspect the
 selected database before writes, migrate one person at a time, and distinguish
 fixture/development verification from target-domain publication.
+
+Staging now permits an attended recovery alternative: an existing verified
+Master Owner proves both their bound Google identity afresh and a current
+legacy authenticator code, then enrolls a newly generated personal factor.
+The shared factor remains intact and is never copied. This is distinct from
+offline operator approval and must not silently become a production policy.
+
+**Why:** A shared-to-personal MFA transition can block the first Owner before
+another Owner is available to assist. Proof must combine the bound individual
+identity with the existing factor; neither chat assertions nor Google alone
+establish sufficient recovery authority.
+
+**How to apply:** Keep the route staging-only, reject already enrolled identities,
+recheck current access at proof consumption, and preserve the separate
+operator-assisted process for people lacking either proof. See the rollout
+document for publication and attended enrollment boundaries.

@@ -28,8 +28,15 @@ The isolated empty-workspace workbook test expects 13,119 new contacts, 3,643 co
 
 ## Operational gates still outstanding
 
+The user approved releasing the separate MFA recovery fix before resuming the
+import. The login problem was caused by the personal-MFA transition, not the
+workbook or importer. No V33 preview was approved or committed during that work.
+The 18 September backup was downloaded and fully restore-tested with 38
+projects, 276 active contacts, 85 active outlets and zero import batches; see
+`production-backup-2026-09-18.md`. Check its freshness again at import time.
+
 1. Independently confirm that the deployed staging API uses the intended production database. The deployment service identified `https://aio-fusion-staging.replit.app`; this alone does not prove database connection identity.
-2. Check backup freshness before import. The production snapshot taken on 16 September 2026 has been restored successfully into disposable PostgreSQL, uploaded to the newly user-created private bucket, and downloaded with a matching checksum. See `production-backup-2026-09-16.md` for recovery location and evidence. Refresh it if significant source changes have occurred.
+2. Check backup freshness before import. The latest verified snapshot recorded here is from 18 September 2026; see `production-backup-2026-09-18.md` for recovery location and evidence. Refresh it if significant source changes have occurred.
 3. Publish the implementation through the supported deployment process. Preview runtime checks do not establish deployed availability.
 4. A signed-in authorised Master previews this exact workbook with the shared collection selected and reviews all sheet/row conflicts and rejections before committing.
 5. Commit through that reviewed application flow, then re-read import batch hash/timestamp/outcomes and same-database aggregate counts.

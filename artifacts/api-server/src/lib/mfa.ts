@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { db, platformMetaTable, platformUsersTable, platformSessionsTable, platformMembershipsTable, platformCompaniesTable, platformAccountsTable } from "@workspace/db";
 import { and, eq, like, sql, inArray } from "drizzle-orm";
+import { isStagingDeployment } from "./app-url";
 
 // TOTP two-factor authentication (RFC 6238, HMAC-SHA1, 30s step, 6 digits)
 // implemented on node's crypto so no external dependency is needed.
@@ -25,6 +26,7 @@ export const mfaKey = (subject: string) => subject.startsWith("user:")
   ? `person:mfa:${subject.slice(5)}` : `${MFA_PREFIX}${subject.replace(/^legacy:/, "").trim().toLowerCase()}`;
 export const migrationApprovalKey = (userId: string) => `person:mfa-migration-approved:${userId}`;
 export const reenrollmentKey = (userId: string) => `person:mfa-reenroll:${userId}`;
+export const legacyRecoveryAuthorizationKey = (userId: string) => `person:mfa-legacy-recovery-authorized:${userId}`;
 
 export async function getMfaGeneration(subject: string, tx: MfaDb = db): Promise<number> {
   if (subject.startsWith("user:")) {
@@ -48,6 +50,8 @@ export async function personalMfaMigrationRequired(userId: string, tx: MfaDb = d
   if ((await getMfaState(`user:${userId}`, tx))?.enabled) return false;
   const [approved] = await tx.select().from(platformMetaTable).where(eq(platformMetaTable.key, migrationApprovalKey(userId))).limit(1);
   if (approved) return false;
+  const [individualProof] = await tx.select().from(platformMetaTable).where(eq(platformMetaTable.key, legacyRecoveryAuthorizationKey(userId))).limit(1);
+  if (individualProof && isStagingDeployment()) return false;
   const memberships = await tx.select({ slug: platformMembershipsTable.companySlug }).from(platformMembershipsTable)
     .where(eq(platformMembershipsTable.userId, userId));
   for (const membership of memberships) {
