@@ -48,12 +48,13 @@ Thumbs.db
 .cache/
 .local/
 
-# Local backup downloads — the durable copies live in object storage, so new
-# dumps written here stay local only. The already-tracked
-# aio-fusion-db-20260612-* files remain in git as evidence of the original
-# empty-dump failure (git keeps tracked files even when ignored).
-/backups/*.sql
-/backups/*.sql.gz
+# Database backup contents must stay in private storage, never in Git.
+# pnpm filtered commands may download under scripts/backups rather than /backups.
+**/backups/**/*.sql
+**/backups/**/*.sql.gz
+**/backups/**/*.dump
+**/backups/**/*.backup
+**/aio-fusion-db-*.sql*
 
 # User-uploaded assets (screenshots, documents, CSVs) — these are workspace
 # uploads for reference only and must not be committed to the repo.
