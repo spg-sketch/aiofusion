@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useState } from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "./Sidebar";
@@ -60,6 +61,55 @@ function renderSidebar() {
 afterEach(() => {
   cleanup();
   localStorage.clear();
+});
+
+describe("Content Management navigation", () => {
+  it.each(["desktop", "mobile"])("keeps the requested order and planner destination selected on %s", (layout) => {
+    const onNavigate = vi.fn();
+    function NavigationHarness() {
+      const [currentPage, setCurrentPage] = useState("dashboard");
+      return (
+        <Sidebar
+          currentPage={currentPage}
+          onNavigate={(page) => { onNavigate(page); setCurrentPage(page); }}
+          activeClient={client}
+          onBackToClients={vi.fn()}
+        />
+      );
+    }
+    render(<NavigationHarness />);
+
+    function getNavigation() {
+      if (layout === "mobile") {
+        fireEvent.click(screen.getByRole("button", { name: "Open project navigation" }));
+        return within(screen.getByRole("dialog", { name: "Project navigation" }))
+          .getByRole("navigation", { name: "Project navigation" });
+      }
+      return screen.getByRole("navigation", { name: "Project navigation" });
+    }
+
+    const navigation = getNavigation();
+    const section = within(navigation).getByText("Content Management").parentElement!.parentElement!;
+    const buttons = within(section).getAllByRole("button");
+    const expectedNames = [
+      "Content Creator Generate pitches and articles",
+      "Content Optimiser & Editor Optimise and edit drafts",
+      "Comms Planner Plan and score the PR / marketing schedule",
+      "Content Library Saved draft and final content",
+    ];
+    expect(buttons).toHaveLength(expectedNames.length);
+    expectedNames.forEach((name, index) => expect(buttons[index]).toHaveAccessibleName(name));
+
+    expect(buttons[2]).not.toHaveAttribute("aria-current");
+    fireEvent.click(buttons[2]);
+    expect(onNavigate).toHaveBeenCalledExactlyOnceWith("planner");
+    if (layout === "mobile") {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    }
+    const selectedNavigation = getNavigation();
+    expect(within(selectedNavigation).getByRole("button", { current: "page" }))
+      .toHaveAccessibleName(expectedNames[2]);
+  });
 });
 
 describe("mobile authenticated sidebar drawer", () => {

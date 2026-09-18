@@ -37,9 +37,9 @@ export const navSections: NavSection[] = [
     section: "Content Management",
     color: "#D4922A",
     items: [
-      { label: "Comms Planner", id: "planner", sub: "Plan and score the PR / marketing schedule" },
       { label: "Content Creator", id: "creator", sub: "Generate pitches and articles" },
       { label: "Content Optimiser & Editor", id: "optimiser", sub: "Optimise and edit drafts" },
+      { label: "Comms Planner", id: "planner", sub: "Plan and score the PR / marketing schedule" },
       { label: "Content Library", id: "archive", sub: "Saved draft and final content" },
     ],
   },
