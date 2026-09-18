@@ -73,11 +73,6 @@ export const LogoutBrowserSessionResponse = zod.void()
  */
 
 
-
-
-
-
-
 export const ExchangeMobileAuthorizationCodeBody = zod.object({
   "code": zod.string().min(1),
   "code_verifier": zod.string().min(1),
@@ -216,8 +211,6 @@ export const ListAdminInsightsResponse = zod.array(ListAdminInsightsResponseItem
  */
 
 
-
-
 export const CreateAdminInsightBody = zod.object({
   "slug": zod.string().min(1),
   "title": zod.string().min(1),
@@ -282,9 +275,6 @@ export const CreateAdminInsightResponse = zod.object({
 export const UpdateAdminInsightParams = zod.object({
   "id": zod.coerce.string()
 })
-
-
-
 
 
 export const UpdateAdminInsightBody = zod.object({
@@ -401,7 +391,6 @@ export const getMediaRecommendationBriefQueryProjectIdMax = 200;
 export const getMediaRecommendationBriefQueryStoryKeyMax = 200;
 
 
-
 export const GetMediaRecommendationBriefQueryParams = zod.object({
   "projectId": zod.coerce.string().min(1).max(getMediaRecommendationBriefQueryProjectIdMax),
   "storyKey": zod.coerce.string().min(1).max(getMediaRecommendationBriefQueryStoryKeyMax)
@@ -448,7 +437,6 @@ export const listMediaDiscoveriesQueryStatusDefault = `pending`;
 export const listMediaDiscoveriesQueryProjectIdMax = 200;
 
 
-
 export const ListMediaDiscoveriesQueryParams = zod.object({
   "status": zod.enum(['pending', 'approved', 'rejected']).default(listMediaDiscoveriesQueryStatusDefault),
   "projectId": zod.coerce.string().min(1).max(listMediaDiscoveriesQueryProjectIdMax).optional()
@@ -488,10 +476,6 @@ export const ListMediaDiscoveriesResponse = zod.object({
 })
 
 
-
-
-
-
 export const SaveMediaDiscoveryBody = zod.object({
   "discoveryToken": zod.string().min(1),
   "candidateKey": zod.string().min(1)
@@ -528,9 +512,6 @@ export const SaveMediaDiscoveryResponse = zod.object({
   "outletId": zod.number().int().nullable()
 })
 })
-
-
-
 
 
 export const ApproveMediaDiscoveryParams = zod.object({
@@ -573,15 +554,11 @@ export const ApproveMediaDiscoveryResponse = zod.object({
 })
 
 
-
-
-
 export const RejectMediaDiscoveryParams = zod.object({
   "id": zod.coerce.number().int().min(1)
 })
 
 export const rejectMediaDiscoveryBodyReasonMax = 4000;
-
 
 
 export const RejectMediaDiscoveryBody = zod.object({
@@ -637,7 +614,6 @@ export const updateMediaDiscoveryInstructionsBodyInstructionsMax = 12000;
 export const updateMediaDiscoveryInstructionsBodyVersionMin = 0;
 
 
-
 export const UpdateMediaDiscoveryInstructionsBody = zod.object({
   "instructions": zod.string().min(updateMediaDiscoveryInstructionsBodyInstructionsMin).max(updateMediaDiscoveryInstructionsBodyInstructionsMax),
   "version": zod.number().int().min(updateMediaDiscoveryInstructionsBodyVersionMin)
@@ -656,7 +632,6 @@ export const UpdateMediaDiscoveryInstructionsResponse = zod.object({
 export const getMediaRecommendationsQueryProjectIdMax = 200;
 
 export const getMediaRecommendationsQueryStoryKeyMax = 200;
-
 
 
 export const GetMediaRecommendationsQueryParams = zod.object({
@@ -687,9 +662,6 @@ export const CreateMediaRecommendationsBody = zod.object({
 export const CreateMediaRecommendationsResponse = zod.unknown()
 
 
-
-
-
 export const EnrichMediaRecommendationsBody = zod.object({
   "projectId": zod.string(),
   "storyKey": zod.string(),
@@ -697,9 +669,6 @@ export const EnrichMediaRecommendationsBody = zod.object({
 })
 
 export const EnrichMediaRecommendationsResponse = zod.unknown()
-
-
-
 
 
 export const SetMediaRecommendationContactRestrictionBody = zod.object({
@@ -717,9 +686,6 @@ export const SetMediaRecommendationContactRestrictionResponse = zod.unknown()
  */
 
 
-
-
-
 export const RequestInsightUploadUrlBody = zod.object({
   "name": zod.string().min(1),
   "size": zod.number().int().min(1),
@@ -730,5 +696,4 @@ export const RequestInsightUploadUrlResponse = zod.object({
   "uploadURL": zod.string().url(),
   "objectPath": zod.string()
 })
-
 

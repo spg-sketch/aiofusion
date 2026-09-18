@@ -392,4 +392,3 @@ projectId: ProjectIdParameter;
  */
 storyKey: StoryKeyParameter;
 };
-

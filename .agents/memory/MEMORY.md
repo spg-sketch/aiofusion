@@ -84,3 +84,4 @@
 - [Editor unsaved-change guards](aio-fusion-unsaved-editor-guards.md) — compare exact saved snapshots and defer navigation centrally; saved handoffs must bypass stale registration state.
 - [Database-backed media targeting](aio-fusion-database-media-targeting.md) — content targeting uses populated accessible contact industries; Project Set-Up 1.9 only supplies exact-match defaults.
 - [Article quality scoring](aio-fusion-article-quality-scoring.md) — keep it distinct from campaign Authority and invalidate persisted assessments when content or scoring context changes.
+- [Selective migration approvals](selective-migration-approval-boundaries.md) — exact digest approval governs writes; legacy workspace foreign keys require reviewed SSO bridge or workspace omission.
