@@ -716,7 +716,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
               {spokesList.map((s) => <option key={s.name} value={s.name}>{s.name}{s.title ? ` · ${s.title}` : ""}</option>)}
             </select>
           </Labelled>
-          <Labelled label="Spokesperson LinkedIn" hint="Pre-fills from the spokesperson record; can be overridden.">
+          <Labelled label="Spokesperson LinkedIn" hint="Pre-filled from spokesperson; editable.">
             <input value={spokesLi} onChange={(e) => setSpokesLi(e.target.value)} placeholder="https://www.linkedin.com/in/..." className="w-full px-3 py-2.5 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
           </Labelled>
         </div>
