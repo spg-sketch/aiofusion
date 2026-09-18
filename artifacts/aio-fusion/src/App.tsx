@@ -143,6 +143,8 @@ import { Sidebar } from "./components/Sidebar";
 import { GeorgeSupport } from "./components/GeorgeSupport";
 import ClientSelectorPage from "./pages/ClientSelectorPage";
 import { RouteLoading } from "./components/RouteLoading";
+import { UnsavedChangesDialog } from "./components/UnsavedChangesDialog";
+import type { UnsavedEditorRegistration } from "./lib/unsavedChanges";
 import { AuthPageLoading } from "./components/AuthPageLoading";
 import { CheckoutReturnLoading } from "./components/CheckoutReturnLoading";
 import { preloadRoute, scheduleIdlePreloads, type RoutePreloader } from "./lib/routePreloading";
@@ -485,20 +487,48 @@ function App() {
   const activeClientRef = useRef<Client | null>(null);
   activeClientRef.current = activeClient;
   const [currentPage, setCurrentPage] = useState("dashboard");
+  const unsavedEditorRef = useRef<UnsavedEditorRegistration | null>(null);
+  const [unsavedDialog, setUnsavedDialog] = useState<{ run: () => void; replacing?: boolean } | null>(null);
+  const [unsavedSaving, setUnsavedSaving] = useState(false);
+  const [unsavedError, setUnsavedError] = useState("");
+  const [, setUnsavedRevision] = useState(0);
+  const pendingDepartureRef = useRef<((run: () => void, options?: { replacing?: boolean }) => boolean)>(() => false);
+  const committedHistoryIndexRef = useRef(0);
+  const historyTraversalRef = useRef<{ expectedIndex: number; onArrive: () => void } | null>(null);
+  const registerUnsavedEditor = useCallback((registration: UnsavedEditorRegistration | null) => {
+    unsavedEditorRef.current = registration;
+    setUnsavedRevision((revision) => revision + 1);
+  }, []);
+  const requestDeparture = useCallback((run: () => void, options: { replacing?: boolean } = {}) => {
+    const editor = unsavedEditorRef.current;
+    if (!editor || (!editor.dirty && !editor.busy)) {
+      run();
+      return true;
+    }
+    setUnsavedError("");
+    setUnsavedDialog((current) => current ?? { run, replacing: options.replacing });
+    return false;
+  }, []);
+  pendingDepartureRef.current = requestDeparture;
   // Lazy route chunks can take a moment on their first visit. Navigation is a
   // transition so React keeps the current page visible until the destination
   // is ready instead of replacing the whole app with the root Suspense spinner.
   const transitionToView = useCallback((nextView: typeof view) => {
-    warmRoute(VIEW_PRELOADERS[nextView]);
-    startTransition(() => setView(nextView));
-  }, []);
+    requestDeparture(() => {
+      warmRoute(VIEW_PRELOADERS[nextView]);
+      startTransition(() => setView(nextView));
+    });
+  }, [requestDeparture]);
   const transitionToPage = useCallback((nextPage: string) => {
-    warmRoute(PAGE_PRELOADERS[nextPage]);
-    // Commit the destination immediately so a cold lazy chunk shows the
-    // shell-preserving page loader instead of leaving the previous page on
-    // screen while React waits for the transition to finish.
-    setCurrentPage(nextPage);
-  }, []);
+    if (nextPage === currentPage) return;
+    requestDeparture(() => {
+      warmRoute(PAGE_PRELOADERS[nextPage]);
+      // Commit the destination immediately so a cold lazy chunk shows the
+      // shell-preserving page loader instead of leaving the previous page on
+      // screen while React waits for the transition to finish.
+      setCurrentPage(nextPage);
+    });
+  }, [currentPage, requestDeparture]);
   const [pendingAuditId, setPendingAuditId] = useState<string | null>(null);
   const [pendingDiagnosticId, setPendingDiagnosticId] = useState<string | null>(null);
   const [pendingContentGeoId, setPendingContentGeoId] = useState<string | null>(null);
@@ -1514,7 +1544,7 @@ function App() {
   }, [currentPage, session]);
 
   useEffect(() => {
-    const navState = { __aioNav: true, view, currentPage, insightsArticleId, accountSection };
+    const currentHistoryState = window.history.state as { __aioIndex?: number } | null;
     // Reflect the active settings section in the URL so a refresh restores it
     // (matches the email deep-link format /?account_section=security).
     const url = (view === "sub-accounts" || view === "users-admin") && accountSection
@@ -1522,6 +1552,8 @@ function App() {
       : viewToUrl(view, insightsArticleId);
     if (!navInitDone.current) {
       navInitDone.current = true;
+      committedHistoryIndexRef.current = currentHistoryState?.__aioIndex ?? 0;
+      const navState = { __aioNav: true, __aioIndex: committedHistoryIndexRef.current, view, currentPage, insightsArticleId, accountSection };
       window.history.replaceState(navState, "", url);
       return;
     }
@@ -1531,15 +1563,25 @@ function App() {
     }
     if (replaceNextNav.current) {
       replaceNextNav.current = false;
+      const navState = { __aioNav: true, __aioIndex: committedHistoryIndexRef.current, view, currentPage, insightsArticleId, accountSection };
       window.history.replaceState(navState, "", url);
       return;
     }
+    committedHistoryIndexRef.current += 1;
+    const navState = { __aioNav: true, __aioIndex: committedHistoryIndexRef.current, view, currentPage, insightsArticleId, accountSection };
     window.history.pushState(navState, "", url);
   }, [view, currentPage, insightsArticleId, accountSection]);
 
   useEffect(() => {
     const onPop = (e: PopStateEvent) => {
-      const s = e.state as { __aioNav?: boolean; view?: string; currentPage?: string; insightsArticleId?: string | null; accountSection?: string | null } | null;
+      const s = e.state as { __aioNav?: boolean; __aioIndex?: number; view?: string; currentPage?: string; insightsArticleId?: string | null; accountSection?: string | null } | null;
+      const targetIndex = typeof s?.__aioIndex === "number" ? s.__aioIndex : null;
+      const traversal = historyTraversalRef.current;
+      if (traversal && targetIndex === traversal.expectedIndex) {
+        historyTraversalRef.current = null;
+        traversal.onArrive();
+        return;
+      }
       // Prefer the navigation state we pushed; fall back to deriving a public
       // page from the URL (e.g. a directly typed /about or a forward nav).
       const protectedDestination = protectedDestinationFromLocation();
@@ -1574,8 +1616,9 @@ function App() {
       // Only apply (and arm the skip guard) when something actually changes,
       // otherwise the guard could stay armed and swallow the next real push.
       if (resolvedTargetView !== viewRef.current || targetPage !== pageRef.current || targetArticleId !== insightsArticleIdRef.current || targetAccountSection !== accountSectionRef.current) {
-        skipHistoryPush.current = true;
         const applyPopNavigation = () => {
+          if (targetIndex !== null) committedHistoryIndexRef.current = targetIndex;
+          skipHistoryPush.current = true;
           setView(resolvedTargetView);
           setCurrentPage(targetPage);
           setInsightsArticleId(targetArticleId);
@@ -1585,7 +1628,32 @@ function App() {
         // Do not defer that swap: a transition may keep marketing content
         // painted while the cold Platform Home chunk is still pending.
         if (redirect.isAuthRedirect) applyPopNavigation();
-        else startTransition(applyPopNavigation);
+        else {
+          const targetUrl = window.location.href;
+          const currentIndex = committedHistoryIndexRef.current;
+          const delta = targetIndex === null ? 0 : targetIndex - currentIndex;
+          const editor = unsavedEditorRef.current;
+          if (delta !== 0 && editor && (editor.dirty || editor.busy)) {
+            historyTraversalRef.current = {
+              expectedIndex: currentIndex,
+              onArrive: () => {
+                pendingDepartureRef.current(() => {
+                  historyTraversalRef.current = {
+                    expectedIndex: targetIndex!,
+                    onArrive: () => startTransition(applyPopNavigation),
+                  };
+                  window.history.go(delta);
+                });
+              },
+            };
+            window.history.go(-delta);
+          } else {
+            pendingDepartureRef.current(() => {
+              if (window.location.href !== targetUrl) window.history.replaceState(s, "", targetUrl);
+              startTransition(applyPopNavigation);
+            });
+          }
+        }
       }
       window.scrollTo(0, 0);
     };
@@ -1623,20 +1691,22 @@ function App() {
     const deniedInsightsAdmin = view === "insights-admin" && (!session || session.insightsCmsAccess !== true);
     if (deniedUsersAdmin || deniedInsightsAdmin) {
       replaceNextNav.current = true;
-      transitionToView("platform-home");
+      warmRoute(loadPlatformHomePage);
+      setView("platform-home");
     }
     // The client-accounts page needs a signed-in account, but is open to any
     // role (admins manage everyone via the User Management page instead).
     if (view === "sub-accounts" && !session) {
       replaceNextNav.current = true;
-      transitionToView("platform-home");
+      warmRoute(loadPlatformHomePage);
+      setView("platform-home");
     }
   }, [view, session, authLoading, transitionToView]);
 
   // Persist project logos whenever they change so they survive a refresh.
   useEffect(() => { saveClientLogos(clientLogos); }, [clientLogos]);
 
-  const handleSignOut = () => {
+  const handleSignOut = () => requestDeparture(() => {
     // Invalidate a still-settling /me reply before clearing UI state.
     authRequestAbort.current.abort();
     authRequestAbort.current = new AbortController();
@@ -1658,7 +1728,7 @@ function App() {
     setActiveClient(null);
     setView("landing");
     window.scrollTo(0, 0);
-  };
+  });
 
   const requireSessionThen = (next: () => void) => {
     // While auth is still loading, silently wait - the session is being
@@ -1686,10 +1756,10 @@ function App() {
 
   const goToView = (v: string) => {
     if (v === "for-inhouse" || v === "insights" || v === "about" || v === "contact" || v === "for-agents" || v === "for-agencies" || v === "pricing" || v === "trust-security" || v === "privacy-policy" || v === "journalist-privacy" || v === "terms-conditions") {
-      warmRoute(VIEW_PRELOADERS[v]);
-      startTransition(() => {
+      requestDeparture(() => {
+        warmRoute(VIEW_PRELOADERS[v]);
         if (v === "insights") { setInsightsFilter(null); setInsightsArticleId(null); }
-        setView(v as any);
+        startTransition(() => setView(v as any));
       });
       window.scrollTo(0, 0);
     } else if (v === "landing" || v === "landing-b" || v === "landing-c") {
@@ -1709,8 +1779,11 @@ function App() {
     setView("platform-home");
   };
   const openAccountSettings = () => {
-    setAccountSection("profile");
-    transitionToView("sub-accounts");
+    requestDeparture(() => {
+      setAccountSection("profile");
+      warmRoute(VIEW_PRELOADERS["sub-accounts"]);
+      startTransition(() => setView("sub-accounts"));
+    });
     window.scrollTo(0, 0);
   };
 
@@ -1791,6 +1864,7 @@ function App() {
       acceptedInvites={acceptedInvites}
       onInviteAccepted={handleInvitationAccepted}
       onDismiss={() => setInviteBannerDismissed(true)}
+      requestAction={requestDeparture}
     />
   ) : null;
 
@@ -2003,8 +2077,8 @@ function App() {
         projects={visibleProjects}
         workspaceSwitcher={(workspaces.length > 1 || agencyImpersonatedBy) ? (
           <div className="flex items-center gap-3">
-            {workspaces.length > 1 && <WorkspaceSwitcher workspaces={workspaces} />}
-            {agencyImpersonatedBy && <BackToAgencyLink agencyName={agencyImpersonatedBy} />}
+            {workspaces.length > 1 && <WorkspaceSwitcher workspaces={workspaces} requestAction={requestDeparture} />}
+            {agencyImpersonatedBy && <BackToAgencyLink agencyName={agencyImpersonatedBy} requestAction={requestDeparture} />}
           </div>
         ) : undefined}
         onSelectClient={async (client) => {
@@ -2073,15 +2147,15 @@ function App() {
       <Sidebar
         workspaceSwitcher={(workspaces.length > 1 || agencyImpersonatedBy) ? (
           <div className="flex flex-col items-start gap-1.5">
-            {workspaces.length > 1 && <WorkspaceSwitcher workspaces={workspaces} />}
-            {agencyImpersonatedBy && <BackToAgencyLink agencyName={agencyImpersonatedBy} />}
+            {workspaces.length > 1 && <WorkspaceSwitcher workspaces={workspaces} requestAction={requestDeparture} />}
+            {agencyImpersonatedBy && <BackToAgencyLink agencyName={agencyImpersonatedBy} requestAction={requestDeparture} />}
           </div>
         ) : undefined}
         currentPage={currentPage}
         onNavigate={transitionToPage}
         onPreloadNavigate={routePreloadingEnabled ? (page) => warmRoute(PAGE_PRELOADERS[page]) : undefined}
         activeClient={activeClient}
-        onBackToClients={() => setActiveClient(null)}
+        onBackToClients={() => requestDeparture(() => setActiveClient(null))}
         onLogoUpdate={handleLogoUpdate}
         onOpenSavedAudit={(id) => { setPendingAuditId(id); transitionToPage("llm-check"); }}
         onOpenSavedDiagnostic={(id) => { setPendingDiagnosticId(id); transitionToPage("diagnostic"); }}
@@ -2107,12 +2181,16 @@ function App() {
           )}
           {currentPage === "llm-check" && <LlmCheckPage activeClient={activeClient} onNavigate={transitionToPage} pendingAuditId={pendingAuditId} onConsumePending={() => setPendingAuditId(null)} />}
           {currentPage === "optimiser" && (
-            <OptimiserPage onNavigate={transitionToPage} />
+            <OptimiserPage
+              onNavigate={transitionToPage}
+              registerUnsavedEditor={registerUnsavedEditor}
+              requestEditorAction={requestDeparture}
+            />
           )}
           {currentPage === "seo-audit" && <SeoAuditPage activeClient={activeClient} pendingTechGeoId={pendingTechGeoId} onConsumePendingTechGeo={() => setPendingTechGeoId(null)} />}
           {currentPage === "geo-content" && <GeoContentPage activeClient={activeClient} pendingContentGeoId={pendingContentGeoId} onConsumePendingContentGeo={() => setPendingContentGeoId(null)} />}
           {currentPage === "planner" && <PlannerPage onNavigate={transitionToPage} />}
-          {currentPage === "creator" && <ContentCreatorPage onNavigate={transitionToPage} />}
+          {currentPage === "creator" && <ContentCreatorPage onNavigate={transitionToPage} registerUnsavedEditor={registerUnsavedEditor} />}
           {currentPage === "media-research" && <MediaResearchPage />}
           {currentPage === "marketing-intel" && <MarketingIntelligencePage />}
           {currentPage === "gateway" && <ReleaseGatewayPage />}
@@ -2121,6 +2199,40 @@ function App() {
           {currentPage === "media-database" && <MediaDatabasePage />}
         </Suspense>
       </main>
+      <UnsavedChangesDialog
+        open={Boolean(unsavedDialog)}
+        replacing={unsavedDialog?.replacing}
+        busy={unsavedEditorRef.current?.busy ?? false}
+        saving={unsavedSaving}
+        error={unsavedError}
+        onStay={() => {
+          if (unsavedSaving) return;
+          setUnsavedDialog(null);
+          setUnsavedError("");
+        }}
+        onDiscard={() => {
+          const pending = unsavedDialog;
+          unsavedEditorRef.current = null;
+          setUnsavedDialog(null);
+          setUnsavedError("");
+          pending?.run();
+        }}
+        onSave={() => {
+          const editor = unsavedEditorRef.current;
+          const pending = unsavedDialog;
+          if (!editor || !pending || unsavedSaving || editor.busy) return;
+          setUnsavedSaving(true);
+          setUnsavedError("");
+          void editor.save().then((result) => {
+            if (!result.ok) {
+              setUnsavedError(result.error || "Your changes could not be saved. Try again.");
+              return;
+            }
+            setUnsavedDialog(null);
+            pending.run();
+          }).finally(() => setUnsavedSaving(false));
+        }}
+      />
     </div>
     </>
   );

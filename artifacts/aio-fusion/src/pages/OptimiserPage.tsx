@@ -17,10 +17,15 @@ import { getKeyMessages, loadIntakeData, getActiveProjectId, getProjectMediaCate
 import { CategoryPickerModal, CONTENT_TYPES, Labelled, countWords } from "./shared";
 import InfoTip from "../InfoTip";
 import CountdownBanner from "../components/CountdownBanner";
+import type { RegisterUnsavedEditor, RequestEditorAction } from "../lib/unsavedChanges";
 function OptimiserPage({
   onNavigate,
+  registerUnsavedEditor,
+  requestEditorAction,
 }: {
   onNavigate: (p: string) => void;
+  registerUnsavedEditor?: RegisterUnsavedEditor;
+  requestEditorAction?: RequestEditorAction;
 }) {
   const intake = loadIntakeData();
   const keyMessages = getKeyMessages();
@@ -58,6 +63,14 @@ function OptimiserPage({
   const [retrieveQuery, setRetrieveQuery] = useState("");
   const [sourceArchiveId, setSourceArchiveId] = useState<string | null>(null);
   const [sourceArchiveCreatedAt, setSourceArchiveCreatedAt] = useState<string | null>(null);
+  const [creatorPitch, setCreatorPitch] = useState("");
+  const [spokespersonLinkedIn, setSpokespersonLinkedIn] = useState("");
+  const pendingArchiveIdRef = useRef<string | null>(null);
+  const [savedBaseline, setSavedBaseline] = useState(() => JSON.stringify({
+    projectTitle, contentType, spokesperson, selectedMessages, mediaCats, targetPhrases, targetPhraseIds,
+    contentStatus, pubDate, llmTarget, articleHeadline, standfirst, bodyCopy, actionNotes,
+    creatorPitch, spokespersonLinkedIn,
+  }));
 
   const PROMPT_1_TYPES = ["Press release", "Case study", "Speaker submission", "Award submission", "Event copy", "Directory entry"];
   const PITCH_TYPES = ["Article Media Pitch"];
@@ -99,14 +112,29 @@ function OptimiserPage({
       if (planner.releaseDate) setPubDate(planner.releaseDate);
       setSelectedMessages(article.selectedMessages ? [...article.selectedMessages] : (planner.keyMessage ? [planner.keyMessage] : []));
       setMediaCats(article.mediaCats ? [...article.mediaCats] : []);
-      if (article.pubDate) setPubDate(article.pubDate);
+      const loadedPubDate = article.pubDate || planner.releaseDate || "";
+      setPubDate(loadedPubDate);
+      setContentStatus(article.status === "Final" ? "Final" : "Draft");
       if (article.headline != null || article.standfirst != null || article.bodyCopy != null || article.body != null) {
         const parts = splitArchiveBody(article);
         setArticleHeadline(parts.headline);
         setStandfirst(parts.standfirst);
         setBodyCopy(parts.bodyCopy);
         setActionNotes(article.actionNotes ?? "");
+      setCreatorPitch(article.pitch ?? "");
+      setSpokespersonLinkedIn(article.spokespersonLinkedIn ?? "");
       }
+      const parts = splitArchiveBody(article);
+      setSavedBaseline(JSON.stringify({
+        projectTitle: article.title, contentType: article.contentType, spokesperson: article.spokesperson || "",
+        selectedMessages: article.selectedMessages || (planner.keyMessage ? [planner.keyMessage] : []),
+        mediaCats: article.mediaCats || [], targetPhrases: article.targetPhrases || [],
+        targetPhraseIds: article.targetPhraseIds || (article.targetPhrases || []).map((phrase) => phrase.id),
+        contentStatus: article.status === "Final" ? "Final" : "Draft", pubDate: loadedPubDate,
+        llmTarget: "General (All LLMs)", articleHeadline: parts.headline, standfirst: parts.standfirst,
+        bodyCopy: parts.bodyCopy, actionNotes: article.actionNotes || "", creatorPitch: article.pitch || "",
+        spokespersonLinkedIn: article.spokespersonLinkedIn || "",
+      }));
       return;
     }
     const arc = loadArchive().find((a) => a.id === archiveId);
@@ -121,13 +149,32 @@ function OptimiserPage({
       setStandfirst(parts.standfirst);
       setBodyCopy(parts.bodyCopy);
       setActionNotes(typeof arc.actionNotes === "string" ? arc.actionNotes : "");
+      setCreatorPitch(arc.pitch || "");
+      setSpokespersonLinkedIn(arc.spokespersonLinkedIn || "");
       setTargetPhrases(Array.isArray(arc.targetPhrases) ? arc.targetPhrases : []);
       setTargetPhraseIds(Array.isArray(arc.targetPhraseIds) ? arc.targetPhraseIds : (arc.targetPhrases ?? []).map((phrase) => phrase.id));
       setSelectedMessages(Array.isArray(arc.selectedMessages) ? arc.selectedMessages : []);
       setMediaCats(Array.isArray(arc.mediaCats) ? arc.mediaCats : []);
       setPubDate(typeof arc.pubDate === "string" ? arc.pubDate : "");
+      setContentStatus(arc.status === "Final" ? "Final" : "Draft");
+      setSavedBaseline(JSON.stringify({
+        projectTitle: arc.title, contentType: arc.contentType, spokesperson: arc.spokesperson || "",
+        selectedMessages: arc.selectedMessages || [], mediaCats: arc.mediaCats || [],
+        targetPhrases: arc.targetPhrases || [],
+        targetPhraseIds: arc.targetPhraseIds || (arc.targetPhrases || []).map((phrase) => phrase.id),
+        contentStatus: arc.status === "Final" ? "Final" : "Draft", pubDate: arc.pubDate || "",
+        llmTarget: "General (All LLMs)", articleHeadline: parts.headline, standfirst: parts.standfirst,
+        bodyCopy: parts.bodyCopy, actionNotes: arc.actionNotes || "", creatorPitch: arc.pitch || "",
+        spokespersonLinkedIn: arc.spokespersonLinkedIn || "",
+      }));
     }
   }, []);
+
+  const editorSnapshot = useMemo(() => JSON.stringify({
+    projectTitle, contentType, spokesperson, selectedMessages, mediaCats, targetPhrases, targetPhraseIds,
+    contentStatus, pubDate, llmTarget, articleHeadline, standfirst, bodyCopy, actionNotes,
+    creatorPitch, spokespersonLinkedIn,
+  }), [projectTitle, contentType, spokesperson, selectedMessages, mediaCats, targetPhrases, targetPhraseIds, contentStatus, pubDate, llmTarget, articleHeadline, standfirst, bodyCopy, actionNotes, creatorPitch, spokespersonLinkedIn]);
 
   const handleRetrieve = (a: ArchiveItem) => {
     setSourceArchiveId(a.id);
@@ -140,21 +187,33 @@ function OptimiserPage({
     setStandfirst(parts.standfirst);
     setBodyCopy(parts.bodyCopy);
     setActionNotes(typeof a.actionNotes === "string" ? a.actionNotes : "");
+    setCreatorPitch(a.pitch || "");
+    setSpokespersonLinkedIn(a.spokespersonLinkedIn || "");
     setTargetPhrases(Array.isArray(a.targetPhrases) ? a.targetPhrases : []);
     setTargetPhraseIds(Array.isArray(a.targetPhraseIds) ? a.targetPhraseIds : (a.targetPhrases ?? []).map((phrase) => phrase.id));
     setSelectedMessages(Array.isArray(a.selectedMessages) ? a.selectedMessages : []);
     setMediaCats(Array.isArray(a.mediaCats) ? a.mediaCats : []);
     setPubDate(typeof a.pubDate === "string" ? a.pubDate : "");
+    setContentStatus(a.status === "Final" ? "Final" : "Draft");
     setOptimised(false);
     setOptimiseSnapshot(null);
     setChangeLog([]);
     setShowRetrieve(false);
+    setSavedBaseline(JSON.stringify({
+      projectTitle: a.title, contentType: a.contentType, spokesperson: a.spokesperson || "",
+      selectedMessages: a.selectedMessages || [], mediaCats: a.mediaCats || [], targetPhrases: a.targetPhrases || [],
+      targetPhraseIds: a.targetPhraseIds || (a.targetPhrases || []).map((phrase) => phrase.id),
+      contentStatus: a.status === "Final" ? "Final" : "Draft", pubDate: a.pubDate || "", llmTarget: "General (All LLMs)",
+      articleHeadline: parts.headline, standfirst: parts.standfirst, bodyCopy: parts.bodyCopy,
+      actionNotes: a.actionNotes || "", creatorPitch: a.pitch || "", spokespersonLinkedIn: a.spokespersonLinkedIn || "",
+    }));
   };
 
-  const archiveItem = async (status: "Draft" | "Final"): Promise<ArchiveItem | null> => {
+  const archiveItem = async (status: "Draft" | "Final", options: { silent?: boolean } = {}): Promise<ArchiveItem | null> => {
+    const snapshotAtStart = editorSnapshot;
     const items = loadArchive();
     const item: ArchiveItem = {
-      id: sourceArchiveId || `arch-${Date.now()}`,
+      id: sourceArchiveId || pendingArchiveIdRef.current || (pendingArchiveIdRef.current = `arch-${Date.now()}`),
       title: projectTitle || "Untitled project",
       contentType,
       spokesperson: spokesperson === "NA" ? "" : spokesperson,
@@ -165,6 +224,8 @@ function OptimiserPage({
       standfirst: standfirst,
       bodyCopy: bodyCopy,
       actionNotes,
+      pitch: creatorPitch,
+      spokespersonLinkedIn,
       selectedMessages,
       mediaCats,
       pubDate,
@@ -177,15 +238,39 @@ function OptimiserPage({
       await saveArchive([item, ...items.filter((existing) => existing.id !== item.id)]);
       setSourceArchiveId(item.id);
       setSourceArchiveCreatedAt(item.createdAt);
-      alert(`Saved "${item.title}" to Content Library as ${status}.`);
+      pendingArchiveIdRef.current = item.id;
+      setSavedBaseline(snapshotAtStart);
+      if (!options.silent) alert(`Saved "${item.title}" to Content Library as ${status}.`);
       return item;
     } catch (error) {
-      alert(isLinkedPlannerSyncError(error)
-        ? "The article was saved to Content Library, but its linked planner snapshot was not updated. Retry Save to Content Library before continuing."
-        : "This item was not saved. Check your connection, then try again.");
+      if (!options.silent) {
+        alert(isLinkedPlannerSyncError(error)
+          ? "The article was saved to Content Library, but its linked planner snapshot was not updated. Retry Save to Content Library before continuing."
+          : "This item was not saved. Check your connection, then try again.");
+      }
       return null;
     }
   };
+
+  useEffect(() => {
+    registerUnsavedEditor?.({
+      editor: "optimiser",
+      dirty: editorSnapshot !== savedBaseline,
+      busy: optimising,
+      save: async () => {
+        const item = await archiveItem(contentStatus === "Final" ? "Final" : "Draft", { silent: true });
+        return item ? { ok: true } : { ok: false, error: "Your changes could not be saved. Check your connection, then try again." };
+      },
+    });
+    return () => registerUnsavedEditor?.(null);
+  }, [registerUnsavedEditor, editorSnapshot, savedBaseline, optimising, contentStatus]);
+
+  useEffect(() => {
+    if (editorSnapshot === savedBaseline && !optimising) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [editorSnapshot, savedBaseline, optimising]);
   const pushToPlanner = async () => {
     if (!projectTitle.trim()) {
       alert("Add a Content Title before placing it on the Comms Planner.");
@@ -301,6 +386,7 @@ function OptimiserPage({
     const item = await archiveItem(contentStatus === "Final" ? "Final" : "Draft");
     if (!item) return;
     try { localStorage.setItem("aio.research.preload", item.id); } catch { /* noop */ }
+    registerUnsavedEditor?.(null);
     onNavigate("media-research");
   };
   const canResearch = RESEARCH_TYPES.includes(contentType);
@@ -1025,7 +1111,11 @@ OUTPUT INSTRUCTIONS:
                 ) : (
                   <div className="space-y-2">
                     {filteredArchive.map((a) => (
-                      <button key={a.id} onClick={() => handleRetrieve(a)} className="w-full text-left rounded-lg border p-3 hover:shadow-sm" style={{ borderColor: vars.g200 }}>
+                      <button key={a.id} onClick={() => {
+                        const retrieve = () => handleRetrieve(a);
+                        if (requestEditorAction) requestEditorAction(retrieve, { replacing: true });
+                        else retrieve();
+                      }} className="w-full text-left rounded-lg border p-3 hover:shadow-sm" style={{ borderColor: vars.g200 }}>
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
                             <p className="text-[13px] font-semibold" style={{ color: vars.navy }}>{a.title}</p>

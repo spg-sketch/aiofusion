@@ -19,6 +19,7 @@ import { CategoryPickerModal, CONTENT_TYPES, countWords, Labelled } from "./shar
 import InfoTip from "../InfoTip";
 import { loadSavedAudits } from "../LlmCheckPage";
 import CountdownBanner from "../components/CountdownBanner";
+import type { RegisterUnsavedEditor } from "../lib/unsavedChanges";
 import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "../lib/auditTiming";
 type CreatorFieldKey = "headline" | "standfirst" | "pitch" | "transcript" | "actionNotes";
 
@@ -30,7 +31,7 @@ const CREATOR_FIELD_LABELS: Record<CreatorFieldKey, string> = {
   actionNotes: "action notes",
 };
 
-function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void }) {
+function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate: (p: string) => void; registerUnsavedEditor?: RegisterUnsavedEditor }) {
   useContentStore();
   const [showLLMBrief, setShowLLMBrief] = useState(false);
   const intake = loadIntakeData();
@@ -71,6 +72,12 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   // than silently creating another article every time it is saved.
   const [sourceArchiveId, setSourceArchiveId] = useState<string | null>(null);
   const [sourceArchiveCreatedAt, setSourceArchiveCreatedAt] = useState<string | null>(null);
+  const pendingArchiveIdRef = useRef<string | null>(null);
+  const [savedBaseline, setSavedBaseline] = useState(() => JSON.stringify({
+    projectName, contentType, articleHeadline, standfirst, headline, transcript, actionNotes,
+    spokesperson, spokesLi, mediaTarget, contentStatus, pubDate, targetPhrases,
+    selectedMessages: selectedMessagesSnapshot,
+  }));
 
   const projectPhrases = getCanonicalExactTargetPhrases((intake as { llmQueries?: { v?: 1; discovery?: string[]; shortlist?: string[]; comparison?: string[] } } | null)?.llmQueries);
   const targetQuery = targetPhrases[0]
@@ -114,25 +121,43 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       setArticleHeadline(parts.headline);
       setStandfirst(parts.standfirst);
       setTranscript(parts.bodyCopy);
+      setHeadline(arc.pitch || "");
+      setSpokesLi(arc.spokespersonLinkedIn || "");
       if (arc.contentType) setContentType(arc.contentType);
       if (arc.spokesperson) setSpokesperson(arc.spokesperson);
       setActionNotes(arc.actionNotes || "");
       setMediaTarget(arc.mediaCats ? [...arc.mediaCats] : []);
       setPubDate(arc.pubDate || "");
       setSelectedMessagesSnapshot(arc.selectedMessages ? [...arc.selectedMessages] : []);
+      setContentStatus(arc.status === "Final" ? "Final" : "Draft");
       if (arc.title) setProjectName(arc.title);
-      if (Array.isArray(arc.targetPhrases)) {
-        setTargetPhrases(arc.targetPhrases);
-      } else if (Array.isArray(arc.targetPhraseIds)) {
-        setTargetPhrases(projectPhrases.filter((phrase) => arc.targetPhraseIds?.includes(phrase.id)));
-      }
+      const loadedPhrases = Array.isArray(arc.targetPhrases)
+        ? arc.targetPhrases
+        : Array.isArray(arc.targetPhraseIds)
+          ? projectPhrases.filter((phrase) => arc.targetPhraseIds?.includes(phrase.id))
+          : [];
+      setTargetPhrases(loadedPhrases);
+      setSavedBaseline(JSON.stringify({
+        projectName: arc.title || "", contentType: arc.contentType || "Article",
+        articleHeadline: parts.headline, standfirst: parts.standfirst, headline: arc.pitch || "",
+        transcript: parts.bodyCopy, actionNotes: arc.actionNotes || "", spokesperson: arc.spokesperson || "",
+        spokesLi: arc.spokespersonLinkedIn || "", mediaTarget: arc.mediaCats || [], contentStatus: arc.status === "Final" ? "Final" : "Draft",
+        pubDate: arc.pubDate || "", targetPhrases: loadedPhrases, selectedMessages: arc.selectedMessages || [],
+      }));
     }
   }, []);
 
-  const archiveItem = async (): Promise<ArchiveItem | null> => {
+  const editorSnapshot = useMemo(() => JSON.stringify({
+    projectName, contentType, articleHeadline, standfirst, headline, transcript, actionNotes,
+    spokesperson, spokesLi, mediaTarget, contentStatus, pubDate, targetPhrases,
+    selectedMessages: selectedMessagesSnapshot,
+  }), [projectName, contentType, articleHeadline, standfirst, headline, transcript, actionNotes, spokesperson, spokesLi, mediaTarget, contentStatus, pubDate, targetPhrases, selectedMessagesSnapshot]);
+
+  const archiveItem = async (options: { silent?: boolean } = {}): Promise<ArchiveItem | null> => {
+    const snapshotAtStart = editorSnapshot;
     const items = loadArchive();
     const item: ArchiveItem = {
-      id: sourceArchiveId || `arch-${Date.now()}`,
+      id: sourceArchiveId || pendingArchiveIdRef.current || (pendingArchiveIdRef.current = `arch-${Date.now()}`),
       title: articleHeadline.trim().slice(0, 120) || headline.split("\n")[0].slice(0, 120) || projectName || "Untitled draft",
       contentType,
       spokesperson,
@@ -143,6 +168,8 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       standfirst: standfirst,
       bodyCopy: transcript,
       actionNotes,
+      pitch: headline,
+      spokespersonLinkedIn: spokesLi,
       mediaCats: mediaTarget,
       pubDate,
       selectedMessages: selectedMessagesSnapshot.length
@@ -157,15 +184,40 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       await saveArchive([item, ...items.filter((existing) => existing.id !== item.id)]);
       setSourceArchiveId(item.id);
       setSourceArchiveCreatedAt(item.createdAt);
-      alert(`Saved "${item.title}" to Content Library.`);
+      pendingArchiveIdRef.current = item.id;
+      setSavedBaseline(snapshotAtStart);
+      if (!options.silent) alert(`Saved "${item.title}" to Content Library.`);
       return item;
     } catch (error) {
-      alert(isLinkedPlannerSyncError(error)
-        ? "The article was saved to Content Library, but its linked planner snapshot was not updated. Retry Save to Content Library before continuing."
-        : "This item was not saved. Check your connection, then try again.");
+      if (!options.silent) {
+        alert(isLinkedPlannerSyncError(error)
+          ? "The article was saved to Content Library, but its linked planner snapshot was not updated. Retry Save to Content Library before continuing."
+          : "This item was not saved. Check your connection, then try again.");
+      }
       return null;
     }
   };
+
+  useEffect(() => {
+    registerUnsavedEditor?.({
+      editor: "creator",
+      dirty: editorSnapshot !== savedBaseline,
+      busy: generating || optimisingField !== null,
+      save: async () => {
+        const item = await archiveItem({ silent: true });
+        return item ? { ok: true } : { ok: false, error: "Your changes could not be saved. Check your connection, then try again." };
+      },
+    });
+    return () => registerUnsavedEditor?.(null);
+  }, [registerUnsavedEditor, editorSnapshot, savedBaseline, generating, optimisingField]);
+
+  useEffect(() => {
+    const dirty = editorSnapshot !== savedBaseline || generating || optimisingField !== null;
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [editorSnapshot, savedBaseline, generating, optimisingField]);
 
   const downloadDoc = () => {
     const accent = "#C8497A";
@@ -410,6 +462,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     const item = await archiveItem();
     if (!item) return;
     try { localStorage.setItem("aio.research.preload", item.id); } catch { /* noop */ }
+    registerUnsavedEditor?.(null);
     onNavigate("media-research");
   };
 

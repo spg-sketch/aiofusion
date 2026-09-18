@@ -15,6 +15,8 @@ export type ArchiveItem = {
   standfirst?: string;
   bodyCopy?: string;
   actionNotes?: string;
+  pitch?: string;
+  spokespersonLinkedIn?: string;
   selectedMessages?: string[];
   mediaCats?: string[];
   pubDate?: string;
@@ -438,6 +440,8 @@ export type PlannerProject = {
   standfirst?: string;
   bodyCopy?: string;
   actionNotes?: string;
+  pitch?: string;
+  spokespersonLinkedIn?: string;
   /** Stable canonical library identity for article-backed planner rows. */
   sourceArchiveId?: string;
   /** Full article snapshot retained by planner, including legacy-only rows. */
@@ -457,7 +461,8 @@ export type PlannerProject = {
 export function articleSnapshotForPlanner(item: ArchiveItem): Pick<PlannerProject,
   "sourceArchiveId" | "title" | "contentType" | "spokesperson" | "headline" |
   "standfirst" | "bodyCopy" | "body" | "actionNotes" | "selectedMessages" |
-  "mediaCats" | "pubDate" | "targetPhrases" | "targetPhraseIds"
+  "mediaCats" | "pubDate" | "targetPhrases" | "targetPhraseIds" | "pitch" |
+  "spokespersonLinkedIn"
 > {
   return {
     sourceArchiveId: item.id,
@@ -469,6 +474,8 @@ export function articleSnapshotForPlanner(item: ArchiveItem): Pick<PlannerProjec
     bodyCopy: item.bodyCopy,
     body: item.body,
     actionNotes: item.actionNotes,
+    pitch: item.pitch,
+    spokespersonLinkedIn: item.spokespersonLinkedIn,
     selectedMessages: item.selectedMessages ? [...item.selectedMessages] : [],
     mediaCats: item.mediaCats ? [...item.mediaCats] : [],
     pubDate: item.pubDate,

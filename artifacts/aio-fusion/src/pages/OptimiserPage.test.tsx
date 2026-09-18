@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
@@ -74,6 +74,7 @@ vi.mock("../lib/contentStore", () => ({
   }),
   getISOWeek: () => 1,
   weekDateLabel: (week: number) => String(week),
+  isLinkedPlannerSyncError: () => false,
 }));
 vi.mock("./shared", () => ({
   CategoryPickerModal: () => null,
@@ -129,5 +130,43 @@ describe("OptimiserPage target phrase round trips", () => {
     fixtures.savedArchive = [];
     fixtures.savedPlanner = [];
     await exercise("archive");
+  });
+
+  it("registers clean defaults, then marks authored metadata dirty", async () => {
+    let registration: Parameters<NonNullable<React.ComponentProps<typeof OptimiserPage>["registerUnsavedEditor"]>>[0] = null;
+    render(
+      <OptimiserPage
+        onNavigate={vi.fn()}
+        registerUnsavedEditor={(next) => { registration = next; }}
+      />,
+    );
+
+    await waitFor(() => expect(registration?.dirty).toBe(false));
+    fireEvent.change(screen.getByPlaceholderText("e.g. Q2 product launch announcement"), {
+      target: { value: "A changed working title" },
+    });
+    await waitFor(() => expect(registration?.dirty).toBe(true));
+  });
+
+  it("defers destructive retrieval to the shared replacement guard", async () => {
+    const pendingAction: { current: (() => void) | null } = { current: null };
+    const requestEditorAction = vi.fn((run: () => void) => {
+      pendingAction.current = run;
+      return false;
+    });
+    render(<OptimiserPage onNavigate={vi.fn()} requestEditorAction={requestEditorAction} />);
+
+    fireEvent.change(screen.getByPlaceholderText("e.g. Q2 product launch announcement"), {
+      target: { value: "Unsaved title" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Retrieve content draft/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Archive source/i }));
+
+    expect(requestEditorAction).toHaveBeenCalledWith(expect.any(Function), { replacing: true });
+    expect(screen.getByPlaceholderText("e.g. Q2 product launch announcement")).toHaveValue("Unsaved title");
+    act(() => pendingAction.current?.());
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("e.g. Q2 product launch announcement")).toHaveValue("Archive source");
+    });
   });
 });

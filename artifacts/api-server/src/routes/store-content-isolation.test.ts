@@ -17,7 +17,8 @@ vi.mock("@workspace/db", async () => {
       id varchar PRIMARY KEY, project_id varchar NOT NULL, owner varchar NOT NULL,
       title varchar NOT NULL DEFAULT '', content_type varchar NOT NULL DEFAULT '',
       spokesperson varchar, status varchar NOT NULL DEFAULT 'Draft', tags jsonb DEFAULT '[]',
-      headline text, standfirst text, body_copy text, action_notes text, body text, selected_messages jsonb,
+      headline text, standfirst text, body_copy text, action_notes text, pitch text,
+      spokesperson_linkedin text, body text, selected_messages jsonb,
       media_cats jsonb, target_phrases jsonb, target_phrase_ids jsonb, pub_date varchar,
       released_at varchar, release_channel varchar, source varchar,
       created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
@@ -30,7 +31,8 @@ vi.mock("@workspace/db", async () => {
       audience varchar NOT NULL DEFAULT '', channels jsonb NOT NULL DEFAULT '[]',
       week integer NOT NULL DEFAULT 1, status varchar NOT NULL DEFAULT 'Planned',
       release_date varchar NOT NULL DEFAULT '', notes text NOT NULL DEFAULT '',
-       headline text, standfirst text, body_copy text, action_notes text,
+       headline text, standfirst text, body_copy text, action_notes text, pitch text,
+       spokesperson_linkedin text,
        source_archive_id varchar, body text, selected_messages jsonb, media_cats jsonb, pub_date varchar,
       target_phrases jsonb, target_phrase_ids jsonb,
       created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
@@ -129,7 +131,9 @@ describe("content store project isolation", () => {
       id: "article-canonical", projectId: "workspace-b-project", title: "Precise article",
       contentType: "Article", status: "Draft", tags: ["article"], headline: "Headline",
       standfirst: "Standfirst", bodyCopy: "The complete body.", body: "Headline\n\nStandfirst\n\nThe complete body.",
-      actionNotes: "Coordinate approval", selectedMessages: ["Exact message"], mediaCats: ["Trade"],
+      actionNotes: "Coordinate approval", pitch: "A precise news hook",
+      spokespersonLinkedIn: "https://www.linkedin.com/in/example",
+      selectedMessages: ["Exact message"], mediaCats: ["Trade"],
       pubDate: "2026-06-01", targetPhrases: [{ id: "phrase-1", text: "exact phrase", intentGroup: "discovery" }],
       targetPhraseIds: ["phrase-1"], createdAt: "2026-01-01T00:00:00.000Z",
     };
@@ -139,9 +143,12 @@ describe("content store project isolation", () => {
       { method: "GET" },
     );
     expect((await archiveAfterPost.json() as {
-      items: Array<{ id: string; actionNotes: string | null }>;
-    }).items.find((item) => item.id === archive.id)?.actionNotes)
-      .toBe("Coordinate approval");
+      items: Array<{ id: string; actionNotes: string | null; pitch: string | null; spokespersonLinkedIn: string | null }>;
+    }).items.find((item) => item.id === archive.id)).toMatchObject({
+      actionNotes: "Coordinate approval",
+      pitch: "A precise news hook",
+      spokespersonLinkedIn: "https://www.linkedin.com/in/example",
+    });
 
     const archiveUpdate = await request("/store/archive/article-canonical", {
       method: "PUT",
@@ -182,6 +189,7 @@ describe("content store project isolation", () => {
       audience: "Trade", channels: ["Website"], week: 23, status: "Drafting", releaseDate: archive.pubDate,
       notes: archive.actionNotes, headline: archive.headline, standfirst: archive.standfirst,
       bodyCopy: archive.bodyCopy, body: archive.body, actionNotes: archive.actionNotes,
+      pitch: archive.pitch, spokespersonLinkedIn: archive.spokespersonLinkedIn,
       selectedMessages: archive.selectedMessages, mediaCats: archive.mediaCats, pubDate: archive.pubDate,
       targetPhrases: archive.targetPhrases, targetPhraseIds: archive.targetPhraseIds,
     };
@@ -192,6 +200,7 @@ describe("content store project isolation", () => {
     const listedBody = await listed.json() as { items: Array<Record<string, unknown>> };
     expect(listedBody.items[0]).toMatchObject({
       sourceArchiveId: "article-canonical", body: archive.body, bodyCopy: "The complete body.",
+      pitch: "A precise news hook", spokespersonLinkedIn: "https://www.linkedin.com/in/example",
       selectedMessages: ["Exact message"], mediaCats: ["Trade"], pubDate: "2026-06-01",
       targetPhraseIds: ["phrase-1"],
     });

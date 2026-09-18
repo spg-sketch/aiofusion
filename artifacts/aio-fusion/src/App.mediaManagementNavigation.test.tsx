@@ -69,6 +69,31 @@ vi.mock("./pages/DashboardPage", () => ({
   DashboardPage: () => <div data-testid="dashboard-page">Existing dashboard page</div>,
 }));
 
+vi.mock("./pages/ContentCreatorPage", async () => {
+  const { useEffect } = await import("react");
+  return {
+    ContentCreatorPage: ({
+      registerUnsavedEditor,
+    }: {
+      registerUnsavedEditor?: (registration: {
+        dirty: boolean;
+        busy: boolean;
+        save: () => Promise<{ ok: true }>;
+      } | null) => void;
+    }) => {
+      useEffect(() => {
+        registerUnsavedEditor?.({
+          dirty: true,
+          busy: false,
+          save: async () => ({ ok: true }),
+        });
+        return () => registerUnsavedEditor?.(null);
+      }, [registerUnsavedEditor]);
+      return <div data-testid="dirty-creator">Dirty Creator editor</div>;
+    },
+  };
+});
+
 vi.mock("./lib/contentAi", async (importOriginal) => {
   const mod = await importOriginal<typeof import("./lib/contentAi")>();
   return { ...mod, apiBase: () => "" };
@@ -201,5 +226,56 @@ describe("Media Management sidebar navigation", () => {
     await waitFor(() => {
       expect(screen.getByTestId("media-database-page")).toBeInTheDocument();
     });
+  });
+
+  it("preserves the Back destination after Stay and reaches it on the next Back", async () => {
+    window.history.replaceState({}, "", "/?oauth_status=ok");
+    const { default: App } = await import("./App");
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /continue to projects/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /open test project/i }));
+    await screen.findByTestId("dashboard-page");
+    const dashboardState = window.history.state;
+    const dashboardUrl = window.location.href;
+
+    fireEvent.click(screen.getByRole("button", {
+      name: /Content Creator.*Generate pitches and articles/i,
+    }));
+    await screen.findByTestId("dirty-creator");
+    await waitFor(() => expect(window.history.state?.currentPage).toBe("creator"));
+    const creatorState = window.history.state;
+    const creatorUrl = window.location.href;
+
+    const go = vi.spyOn(window.history, "go").mockImplementation((delta?: number) => {
+      const restoringCreator = Number(delta) > 0;
+      window.history.replaceState(
+        restoringCreator ? creatorState : dashboardState,
+        "",
+        restoringCreator ? creatorUrl : dashboardUrl,
+      );
+      queueMicrotask(() => {
+        window.dispatchEvent(new PopStateEvent("popstate", {
+          state: restoringCreator ? creatorState : dashboardState,
+        }));
+      });
+    });
+    const attemptBack = () => {
+      window.history.replaceState(dashboardState, "", dashboardUrl);
+      window.dispatchEvent(new PopStateEvent("popstate", { state: dashboardState }));
+    };
+
+    act(attemptBack);
+    expect(await screen.findByRole("alertdialog", { name: /Save your changes before leaving/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Stay on this page/i }));
+    expect(screen.getByTestId("dirty-creator")).toBeInTheDocument();
+    expect(window.history.state).toEqual(creatorState);
+
+    act(attemptBack);
+    expect(await screen.findByRole("alertdialog", { name: /Save your changes before leaving/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Leave without saving/i }));
+    await waitFor(() => expect(screen.getByTestId("dashboard-page")).toBeInTheDocument());
+    expect(go).toHaveBeenCalledWith(1);
+    expect(go).toHaveBeenCalledWith(-1);
   });
 });

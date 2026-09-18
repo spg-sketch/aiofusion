@@ -103,17 +103,9 @@ function brandMeResponse() {
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class {
     observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
   });
   vi.stubGlobal("IntersectionObserver", class {
     observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    root = null; rootMargin = ""; thresholds = [];
-    root = null; rootMargin = ""; thresholds = [];
     root = null; rootMargin = ""; thresholds = [];
   });
   if (!window.matchMedia) {
@@ -162,7 +154,7 @@ describe("App in-session login - authoritative session and profile handoff", () 
       const urlStr = String(url);
       if (urlStr.includes("/api/platform/me")) {
         meRequests += 1;
-        return loggedIn ? delayedSetupCheck : unauth();
+        return brandMeResponse();
       }
       if (urlStr.includes("/api/store/projects")) {
         return makeResponse({ projects: [], deletedIds: [] });
@@ -179,7 +171,7 @@ describe("App in-session login - authoritative session and profile handoff", () 
     // Mock PlatformHomePage shows "Project Hub" (session confirmed by
     // bootstrapAuth). Navigate into the platform.
     const projectHubBtn = await screen.findByRole("button", { name: /Project Hub/i }, { timeout: 8000 });
-    expect(meRequests).toBe(2);
+    expect(meRequests).toBe(1);
     await act(async () => {
       fireEvent.click(projectHubBtn);
       await new Promise((r) => setTimeout(r, 50));
@@ -217,7 +209,7 @@ describe("App in-session login - authoritative session and profile handoff", () 
       const urlStr = String(url);
       if (urlStr.includes("/api/platform/me")) {
         meRequests += 1;
-        return loggedIn ? delayedSetupCheck : unauth();
+        return loggedIn ? brandMeResponse() : unauth();
       }
       if (urlStr.includes("/api/store/projects")) {
         return makeResponse({ projects: [], deletedIds: [] });
@@ -292,16 +284,20 @@ describe("App in-session login - authoritative session and profile handoff", () 
     const { default: App } = await import("./App");
     render(<App />);
 
-    await screen.findByText("Mock sign in");
-    fireEvent.click(screen.getByText("Mock sign in"));
-    fireEvent.click(screen.getByText("Mock sign out"));
+    fireEvent.click(await screen.findByText("Mock MFA success"));
+    expect(meCalls).toBe(2);
+    expect(projectCalls).toBe(0);
+    expect(screen.queryByText("Project Hub")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Create your first project/i })).not.toBeInTheDocument();
     await act(async () => { resolveMe(brandMeResponse()); });
 
-    await waitFor(() => expect(screen.queryByText("Project Hub")).not.toBeInTheDocument());
-    expect(screen.getByText("Mock sign in")).toBeInTheDocument();
+    fireEvent.click(await screen.findByText("Project Hub"));
+    expect(await screen.findByRole("button", { name: /Create your first project/i })).toBeInTheDocument();
+    expect(meCalls).toBe(2);
+    expect(projectCalls).toBeGreaterThan(0);
   });
 
-  it("does not start project/account resync from focus while a login authority check is pending", async () => {
+  it("sign-out invalidates an in-flight login check so a late /me cannot revive the session", async () => {
     let resolveMe!: (response: Response) => void;
     let meCalls = 0;
     vi.stubGlobal("fetch", vi.fn((url: string) => {

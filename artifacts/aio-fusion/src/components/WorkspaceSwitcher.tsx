@@ -6,6 +6,7 @@ interface Props {
   workspaces: WorkspaceInfo[];
   /** Extra CSS classes for positioning/layout in the parent. */
   className?: string;
+  requestAction?: (run: () => void) => boolean;
 }
 
 /**
@@ -15,7 +16,7 @@ interface Props {
  * safest option: workspace-scoped localStorage keys (archive/planner, saved audits)
  * and all in-memory React state reset cleanly against the new workspace's data.
  */
-export function WorkspaceSwitcher({ workspaces, className = "" }: Props) {
+export function WorkspaceSwitcher({ workspaces, className = "", requestAction }: Props) {
   const [switching, setSwitching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,14 +24,19 @@ export function WorkspaceSwitcher({ workspaces, className = "" }: Props) {
 
   const active = workspaces.find((w) => w.isActive) ?? workspaces[0];
 
-  const handleChange = async (companyId: string) => {
+  const handleChange = (companyId: string) => {
     if (companyId === active?.companyId) return;
-    setSwitching(true);
-    setError(null);
-    const result = await serverSwitchWorkspace(companyId);
-    // serverSwitchWorkspace reloads on success; only reached on error.
-    setSwitching(false);
-    if (!result.ok) setError(result.error ?? "Could not switch workspace.");
+    const switchWorkspace = () => {
+      setSwitching(true);
+      setError(null);
+      void serverSwitchWorkspace(companyId).then((result) => {
+        // serverSwitchWorkspace reloads on success; only reached on error.
+        setSwitching(false);
+        if (!result.ok) setError(result.error ?? "Could not switch workspace.");
+      });
+    };
+    if (requestAction) requestAction(switchWorkspace);
+    else switchWorkspace();
   };
 
   return (
@@ -47,7 +53,7 @@ export function WorkspaceSwitcher({ workspaces, className = "" }: Props) {
       ) : (
         <select
           value={active?.companyId ?? ""}
-          onChange={(e) => void handleChange(e.target.value)}
+          onChange={(e) => handleChange(e.target.value)}
           className="text-[12px] font-semibold bg-transparent border-none outline-none cursor-pointer pr-1"
           style={{ color: "#1F748F" }}
           aria-label="Switch workspace"

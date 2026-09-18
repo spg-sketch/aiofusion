@@ -12,7 +12,7 @@ import { serverExitImpersonation } from "../lib/auth";
  * Rendered in the same slot as the WorkspaceSwitcher (sidebar + project
  * selector header) so it appears wherever the user navigates.
  */
-export function BackToAgencyLink({ agencyName, light = false }: { agencyName: string; light?: boolean }) {
+export function BackToAgencyLink({ agencyName, light = false, requestAction }: { agencyName: string; light?: boolean; requestAction?: (run: () => void) => boolean }) {
   const [exiting, setExiting] = useState(false);
 
   const handleExit = async () => {
@@ -29,7 +29,11 @@ export function BackToAgencyLink({ agencyName, light = false }: { agencyName: st
 
   return (
     <button
-      onClick={() => void handleExit()}
+      onClick={() => {
+        const exit = () => void handleExit();
+        if (requestAction) requestAction(exit);
+        else exit();
+      }}
       disabled={exiting}
       className="aio-button aio-button--secondary aio-button--compact"
       style={{ background: "#0a1628", color: "#ffffff", borderColor: light ? "rgba(255,255,255,0.25)" : "#0a1628", opacity: exiting ? 0.7 : 1 }}

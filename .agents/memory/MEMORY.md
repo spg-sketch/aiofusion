@@ -81,3 +81,4 @@
 - [Media visibility comparison](aio-fusion-media-visibility-comparison.md) — compare phrase checks only when the effective query, provider, model, run count, and methodology version all match.
 - [Performance measurement](aio-fusion-performance-measurement.md) — separate published, anonymous and fixture-backed timings; measure destination content, not sidebar labels.
 - [Journalist privacy outcomes](aio-fusion-journalist-privacy.md) — rights decisions require verified identity, explicit human-selected matches and scope; suppressions must be rechecked at every write boundary.
+- [Editor unsaved-change guards](aio-fusion-unsaved-editor-guards.md) — compare exact saved snapshots and defer navigation centrally; saved handoffs must bypass stale registration state.

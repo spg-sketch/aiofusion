@@ -23,6 +23,8 @@ export const archiveItemsTable = pgTable("archive_items", {
   standfirst: text("standfirst"),
   bodyCopy: text("body_copy"),
   actionNotes: text("action_notes"),
+  pitch: text("pitch"),
+  spokespersonLinkedIn: text("spokesperson_linkedin"),
   body: text("body"),
   selectedMessages: jsonb("selected_messages").$type<string[]>(),
   mediaCats: jsonb("media_cats").$type<string[]>(),
@@ -60,6 +62,8 @@ export const plannerItemsTable = pgTable("planner_items", {
   standfirst: text("standfirst"),
   bodyCopy: text("body_copy"),
   actionNotes: text("action_notes"),
+  pitch: text("pitch"),
+  spokespersonLinkedIn: text("spokesperson_linkedin"),
   // The canonical Content Library record for article-backed planner rows.
   // Planner keeps a complete snapshot too, so deleting a planner row never
   // deletes the article and a legacy planner row remains useful on its own.

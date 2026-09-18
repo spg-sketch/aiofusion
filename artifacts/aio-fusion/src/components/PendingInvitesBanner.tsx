@@ -19,6 +19,7 @@ interface Props {
   acceptedInvites?: AcceptedInvitation[];
   onInviteAccepted: (invite?: AcceptedInvitation) => void; // ask parent to refresh invite list + workspaces
   onDismiss: () => void;
+  requestAction?: (run: () => void) => boolean;
 }
 
 interface AcceptState {
@@ -31,7 +32,7 @@ interface AcceptState {
   reason?: InviteFailureReason;
 }
 
-export function PendingInvitesBanner({ invites, loading, loadError, onRetry, acceptedInvites = [], onInviteAccepted, onDismiss }: Props) {
+export function PendingInvitesBanner({ invites, loading, loadError, onRetry, acceptedInvites = [], onInviteAccepted, onDismiss, requestAction }: Props) {
   const [acceptState, setAcceptState] = useState<Record<string, AcceptState>>({});
   const [switching, setSwitching] = useState<string | null>(null);
   const [switchError, setSwitchError] = useState<string | null>(null);
@@ -83,14 +84,19 @@ export function PendingInvitesBanner({ invites, loading, loadError, onRetry, acc
     }
   };
 
-  const handleSwitch = async (companyId: string) => {
-    setSwitching(companyId);
-    setSwitchError(null);
-    const result = await serverSwitchWorkspace(companyId);
-    // serverSwitchWorkspace reloads the page on success; setSwitching(null) is
-    // only reached if the call returns an error.
-    setSwitching(null);
-    if (!result.ok) setSwitchError(result.error ?? "Failed to switch workspace.");
+  const handleSwitch = (companyId: string) => {
+    const switchWorkspace = () => {
+      setSwitching(companyId);
+      setSwitchError(null);
+      void serverSwitchWorkspace(companyId).then((result) => {
+        // serverSwitchWorkspace reloads the page on success; setSwitching(null)
+        // is only reached if the call returns an error.
+        setSwitching(null);
+        if (!result.ok) setSwitchError(result.error ?? "Failed to switch workspace.");
+      });
+    };
+    if (requestAction) requestAction(switchWorkspace);
+    else switchWorkspace();
   };
 
   const handleDecline = async (token: string) => {
