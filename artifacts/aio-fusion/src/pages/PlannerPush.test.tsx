@@ -29,6 +29,15 @@ vi.mock("../lib/contentAi", () => ({
   textToHtmlParagraphs: (value: string) => value,
   downloadWordDocument: vi.fn(),
 }));
+vi.mock("../lib/databaseCategories", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/databaseCategories")>()),
+  useDatabaseCategories: () => ({
+    categories: ["Clean Energy"],
+    status: "ready",
+    error: "",
+    retry: vi.fn(),
+  }),
+}));
 vi.mock("../InfoTip", () => ({ default: () => null }));
 vi.mock("../components/CountdownBanner", () => ({ default: () => null }));
 
@@ -63,6 +72,7 @@ function installStoreServer() {
     const url = String(input);
     const method = init.method || "GET";
     if (url.endsWith("/api/store/scoring-config")) return json({ config: null });
+    if (url.endsWith("/api/store/media-db/categories")) return json({ categories: ["Clean Energy"] });
 
     if (url.includes("/api/store/archive")) {
       if (method === "GET") return json({ items: serverArchive });

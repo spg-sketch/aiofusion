@@ -10,10 +10,9 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { TRADE_MEDIA_CATEGORIES } from "../tradeMediaCategories";
 import { streamContent, buildProjectDataText, CONTENT_AI_TIMEOUT_MS, escapeHtml, textToHtmlParagraphs, downloadWordDocument, GenerationProgress, safeHttpUrl } from "../lib/contentAi";
 import { loadArchive, saveArchive, useContentStore, isLinkedPlannerSyncError, splitArchiveBody, plannerProjectForArchive, type ArchiveItem, loadPlannerProjects, savePlannerProjects, getISOWeek, weekDateLabel, type PlannerProject } from "../lib/contentStore";
-import { getKeyMessages, getSpokespeople, loadIntakeData, getActiveProjectId, getProjectMediaCategories, getCompetitors, getConfirmedEntity } from "../IntakeForm";
+import { getKeyMessages, getSpokespeople, loadIntakeData, getActiveProjectId, getCompetitors, getConfirmedEntity } from "../IntakeForm";
 import { buildExactTargetRequest, getExactTargetPhrases as getCanonicalExactTargetPhrases, type ExactTargetPhrase } from "../lib/exactTargetPhrases";
 import { CategoryPickerModal, CONTENT_TYPES, countWords, Labelled } from "./shared";
 import InfoTip from "../InfoTip";
@@ -21,6 +20,7 @@ import { loadSavedAudits } from "../LlmCheckPage";
 import CountdownBanner from "../components/CountdownBanner";
 import type { RegisterUnsavedEditor } from "../lib/unsavedChanges";
 import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "../lib/auditTiming";
+import { getFreshCategoryDefaults, normaliseCategory, useDatabaseCategories, validDatabaseCategories } from "../lib/databaseCategories";
 type CreatorFieldKey = "headline" | "standfirst" | "pitch" | "transcript" | "actionNotes";
 
 const CREATOR_FIELD_LABELS: Record<CreatorFieldKey, string> = {
@@ -36,7 +36,9 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
   const [showLLMBrief, setShowLLMBrief] = useState(false);
   const intake = loadIntakeData();
   const spokesList = getSpokespeople();
-  const projectCategories = getProjectMediaCategories();
+  const databaseCategories = useDatabaseCategories();
+  const restoredSourceRef = useRef(false);
+  const defaultedCategoriesRef = useRef(false);
 
   const [projectName, setProjectName] = useState(() => (intake?.formData["4.1"] as string) || "");
   const [contentType, setContentType] = useState("Article");
@@ -78,6 +80,8 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
     spokesperson, spokesLi, mediaTarget, contentStatus, pubDate, targetPhrases,
     selectedMessages: selectedMessagesSnapshot,
   }));
+  const validatedMediaTarget = validDatabaseCategories(mediaTarget, databaseCategories.categories);
+  const categoriesUnavailable = databaseCategories.status === "loading" || databaseCategories.status === "error";
 
   const projectPhrases = getCanonicalExactTargetPhrases((intake as { llmQueries?: { v?: 1; discovery?: string[]; shortlist?: string[]; comparison?: string[] } } | null)?.llmQueries);
   const targetQuery = targetPhrases[0]
@@ -115,6 +119,7 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
     try { localStorage.removeItem("aio.creator.preload"); } catch { /* noop */ }
     const arc = loadArchive().find((a) => a.id === archiveId);
     if (arc) {
+      restoredSourceRef.current = true;
       setSourceArchiveId(arc.id);
       setSourceArchiveCreatedAt(arc.createdAt);
       const parts = splitArchiveBody(arc);
@@ -153,8 +158,18 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
     selectedMessages: selectedMessagesSnapshot,
   }), [projectName, contentType, articleHeadline, standfirst, headline, transcript, actionNotes, spokesperson, spokesLi, mediaTarget, contentStatus, pubDate, targetPhrases, selectedMessagesSnapshot]);
 
+  useEffect(() => {
+    if (defaultedCategoriesRef.current || restoredSourceRef.current || databaseCategories.status !== "ready") return;
+    defaultedCategoriesRef.current = true;
+    setMediaTarget(validDatabaseCategories(getFreshCategoryDefaults(), databaseCategories.categories));
+  }, [databaseCategories.status, databaseCategories.categories]);
+
   const archiveItem = async (options: { silent?: boolean } = {}): Promise<ArchiveItem | null> => {
     const snapshotAtStart = editorSnapshot;
+    if (categoriesUnavailable) {
+      alert(databaseCategories.status === "loading" ? "Media categories are still loading. Please try again." : "Media categories could not be loaded. Retry before saving.");
+      return null;
+    }
     const items = loadArchive();
     const item: ArchiveItem = {
       id: sourceArchiveId || pendingArchiveIdRef.current || (pendingArchiveIdRef.current = `arch-${Date.now()}`),
@@ -170,7 +185,7 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
       actionNotes,
       pitch: headline,
       spokespersonLinkedIn: spokesLi,
-      mediaCats: mediaTarget,
+      mediaCats: validatedMediaTarget,
       pubDate,
       selectedMessages: selectedMessagesSnapshot.length
         ? [...selectedMessagesSnapshot]
@@ -224,8 +239,8 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
     const meta = [contentType, spokesperson && spokesperson !== "NA" ? spokesperson : "", contentStatus]
       .filter(Boolean)
       .join("  •  ");
-    const targetList = mediaTarget.length
-      ? `<p style="margin:0 0 14pt 0;">${mediaTarget.map((c) => escapeHtml(c)).join(", ")}</p>`
+    const targetList = validatedMediaTarget.length
+      ? `<p style="margin:0 0 14pt 0;">${validatedMediaTarget.map((c) => escapeHtml(c)).join(", ")}</p>`
       : `<p style="margin:0 0 14pt 0; color:#6b7280;">None selected.</p>`;
     const articleWordCount = countWords(transcript);
     const html =
@@ -335,6 +350,10 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
 
   const createDraft = async () => {
     if (generating || optimisingField) return;
+    if (categoriesUnavailable) {
+      alert(databaseCategories.status === "loading" ? "Media categories are still loading. Please try again." : "Media categories could not be loaded. Retry before generating.");
+      return;
+    }
     const theme = articleHeadline.trim() || headline.trim() || transcript.trim();
     if (!theme && targetPhrases.length === 0) {
       alert("Add a headline or select a Target LLM Query so the AI knows what to write about.");
@@ -371,7 +390,7 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
           pitch: headline,
           sourceNotes: transcript,
           selectedMessages: projectMessages.map((m) => m.long || m.short).filter(Boolean),
-          mediaCategories: mediaTarget,
+          mediaCategories: validatedMediaTarget,
           projectData: buildProjectDataText(),
           projectId: getActiveProjectId(),
            // targetQuery is retained for v1 API consumers. Structured phrases
@@ -474,8 +493,8 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
     const existing = projects.find((project) => project.sourceArchiveId === item.id);
     const proj: PlannerProject = plannerProjectForArchive(item, existing, {
       keyMessage: projectMessages[0]?.short || "",
-      audience: mediaTarget[0] || "",
-      channels: mediaTarget.slice(0, 4),
+      audience: validatedMediaTarget[0] || "",
+      channels: validatedMediaTarget.slice(0, 4),
       week: pubDate ? getISOWeek(new Date(pubDate)) : getISOWeek(new Date()),
       status: contentStatus === "Final" ? "Approved" : contentStatus === "Review" ? "Review" : "Drafting",
       releaseDate: pubDate,
@@ -774,33 +793,28 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
           </Labelled>
         </div>
 
-        <Labelled label="Select Media Targets" hint="Multi-select drawn from the Trade Media Categories list (1.9).">
+        <Labelled label="Select Media Targets" hint="Choose available Media Database industries. These may be broader than your specialist business sector.">
           <div className="rounded-lg border p-3 mb-2" style={{ borderColor: vars.g200, background: vars.g50 }}>
-            {mediaTarget.length === 0 ? (
-              <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No targets selected - pick from the project categories or the full alphabetical list.</p>
+            {validatedMediaTarget.length === 0 ? (
+              <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No targets selected - choose from the database category list.</p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
-                {mediaTarget.map((cat) => (
+                {validatedMediaTarget.map((cat) => (
                   <span key={cat} className="text-[11px] font-medium px-2.5 py-1 rounded-full inline-flex items-center gap-1.5" style={{ background: "rgba(201,160,78,0.18)", color: "#7A5E25" }}>
                     {cat}
-                    <button onClick={() => setMediaTarget(mediaTarget.filter((c) => c !== cat))}><XCircle size={11} /></button>
+                    <button onClick={() => setMediaTarget(mediaTarget.filter((c) => normaliseCategory(c) !== normaliseCategory(cat)))}><XCircle size={11} /></button>
                   </span>
                 ))}
               </div>
             )}
           </div>
+          {(databaseCategories.status === "ready" || databaseCategories.status === "empty") && mediaTarget.length > validatedMediaTarget.length && (
+            <p className="text-[11px] mt-2" style={{ color: vars.amber }}>
+              Some previously saved targets are no longer in the database category list and were not selected.
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             <button onClick={() => setShowCatPicker(true)} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.gold, color: "#7A5E25" }}>+ Choose categories</button>
-            {projectCategories.length > 0 && (
-              <button
-                onClick={() => setMediaTarget(Array.from(new Set([...mediaTarget, ...projectCategories])))}
-                className="text-[12px] font-semibold px-3 py-1.5 rounded-lg"
-                style={{ background: "rgba(201,160,78,0.18)", color: "#7A5E25" }}
-                title={`Add the ${projectCategories.length} categories selected in Project Set-Up 1.9`}
-              >
-                Use Project Set-Up categories ({projectCategories.length})
-              </button>
-            )}
           </div>
         </Labelled>
 
@@ -1023,11 +1037,14 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
 
       {showCatPicker && (
         <CategoryPickerModal
-          all={TRADE_MEDIA_CATEGORIES}
-          selected={mediaTarget}
-          projectSet={projectCategories}
+          all={databaseCategories.categories}
+          selected={categoriesUnavailable ? mediaTarget : validatedMediaTarget}
+          databaseOnly
+          loading={databaseCategories.status === "loading"}
+          error={databaseCategories.status === "error" ? databaseCategories.error : ""}
+          onRetry={databaseCategories.retry}
           onClose={() => setShowCatPicker(false)}
-          onSave={(next) => { setMediaTarget(next); setShowCatPicker(false); }}
+          onSave={(next) => { setMediaTarget(validDatabaseCategories(next, databaseCategories.categories)); setShowCatPicker(false); }}
         />
       )}
 

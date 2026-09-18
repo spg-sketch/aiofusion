@@ -254,6 +254,59 @@ router.get(
   },
 );
 
+// Distinct category/industry labels used by the contact category filter.  This
+// is deliberately derived from visible contacts rather than the custom
+// category table: sectors are contact-owned data and outlet categories must
+// not leak from an inaccessible outlet.
+router.get(
+  "/store/media-db/categories",
+  requirePlatformAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const visible = await visibleAccounts(req);
+      const workspaceId = normUsername(req.account!.username);
+      const rows = await db
+        .select({
+          contact: mediaContactsTable,
+          outletName: mediaOutletsTable.name,
+          outletCategory: mediaOutletsTable.category,
+          outletAccountId: mediaOutletsTable.accountId,
+        })
+        .from(mediaContactsTable)
+        .leftJoin(mediaOutletsTable, and(
+          eq(mediaContactsTable.outletId, mediaOutletsTable.id),
+          isNull(mediaOutletsTable.deletedAt),
+        ))
+        .where(isNull(mediaContactsTable.deletedAt));
+
+      const accessible = rows
+        .filter(({ contact }) => contact.accountId === null || visible === null || visible.includes(contact.accountId))
+        .map((row) => outletVisible(row.outletAccountId ?? null, visible)
+          ? row
+          : { ...row, outletName: null, outletCategory: null });
+      const privacyVisible = (await Promise.all(accessible.map(async (row) => ({
+        row,
+        suppressed: await isContactSuppressed({
+          ...row.contact,
+          outlet: row.outletName ?? "",
+          accountId: workspaceId,
+        }),
+      })))).filter(({ suppressed }) => !suppressed);
+
+      const labels = new Map<string, string>();
+      for (const { row } of privacyVisible) {
+        for (const value of [...(row.contact.sectors ?? []), row.outletCategory ?? ""]) {
+          const label = value.trim().replace(/\s+/g, " ");
+          if (label && !labels.has(label.toLocaleLowerCase())) labels.set(label.toLocaleLowerCase(), label);
+        }
+      }
+      res.json({ categories: [...labels.values()].sort((a, b) => a.localeCompare(b)) });
+    } catch {
+      res.status(500).json({ error: "Failed to load media categories" });
+    }
+  },
+);
+
 router.post(
   "/store/media-db/import",
   requirePlatformAuth,

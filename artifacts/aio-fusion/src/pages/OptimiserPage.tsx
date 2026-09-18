@@ -10,14 +10,14 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { TRADE_MEDIA_CATEGORIES } from "../tradeMediaCategories";
 import { streamContent, buildProjectDataText, CONTENT_AI_TIMEOUT_MS, escapeHtml, safeHttpUrl, GenerationProgress, textToHtmlParagraphs, downloadWordDocument } from "../lib/contentAi";
 import { loadArchive, saveArchive, useContentStore, isLinkedPlannerSyncError, splitArchiveBody, plannerProjectForArchive, type ArchiveItem, loadPlannerProjects, savePlannerProjects, getISOWeek, weekDateLabel, type PlannerProject } from "../lib/contentStore";
-import { getKeyMessages, loadIntakeData, getActiveProjectId, getProjectMediaCategories, getProjectDataMessages, getSpokespeople } from "../IntakeForm";
+import { getKeyMessages, loadIntakeData, getActiveProjectId, getProjectDataMessages, getSpokespeople } from "../IntakeForm";
 import { CategoryPickerModal, CONTENT_TYPES, Labelled, countWords } from "./shared";
 import InfoTip from "../InfoTip";
 import CountdownBanner from "../components/CountdownBanner";
 import type { RegisterUnsavedEditor, RequestEditorAction } from "../lib/unsavedChanges";
+import { getFreshCategoryDefaults, normaliseCategory, useDatabaseCategories, validDatabaseCategories } from "../lib/databaseCategories";
 function OptimiserPage({
   onNavigate,
   registerUnsavedEditor,
@@ -31,7 +31,9 @@ function OptimiserPage({
   const keyMessages = getKeyMessages();
   const projectDataMessages = getProjectDataMessages();
   const spokesList = getSpokespeople();
-  const projectCategories = getProjectMediaCategories();
+  const databaseCategories = useDatabaseCategories();
+  const restoredSourceRef = useRef(false);
+  const defaultedCategoriesRef = useRef(false);
 
   const [projectTitle, setProjectTitle] = useState("");
   const [contentType, setContentType] = useState("Press release");
@@ -71,6 +73,8 @@ function OptimiserPage({
     contentStatus, pubDate, llmTarget, articleHeadline, standfirst, bodyCopy, actionNotes,
     creatorPitch, spokespersonLinkedIn,
   }));
+  const validatedMediaCats = validDatabaseCategories(mediaCats, databaseCategories.categories);
+  const categoriesUnavailable = databaseCategories.status === "loading" || databaseCategories.status === "error";
 
   const PROMPT_1_TYPES = ["Press release", "Case study", "Speaker submission", "Award submission", "Event copy", "Directory entry"];
   const PITCH_TYPES = ["Article Media Pitch"];
@@ -95,6 +99,7 @@ function OptimiserPage({
     try { localStorage.removeItem("aio.optimiser.preload"); } catch { /* noop */ }
     const planner = loadPlannerProjects().find((p) => p.id === archiveId);
     if (planner) {
+      restoredSourceRef.current = true;
       // Linked rows intentionally open the canonical article, not an older
       // planner snapshot. Legacy planner-only rows still open their own
       // captured values without attempting a title-based match.
@@ -139,6 +144,7 @@ function OptimiserPage({
     }
     const arc = loadArchive().find((a) => a.id === archiveId);
     if (arc) {
+      restoredSourceRef.current = true;
       setSourceArchiveId(arc.id);
       setSourceArchiveCreatedAt(arc.createdAt);
       setProjectTitle(arc.title);
@@ -176,6 +182,12 @@ function OptimiserPage({
     creatorPitch, spokespersonLinkedIn,
   }), [projectTitle, contentType, spokesperson, selectedMessages, mediaCats, targetPhrases, targetPhraseIds, contentStatus, pubDate, llmTarget, articleHeadline, standfirst, bodyCopy, actionNotes, creatorPitch, spokespersonLinkedIn]);
 
+  useEffect(() => {
+    if (defaultedCategoriesRef.current || restoredSourceRef.current || databaseCategories.status !== "ready") return;
+    defaultedCategoriesRef.current = true;
+    setMediaCats(validDatabaseCategories(getFreshCategoryDefaults(), databaseCategories.categories));
+  }, [databaseCategories.status, databaseCategories.categories]);
+
   const handleRetrieve = (a: ArchiveItem) => {
     setSourceArchiveId(a.id);
     setSourceArchiveCreatedAt(a.createdAt);
@@ -211,6 +223,10 @@ function OptimiserPage({
 
   const archiveItem = async (status: "Draft" | "Final", options: { silent?: boolean } = {}): Promise<ArchiveItem | null> => {
     const snapshotAtStart = editorSnapshot;
+    if (categoriesUnavailable) {
+      alert(databaseCategories.status === "loading" ? "Media categories are still loading. Please try again." : "Media categories could not be loaded. Retry before saving.");
+      return null;
+    }
     const items = loadArchive();
     const item: ArchiveItem = {
       id: sourceArchiveId || pendingArchiveIdRef.current || (pendingArchiveIdRef.current = `arch-${Date.now()}`),
@@ -218,7 +234,7 @@ function OptimiserPage({
       contentType,
       spokesperson: spokesperson === "NA" ? "" : spokesperson,
       status,
-      tags: [contentType.toLowerCase().replace(/\s+/g, "-"), ...mediaCats.slice(0, 3).map((c) => c.toLowerCase().replace(/\s+/g, "-"))],
+      tags: [contentType.toLowerCase().replace(/\s+/g, "-"), ...validatedMediaCats.slice(0, 3).map((c) => c.toLowerCase().replace(/\s+/g, "-"))],
       body: [articleHeadline, standfirst, bodyCopy].filter(Boolean).join("\n\n"),
       headline: articleHeadline,
       standfirst: standfirst,
@@ -227,7 +243,7 @@ function OptimiserPage({
       pitch: creatorPitch,
       spokespersonLinkedIn,
       selectedMessages,
-      mediaCats,
+      mediaCats: validatedMediaCats,
       pubDate,
       targetPhrases: targetPhrases.map((phrase) => ({ ...phrase })),
       targetPhraseIds: targetPhraseIds.length ? [...targetPhraseIds] : targetPhrases.map((phrase) => phrase.id),
@@ -283,8 +299,8 @@ function OptimiserPage({
     const existing = projects.find((project) => project.sourceArchiveId === item.id);
     const proj: PlannerProject = plannerProjectForArchive(item, existing, {
       keyMessage: selectedMessages[0] || "",
-      audience: mediaCats[0] || "",
-      channels: mediaCats.slice(0, 4),
+      audience: validatedMediaCats[0] || "",
+      channels: validatedMediaCats.slice(0, 4),
       week: dateWeek,
       status: contentStatus === "Final" ? "Approved" : contentStatus === "Review" ? "Review" : "Drafting",
       releaseDate: pubDate,
@@ -415,6 +431,10 @@ function OptimiserPage({
   const hasAnyContent = articleHeadline.trim().length > 0 || standfirst.trim().length > 0 || bodyCopy.trim().length > 0;
 
   const runOptimise = async () => {
+    if (categoriesUnavailable) {
+      alert(databaseCategories.status === "loading" ? "Media categories are still loading. Please try again." : "Media categories could not be loaded. Retry before optimising.");
+      return;
+    }
     if (!hasAnyContent) {
       alert("Add some content first - at least a headline, standfirst or body copy.");
       return;
@@ -433,7 +453,7 @@ function OptimiserPage({
           llmTarget,
           projectTitle,
           selectedMessages,
-          mediaCategories: mediaCats,
+          mediaCategories: validatedMediaCats,
           headline: articleHeadline,
           standfirst,
           bodyCopy,
@@ -717,33 +737,28 @@ OUTPUT INSTRUCTIONS:
             </Labelled>
 
             {/* Row 4 - Media targets */}
-            <Labelled label="Select Media Targets" hint="Multi-select drawn from the Trade Media Categories list (1.9).">
+            <Labelled label="Select Media Targets" hint="Choose available Media Database industries. These may be broader than your specialist business sector.">
               <div className="rounded-lg border p-3 mb-2" style={{ borderColor: vars.g200, background: vars.g50 }}>
-                {mediaCats.length === 0 ? (
-                  <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No targets selected - pick from the project categories or the full alphabetical list.</p>
+                {validatedMediaCats.length === 0 ? (
+                  <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No targets selected - choose from the database category list.</p>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
-                    {mediaCats.map((c) => (
+                    {validatedMediaCats.map((c) => (
                       <span key={c} className="text-[11px] font-medium px-2.5 py-1 rounded-full inline-flex items-center gap-1.5" style={{ background: "rgba(201,160,78,0.18)", color: "#7A5E25" }}>
                         {c}
-                        <button onClick={() => setMediaCats(mediaCats.filter((x) => x !== c))}><XCircle size={11} /></button>
+                        <button onClick={() => setMediaCats(mediaCats.filter((x) => normaliseCategory(x) !== normaliseCategory(c)))}><XCircle size={11} /></button>
                       </span>
                     ))}
                   </div>
                 )}
               </div>
+              {(databaseCategories.status === "ready" || databaseCategories.status === "empty") && mediaCats.length > validatedMediaCats.length && (
+                <p className="text-[11px] mt-2" style={{ color: vars.amber }}>
+                  Some previously saved targets are no longer in the database category list and were not selected.
+                </p>
+              )}
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => setShowCatPicker(true)} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.gold, color: "#7A5E25" }}>+ Choose categories</button>
-                {projectCategories.length > 0 && (
-                  <button
-                    onClick={() => setMediaCats(Array.from(new Set([...mediaCats, ...projectCategories])))}
-                    className="text-[12px] font-semibold px-3 py-1.5 rounded-lg"
-                    style={{ background: "rgba(201,160,78,0.18)", color: "#7A5E25" }}
-                    title={`Add the ${projectCategories.length} categories from Project Set-Up 1.9`}
-                  >
-                    + Use Project Set-Up ({projectCategories.length})
-                  </button>
-                )}
               </div>
             </Labelled>
 
@@ -1135,11 +1150,14 @@ OUTPUT INSTRUCTIONS:
         {/* Category picker */}
         {showCatPicker && (
           <CategoryPickerModal
-            all={TRADE_MEDIA_CATEGORIES}
-            selected={mediaCats}
-            projectSet={projectCategories}
+            all={databaseCategories.categories}
+            selected={categoriesUnavailable ? mediaCats : validatedMediaCats}
+            databaseOnly
+            loading={databaseCategories.status === "loading"}
+            error={databaseCategories.status === "error" ? databaseCategories.error : ""}
+            onRetry={databaseCategories.retry}
             onClose={() => setShowCatPicker(false)}
-            onSave={(next) => { setMediaCats(next); setShowCatPicker(false); }}
+            onSave={(next) => { setMediaCats(validDatabaseCategories(next, databaseCategories.categories)); setShowCatPicker(false); }}
           />
         )}
 

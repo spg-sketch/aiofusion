@@ -86,9 +86,10 @@ function ScorePill({ label, score, color }: { label: string; score: number; colo
 }
 
 function CategoryPickerModal({
-  all, selected, projectSet = [], onClose, onSave,
+  all, selected, projectSet = [], databaseOnly = false, loading = false, error = "", onRetry, onClose, onSave,
 }: {
   all: string[]; selected: string[]; projectSet?: string[];
+  databaseOnly?: boolean; loading?: boolean; error?: string; onRetry?: () => void;
   onClose: () => void; onSave: (next: string[]) => void;
 }) {
   const [draft, setDraft] = useState<string[]>(selected);
@@ -98,6 +99,7 @@ function CategoryPickerModal({
   const [addingCat, setAddingCat] = useState(false);
 
   useEffect(() => {
+    if (databaseOnly) return;
     fetch(`${apiBase()}/api/store/media-categories`, { credentials: "include" })
       .then((r) => r.ok ? r.json() : null)
       .then((d) => { if (d?.custom) setCustomCategories(d.custom); })
@@ -105,7 +107,7 @@ function CategoryPickerModal({
   }, []);
 
   const allCustomNames = customCategories.map((c) => c.name);
-  const combined = Array.from(new Set([...all, ...allCustomNames])).sort((a, b) => a.localeCompare(b));
+  const combined = Array.from(new Set(databaseOnly ? all : [...all, ...allCustomNames])).sort((a, b) => a.localeCompare(b));
   const filtered = combined.filter((c) => !search || c.toLowerCase().includes(search.toLowerCase()));
 
   const addCustomCategory = async () => {
@@ -137,13 +139,16 @@ function CategoryPickerModal({
         </div>
         <div className="px-6 py-3 border-b flex items-center gap-2 flex-wrap" style={{ borderColor: vars.g100 }}>
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter categories..." className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
-          {projectSet.length > 0 && (
+          {!databaseOnly && projectSet.length > 0 && (
             <button onClick={() => setDraft(Array.from(new Set([...draft, ...projectSet])))} className="text-[12px] font-semibold px-3 py-2 rounded-lg" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>
               + Use Project Set-Up ({projectSet.length})
             </button>
           )}
         </div>
         <div className="flex-1 overflow-y-auto p-4">
+          {loading && <p className="p-3 text-[12px]" style={{ color: vars.g500 }}>Loading categories...</p>}
+          {error && <div className="p-3 text-[12px]" style={{ color: "#B42318" }}>{error} <button onClick={onRetry} className="underline font-semibold">Retry</button></div>}
+          {!loading && !error && combined.length === 0 && <p className="p-3 text-[12px]" style={{ color: vars.g500 }}>No categories are available.</p>}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
             {filtered.map((cat) => {
               const on = draft.includes(cat);
@@ -160,7 +165,7 @@ function CategoryPickerModal({
             })}
           </div>
         </div>
-        <div className="px-6 py-3 border-t" style={{ borderColor: vars.g100 }}>
+        {!databaseOnly && <div className="px-6 py-3 border-t" style={{ borderColor: vars.g100 }}>
           <div className="flex items-center gap-2">
             <input
               value={newCatInput}
@@ -179,12 +184,19 @@ function CategoryPickerModal({
               {addingCat ? "Adding..." : "+ Add"}
             </button>
           </div>
-        </div>
+        </div>}
         <div className="px-6 py-3 border-t flex justify-between gap-2" style={{ borderColor: vars.g200 }}>
           <button onClick={() => setDraft([])} className="text-[12px] font-semibold px-3 py-2 rounded-lg" style={{ color: vars.g500 }}>Clear all</button>
           <div className="flex gap-2">
             <button onClick={onClose} className="text-[13px] font-semibold px-4 py-2 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}>Cancel</button>
-            <button onClick={() => onSave(draft)} className="text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.accent }}>Done ({draft.length})</button>
+            <button
+              onClick={() => onSave(draft)}
+              disabled={databaseOnly && (loading || Boolean(error))}
+              className="text-[13px] font-semibold px-4 py-2 rounded-lg text-white"
+              style={{ background: vars.accent, opacity: databaseOnly && (loading || error) ? 0.45 : 1 }}
+            >
+              Done ({draft.length})
+            </button>
           </div>
         </div>
       </div>

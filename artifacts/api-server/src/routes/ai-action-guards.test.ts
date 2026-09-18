@@ -621,6 +621,8 @@ const PAID_AI_PREFIXES = [
 const PUBLIC_ALLOWLIST = new Set<string>([
   // ── health ────────────────────────────────────────────────────────────────
   "GET /healthz",
+  // Authenticated media metadata read. It does not invoke a paid provider.
+  "GET /store/media-db/categories",
 
   // ── journalist privacy rights ─────────────────────────────────────────────
   // Anonymous intake is rate-limited. Every administration route also has its

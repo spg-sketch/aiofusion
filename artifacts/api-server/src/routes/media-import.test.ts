@@ -151,10 +151,12 @@ import {
   mediaOutletsTable,
   mediaRecommendationSetsTable,
   mediaRecommendationItemsTable,
+  mediaSuppressionsTable,
   platformAccountsTable,
   projectsTable,
 } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
+import { privacyHash } from "../lib/journalist-privacy";
 import mediaRouter from "./media-db";
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
@@ -286,6 +288,76 @@ afterAll(async () => {
 });
 
 describe("media import route regressions", () => {
+  it("returns populated category labels from visible, live, unsuppressed contacts", async () => {
+    const [workspaceOutlet] = await db.insert(mediaOutletsTable).values({
+      name: "Category Workspace Outlet",
+      category: "Trade Media",
+      accountId: "category-workspace",
+    }).returning();
+    const [sharedOutlet] = await db.insert(mediaOutletsTable).values({
+      name: "Category Shared Outlet",
+      category: "Shared Industry",
+      accountId: null,
+    }).returning();
+    const [privateOutlet] = await db.insert(mediaOutletsTable).values({
+      name: "Category Private Outlet",
+      category: "Private Industry",
+      accountId: "category-other",
+    }).returning();
+    await db.insert(mediaContactsTable).values([
+      {
+        outletId: workspaceOutlet!.id,
+        firstName: "Visible",
+        lastName: "Workspace",
+        sectors: ["Technology", "  Trade Media  "],
+        accountId: "category-workspace",
+      },
+      {
+        outletId: sharedOutlet!.id,
+        firstName: "Visible",
+        lastName: "Shared",
+        sectors: ["Technology"],
+        accountId: null,
+      },
+      {
+        outletId: privateOutlet!.id,
+        firstName: "Hidden",
+        lastName: "Private",
+        sectors: ["Private Sector"],
+        accountId: "category-other",
+      },
+      {
+        outletId: workspaceOutlet!.id,
+        firstName: "Deleted",
+        lastName: "Contact",
+        sectors: ["Deleted Industry"],
+        accountId: "category-workspace",
+        deletedAt: new Date(),
+      },
+      {
+        outletId: workspaceOutlet!.id,
+        firstName: "Suppressed",
+        lastName: "Contact",
+        email: "suppressed-category@example.test",
+        sectors: ["Suppressed Industry"],
+        accountId: "category-workspace",
+      },
+    ]);
+    await db.insert(mediaSuppressionsTable).values({
+      scope: "workspace",
+      accountId: "category-workspace",
+      emailHash: privacyHash("suppressed-category@example.test"),
+      reason: "request",
+    });
+
+    const response = await mediaRequest("GET", "/api/store/media-db/categories", "category-workspace");
+    expect(response.status).toBe(200);
+    expect(response.json.categories).toEqual(["Shared Industry", "Technology", "Trade Media"]);
+    expect(response.json.categories).not.toEqual(expect.arrayContaining([
+      "Private Industry", "Private Sector", "Deleted Industry", "Suppressed Industry",
+    ]));
+  });
+
   it("scopes preview reconciliation to the active workspace, including platform admins", async () => {
     const [otherOutlet] = await db.insert(mediaOutletsTable).values({
       name: "Workspace Daily", website: "https://workspace.test", accountId: "other-workspace",

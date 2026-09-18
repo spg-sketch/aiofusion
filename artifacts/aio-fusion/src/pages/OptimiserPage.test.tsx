@@ -33,11 +33,13 @@ const fixtures = vi.hoisted(() => ({
     headline: "Archive headline",
     bodyCopy: "Archive body",
     createdAt: "2026-01-01T00:00:00.000Z",
+    mediaCats: undefined as string[] | undefined,
     targetPhrases: [] as Array<{ id: string; text: string; intentGroup: "discovery" }>,
     targetPhraseIds: [] as string[],
   }],
   savedArchive: [] as unknown[],
   savedPlanner: [] as unknown[],
+  categories: ["Technology", "Energy"],
 }));
 
 vi.mock("../IntakeForm", () => ({
@@ -96,10 +98,17 @@ describe("OptimiserPage target phrase round trips", () => {
     fixtures.archive[0].targetPhrases = [fixtures.phrase];
     fixtures.archive[0].targetPhraseIds = [fixtures.phrase.id];
     window.alert = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/store/media-db/categories")) {
+        return new Response(JSON.stringify({ categories: fixtures.categories }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
+    }));
   });
   afterEach(() => {
     cleanup();
     window.localStorage.clear();
+    vi.unstubAllGlobals();
   });
 
   async function exercise(source: "planner" | "archive") {
@@ -168,5 +177,37 @@ describe("OptimiserPage target phrase round trips", () => {
     await waitFor(() => {
       expect(screen.getByPlaceholderText("e.g. Q2 product launch announcement")).toHaveValue("Archive source");
     });
+  });
+
+  it("filters unavailable restored targets before saving or planning", async () => {
+    fixtures.archive[0].mediaCats = [" technology ", "Bespoke niche"];
+    window.localStorage.setItem("aio.optimiser.preload", "archive-source");
+    render(<OptimiserPage onNavigate={vi.fn()} />);
+    expect(await screen.findByText("Technology")).toBeTruthy();
+    expect(screen.getByText(/previously saved targets are no longer/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Save to Content Library/i }));
+    await waitFor(() => expect(fixtures.savedArchive.length).toBe(1));
+    const archived = (fixtures.savedArchive[0] as Array<Record<string, unknown>>)[0];
+    expect(archived.mediaCats).toEqual(["Technology"]);
+    fixtures.archive[0].mediaCats = undefined;
+  });
+
+  it("persists only database allowlisted media categories with server labels", async () => {
+    fixtures.archive[0].mediaCats = [" technology ", "not in database"];
+    window.localStorage.setItem("aio.optimiser.preload", "archive-source");
+    render(<OptimiserPage onNavigate={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Save to Content Library/i }));
+    await waitFor(() => expect(fixtures.savedArchive.length).toBe(1));
+    const saved = (fixtures.savedArchive[0] as Array<Record<string, unknown>>)[0];
+    expect(saved.mediaCats).toEqual(["Technology"]);
+  });
+
+  it("blocks save while the category database is unavailable", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("offline", { status: 503 })));
+    window.localStorage.setItem("aio.optimiser.preload", "archive-source");
+    render(<OptimiserPage onNavigate={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Save to Content Library/i }));
+    await waitFor(() => expect(window.alert).toHaveBeenCalledWith(expect.stringMatching(/could not be loaded/i)));
+    expect(fixtures.savedArchive).toHaveLength(0);
   });
 });
