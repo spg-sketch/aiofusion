@@ -42,7 +42,44 @@ function initSse(res: Response): void {
 
 function sseSend(res: Response, event: string, data: unknown): void {
   if (res.writableEnded) return;
-  const payload = event === "result" ? deepStripEmDashes(data) : data;
+  let payload = event === "result" ? deepStripEmDashes(data) : data;
+  // Phrase identity is canonical and must remain byte-for-byte aligned with the
+  // submitted ID. Restore those user-owned fields after prose sanitation.
+  if (event === "result" && data && typeof data === "object" && payload && typeof payload === "object") {
+    const sourceResult = data as {
+      phraseMeasurements?: PhraseProbeMeasurement[];
+      probes?: Array<{ question: string }>;
+      assessment?: {
+        queryTable?: Array<{ query: string }>;
+        categoryFraming?: Array<{ query: string }>;
+      };
+    };
+    const targetResult = payload as typeof sourceResult;
+    if (Array.isArray(sourceResult.phraseMeasurements) && Array.isArray(targetResult.phraseMeasurements)) {
+      targetResult.phraseMeasurements.forEach((measurement, index) => {
+        const original = sourceResult.phraseMeasurements![index];
+        if (!original) return;
+        measurement.phrase = { ...original.phrase };
+        measurement.effectiveQuery = original.effectiveQuery;
+      });
+    }
+    if (Array.isArray(sourceResult.probes) && Array.isArray(targetResult.probes)) {
+      targetResult.probes.forEach((probe, index) => {
+        const original = sourceResult.probes![index];
+        if (original) probe.question = original.question;
+      });
+    }
+    for (const key of ["queryTable", "categoryFraming"] as const) {
+      const sourceRows = sourceResult.assessment?.[key];
+      const targetRows = targetResult.assessment?.[key];
+      if (Array.isArray(sourceRows) && Array.isArray(targetRows)) {
+        targetRows.forEach((row, index) => {
+          const original = sourceRows[index];
+          if (original) row.query = original.query;
+        });
+      }
+    }
+  }
   res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
 }
 
@@ -69,6 +106,8 @@ export interface ProbeResult {
   competitors: string[];
   anchored?: boolean;
   intentTier?: "buyer" | "sector" | "identity";
+  /** Canonical phrases represented by this scheduled effective query. */
+  phraseIds?: string[];
 }
 
 type ExactTargetPhrase = {
@@ -97,7 +136,8 @@ export type PhraseProbeMeasurement = {
 };
 
 const RUNS_PER_QUESTION = 2;
-const MAX_QUESTIONS = 8;
+const LEGACY_MAX_QUESTIONS = 8;
+const MAX_TARGET_PHRASES = 24;
 const PHRASE_METHODOLOGY_VERSION = 1;
 const AUDIT_LOCK_DAYS = 21;
 const CHATGPT_MODEL = "gpt-5";
@@ -116,7 +156,7 @@ function normaliseExactPhrases(value: unknown): ExactTargetPhrase[] {
     if (item.id !== id || seen.has(id)) return [];
     seen.add(id);
     return [{ id, text, intentGroup: intentGroup as ExactTargetPhrase["intentGroup"] }];
-  }).slice(0, MAX_QUESTIONS);
+  });
 }
 
 function urlsFromAnswer(text: string): string[] {
@@ -154,8 +194,8 @@ export function buildPhraseMeasurements(
   effectiveQuestions: Map<string, string> = new Map(),
 ): PhraseProbeMeasurement[] {
   return phrases.flatMap((phrase) => ([
-    { provider: "chatgpt" as const, model: CHATGPT_MODEL, matches: results.filter((r) => r.question === (effectiveQuestions.get(phrase.id) ?? phrase.text) && r.model.includes("GPT")) },
-    { provider: "claude" as const, model: CLAUDE_MODEL, matches: results.filter((r) => r.question === (effectiveQuestions.get(phrase.id) ?? phrase.text) && r.model.includes("Claude")) },
+    { provider: "chatgpt" as const, model: CHATGPT_MODEL, matches: results.filter((r) => (r.phraseIds ? r.phraseIds.includes(phrase.id) : r.question === (effectiveQuestions.get(phrase.id) ?? phrase.text)) && r.model.includes("GPT")) },
+    { provider: "claude" as const, model: CLAUDE_MODEL, matches: results.filter((r) => (r.phraseIds ? r.phraseIds.includes(phrase.id) : r.question === (effectiveQuestions.get(phrase.id) ?? phrase.text)) && r.model.includes("Claude")) },
   ]).map(({ provider, model, matches }) => {
     const completedRuns = matches.length;
     const mentionRuns = matches.filter((r) => r.mentioned).length;
@@ -1581,10 +1621,10 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
   }
   if (rawTargetPhrases !== undefined && (
     !Array.isArray(rawTargetPhrases)
-    || rawTargetPhrases.length > MAX_QUESTIONS
+    || rawTargetPhrases.length > MAX_TARGET_PHRASES
     || targetPhrases.length !== rawTargetPhrases.length
   )) {
-    res.status(400).json({ error: `targetPhrases must contain at most ${MAX_QUESTIONS} unique phrases with canonical IDs.` });
+    res.status(400).json({ error: `targetPhrases must contain at most ${MAX_TARGET_PHRASES} unique phrases with canonical IDs.` });
     return;
   }
 
@@ -1686,38 +1726,52 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     const entityClarityPromise = assessEntityClarity(identity, req.account?.username, projectId, tokenAccum);
 
     const generated = generateProbeQuestions(companyName, sectorList, kw, icpProfile, locationProfile, personaProfile, identity, businessType);
-    // Seed the probe set with the buyer's verbatim questions so the measurement
-    // uses real queries, not only generated ones. De-duplicate while preserving
-    // the buyer questions first, and cap the total so the run stays bounded.
+    // Omission preserves the legacy buyer-question/generated probe behaviour.
+    // An explicit [] is intentional and runs only the separate identity probe.
+    // Submitted phrases are grouped by effective query for provider scheduling,
+    // while retaining every canonical phrase ID for measurement attribution.
     // Disambiguate confusable names (e.g. "SMG", "Blue Halo") by appending the
     // company's website domain so the AI engines answer about the right company.
     // Apply the same anchoring to generated questions so detection is consistent
     // across all probe types for confusable names.
-    const rawBuyerQuestions = (targetPhrases.length ? targetPhrases.map((phrase) => phrase.text) : (authorityData.buyerQuestions || [])).slice(0, 12);
+    const hasTargetPhraseField = rawTargetPhrases !== undefined;
+    const rawBuyerQuestions = hasTargetPhraseField
+      ? targetPhrases.map((phrase) => phrase.text)
+      : (authorityData.buyerQuestions || []).slice(0, LEGACY_MAX_QUESTIONS);
     const buyerQuestions = disambiguateBuyerQuestions(rawBuyerQuestions, identity);
     const effectivePhraseQuestions = new Map(targetPhrases.map((phrase, index) => [phrase.id, buyerQuestions[index] ?? phrase.text]));
     const anchoredGenerated = disambiguateBuyerQuestions(generated, identity);
-    // The identity probe (anchoredGenerated[0]) must always be included so that
-    // short/ambiguous names like "SMG" have at least one anchored probe and are
-    // not detected at 0% when the user has >= MAX_QUESTIONS buyer questions that
-    // fill all slots before any generated probe gets a chance to run.
     const identityProbe = anchoredGenerated[0];
-    const questions = [
-      ...new Set([identityProbe, ...buyerQuestions, ...anchoredGenerated.slice(1)]),
-    ].slice(0, targetPhrases.length ? MAX_QUESTIONS + 1 : MAX_QUESTIONS);
-
-    // Tag each question with its intent tier so the weighted Authority Index
-    // can give buyer-intent probes more influence than generic sector probes.
-    // - buyer: verbatim ICP buyer questions (the highest-signal tier)
-    // - identity: the direct "What do you know about [brand]?" probe (anchored, less diagnostic)
-    // - sector: generated category/recommendation probes
-    const buyerQuestionSet = new Set(buyerQuestions);
-    const identityProbeText = anchoredGenerated[0]; // first generated question is always the identity probe
-    const questionTiers = new Map<string, "buyer" | "sector" | "identity">();
-    for (const q of questions) {
-      if (q === identityProbeText) questionTiers.set(q, "identity");
-      else if (buyerQuestionSet.has(q)) questionTiers.set(q, "buyer");
-      else questionTiers.set(q, "sector");
+    type ScheduledQuestion = {
+      question: string;
+      intentTier: "buyer" | "sector" | "identity";
+      phraseIds: string[];
+    };
+    const scheduledQuestions: ScheduledQuestion[] = [{
+      question: identityProbe,
+      intentTier: "identity",
+      phraseIds: [],
+    }];
+    if (hasTargetPhraseField) {
+      const phrasesByQuery = new Map<string, ScheduledQuestion>();
+      targetPhrases.forEach((phrase, index) => {
+        const question = buyerQuestions[index] ?? phrase.text;
+        const existing = phrasesByQuery.get(question);
+        if (existing) existing.phraseIds.push(phrase.id);
+        else phrasesByQuery.set(question, { question, intentTier: "buyer", phraseIds: [phrase.id] });
+      });
+      scheduledQuestions.push(...phrasesByQuery.values());
+    } else {
+      const buyerQuestionSet = new Set(buyerQuestions);
+      const legacyQuestions = [...new Set([
+        ...buyerQuestions,
+        ...anchoredGenerated.slice(1),
+      ])].slice(0, LEGACY_MAX_QUESTIONS - 1);
+      scheduledQuestions.push(...legacyQuestions.map((question) => ({
+        question,
+        intentTier: buyerQuestionSet.has(question) ? "buyer" as const : "sector" as const,
+        phraseIds: [],
+      })));
     }
 
     // Track which questions were rewritten by disambiguation so probeOpenAI /
@@ -1740,7 +1794,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     res.on("close", () => probeAbort.abort());
 
     // Total individual LLM calls: one per (question × run × model).
-    const totalProbeCount = questions.length * RUNS_PER_QUESTION * 2;
+    const totalProbeCount = scheduledQuestions.length * RUNS_PER_QUESTION * 2;
     let completedProbes = 0;
 
     // Wrap each probe so a progress event fires as soon as it settles.
@@ -1752,19 +1806,20 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     }
 
     const probePromises: Promise<ProbeResult | null>[] = [];
-    for (const q of questions) {
+    for (const scheduled of scheduledQuestions) {
+      const { question: q, intentTier, phraseIds } = scheduled;
       const anchored = anchoredQuestions.has(q);
       for (let run = 0; run < RUNS_PER_QUESTION; run++) {
-        probePromises.push(trackProbe(probeOpenAI(q, identity, anchored, probeAbort.signal, req.account?.username, projectId, tokenAccum)));
-        probePromises.push(trackProbe(probeClaude(q, identity, anchored, probeAbort.signal, req.account?.username, projectId, tokenAccum)));
+        probePromises.push(trackProbe(probeOpenAI(q, identity, anchored, probeAbort.signal, req.account?.username, projectId, tokenAccum)
+          .then((result) => result ? { ...result, intentTier, phraseIds } : null)));
+        probePromises.push(trackProbe(probeClaude(q, identity, anchored, probeAbort.signal, req.account?.username, projectId, tokenAccum)
+          .then((result) => result ? { ...result, intentTier, phraseIds } : null)));
       }
     }
 
     const results = await Promise.all(probePromises);
-    // Attach intent tier to each result using the question→tier map.
     const validResults = results
-      .filter((r): r is ProbeResult => r !== null)
-      .map((r) => ({ ...r, intentTier: questionTiers.get(r.question) ?? "sector" as "sector" }));
+      .filter((r): r is ProbeResult => r !== null);
 
     const {
       chatgptProbes,
@@ -1814,7 +1869,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
         e.claude = trimmed;
       }
     }
-    const evidence = [...evidenceByQuery.values()].slice(0, 18).map((e) => ({
+    const evidence = [...evidenceByQuery.values()].slice(0, MAX_TARGET_PHRASES + 1).map((e) => ({
       question: e.question,
       appeared: e.appeared,
       competitors: [...e.competitors].slice(0, 12),

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildMediaVisibilityImpact, mediaVisibilityImpactHtml, type PhraseMeasurement } from "./mediaVisibilityImpact";
+import { createExactTargetPhrase } from "./exactTargetPhrases";
 
 const phrase = { id: "phrase-one", text: "best specialist agency", intentGroup: "shortlist" as const };
 
@@ -30,6 +31,18 @@ function audit(id: string, checkedAt: string, sample: PhraseMeasurement) {
 }
 
 describe("media visibility impact", () => {
+  it("keeps edited per-run phrases separate from the saved setup phrase and historical baseline", () => {
+    const original = createExactTargetPhrase("shortlist", "Which SMG agency?")!;
+    const edited = createExactTargetPhrase("shortlist", "Which specialist SMG agency?")!;
+    const before = audit("before", "2026-01-01", measurement({ phrase: original, effectiveQuery: "Which SMG (example.invalid) agency?" }));
+    const after = audit("after", "2026-02-01", measurement({ phrase: edited, effectiveQuery: "Which specialist SMG (example.invalid) agency?" }));
+    const snapshot = JSON.stringify([before, after]);
+    const comparisons = buildMediaVisibilityImpact([before, after], [], []);
+    expect(comparisons).toHaveLength(2);
+    expect(comparisons.every((item) => item.status === "baseline-only" && !item.deltas)).toBe(true);
+    expect(JSON.stringify([before, after])).toBe(snapshot);
+    expect(mediaVisibilityImpactHtml("SMG", comparisons)).toContain("Which specialist SMG (example.invalid) agency?");
+  });
   it("calculates transparent deltas and includes only linked evidence between comparable checks", () => {
     const baseline = audit("a", "2026-01-01T00:00:00.000Z", measurement());
     const followUp = audit("b", "2026-02-01T00:00:00.000Z", measurement({

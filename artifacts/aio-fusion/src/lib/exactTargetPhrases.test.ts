@@ -46,4 +46,29 @@ describe("exact target phrase identity", () => {
       targetQuery: { text: phrases[0].text, category: "discovery" },
     });
   });
+
+  it.each([
+    [0, { discovery: [" ", "\n"], shortlist: [], comparison: [] }],
+    [8, { discovery: Array.from({ length: 8 }, (_, i) => `Query ${i}`), shortlist: [], comparison: [] }],
+    [9, { discovery: Array.from({ length: 9 }, (_, i) => `Query ${i}`), shortlist: [], comparison: [] }],
+    [12, { discovery: Array.from({ length: 12 }, (_, i) => `Query ${i}`), shortlist: [], comparison: [] }],
+    [13, { discovery: Array.from({ length: 13 }, (_, i) => `Query ${i}`), shortlist: [], comparison: [] }],
+  ])("returns the canonical audit count %i without slicing", (count, groups) => {
+    expect(getExactTargetPhrases({ v: 1, ...groups })).toHaveLength(count);
+  });
+
+  it("ignores blanks, de-duplicates within a group, and keeps cross-group identity", () => {
+    const phrases = getExactTargetPhrases({
+      v: 1,
+      discovery: [" Same query ", "same   QUERY", ""],
+      shortlist: ["same query", "  "],
+      comparison: [],
+    });
+    expect(phrases).toHaveLength(2);
+    expect(phrases.map(({ text, intentGroup }) => ({ text, intentGroup }))).toEqual([
+      { text: "Same query", intentGroup: "discovery" },
+      { text: "same query", intentGroup: "shortlist" },
+    ]);
+    expect(phrases[0].id).not.toBe(phrases[1].id);
+  });
 });

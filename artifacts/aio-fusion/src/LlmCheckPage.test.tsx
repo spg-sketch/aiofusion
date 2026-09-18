@@ -672,3 +672,209 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
     });
   });
 });
+
+function seedQueries(clientId: string, discovery: string[], shortlist: string[] = [], comparison: string[] = []) {
+  localStorage.setItem("aio.activeProjectId", clientId);
+  localStorage.setItem(`aio.intake.v2::${clientId}`, JSON.stringify({
+    llmQueries: { v: 1, discovery, shortlist, comparison },
+  }));
+}
+
+function sseAuditResponse(result = LEGACY_RESULT): Response {
+  const chunks = [
+    new TextEncoder().encode(`event: result\ndata: ${JSON.stringify(result)}\n\n`),
+  ];
+  return {
+    ok: true,
+    status: 200,
+    body: {
+      getReader: () => ({
+        read: vi.fn()
+          .mockResolvedValueOnce({ done: false, value: chunks[0] })
+          .mockResolvedValueOnce({ done: true, value: undefined }),
+      }),
+    },
+  } as unknown as Response;
+}
+
+function supportingResponse(url: string): Response {
+  if (url.includes("/audit-lock")) {
+    return { ok: true, json: async () => ({ locked: false }) } as unknown as Response;
+  }
+  if (url.includes("/intake")) {
+    return { ok: true, json: async () => ({ intake: null, updatedAt: null }) } as unknown as Response;
+  }
+  if (url.includes("/audits")) {
+    return { ok: true, json: async () => ({ audits: [] }) } as unknown as Response;
+  }
+  return { ok: true, json: async () => ({}) } as unknown as Response;
+}
+
+describe("LlmCheckPage canonical per-run query input", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("runs the current grouped edits, not stale saved setup, in both request fields", async () => {
+    seedQueries(CLIENT.id, ["Stale saved setup"]);
+    let auditBody: Record<string, any> | null = null;
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown, init?: { body?: string }) => {
+      const url = String(input);
+      if (url.includes("/api/llm-check")) {
+        auditBody = JSON.parse(init?.body || "{}");
+        return sseAuditResponse();
+      }
+      return supportingResponse(url);
+    }));
+
+    render(<LlmCheckPage activeClient={CLIENT} />);
+    fireEvent.click(screen.getByRole("button", { name: /Refine what we probe/i }));
+    fireEvent.change(screen.getByDisplayValue("Stale saved setup"), {
+      target: { value: "Current edited query" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run Visibility Audit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => expect(auditBody).not.toBeNull());
+    expect(auditBody!.targetPhrases).toEqual([
+      expect.objectContaining({ text: "Current edited query", intentGroup: "discovery" }),
+    ]);
+    expect(auditBody!.projectData.buyerQuestions).toEqual(["Current edited query"]);
+    expect(JSON.stringify(auditBody)).not.toContain("Stale saved setup");
+  });
+
+  it("preserves all oversized saved entries and blocks confirmation until reduced to 24", async () => {
+    seedQueries(CLIENT.id, Array.from({ length: 25 }, (_, i) => `Saved query ${i + 1}`));
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => supportingResponse(String(input))));
+
+    render(<LlmCheckPage activeClient={CLIENT} />);
+    fireEvent.click(screen.getByRole("button", { name: /Refine what we probe/i }));
+
+    expect(screen.getAllByPlaceholderText("Type a query...")).toHaveLength(25);
+    expect(screen.getByText(/You have 25 queries\. Remove 1/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run Visibility Audit" })).toBeDisabled();
+
+    fireEvent.click(screen.getAllByTitle("Remove query")[0]);
+    await waitFor(() => expect(screen.getAllByPlaceholderText("Type a query...")).toHaveLength(24));
+    expect(screen.getByRole("button", { name: "Run Visibility Audit" })).toBeEnabled();
+    expect(JSON.parse(localStorage.getItem(`aio.intake.v2::${CLIENT.id}`) || "{}").llmQueries.discovery)
+      .toHaveLength(25);
+  });
+
+  it("keeps add/remove/regeneration per-run and sends regenerated canonical phrases without persisting them", async () => {
+    seedQueries(CLIENT.id, ["Saved one"]);
+    let auditBody: Record<string, any> | null = null;
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown, init?: { body?: string }) => {
+      const url = String(input);
+      if (url.includes("/api/content/llm-queries")) {
+        return {
+          ok: true,
+          json: async () => ({
+            discovery: ["Generated", " generated  ", ""],
+            shortlist: ["Generated"],
+            comparison: [],
+          }),
+        } as unknown as Response;
+      }
+      if (url.includes("/api/llm-check")) {
+        auditBody = JSON.parse(init?.body || "{}");
+        return sseAuditResponse();
+      }
+      return supportingResponse(url);
+    }));
+
+    render(<LlmCheckPage activeClient={CLIENT} />);
+    fireEvent.click(screen.getByRole("button", { name: /Refine what we probe/i }));
+    fireEvent.click(screen.getAllByText("Add query")[0]);
+    expect(screen.getAllByPlaceholderText("Type a query...")).toHaveLength(2);
+    fireEvent.click(screen.getAllByTitle("Remove query")[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate queries" }));
+
+    await screen.findAllByDisplayValue("Generated");
+    expect(screen.getAllByPlaceholderText("Type a query...")).toHaveLength(4);
+    expect(JSON.parse(localStorage.getItem(`aio.intake.v2::${CLIENT.id}`) || "{}").llmQueries.discovery)
+      .toEqual(["Saved one"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Run Visibility Audit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await waitFor(() => expect(auditBody).not.toBeNull());
+    expect(auditBody!.targetPhrases).toHaveLength(2);
+    expect(auditBody!.projectData.buyerQuestions).toEqual(["Generated", "Generated"]);
+  });
+
+  it("ignores a generation response that resolves after switching projects", async () => {
+    const second = { id: "client-2", name: "Beta Ltd", sector: "Technology" };
+    seedQueries(CLIENT.id, ["Client one query"]);
+    seedQueries(second.id, ["Client two query"]);
+    localStorage.setItem("aio.activeProjectId", CLIENT.id);
+    let resolveGeneration!: (value: Response) => void;
+    const pendingGeneration = new Promise<Response>((resolve) => { resolveGeneration = resolve; });
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/api/content/llm-queries")) return pendingGeneration;
+      return supportingResponse(url);
+    }));
+
+    const view = render(<LlmCheckPage activeClient={CLIENT} />);
+    fireEvent.click(screen.getByRole("button", { name: /Refine what we probe/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate queries" }));
+    view.rerender(<LlmCheckPage activeClient={second} />);
+    await screen.findByDisplayValue("Client two query");
+
+    resolveGeneration({
+      ok: true,
+      json: async () => ({ discovery: ["Late client one result"], shortlist: [], comparison: [] }),
+    } as unknown as Response);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(screen.getByDisplayValue("Client two query")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Late client one result")).not.toBeInTheDocument();
+  });
+
+  it("ignores an audit stream that finishes after switching projects", async () => {
+    const second = { id: "client-2", name: "Beta Ltd", sector: "Technology" };
+    seedQueries(CLIENT.id, ["Client one query"]);
+    seedQueries(second.id, ["Client two query"]);
+    localStorage.setItem("aio.activeProjectId", CLIENT.id);
+    let resolveRead!: (value: { done: boolean; value?: Uint8Array }) => void;
+    const pendingRead = new Promise<{ done: boolean; value?: Uint8Array }>((resolve) => { resolveRead = resolve; });
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/api/llm-check")) {
+        let reads = 0;
+        return {
+          ok: true,
+          status: 200,
+          body: {
+            getReader: () => ({
+              read: () => reads++ === 0 ? pendingRead : Promise.resolve({ done: true }),
+            }),
+          },
+        } as unknown as Response;
+      }
+      return supportingResponse(url);
+    }));
+
+    const view = render(<LlmCheckPage activeClient={CLIENT} />);
+    fireEvent.click(screen.getByRole("button", { name: "Run Visibility Audit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    view.rerender(<LlmCheckPage activeClient={second} />);
+    await screen.findByDisplayValue("Beta Ltd");
+
+    resolveRead({
+      done: false,
+      value: new TextEncoder().encode(`event: result\ndata: ${JSON.stringify(LEGACY_RESULT)}\n\n`),
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("Detailed probe results")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Run Visibility Audit" })).toBeEnabled();
+    });
+    expect(JSON.parse(localStorage.getItem(`aio.savedAudits.${second.id}`) || "[]")).toEqual([]);
+  });
+});

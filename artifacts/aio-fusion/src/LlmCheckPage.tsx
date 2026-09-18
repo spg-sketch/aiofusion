@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { loadCycle, recordCycle, type CycleHistory } from "./lib/cycleHistory";
 import CountdownBanner from "./components/CountdownBanner";
 import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "./lib/auditTiming";
-import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, getLlmSearchQueries, getWebsite, setActiveProjectId, getActiveProjectId, type ConfirmedEntity } from "./IntakeForm";
+import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, getLlmSearchQueries, getWebsite, setActiveProjectId, type ConfirmedEntity } from "./IntakeForm";
 import { syncIntakeForProject } from "./lib/projectSync";
 import { getExactTargetPhrases } from "./lib/exactTargetPhrases";
+import { AuditQueryCoverage, auditQueryCoverageHtml } from "./components/AuditQueryCoverage";
 import { syncAuditsForProject, pushServerAudit, deleteServerAudit } from "./lib/auditSync";
 import { getSession } from "./lib/auth";
 import {
@@ -680,6 +681,10 @@ function NarrativeSignalsCard({ signals, companyName }: { signals: { gpt: string
 }
 
 export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId, onConsumePending }: { activeClient: Client; onNavigate?: (p: string) => void; pendingAuditId?: string | null; onConsumePending?: () => void }) {
+  const activeProjectRef = useRef(activeClient.id);
+  activeProjectRef.current = activeClient.id;
+  const generationRequestRef = useRef(0);
+  const auditRequestRef = useRef(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [probeProgress, setProbeProgress] = useState<{ done: number; total: number } | null>(null);
@@ -746,8 +751,15 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   const auditSectors = combinedSectors.filter((s) => selectedSectors.includes(s)).slice(0, 3);
   // LLM search queries (1.6) and competitors (4.8) most directly shape the
   // audit, so they are editable here.
-  const buyerQuestions = [...llmQueries.discovery, ...llmQueries.shortlist, ...llmQueries.comparison]
-    .map((q) => q.trim()).filter(Boolean);
+  // This canonical list is the single source of truth for the displayed count,
+  // request phrases and legacy projectData question strings. It ignores blanks,
+  // de-duplicates harmless variants within a group, and deliberately preserves
+  // the same wording in different buyer-journey groups as distinct targets.
+  const targetPhrases = getExactTargetPhrases(llmQueries);
+  const buyerQuestions = targetPhrases.map((phrase) => phrase.text);
+  const targetPhraseCount = targetPhrases.length;
+  const targetPhraseLimit = 24;
+  const targetPhraseCountInvalid = targetPhraseCount === 0 || targetPhraseCount > targetPhraseLimit;
   const competitors = competitorsText.split(/[\n,]+/).map((c) => c.trim()).filter(Boolean);
   // The remaining authority signals are shown read-only so the user can see what
   // is feeding the score, with a pointer to where to edit them in Project Set-Up.
@@ -779,16 +791,18 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     setConfirmedEntityState(entity);
     setEditingIdentity(false);
   }
-  const hasSection16Queries = (() => {
-    const q = getLlmSearchQueries();
-    return q.discovery.length > 0 || q.shortlist.length > 0 || q.comparison.length > 0;
-  })();
+  const hasSection16Queries = targetPhraseCount > 0;
   const setupIncomplete = auditSectors.length === 0 || probeName.length === 0 || !hasSection16Queries;
   useEffect(() => {
     if (setupIncomplete) setShowRefine(true);
   }, [setupIncomplete]);
 
   useEffect(() => {
+    generationRequestRef.current += 1;
+    auditRequestRef.current += 1;
+    setLlmQueriesGenerating(false);
+    setLoading(false);
+    setProbeProgress(null);
     setCycleData(loadCycle(activeClient.id));
     setSavedAudits(loadSavedAudits(activeClient.id));
     setResult(null);
@@ -802,20 +816,24 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     setPendingForce(false);
     // Sync audit history from server: server wins on conflict, local-only
     // items are pushed up. Update state once the merge is ready.
-    void syncAuditsForProject(activeClient.id).then((merged) => {
-      setSavedAudits(merged);
+    const projectId = activeClient.id;
+    void syncAuditsForProject(projectId).then((merged) => {
+      if (activeProjectRef.current === projectId) setSavedAudits(merged);
     });
   }, [activeClient.id]);
 
   // Fetch audit lock status for this project whenever the active client changes.
   useEffect(() => {
     if (!activeClient.id) return;
+    const projectId = activeClient.id;
     const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
-    fetch(`${apiBase}/api/audit-lock?projectId=${encodeURIComponent(activeClient.id)}&auditType=visibility`, {
+    fetch(`${apiBase}/api/audit-lock?projectId=${encodeURIComponent(projectId)}&auditType=visibility`, {
       credentials: "include",
     })
       .then((r) => r.json())
-      .then((d) => setAuditLock(d))
+      .then((d) => {
+        if (activeProjectRef.current === projectId) setAuditLock(d);
+      })
       .catch(() => { /* non-blocking */ });
   }, [activeClient.id]);
 
@@ -889,6 +907,10 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   }, [pendingAuditId, savedAudits]);
 
   async function generateQueriesOnPage(isAuto = false) {
+    const projectId = activeClient.id;
+    const requestId = ++generationRequestRef.current;
+    const isCurrentRequest = () =>
+      activeProjectRef.current === projectId && generationRequestRef.current === requestId;
     setLlmQueriesError("");
     setLlmQueriesGenerating(true);
     try {
@@ -905,7 +927,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           mediaCategories: getBusinessSectors().slice(0, 5).join(", "),
           competitors: getCompetitors().slice(0, 10).join(", "),
           websiteUrl: getWebsite(),
-          projectId: getActiveProjectId(),
+          projectId,
         }),
       });
       if (!resp.ok) {
@@ -913,21 +935,33 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         throw new Error(d.error || `HTTP ${resp.status}`);
       }
       const data = await resp.json();
+      if (!isCurrentRequest()) return;
       setLlmQueries({
         discovery: Array.isArray(data.discovery) ? (data.discovery as string[]) : [],
         shortlist: Array.isArray(data.shortlist) ? (data.shortlist as string[]) : [],
         comparison: Array.isArray(data.comparison) ? (data.comparison as string[]) : [],
       });
     } catch (err) {
-      if (!isAuto) {
+      if (!isAuto && isCurrentRequest()) {
         setLlmQueriesError((err instanceof Error ? err.message : null) || "Could not generate queries. Please try again.");
       }
     } finally {
-      setLlmQueriesGenerating(false);
+      if (isCurrentRequest()) setLlmQueriesGenerating(false);
     }
   }
 
   async function runCheck(force = false) {
+    if (targetPhraseCountInvalid) {
+      setShowRunConfirm(false);
+      setError(targetPhraseCount === 0
+        ? "Add at least one query before running the audit."
+        : `You have ${targetPhraseCount} queries. Remove ${targetPhraseCount - targetPhraseLimit} to run the audit (maximum ${targetPhraseLimit}).`);
+      return;
+    }
+    const projectId = activeClient.id;
+    const requestId = ++auditRequestRef.current;
+    const isCurrentRequest = () =>
+      activeProjectRef.current === projectId && auditRequestRef.current === requestId;
     setLoading(true);
     setError("");
     setResult(null);
@@ -946,7 +980,6 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       const projectData = getProjectAuthorityData();
       projectData.buyerQuestions = buyerQuestions;
       projectData.competitors = competitors;
-      const targetPhrases = getExactTargetPhrases(getLlmSearchQueries());
 
       const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
       const resp = await fetch(`${apiBase}/api/llm-check`, {
@@ -964,7 +997,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           businessType,
           projectData,
           targetPhrases,
-          projectId: activeClient.id,
+          projectId,
           force,
         }),
       });
@@ -1019,7 +1052,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           if (event === "progress") {
             const done = typeof parsed.done === "number" ? parsed.done : 0;
             const total = typeof parsed.total === "number" ? parsed.total : 0;
-            setProbeProgress({ done, total });
+            if (isCurrentRequest()) setProbeProgress({ done, total });
           } else if (event === "result") {
             finalData = parsed as unknown as LlmCheckResult;
           } else if (event === "error") {
@@ -1030,24 +1063,29 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
 
       if (sseError) throw new Error(sseError);
       if (!finalData) throw new Error("The audit ended before it finished. Please try again.");
+      if (!isCurrentRequest()) return;
 
       setResult(finalData);
       setResultIsFromSaved(false);
-      const updated = recordCycle(activeClient.id, authorityIndexFor(finalData));
+      const updated = recordCycle(projectId, authorityIndexFor(finalData));
       setCycleData(updated);
       saveAuditToHistory(finalData);
       recordAuditDuration("visibility", Date.now() - _auditStart, getAuditDurationSeconds("visibility") * 1000);
       // Refresh audit lock so the UI reflects the new last-run date immediately.
       const apiBase2 = import.meta.env.DEV ? `https://${window.location.host}` : "";
-      fetch(`${apiBase2}/api/audit-lock?projectId=${encodeURIComponent(activeClient.id)}&auditType=visibility`, { credentials: "include" })
+      fetch(`${apiBase2}/api/audit-lock?projectId=${encodeURIComponent(projectId)}&auditType=visibility`, { credentials: "include" })
         .then((r) => r.json())
-        .then(setAuditLock)
+        .then((lock) => {
+          if (isCurrentRequest()) setAuditLock(lock);
+        })
         .catch(() => {});
     } catch (err: any) {
-      setError(err.message || "Failed to run visibility check");
+      if (isCurrentRequest()) setError(err.message || "Failed to run visibility check");
     } finally {
-      setLoading(false);
-      setProbeProgress(null);
+      if (isCurrentRequest()) {
+        setLoading(false);
+        setProbeProgress(null);
+      }
     }
   }
 
@@ -1104,7 +1142,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
 
     const topComp = result.topCompetitors[0];
     const execSummary =
-      `${escapeHtml(result.companyName)} appeared in <strong>${appearedCount}</strong> of <strong>${totalQueries}</strong> non-branded category queries across ChatGPT and Claude (${presencePct}% presence). ` +
+      `${escapeHtml(result.companyName)} appeared in <strong>${appearedCount}</strong> of <strong>${totalQueries}</strong> ${result.phraseMeasurements?.length ? "answered probe queries (including the identity probe)" : "non-branded category queries"} across ChatGPT and Claude (${presencePct}% presence). ` +
       (result.topCompetitors.length > 0
         ? `When ${escapeHtml(result.companyName)} was absent, the engines recommended rivals instead${topComp ? `, most often <strong>${escapeHtml(topComp.name)}</strong> (in ${topComp.mentions} of ${result.totalProbes} answers)` : ""}. `
         : `No single rival was recommended often enough to dominate, so there is open space to claim the category. `) +
@@ -1340,7 +1378,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         <div class="stats">
           <div class="stat"><b>${presencePct}%</b><small>Presence</small></div>
           <div class="stat"><b>${sov}%</b><small>Share of voice</small></div>
-          <div class="stat"><b>${appearedCount} / ${totalQueries}</b><small>Queries appeared</small></div>
+          <div class="stat"><b>${appearedCount} / ${totalQueries}</b><small>${result.phraseMeasurements?.length ? "Answered queries appeared" : "Queries appeared"}</small></div>
         </div>
       </div>
       <div style="margin-top:14px;font-size:11px;color:#6B7280;">ChatGPT: ${result.byModel.chatgpt.rate}% &middot; Claude: ${result.byModel.claude.rate}% &middot; Cycle ${cycleData.cycle}</div>
@@ -1385,9 +1423,10 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         <tbody>${evidenceRows}</tbody>
       </table>
     </div>
+    ${auditQueryCoverageHtml(result.phraseMeasurements ?? [])}
     <div class="card">
       <h2>Method &amp; caveats</h2>
-      <p class="lead">This assessment fires the buyer's real, non-branded category questions at ChatGPT and Claude as blind probes (the brand is not named in the prompt), with multiple runs per model to account for AI non-determinism. Presence and share of voice are measured from those live answers. Branded queries that test message fidelity and entity clarity are not part of this run. Results reflect each engine's knowledge at the time of the probe and vary between sessions, so re-run on a schedule to chart the trend.</p>
+      <p class="lead">${result.phraseMeasurements?.length ? "This audit uses the target queries listed above plus a separate identity probe across ChatGPT and Claude, with two runs per provider. Target queries may name the brand; existing domain disambiguation is reflected in the effective query. The evidence log contains returned answers; the query coverage table also includes failed and partial checks." : "This assessment fires the buyer's real, non-branded category questions at ChatGPT and Claude as blind probes (the brand is not named in the prompt), with multiple runs per model to account for AI non-determinism. Presence and share of voice are measured from those live answers. Branded queries that test message fidelity and entity clarity are not part of this run."} Results reflect each engine's knowledge at the time of the probe and vary between sessions, so re-run on a schedule to chart the trend.</p>
     </div>
     <div class="footer">Generated by AIO Fusion &middot; AI Authority &amp; Earned-Media Visibility Assessment &middot; Results reflect AI model knowledge at time of query and may vary between sessions.</div>
   </div>
@@ -1630,12 +1669,12 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                   style={{ background: vars.accent }}
                 >
                   {llmQueriesGenerating ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
-                  {llmQueriesGenerating ? "Generating..." : buyerQuestions.length > 0 ? "Regenerate queries" : "Generate top 12 queries"}
+                  {llmQueriesGenerating ? "Generating..." : targetPhraseCount > 0 ? "Regenerate queries" : "Generate top 12 queries"}
                 </button>
                 {llmQueriesError && (
                   <p className="text-[12px]" style={{ color: vars.red }}>{llmQueriesError}</p>
                 )}
-                {buyerQuestions.length === 0 && !llmQueriesGenerating && (
+                {targetPhraseCount === 0 && !llmQueriesGenerating && (
                   <p className="text-[12px] font-light" style={{ color: vars.g500 }}>
                     Or type your own queries in the groups below. Fill in Company Set-Up (section 4) and your primary message first for the best results.
                   </p>
@@ -1705,11 +1744,13 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                   </div>
                 );
               })()}
-              <p className="text-[11px] mt-2 flex items-start gap-1" style={{ color: buyerQuestions.length === 0 ? "#8A6314" : vars.g400 }}>
+              <p className="text-[11px] mt-2 flex items-start gap-1" style={{ color: targetPhraseCountInvalid ? "#8A6314" : vars.g400 }}>
                 <Info size={11} className="flex-shrink-0 mt-0.5" />
-                {buyerQuestions.length > 0
-                  ? `These ${buyerQuestions.length} queries are run as blind probes. We then check whether you appear in the answer.`
-                  : "Generate queries above, or type your own. They are run as blind probes so we can check whether you appear."}
+                {targetPhraseCount > targetPhraseLimit
+                  ? `You have ${targetPhraseCount} queries. Remove ${targetPhraseCount - targetPhraseLimit} to run the audit (maximum ${targetPhraseLimit}). All saved queries remain available to edit.`
+                  : targetPhraseCount > 0
+                  ? `These ${targetPhraseCount} queries are run as blind probes. We then check whether you appear in the answer. You can add queries up to a maximum of ${targetPhraseLimit}.`
+                  : `Generate queries above, or type your own, up to a maximum of ${targetPhraseLimit}. They are run as blind probes so we can check whether you appear.`}
               </p>
             </div>
             <div className="mb-6">
@@ -1792,11 +1833,12 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 <p className="text-xs font-light mb-3" style={{ color: "#7A5800" }}>
                   {pendingForce
                     ? "This will override the 21-day lock. Continue?"
-                    : "This will query Claude and ChatGPT across up to 8 questions. It typically takes 1–3 minutes."}
+                    : `This will query Claude and ChatGPT across ${targetPhraseCount} question${targetPhraseCount === 1 ? "" : "s"}. It typically takes 1–3 minutes.`}
                 </p>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => { setShowRunConfirm(false); runCheck(pendingForce); }}
+                    disabled={targetPhraseCountInvalid}
                     className="px-4 py-1.5 rounded text-xs font-medium text-white"
                     style={{ background: "#1f748f" }}
                   >
@@ -1820,8 +1862,12 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
               ) : (
                 <>
                   <button
-                    onClick={() => { setPendingForce(auditLock.locked); setShowRunConfirm(true); }}
-                    disabled={loading || auditSectors.length === 0 || probeName.length === 0 || !hasSection16Queries || showRunConfirm}
+                    onClick={() => {
+                      if (targetPhraseCountInvalid) return;
+                      setPendingForce(auditLock.locked);
+                      setShowRunConfirm(true);
+                    }}
+                    disabled={loading || auditSectors.length === 0 || probeName.length === 0 || targetPhraseCountInvalid || showRunConfirm}
                     className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-60"
                     style={{ background: "#1f748f" }}
                   >
@@ -1869,6 +1915,19 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                       <span className="font-medium">Project Set-Up → Section 1.6</span>
                     )}{" "}
                     and generate your LLM search queries first.
+                  </p>
+                </div>
+              </div>
+            )}
+            {!loading && targetPhraseCount > targetPhraseLimit && (
+              <div className="mt-3 p-3 rounded-lg flex items-start gap-2.5" style={{ background: "#FEF3C7", border: "1px solid #FCD34D" }}>
+                <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" style={{ color: "#92400E" }} />
+                <div className="min-w-0">
+                  <p className="text-[12px] font-semibold" style={{ color: "#78350F" }}>
+                    Reduce your query list before running the audit
+                  </p>
+                  <p className="text-[12px] mt-0.5 leading-relaxed" style={{ color: "#92400E" }}>
+                    You have {targetPhraseCount} canonical queries. Remove {targetPhraseCount - targetPhraseLimit} to meet the maximum of {targetPhraseLimit}. Your saved entries have not been removed.
                   </p>
                 </div>
               </div>
@@ -2171,7 +2230,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             {[
               { v: `${rd.presencePct}%`, l: "Presence" },
               { v: `${rd.sov}%`, l: "Share of voice" },
-              { v: `${rd.appearedCount} / ${rd.totalQueries}`, l: "Queries appeared" },
+              { v: `${rd.appearedCount} / ${rd.totalQueries}`, l: result.phraseMeasurements?.length ? "Answered queries appeared" : "Queries appeared" },
             ].map((s) => (
               <div key={s.l} className="rounded-xl border p-3 sm:p-4 text-center" style={{ background: vars.g50, borderColor: vars.g200 }}>
                 <p className="text-2xl sm:text-[28px] font-bold leading-none" style={{ color: vars.navy }}>{s.v}</p>
@@ -2181,7 +2240,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           </div>
         </div>
         <p className="text-[11px] mt-4 pt-3 border-t" style={{ borderColor: vars.g100, color: vars.g400 }}>
-          Non-branded category queries ({rd.appearedCount} of {rd.totalQueries}) vs named competitors{rd.trackedCount > 0 ? ` · ${rd.trackedCount} tracked competitors` : ""} · ChatGPT {result.byModel.chatgpt.rate}% · Claude {result.byModel.claude.rate}% · Cycle {cycleData.cycle}
+          {result.phraseMeasurements?.length ? "Answered probe queries (including identity)" : "Non-branded category queries"} ({rd.appearedCount} of {rd.totalQueries}) vs named competitors{rd.trackedCount > 0 ? ` · ${rd.trackedCount} tracked competitors` : ""} · ChatGPT {result.byModel.chatgpt.rate}% · Claude {result.byModel.claude.rate}% · Cycle {cycleData.cycle}
         </p>
         <p className="text-[10px] mt-2 flex items-start gap-1" style={{ color: vars.g400 }}>
           <Info size={10} className="flex-shrink-0 mt-0.5" />
@@ -2201,7 +2260,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         {rd.assess?.summary
           ? <p className="text-[13px] leading-relaxed" style={{ color: vars.g600 }}>{rd.assess.summary}</p>
           : <p className="text-[13px] leading-relaxed" style={{ color: vars.g600 }}>
-              {result.companyName} appeared in {rd.appearedCount} of {rd.totalQueries} non-branded category queries across ChatGPT and Claude ({rd.presencePct}% presence), with {rd.sov}% share of voice against the rivals the engines named.
+              {result.companyName} appeared in {rd.appearedCount} of {rd.totalQueries} {result.phraseMeasurements?.length ? "answered probe queries (including the identity probe)" : "non-branded category queries"} across ChatGPT and Claude ({rd.presencePct}% presence), with {rd.sov}% share of voice against the rivals the engines named.
             </p>}
         {result.icp && (
           <p className="text-[12px] mt-3" style={{ color: vars.g500 }}>
@@ -2538,10 +2597,11 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       )}
 
       {/* Blind-probe evidence log */}
+      <AuditQueryCoverage measurements={result.phraseMeasurements ?? []} />
       <ReportSection
         icon={<Search size={14} style={{ color: vars.accent }} />}
         title="Blind-probe evidence log"
-        subtitle="Every query sent to the AI engines, and whether this brand appeared in the answer"
+        subtitle={result.phraseMeasurements?.length ? "Returned answers, including the identity probe. See Queries run for incomplete checks." : "Every query sent to the AI engines, and whether this brand appeared in the answer"}
         defaultOpen={false}
       >
         <div className="overflow-x-auto">
@@ -2593,7 +2653,9 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       >
         <ul className="list-disc pl-5 space-y-1.5">
           <li className="text-[12px] leading-relaxed" style={{ color: vars.g600 }}>
-            Blind probes were run across ChatGPT and Claude using {rd.totalQueries} non-branded category queries a prospect, journalist or researcher might ask. {result.companyName} was never named in the prompts.
+            {result.phraseMeasurements?.length
+              ? "The target queries listed in Queries run were scheduled across ChatGPT and Claude, twice per provider, plus a separate identity probe. Target queries may name the brand; existing domain disambiguation is reflected in the effective query. The evidence log contains returned answers; query coverage also includes failed and partial checks."
+              : <>Blind probes were run across ChatGPT and Claude using {rd.totalQueries} non-branded category queries a prospect, journalist or researcher might ask. {result.companyName} was never named in the prompts.</>}
           </li>
           <li className="text-[12px] leading-relaxed" style={{ color: vars.g600 }}>
             Presence is the share of probes in which {result.companyName} appeared. Share of voice weighs those mentions against the rival brands the engines named.

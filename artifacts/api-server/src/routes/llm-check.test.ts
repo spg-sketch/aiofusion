@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import express from "express";
+import { stableExactTargetPhraseId } from "../lib/exact-target-phrases";
 
 // Mock the Anthropic SDK so the stage-two scoring call never hits the network.
 // `messagesCreate` is hoisted so the mock factory can reference it.
@@ -1327,6 +1328,25 @@ describe("llm-check HTTP routes - audit-lock", () => {
     return { status: res.status, json: (await res.json().catch(() => null)) as any };
   }
 
+  async function postCheckWithEvents(body: unknown) {
+    const res = await fetch(`${baseUrl}/api/llm-check`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    const events = text.split("\n\n").flatMap((block) => {
+      const event = block.match(/^event: (.+)$/m)?.[1];
+      const data = block.match(/^data: (.+)$/m)?.[1];
+      return event && data ? [{ event, data: JSON.parse(data) }] : [];
+    });
+    return { status: res.status, events, json: res.headers.get("content-type")?.includes("application/json") ? JSON.parse(text) : null };
+  }
+
+  function phrase(text: string, intentGroup: "discovery" | "shortlist" | "comparison") {
+    return { id: stableExactTargetPhraseId(intentGroup, text), text, intentGroup };
+  }
+
   async function getAuditLock(params: Record<string, string>) {
     const qs = new URLSearchParams(params).toString();
     const res = await fetch(`${baseUrl}/api/audit-lock${qs ? `?${qs}` : ""}`);
@@ -1371,6 +1391,146 @@ describe("llm-check HTTP routes - audit-lock", () => {
       });
       expect(status).toBe(429);
       expect(json.locked).toBe(true);
+    });
+  });
+
+  describe("POST /api/llm-check - exact target phrase boundary", () => {
+    const baseBody = { companyName: "Acme", sectors: ["widgets"] };
+
+    it.each([8, 9, 13, 23])("accepts %i canonical target phrases", async (count) => {
+      const targetPhrases = Array.from({ length: count }, (_, index) =>
+        phrase(`accepted ${index + 1}`, (["discovery", "shortlist", "comparison"] as const)[index % 3]),
+      );
+      const response = await postCheckWithEvents({ ...baseBody, targetPhrases });
+      expect(response.status).toBe(200);
+      expect(response.events.find((event) => event.event === "result")?.data.phraseMeasurements).toHaveLength(count * 2);
+      expect(response.events.filter((event) => event.event === "progress").at(-1)?.data.total).toBe((count + 1) * 4);
+    });
+
+    it.each([12, 24])("accepts %i canonical phrases spanning every intent group and reports the real bounded work total", async (count) => {
+      process.env.AI_INTEGRATIONS_OPENAI_BASE_URL = "https://example.test";
+      process.env.AI_INTEGRATIONS_OPENAI_API_KEY = "test-key";
+      chatCompletionsCreate.mockResolvedValue({
+        choices: [{ message: { content: "Acme is a relevant provider." }, finish_reason: "stop" }],
+        usage: {},
+      });
+      messagesCreate.mockImplementation(async (request: any) => {
+        if (request.system?.includes("knowledgeable business advisor")) {
+          return { content: [{ type: "text", text: "Acme is a relevant provider." }], usage: {} };
+        }
+        return { content: [{ type: "text", text: "" }], usage: {} };
+      });
+      const targetPhrases = Array.from({ length: count }, (_, index) =>
+        phrase(`canonical ${index + 1}`, (["discovery", "shortlist", "comparison"] as const)[index % 3]),
+      );
+
+      const response = await postCheckWithEvents({ ...baseBody, targetPhrases });
+
+      expect(response.status).toBe(200);
+      const result = response.events.find((event) => event.event === "result")?.data;
+      expect(result.phraseMeasurements).toHaveLength(count * 2);
+      expect(new Set(result.phraseMeasurements.map((item: any) => item.phrase.id))).toEqual(new Set(targetPhrases.map((item) => item.id)));
+      const progress = response.events.filter((event) => event.event === "progress");
+      expect(progress.at(-1)?.data).toEqual({ done: (count + 1) * 4, total: (count + 1) * 4 });
+      expect(chatCompletionsCreate).toHaveBeenCalledTimes((count + 1) * 2);
+      expect(messagesCreate.mock.calls.filter(([request]) => request.system?.includes("knowledgeable business advisor"))).toHaveLength((count + 1) * 2);
+      const scoringCalls = messagesCreate.mock.calls.filter(([request]) => request.max_tokens === 5000);
+      expect(scoringCalls).toHaveLength(1);
+      for (const target of targetPhrases) {
+        expect(JSON.stringify(scoringCalls[0][0].messages)).toContain(target.text);
+      }
+    });
+
+    it("runs an explicit empty phrase list as identity-only without resurrecting saved buyer questions", async () => {
+      const response = await postCheckWithEvents({
+        ...baseBody,
+        targetPhrases: [],
+        projectData: { buyerQuestions: ["stale saved buyer question"] },
+      });
+      expect(response.status).toBe(200);
+      expect(response.events.find((event) => event.event === "result")?.data.phraseMeasurements).toEqual([]);
+      expect(response.events.filter((event) => event.event === "progress").at(-1)?.data).toEqual({ done: 4, total: 4 });
+      const probePrompts = messagesCreate.mock.calls
+        .filter(([request]) => request.system?.includes("knowledgeable business advisor"))
+        .map(([request]) => request.messages[0].content);
+      expect(probePrompts).not.toContain("stale saved buyer question");
+    });
+
+    it("preserves legacy saved buyer-question behaviour when targetPhrases is omitted", async () => {
+      await postCheckWithEvents({
+        ...baseBody,
+        projectData: { buyerQuestions: ["legacy saved buyer question"] },
+      });
+      const probePrompts = messagesCreate.mock.calls
+        .filter(([request]) => request.system?.includes("knowledgeable business advisor"))
+        .map(([request]) => request.messages[0].content);
+      expect(probePrompts).toContain("legacy saved buyer question");
+    });
+
+    it("strictly rejects twenty-five, invalid IDs, duplicate IDs and blank phrases at the HTTP boundary", async () => {
+      const twentyFive = Array.from({ length: 25 }, (_, index) => phrase(`too many ${index}`, "discovery"));
+      const valid = phrase("valid phrase", "shortlist");
+      const invalidCases = [
+        null,
+        twentyFive,
+        [{ ...valid, id: "phrase-not-canonical" }],
+        [valid, { ...valid }],
+        [{ ...valid, id: stableExactTargetPhraseId("shortlist", " "), text: " " }],
+      ];
+      for (const targetPhrases of invalidCases) {
+        const response = await postCheckWithEvents({ ...baseBody, targetPhrases });
+        expect(response.status).toBe(400);
+        expect(response.json.error).toContain("at most 24");
+      }
+      expect(chatCompletionsCreate).not.toHaveBeenCalled();
+      expect(messagesCreate).not.toHaveBeenCalled();
+    });
+
+    it("deduplicates a repeated effective query across intent groups, shares observations, preserves canonical fields, and keeps identity separate", async () => {
+      process.env.AI_INTEGRATIONS_OPENAI_BASE_URL = "https://example.test";
+      process.env.AI_INTEGRATIONS_OPENAI_API_KEY = "test-key";
+      const repeatedText = "best \u2014 specialist agency";
+      const discovery = phrase(repeatedText, "discovery");
+      const comparison = phrase(repeatedText, "comparison");
+      let repeatedOpenAiRun = 0;
+      chatCompletionsCreate.mockImplementation(async (request: any) => {
+        const question = request.messages[1].content;
+        if (question === repeatedText && repeatedOpenAiRun++ === 0) throw new Error("one provider run failed");
+        return {
+          choices: [{ message: { content: "Acme is a relevant provider." }, finish_reason: "stop" }],
+          usage: {},
+        };
+      });
+      messagesCreate.mockImplementation(async (request: any) => {
+        if (request.system?.includes("knowledgeable business advisor")) {
+          return { content: [{ type: "text", text: "Acme is a relevant provider." }], usage: {} };
+        }
+        return { content: [{ type: "text", text: "" }], usage: {} };
+      });
+
+      const response = await postCheckWithEvents({
+        ...baseBody,
+        targetPhrases: [discovery, comparison],
+      });
+      const result = response.events.find((event) => event.event === "result")?.data;
+      expect(response.events.filter((event) => event.event === "progress").at(-1)?.data).toEqual({ done: 8, total: 8 });
+      expect(chatCompletionsCreate).toHaveBeenCalledTimes(4);
+      expect(messagesCreate.mock.calls.filter(([request]) => request.system?.includes("knowledgeable business advisor"))).toHaveLength(4);
+      expect(result.phraseMeasurements).toHaveLength(4);
+      for (const canonical of [discovery, comparison]) {
+        const measurements = result.phraseMeasurements.filter((item: any) => item.phrase.id === canonical.id);
+        expect(measurements.map((item: any) => item.phrase)).toEqual([canonical, canonical]);
+        expect(measurements.map((item: any) => item.effectiveQuery)).toEqual([repeatedText, repeatedText]);
+        expect(measurements.find((item: any) => item.provider === "chatgpt")).toMatchObject({
+          status: "partial", completedRuns: 1, failureLabel: "1 of 2 runs failed",
+        });
+        expect(measurements.find((item: any) => item.provider === "claude")).toMatchObject({
+          status: "complete", completedRuns: 2,
+        });
+      }
+      expect(result.probes.some((item: any) => item.intentTier === "identity")).toBe(true);
+      expect(result.probes.some((item: any) => item.intentTier === "buyer")).toBe(true);
+      expect(result.probes.find((item: any) => item.intentTier === "buyer")?.question).toBe(repeatedText);
     });
   });
 
