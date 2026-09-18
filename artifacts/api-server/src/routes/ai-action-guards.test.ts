@@ -616,6 +616,20 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   // ── health ────────────────────────────────────────────────────────────────
   "GET /healthz",
 
+  // ── journalist privacy rights ─────────────────────────────────────────────
+  // Anonymous intake is rate-limited. Every administration route also has its
+  // own authenticated, unrestricted Master-owner gate.
+  "POST /journalist-privacy/requests",
+  "GET /admin/journalist-privacy/requests",
+  "GET /admin/journalist-privacy/requests/:id",
+  "GET /admin/journalist-privacy/requests/:id/candidates",
+  "POST /admin/journalist-privacy/requests/:id/verify",
+  "POST /admin/journalist-privacy/requests/:id/approve",
+  "POST /admin/journalist-privacy/requests/:id/assign",
+  "POST /admin/journalist-privacy/requests/:id/resolve",
+  "POST /admin/journalist-privacy/requests/:id/deliver-outcome",
+  "POST /admin/journalist-privacy/requests/:id/retry-notification",
+
   // ── legacy Replit auth (auth.ts) ─────────────────────────────────────────
   "GET /auth/user",
   "GET /login",

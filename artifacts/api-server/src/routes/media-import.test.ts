@@ -68,6 +68,11 @@ vi.mock("@workspace/db", async () => {
       committed_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(),
       UNIQUE(account_id, idempotency_key)
     );
+    CREATE TABLE media_suppressions (
+      id serial PRIMARY KEY, request_id integer, email_hash text, name_hash text, outlet_hash text, linkedin_hash text,
+      scope text NOT NULL DEFAULT 'shared', account_id varchar, reason text NOT NULL DEFAULT '',
+      active integer NOT NULL DEFAULT 1, created_at timestamptz NOT NULL DEFAULT now(), revoked_at timestamptz
+    );
     CREATE TABLE media_recommendation_sets (
       id serial PRIMARY KEY, account_id varchar NOT NULL, project_id varchar NOT NULL,
       story_key varchar(200) NOT NULL, criteria jsonb NOT NULL DEFAULT '{}',

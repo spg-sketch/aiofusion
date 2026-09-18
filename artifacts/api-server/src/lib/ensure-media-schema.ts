@@ -9,6 +9,65 @@ import { logger } from "./logger";
  * rows remain valid while the new required fields are introduced.
  */
 export async function ensureMediaSchema(): Promise<void> {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS journalist_privacy_requests (
+      id serial PRIMARY KEY, request_type varchar(20) NOT NULL, name text NOT NULL,
+      email text NOT NULL, outlet text NOT NULL DEFAULT '', details text NOT NULL,
+      scope varchar(20) NOT NULL DEFAULT 'workspace', status varchar(24) NOT NULL DEFAULT 'received',
+      assigned_to varchar, due_at timestamptz NOT NULL, verification_status varchar(20) NOT NULL DEFAULT 'unverified',
+      verification_note text NOT NULL DEFAULT '', reviewer_approval_at timestamptz, reviewer_approval_by varchar,
+      resolution varchar(32), resolution_note text NOT NULL DEFAULT '', notification_status varchar(20) NOT NULL DEFAULT 'pending',
+      notification_attempts integer NOT NULL DEFAULT 0, last_notification_error text NOT NULL DEFAULT '',
+      outcome_delivery_status varchar(20) NOT NULL DEFAULT 'pending', outcome_delivery_attempts integer NOT NULL DEFAULT 0,
+      outcome_delivery_error text NOT NULL DEFAULT '',
+      resolved_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`
+    ALTER TABLE journalist_privacy_requests ADD COLUMN IF NOT EXISTS outcome_delivery_status varchar(20) NOT NULL DEFAULT 'pending',
+      ADD COLUMN IF NOT EXISTS outcome_delivery_attempts integer NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS outcome_delivery_error text NOT NULL DEFAULT ''
+      ,ADD COLUMN IF NOT EXISTS outcome_delivery_claimed_at timestamptz
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS journalist_privacy_completion_ledger (
+      id serial PRIMARY KEY, request_id integer NOT NULL REFERENCES journalist_privacy_requests(id) ON DELETE RESTRICT,
+      store varchar(40) NOT NULL, store_key text NOT NULL, result varchar(24) NOT NULL,
+      note text NOT NULL DEFAULT '', created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS journalist_privacy_completion_ledger_unique ON journalist_privacy_completion_ledger (request_id, store, store_key)`);
+  await db.execute(sql`
+    ALTER TABLE journalist_privacy_requests
+      ADD COLUMN IF NOT EXISTS approved_scope varchar(20),
+      ADD COLUMN IF NOT EXISTS approved_account_id varchar,
+      ADD COLUMN IF NOT EXISTS matched_contact_ids integer[] NOT NULL DEFAULT ARRAY[]::integer[],
+      ADD COLUMN IF NOT EXISTS disclosure_result jsonb NOT NULL DEFAULT '{}'::jsonb
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS journalist_privacy_request_events (
+      id serial PRIMARY KEY, request_id integer NOT NULL REFERENCES journalist_privacy_requests(id) ON DELETE RESTRICT,
+      event_type varchar(32) NOT NULL, actor varchar NOT NULL, note text NOT NULL DEFAULT '',
+      metadata jsonb NOT NULL DEFAULT '{}'::jsonb, created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS media_suppressions (
+      id serial PRIMARY KEY, request_id integer REFERENCES journalist_privacy_requests(id) ON DELETE RESTRICT,
+      scope varchar(20) NOT NULL DEFAULT 'workspace', account_id varchar, email_hash varchar(64),
+      name_hash varchar(64), linkedin_hash varchar(64), outlet_hash varchar(64), reason varchar(32) NOT NULL,
+      active integer NOT NULL DEFAULT 1, created_at timestamptz NOT NULL DEFAULT now(), revoked_at timestamptz
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS journalist_privacy_legal_holds (
+      id serial PRIMARY KEY, request_id integer NOT NULL REFERENCES journalist_privacy_requests(id) ON DELETE RESTRICT,
+      scope varchar(20) NOT NULL, reason text NOT NULL, approved_by varchar NOT NULL,
+      expires_at timestamptz, created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`DROP INDEX IF EXISTS media_suppressions_request_scope_identity`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS media_suppressions_request_scope_identity ON media_suppressions (request_id, scope, COALESCE(account_id, ''), COALESCE(email_hash, ''), COALESCE(name_hash, ''), COALESCE(linkedin_hash, ''), COALESCE(outlet_hash, ''))`);
   // Discovery candidates are additive and deliberately separate from trusted
   // contacts/outlets. Keep the snapshot immutable at the application layer;
   // status transitions are performed only by the approval routes.

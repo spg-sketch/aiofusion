@@ -225,6 +225,20 @@ export const PAGE_META: Record<PublicPageMetaKey, PageMeta> = {
     canonical: `${BASE}/privacy-policy`,
     ogType: "website",
   },
+  "journalist-privacy": {
+    title: "Journalist Privacy Rights | AIO Fusion",
+    description:
+      "How journalists can request access, correction, objection or removal of media contact information held by AIO Fusion.",
+    canonical: `${BASE}/journalist-privacy`,
+    ogType: "website",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      name: "Journalist Privacy Rights",
+      url: `${BASE}/journalist-privacy`,
+      description: "Privacy rights and request form for journalists whose professional contact information may be processed by AIO Fusion.",
+    },
+  },
   "terms-conditions": {
     title: "Terms & Conditions | AIO Fusion",
     description:
@@ -648,6 +662,7 @@ export const PUBLIC_PAGE_DEFINITIONS = [
   { view: "contact", slug: "contact", priority: "0.8" },
   { view: "trust-security", slug: "trust-security", priority: "0.5" },
   { view: "privacy-policy", slug: "privacy-policy", priority: "0.4" },
+  { view: "journalist-privacy", slug: "journalist-privacy", priority: "0.4" },
   { view: "terms-conditions", slug: "terms-conditions", priority: "0.4" },
 ] as const satisfies readonly {
   view: "landing" | PublicView;

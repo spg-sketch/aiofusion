@@ -90,6 +90,40 @@ function fromAddress(): string {
   return process.env.RESEND_FROM ?? "AIO Fusion Alerts <info@aiofusion.ai>";
 }
 
+export async function sendJournalistPrivacyCaseAlert(opts: {
+  requestId: number;
+  requestType: string;
+  dueAt: Date;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) throw new Error("RESEND_API_KEY is not configured");
+  await resend.emails.send({
+    from: fromAddress(),
+    to: ALERT_RECIPIENTS,
+    subject: "[AIO Fusion] Journalist privacy request received",
+    text: `A journalist privacy request (#${opts.requestId}) requires review.\nType: ${opts.requestType}\nResponse target: ${opts.dueAt.toISOString()}\nNo requester identity is included in this notification.`,
+    html: buildEmailHtml({
+      label: "Journalist Privacy Request",
+      bodyHtml: `<p>A privacy request requires review.</p>${buildDataRows([
+        ["Case", String(opts.requestId)],
+        ["Type", opts.requestType],
+        ["Response target", opts.dueAt.toISOString()],
+      ])}`,
+    }),
+  });
+}
+
+export async function sendJournalistPrivacyOutcome(opts: { toEmail: string; requestId: number; requestType: string; body: string }): Promise<void> {
+  const resend = getClient();
+  if (!resend) throw new Error("RESEND_API_KEY is not configured");
+  await resend.emails.send({
+    from: fromAddress(), to: opts.toEmail,
+    subject: "Your privacy rights request outcome",
+    text: opts.body,
+    html: buildEmailHtml({ label: "Privacy rights request outcome", bodyHtml: `<p>${opts.body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>` }),
+  });
+}
+
 export async function sendVerificationEmail(opts: {
   toEmail: string;
   toName: string;

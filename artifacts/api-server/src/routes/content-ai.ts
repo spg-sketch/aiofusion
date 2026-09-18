@@ -17,6 +17,7 @@ import { countWebSearchCalls } from "../lib/media-discovery-usage";
 import { dateAppearsOnPage, deadlineAppearsOnPage, eventNameAppearsOnPage, normaliseEventResults, publishedValueAppearsOnPage, recomputeActionableOpportunities, regionAppearsOnPage } from "../lib/events-search";
 import { TRADE_MEDIA_CATEGORIES } from "../lib/trade-media-categories";
 import { normaliseMediaResearchRegions } from "../lib/media-research-regions";
+import { isSuppressedWithDb } from "../lib/journalist-privacy";
 import { getMediaDiscoveryInstructions } from "../lib/media-discovery-instructions";
 import {
   normaliseExactPhraseText,
@@ -912,7 +913,7 @@ contentAiRouter.post(
 // Only global records (accountId IS NULL) are used here - these are
 // populated by admins and are visible to all accounts.
 // Returns a formatted block to inject into the prompt, or "" if empty.
-async function fetchMediaDbContext(mediaCategories: string[]): Promise<string> {
+export async function fetchMediaDbContext(mediaCategories: string[], processingAccountId: string): Promise<string> {
   try {
     const outlets = await db
       .select()
@@ -946,7 +947,22 @@ async function fetchMediaDbContext(mediaCategories: string[]): Promise<string> {
 
     const contactsByOutlet = new Map<number, typeof contacts>();
     for (const c of contacts) {
+      // This prompt context is platform-wide reference data only. A private
+      // workspace contact must never enter another workspace's model prompt
+      // merely because it is attached to a shared outlet.
+      if (c.accountId !== null && c.accountId !== "admin") continue;
       if (c.outletId && outletIds.has(c.outletId)) {
+        const outlet = relevant.find((candidate) => candidate.id === c.outletId);
+        // Privacy suppression is evaluated in the requesting workspace's
+        // processing context before any PII enters the provider prompt.
+        // Shared suppressions still apply universally.
+        if (await isSuppressedWithDb(db, {
+          name: `${c.firstName ?? ""} ${c.lastName ?? ""}`,
+          email: c.email,
+          linkedinUrl: c.linkedinUrl,
+          outlet: outlet?.name,
+          accountId: processingAccountId,
+        })) continue;
         if (!contactsByOutlet.has(c.outletId)) contactsByOutlet.set(c.outletId, []);
         contactsByOutlet.get(c.outletId)!.push(c);
       }
@@ -1070,7 +1086,7 @@ contentAiRouter.post(
       : "(none selected - infer suitable UK trade and business categories from the Project Data)";
 
     // DB-first: load verified outlets/contacts; LLM fills any gaps.
-    const mediaDbContext = await fetchMediaDbContext(mediaCategories);
+    const mediaDbContext = await fetchMediaDbContext(mediaCategories, normUsername(req.account.username));
     const hasDbContext = mediaDbContext.length > 0;
 
     const contactNote = hasDbContext

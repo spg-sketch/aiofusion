@@ -124,6 +124,14 @@ export default function MarketingPage({
               Trust &amp; Security
             </a>
             <a
+              href={`${base}journalist-privacy`}
+              onClick={(e) => { e.preventDefault(); onNavigate("journalist-privacy"); }}
+              className="text-[12px] font-light hover:underline"
+              style={{ color: "rgba(16,43,54,0.7)" }}
+            >
+              Journalist privacy
+            </a>
+            <a
               href={`${base}privacy-policy`}
               onClick={(e) => { e.preventDefault(); onNavigate("privacy-policy"); }}
               className="text-[12px] font-light hover:underline"

@@ -174,10 +174,10 @@ vi.mock("@workspace/db", async () => {
     CREATE TABLE IF NOT EXISTS media_discoveries (
       id serial PRIMARY KEY,
       account_id varchar NOT NULL,
-      project_id varchar NOT NULL,
-      candidate_key text NOT NULL,
+      project_id varchar NOT NULL DEFAULT '',
+      candidate_key text NOT NULL DEFAULT '',
       status varchar(20) NOT NULL DEFAULT 'pending',
-      candidate jsonb NOT NULL,
+      candidate jsonb NOT NULL DEFAULT '{}',
       created_at timestamptz NOT NULL DEFAULT now(),
       reviewed_at timestamptz,
       reviewed_by varchar,

@@ -20,11 +20,13 @@ import contactRouter from "./contact";
 import supportRouter from "./support";
 import publicAssetsRouter from "./public-assets";
 import insightsRouter from "./insights";
+import journalistPrivacyRouter from "./journalist-privacy";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(publicAssetsRouter);
+router.use(journalistPrivacyRouter);
 router.use(insightsRouter);
 router.use(authRouter);
 router.use(platformRouter);

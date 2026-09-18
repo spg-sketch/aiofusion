@@ -7,6 +7,7 @@ import {
   type MediaContactRow,
 } from "@workspace/db";
 import { fetchMediaSourceEvidence } from "./safe-fetch";
+import { acquirePrivacyIdentityLock, isSuppressed, isSuppressedWithDb } from "./journalist-privacy";
 import {
   evaluateMediaSource,
   SOURCE_RETRY_BASE_MS,
@@ -23,8 +24,9 @@ export const MEDIA_REVERIFICATION_CONCURRENCY = 3;
 export const MEDIA_REVERIFICATION_CLAIM_TTL_MS = 30 * 60 * 1000;
 export const MEDIA_REVERIFICATION_RUN_LEASE_MS = 55 * 60 * 1000;
 
-type ClaimedContact = Pick<MediaContactRow, "id" | "firstName" | "lastName" | "role" | "email" | "sourceUrl" | "accountId" | "sourceCheckFailureCount"> & {
+type ClaimedContact = Pick<MediaContactRow, "id" | "firstName" | "lastName" | "role" | "email" | "linkedinUrl" | "sourceUrl" | "accountId" | "sourceCheckFailureCount"> & {
   claimToken: string;
+  outletName?: string | null;
 };
 
 type WorkerOptions = {
@@ -56,7 +58,7 @@ export async function claimMediaContactsForReverification(options: WorkerOptions
   const freshBefore = new Date(now.getTime() - SOURCE_REVIEW_INTERVAL_MS);
   const token = randomUUID();
 
-  return db.transaction(async (tx) => {
+  const claimed = await db.transaction(async (tx) => {
     const result = await tx.execute(sql`
       WITH latest AS (
         SELECT DISTINCT ON (contact_id, source_url) contact_id, source_url, outcome, checked_at
@@ -99,17 +101,28 @@ export async function claimMediaContactsForReverification(options: WorkerOptions
         c.last_name AS "lastName",
         c.role,
         c.email,
+        c.linkedin_url AS "linkedinUrl",
+        (SELECT o.name FROM media_outlets o WHERE o.id = c.outlet_id) AS "outletName",
         c.source_url AS "sourceUrl",
         c.account_id AS "accountId",
         c.source_check_failure_count AS "sourceCheckFailureCount"
     `);
-    return (result.rows as MediaContactRow[]).map((row) => ({ ...row, claimToken: token }));
+    return (result.rows as Array<Omit<ClaimedContact, "claimToken">>).map((row) => ({ ...row, claimToken: token }));
   });
+  const allowed: ClaimedContact[] = [];
+  for (const contact of claimed) {
+    if (await isSuppressed({ name: `${contact.firstName} ${contact.lastName}`, email: contact.email ?? undefined, linkedinUrl: contact.linkedinUrl ?? undefined, outlet: contact.outletName ?? undefined, accountId: contact.accountId })) {
+      await db.execute(sql`UPDATE media_contacts SET source_check_claimed_at = NULL, source_check_claim_token = NULL WHERE id = ${contact.id} AND source_check_claim_token = ${contact.claimToken}`);
+    } else {
+      allowed.push(contact);
+    }
+  }
+  return allowed;
 }
 
 export async function reverifyClaimedMediaContact(
   contact: ClaimedContact,
-  options: Pick<WorkerOptions, "now" | "fetchEvidence"> = {},
+  options: Pick<WorkerOptions, "now" | "fetchEvidence"> & { processingAccountId?: string | null } = {},
 ): Promise<"current" | "changed" | "unavailable" | "lost-claim"> {
   const checkedAt = options.now ?? new Date();
   const fetchEvidence = options.fetchEvidence ?? fetchMediaSourceEvidence;
@@ -138,7 +151,19 @@ export async function reverifyClaimedMediaContact(
     };
   }
 
+  const processingAccountId = options.processingAccountId ?? contact.accountId;
+  if (await isSuppressed({ name: `${contact.firstName} ${contact.lastName}`, email: contact.email ?? undefined, linkedinUrl: contact.linkedinUrl ?? undefined, outlet: contact.outletName ?? undefined, accountId: processingAccountId })) return "unavailable";
   return db.transaction(async (tx) => {
+    await acquirePrivacyIdentityLock(tx, "reverification");
+    const [current] = await tx.execute(sql`SELECT * FROM media_contacts WHERE id = ${contact.id} FOR UPDATE`).then((result: any) => result.rows);
+    if (current?.outlet_id) {
+      const [outlet] = await tx.execute(sql`SELECT name FROM media_outlets WHERE id = ${current.outlet_id}`).then((result: any) => result.rows);
+      current.outlet_name = outlet?.name ?? "";
+    }
+    if (!current || await isSuppressedWithDb(tx, { name: `${current.first_name} ${current.last_name}`, email: current.email, linkedinUrl: current.linkedin_url, outlet: current.outlet_name, accountId: processingAccountId })) {
+      await tx.execute(sql`UPDATE media_contacts SET source_check_claimed_at = NULL, source_check_claim_token = NULL WHERE id = ${contact.id} AND source_check_claim_token = ${contact.claimToken}`);
+      return "lost-claim";
+    }
     const claimed = await tx.execute(sql`
       UPDATE media_contacts
       SET source_check_claimed_at = NULL,
@@ -169,30 +194,51 @@ export async function reverifyClaimedMediaContact(
 export async function claimMediaContactForManualReverification(
   contact: Pick<MediaContactRow, "id" | "sourceUrl">,
   now = new Date(),
+  processingAccountId?: string | null,
 ): Promise<ClaimedContact | null> {
   const claimExpiredBefore = new Date(now.getTime() - MEDIA_REVERIFICATION_CLAIM_TTL_MS);
   const token = randomUUID();
-  const result = await db.execute(sql`
-    UPDATE media_contacts
-    SET source_check_claimed_at = ${now}::timestamptz,
-        source_check_claim_token = ${token}
-    WHERE id = ${contact.id}
-      AND source_url = ${contact.sourceUrl}
-      AND deleted_at IS NULL
-      AND btrim(source_url) <> ''
-      AND (source_check_claimed_at IS NULL OR source_check_claimed_at < ${claimExpiredBefore}::timestamptz)
-    RETURNING
-      id,
-      first_name AS "firstName",
-      last_name AS "lastName",
-      role,
-      email,
-      source_url AS "sourceUrl",
-      account_id AS "accountId",
-      source_check_failure_count AS "sourceCheckFailureCount"
-  `);
-  const row = result.rows[0] as Omit<ClaimedContact, "claimToken"> | undefined;
-  return row ? { ...row, claimToken: token } : null;
+  return db.transaction(async (tx) => {
+    await acquirePrivacyIdentityLock(tx, "manual-reverification");
+    const result = await tx.execute(sql`
+      UPDATE media_contacts
+      SET source_check_claimed_at = ${now}::timestamptz,
+          source_check_claim_token = ${token}
+      WHERE id = ${contact.id}
+        AND source_url = ${contact.sourceUrl}
+        AND deleted_at IS NULL
+        AND btrim(source_url) <> ''
+        AND (source_check_claimed_at IS NULL OR source_check_claimed_at < ${claimExpiredBefore}::timestamptz)
+      RETURNING
+        id,
+        first_name AS "firstName",
+        last_name AS "lastName",
+        role,
+        email,
+        linkedin_url AS "linkedinUrl",
+        outlet_id AS "outletId",
+        source_url AS "sourceUrl",
+        account_id AS "accountId",
+        source_check_failure_count AS "sourceCheckFailureCount"
+    `);
+    const row = result.rows[0] as (Omit<ClaimedContact, "claimToken"> & { outletId?: number | null }) | undefined;
+    if (!row) return null;
+    const outletName = row.outletId
+      ? String((await tx.execute(sql`SELECT name FROM media_outlets WHERE id = ${row.outletId}`)).rows[0]?.name ?? "")
+      : "";
+    if (await isSuppressedWithDb(tx, {
+      name: `${row.firstName} ${row.lastName}`,
+      email: row.email ?? undefined,
+      linkedinUrl: row.linkedinUrl ?? undefined,
+      outlet: outletName,
+      accountId: processingAccountId ?? row.accountId,
+    })) {
+      await tx.execute(sql`UPDATE media_contacts SET source_check_claimed_at = NULL, source_check_claim_token = NULL WHERE id = ${row.id} AND source_check_claim_token = ${token}`);
+      return null;
+    }
+    const { outletId: _outletId, ...claimed } = row;
+    return { ...claimed, outletName, claimToken: token };
+  });
 }
 
 export async function runMediaSourceReverification(options: WorkerOptions = {}) {

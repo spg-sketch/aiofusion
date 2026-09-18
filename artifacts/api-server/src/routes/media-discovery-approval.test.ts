@@ -54,6 +54,11 @@ vi.mock("@workspace/db", async () => {
     );
     CREATE UNIQUE INDEX media_discoveries_test_identity
       ON media_discoveries (account_id, project_id, candidate_key);
+    CREATE TABLE media_suppressions (
+      id serial PRIMARY KEY, request_id integer, email_hash text, name_hash text, outlet_hash text, linkedin_hash text,
+      scope text NOT NULL DEFAULT 'shared', account_id varchar, reason text NOT NULL DEFAULT '',
+      active integer NOT NULL DEFAULT 1, created_at timestamptz NOT NULL DEFAULT now(), revoked_at timestamptz
+    );
   `);
   return { db, ...schema };
 });

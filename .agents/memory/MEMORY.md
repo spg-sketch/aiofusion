@@ -1,5 +1,3 @@
-// hint: Logic changed on both sides. Requires understanding intent of each change.
-- [Secret placeholders](secret-placeholders.md) — a secret-existence flag can represent an empty placeholder; do not assume missing runtime values require a compute restart.
 - [AIO Fusion profile images](aio-fusion-profile-images.md) — personal avatars are user-scoped, logos workspace-scoped; Google photos import only when no avatar/tombstone exists.
 - [GitHub Git authentication](github-git-authentication.md) — working API access does not prove Git push credentials work; diagnose Git Providers separately.
 - [AIO Fusion saved audits + App/LlmCheckPage coupling](aio-fusion-saved-audits-and-cycles.md) — fire `aio:saved-audits-changed` window event on save/delete so sidebar refreshes; beware the App<->LlmCheckPage circular import.
@@ -82,3 +80,4 @@
 - [Media contact status and correction provenance](aio-fusion-media-contact-review.md) — departed state and correction reports are workspace-scoped audit records, never silent edits to trusted contact fields.
 - [Media visibility comparison](aio-fusion-media-visibility-comparison.md) — compare phrase checks only when the effective query, provider, model, run count, and methodology version all match.
 - [Performance measurement](aio-fusion-performance-measurement.md) — separate published, anonymous and fixture-backed timings; measure destination content, not sidebar labels.
+- [Journalist privacy outcomes](aio-fusion-journalist-privacy.md) — rights decisions require verified identity, explicit human-selected matches and scope; suppressions must be rechecked at every write boundary.

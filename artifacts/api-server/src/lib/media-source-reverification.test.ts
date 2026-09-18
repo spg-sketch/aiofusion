@@ -16,6 +16,8 @@ vi.mock("@workspace/db", async () => {
       last_name text NOT NULL DEFAULT '',
       role text NOT NULL DEFAULT '',
       email text NOT NULL DEFAULT '',
+      linkedin_url text NOT NULL DEFAULT '',
+      outlet_id integer,
       source_url text NOT NULL DEFAULT '',
       account_id varchar,
       last_verified_at timestamptz,
@@ -23,6 +25,10 @@ vi.mock("@workspace/db", async () => {
       source_check_claim_token varchar(80),
       source_check_failure_count integer NOT NULL DEFAULT 0,
       deleted_at timestamptz
+    );
+    CREATE TABLE media_outlets (
+      id serial PRIMARY KEY,
+      name text NOT NULL DEFAULT ''
     );
     CREATE TABLE media_contact_source_checks (
       id serial PRIMARY KEY,
@@ -41,6 +47,12 @@ vi.mock("@workspace/db", async () => {
     CREATE TABLE media_source_reverification_runs (
       singleton_id integer PRIMARY KEY,
       started_at timestamptz NOT NULL
+    );
+    CREATE TABLE media_suppressions (
+      id serial PRIMARY KEY, request_id integer, scope varchar(20) NOT NULL DEFAULT 'shared',
+      account_id varchar, email_hash varchar(64), name_hash varchar(64), linkedin_hash varchar(64),
+      outlet_hash varchar(64), reason varchar(32) NOT NULL DEFAULT '', active integer NOT NULL DEFAULT 1,
+      created_at timestamptz NOT NULL DEFAULT now(), revoked_at timestamptz
     );
   `);
   return { ...schema, db: drizzle(client, { schema }), __client: client };

@@ -30,6 +30,7 @@ import ContactPage from "./marketing/ContactPage";
 import PricingPage from "./marketing/PricingPage";
 import TrustSecurityPage from "./marketing/TrustSecurityPage";
 import PrivacyPolicyPage from "./marketing/PrivacyPolicyPage";
+import JournalistPrivacyPage from "./marketing/JournalistPrivacyPage";
 import TermsConditionsPage from "./marketing/TermsConditionsPage";
 
 import {
@@ -82,6 +83,8 @@ function buildElement(route: string, articleId?: string): React.ReactElement | n
       return createElement(TrustSecurityPage, commonProps);
     case "privacy-policy":
       return createElement(PrivacyPolicyPage, commonProps);
+    case "journalist-privacy":
+      return createElement(JournalistPrivacyPage, commonProps);
     case "terms-conditions":
       return createElement(TermsConditionsPage, commonProps);
     default:

@@ -48,6 +48,7 @@ function PlatformHomePage({
   onLoginSuccess,
   onSignOut,
   onManageUsers,
+  onPrivacyRights,
   onManageTeam,
   onManageSubAccounts,
   onInsightsAdmin,
@@ -75,6 +76,7 @@ function PlatformHomePage({
   onLoginSuccess: (s: LocalSession) => void;
   onSignOut: () => void;
   onManageUsers: () => void;
+  onPrivacyRights?: () => void;
   onManageTeam?: () => void;
   onManageSubAccounts: () => void;
   /** Retained for compatibility with older callers; Token Usage now lives inside Manage Accounts. */
@@ -956,6 +958,15 @@ function PlatformHomePage({
                     style={{ border: "1.5px solid rgba(255,255,255,0.5)", background: "transparent", color: "white" }}
                   >
                     <FileEdit size={15} /> Edit Insights CMS
+                  </button>
+                )}
+                {session.role === "admin" && onPrivacyRights && (
+                  <button
+                    onClick={onPrivacyRights}
+                    className="flex items-center gap-2 rounded-lg border px-3 py-2 text-[12px] font-semibold"
+                    style={{ borderColor: "#d8e2e5", color: ink }}
+                  >
+                    <ShieldCheck size={15} /> Journalist privacy
                   </button>
                 )}
                 {session.role === "admin" ? (

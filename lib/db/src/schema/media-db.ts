@@ -289,3 +289,88 @@ export const mediaContactCorrectionReportsTable = pgTable("media_contact_correct
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Account-free journalist rights cases.  Raw evidence is deliberately kept
+ * private to the API and is never returned by the anonymous intake response.
+ */
+export const journalistPrivacyRequestsTable = pgTable("journalist_privacy_requests", {
+  id: serial("id").primaryKey(),
+  requestType: varchar("request_type", { length: 20 }).notNull(),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  outlet: text("outlet").notNull().default(""),
+  details: text("details").notNull(),
+  scope: varchar("scope", { length: 20 }).notNull().default("workspace"),
+  approvedScope: varchar("approved_scope", { length: 20 }),
+  approvedAccountId: varchar("approved_account_id"),
+  matchedContactIds: integer("matched_contact_ids").array().notNull().default([]),
+  disclosureResult: jsonb("disclosure_result").$type<Record<string, unknown>>().notNull().default({}),
+  status: varchar("status", { length: 24 }).notNull().default("received"),
+  assignedTo: varchar("assigned_to"),
+  dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+  verificationStatus: varchar("verification_status", { length: 20 }).notNull().default("unverified"),
+  verificationNote: text("verification_note").notNull().default(""),
+  reviewerApprovalAt: timestamp("reviewer_approval_at", { withTimezone: true }),
+  reviewerApprovalBy: varchar("reviewer_approval_by"),
+  resolution: varchar("resolution", { length: 32 }),
+  resolutionNote: text("resolution_note").notNull().default(""),
+  notificationStatus: varchar("notification_status", { length: 20 }).notNull().default("pending"),
+  notificationAttempts: integer("notification_attempts").notNull().default(0),
+  lastNotificationError: text("last_notification_error").notNull().default(""),
+  outcomeDeliveryStatus: varchar("outcome_delivery_status", { length: 20 }).notNull().default("pending"),
+  outcomeDeliveryAttempts: integer("outcome_delivery_attempts").notNull().default(0),
+  outcomeDeliveryError: text("outcome_delivery_error").notNull().default(""),
+  outcomeDeliveryClaimedAt: timestamp("outcome_delivery_claimed_at", { withTimezone: true }),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const journalistPrivacyCompletionLedgerTable = pgTable("journalist_privacy_completion_ledger", {
+  id: serial("id").primaryKey(),
+  requestId: integer("request_id").notNull().references(() => journalistPrivacyRequestsTable.id, { onDelete: "restrict" }),
+  store: varchar("store", { length: 40 }).notNull(),
+  storeKey: text("store_key").notNull(),
+  result: varchar("result", { length: 24 }).notNull(),
+  note: text("note").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [uniqueIndex("journalist_privacy_completion_ledger_unique").on(table.requestId, table.store, table.storeKey)]);
+
+export const journalistPrivacyRequestEventsTable = pgTable("journalist_privacy_request_events", {
+  id: serial("id").primaryKey(),
+  requestId: integer("request_id").notNull().references(() => journalistPrivacyRequestsTable.id, { onDelete: "restrict" }),
+  eventType: varchar("event_type", { length: 32 }).notNull(),
+  actor: varchar("actor").notNull(),
+  note: text("note").notNull().default(""),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Minimal, scoped matching keys.  Never store a plaintext request narrative here. */
+export const mediaSuppressionsTable = pgTable("media_suppressions", {
+  id: serial("id").primaryKey(),
+  requestId: integer("request_id").references(() => journalistPrivacyRequestsTable.id, { onDelete: "restrict" }),
+  scope: varchar("scope", { length: 20 }).notNull().default("workspace"),
+  accountId: varchar("account_id"),
+  emailHash: varchar("email_hash", { length: 64 }),
+  nameHash: varchar("name_hash", { length: 64 }),
+  linkedinHash: varchar("linkedin_hash", { length: 64 }),
+  outletHash: varchar("outlet_hash", { length: 64 }),
+  reason: varchar("reason", { length: 32 }).notNull(),
+  active: integer("active").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+}, (table) => [
+  uniqueIndex("media_suppressions_request_scope_identity").on(table.requestId, table.scope, table.accountId, table.emailHash, table.nameHash, table.linkedinHash, table.outletHash),
+]);
+
+export const journalistPrivacyLegalHoldsTable = pgTable("journalist_privacy_legal_holds", {
+  id: serial("id").primaryKey(),
+  requestId: integer("request_id").notNull().references(() => journalistPrivacyRequestsTable.id, { onDelete: "restrict" }),
+  scope: varchar("scope", { length: 20 }).notNull(),
+  reason: text("reason").notNull(),
+  approvedBy: varchar("approved_by").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

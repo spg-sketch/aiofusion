@@ -59,6 +59,11 @@ vi.mock("@workspace/db", async () => {
       singleton_id integer PRIMARY KEY,
       started_at timestamptz NOT NULL
     );
+    CREATE TABLE media_suppressions (
+      id serial PRIMARY KEY, request_id integer, email_hash text, name_hash text, outlet_hash text, linkedin_hash text,
+      scope text NOT NULL DEFAULT 'shared', account_id varchar, reason text NOT NULL DEFAULT '',
+      active integer NOT NULL DEFAULT 1, created_at timestamptz NOT NULL DEFAULT now(), revoked_at timestamptz
+    );
   `);
   return { ...schema, db: drizzle(client, { schema }), __client: client };
 });
@@ -87,8 +92,9 @@ vi.mock("../lib/media-discovery-token", () => ({ verifyMediaDiscoveries: () => [
 
 import router from "./media-db";
 import * as workspaceDb from "@workspace/db";
+import { privacyHash } from "../lib/journalist-privacy";
 
-const { db, mediaContactFieldOverridesTable, mediaContactsTable, __client } = workspaceDb as typeof workspaceDb & {
+const { db, mediaContactFieldOverridesTable, mediaContactsTable, mediaOutletsTable, mediaSuppressionsTable, __client } = workspaceDb as typeof workspaceDb & {
   __client: { exec(sql: string): Promise<unknown> };
 };
 
@@ -139,6 +145,28 @@ describe("media source health routes", () => {
     expect((await post(`/store/media-db/contacts/${contact.id}/source-check`)).status).toBe(400);
     expect((await post(`/store/media-db/contacts/${contact.id}/source-check`, "account-b")).status).toBe(403);
     expect(fetchMediaSourceEvidence).not.toHaveBeenCalled();
+  });
+
+  it("applies processing-workspace suppression to global contacts across read and write routes", async () => {
+    const [outlet] = await db.insert(mediaOutletsTable).values({ name: "Global News", category: "Technology" }).returning();
+    const [contact] = await db.insert(mediaContactsTable).values({
+      outletId: outlet.id, firstName: "Global", lastName: "Editor", email: "global-editor@example.test", role: "Editor", accountId: null,
+    }).returning();
+    await db.insert(mediaSuppressionsTable).values({
+      scope: "workspace", accountId: "account-a", emailHash: privacyHash(contact.email), reason: "objection", active: 1,
+    });
+    const aSearch = await get("/store/media-db/search?phrase=Global", "account-a");
+    expect(aSearch.status).toBe(200);
+    expect(((await aSearch.json()) as { results: Array<{ type?: string }> }).results.filter((row) => row.type === "contact")).toHaveLength(0);
+    const bSearch = await get("/store/media-db/search?phrase=Global", "account-b");
+    expect(((await bSearch.json()) as { results: Array<{ type?: string }> }).results.filter((row) => row.type === "contact")).toHaveLength(1);
+    expect((await post(`/store/media-db/contacts/${contact.id}/status`, "account-a", { status: "active" })).status).toBe(409);
+    expect((await post(`/store/media-db/contacts/${contact.id}/status`, "account-b", { status: "active" })).status).not.toBe(409);
+    await db.insert(mediaSuppressionsTable).values({
+      scope: "shared", accountId: null, emailHash: privacyHash(contact.email), reason: "objection", active: 1,
+    });
+    const sharedSearch = await get("/store/media-db/search?phrase=Global", "account-b");
+    expect(((await sharedSearch.json()) as { results: Array<{ type?: string }> }).results.filter((row) => row.type === "contact")).toHaveLength(0);
   });
 
   it("records unavailable pages without changing the contact", async () => {

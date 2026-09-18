@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor, cleanup, configure, act, fireEvent } from "@testing-library/react";
 
+vi.mock("./lib/billingAllowance", () => ({
+  fetchProjectAllowance: vi.fn(async () => ({ projectsUsed: 0, projectAllowance: 1, atLimit: false })),
+}));
+
 // Generous timeouts: full-App render spans several async cycles (bootstrapAuth,
 // lazy chunk resolution, Suspense). `asyncUtilTimeout` raises the default
 // waitFor/findBy budget from 1 s to 5 s globally.
@@ -78,9 +82,17 @@ function loginSuccessResponse() {
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class {
     observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
   });
   vi.stubGlobal("IntersectionObserver", class {
     observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    root = null; rootMargin = ""; thresholds = [];
+    root = null; rootMargin = ""; thresholds = [];
     root = null; rootMargin = ""; thresholds = [];
   });
   if (!window.matchMedia) {

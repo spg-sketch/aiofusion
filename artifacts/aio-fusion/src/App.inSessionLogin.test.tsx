@@ -15,6 +15,10 @@ import React from "react";
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor, cleanup, configure, act, fireEvent } from "@testing-library/react";
 
+vi.mock("./lib/billingAllowance", () => ({
+  fetchProjectAllowance: vi.fn(async () => ({ projectsUsed: 0, projectAllowance: 1, atLimit: false })),
+}));
+
 configure({ asyncUtilTimeout: 5000 });
 
 // ─── PlatformHomePage mock ────────────────────────────────────────────────────
@@ -99,9 +103,17 @@ function brandMeResponse() {
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class {
     observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
   });
   vi.stubGlobal("IntersectionObserver", class {
     observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    root = null; rootMargin = ""; thresholds = [];
+    root = null; rootMargin = ""; thresholds = [];
     root = null; rootMargin = ""; thresholds = [];
   });
   if (!window.matchMedia) {
@@ -146,21 +158,13 @@ describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () =
     // setAccountProfile is called with the result.
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       const urlStr = String(url);
-      // bootstrapAuth (initial): /me returns 401 (signed out)
-      // fetchAccountProfile (after login): /me returns brand profile
-      // We distinguish by loggedIn flag toggled once the mock sign-in is used.
-      // But since the mock fires synchronously (no real auth endpoint), /me will
-      // always return the brand profile from the moment it's first called after
-      // "Mock sign in" clicks (because loggedIn starts false and the sign-in
-      // button fires setSession synchronously, then fetchAccountProfile fires).
-      // Simplify: return brand profile for all /me calls (bootstrapAuth sees a
-      // session immediately - that's fine; we're testing the LOGIN path where
-      // we're already signed in from bootstrapAuth's perspective too).
-      if (urlStr.includes("/api/platform/me")) return brandMeResponse();
-      if (urlStr.includes("/api/platform/billing/subscription")) {
-        return makeResponse({ projectsUsed: 0, projectAllowance: 1 });
+      if (urlStr.includes("/api/platform/me")) {
+        meRequests += 1;
+        return loggedIn ? delayedSetupCheck : unauth();
       }
-      if (urlStr.includes("/api/store/projects")) return makeResponse({ projects: [], deletedIds: [] });
+      if (urlStr.includes("/api/store/projects")) {
+        return makeResponse({ projects: [], deletedIds: [] });
+      }
       return unauth();
     }));
 
@@ -178,7 +182,7 @@ describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () =
       await new Promise((r) => setTimeout(r, 50));
     });
 
-    // ClientSelectorPage: create a project.
+    // Phase 3: create a project → intake.
     const createBtn = await screen.findByRole("button", { name: /Create your first project/i }, { timeout: 6000 });
     await act(async () => {
       fireEvent.click(createBtn);
@@ -186,7 +190,7 @@ describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () =
     });
 
     const nameInput = await screen.findByPlaceholderText("e.g. Acme Robotics", {}, { timeout: 4000 });
-    await act(async () => { fireEvent.change(nameInput, { target: { value: "My Brand Project" } }); });
+    await act(async () => { fireEvent.change(nameInput, { target: { value: "Brand Project" } }); });
 
     const createAndSetup = await screen.findByRole("button", { name: /Create.*set up/i }, { timeout: 4000 });
     await act(async () => {
@@ -216,10 +220,8 @@ describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () =
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       const urlStr = String(url);
       if (urlStr.includes("/api/platform/me")) {
-        return loggedIn ? brandMeResponse() : unauth();
-      }
-      if (urlStr.includes("/api/platform/billing/subscription")) {
-        return makeResponse({ projectsUsed: 0, projectAllowance: 1 });
+        meRequests += 1;
+        return loggedIn ? delayedSetupCheck : unauth();
       }
       if (urlStr.includes("/api/store/projects")) {
         return makeResponse({ projects: [], deletedIds: [] });
@@ -231,9 +233,6 @@ describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () =
     const { default: App } = await import("./App");
     render(<App />);
 
-    await act(async () => { await new Promise((r) => setTimeout(r, 150)); });
-
-    // Phase 1: signed out - Mock PlatformHomePage shows "Mock sign in" button.
     const signInBtn = await screen.findByRole("button", { name: /Mock sign in/i }, { timeout: 8000 });
 
     // Switch /me to return brand profile BEFORE clicking sign in, so
@@ -280,27 +279,28 @@ describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () =
 
   it("MFA success is provisional until one authoritative /me check, then reaches the project destination", async () => {
     let meCalls = 0;
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
       if (String(url).includes("/api/platform/me")) {
         meCalls += 1;
-        return meCalls === 1 ? unauth() : brandMeResponse();
+        if (meCalls === 1) return Promise.resolve(unauth());
+        return new Promise<Response>((resolve) => { resolveMe = resolve; });
       }
-      if (String(url).includes("/api/store/projects")) return makeResponse({ projects: [], deletedIds: [] });
-      if (String(url).includes("/api/platform/accounts")) return makeResponse({ accounts: [] });
-      return unauth();
+      return Promise.resolve(unauth());
     }));
     window.history.replaceState({}, "", "/?oauth_status=ok");
     const { default: App } = await import("./App");
     render(<App />);
 
-    await screen.findByText("Mock MFA success");
-    fireEvent.click(screen.getByText("Mock MFA success"));
+    await screen.findByText("Mock sign in");
+    fireEvent.click(screen.getByText("Mock sign in"));
+    fireEvent.click(screen.getByText("Mock sign out"));
+    await act(async () => { resolveMe(brandMeResponse()); });
 
-    await screen.findByText("Project Hub");
-    expect(meCalls).toBe(2); // anonymous initial bootstrap + exactly one MFA authority hand-off
+    await waitFor(() => expect(screen.queryByText("Project Hub")).not.toBeInTheDocument());
+    expect(screen.getByText("Mock sign in")).toBeInTheDocument();
   });
 
-  it("does not revive an identity when sign-out wins a delayed authority hand-off", async () => {
+  it("does not start project/account resync from focus while a login authority check is pending", async () => {
     let resolveMe!: (response: Response) => void;
     let meCalls = 0;
     vi.stubGlobal("fetch", vi.fn((url: string) => {

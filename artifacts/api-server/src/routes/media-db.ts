@@ -44,6 +44,7 @@ import { MEDIA_RECOMMENDATION_STOP_WORDS, scoreMediaRecommendation } from "../li
 import { assessEditorialFit, type EditorialAssessment, type TargetingBrief } from "../lib/media-editorial-ranking";
 import { checkFairUsage, checkMonthlySpendLimit } from "../lib/fair-usage";
 import { collectJournalistCoverage } from "../lib/journalist-coverage-evidence";
+import { acquirePrivacyIdentityLock, filterSuppressedContacts, isContactSuppressed, isSuppressed, isSuppressedWithDb, privacyHash } from "../lib/journalist-privacy";
 
 const router: IRouter = Router();
 
@@ -334,6 +335,20 @@ router.post(
             errors: [],
             headers: [],
           };
+      // Reviewed suppression decisions are checked again at write preparation
+      // time, so a preview created before a privacy decision cannot recreate
+      // an unavailable journalist.
+      const suppressedRows = await Promise.all(parsed.rows.map(async (row) => ({
+        row,
+        suppressed: await isSuppressed({
+          name: `${row.firstName} ${row.lastName}`,
+          email: row.email,
+          linkedinUrl: row.linkedinUrl,
+          outlet: row.outletName,
+          accountId: normUsername(req.account!.username),
+        }),
+      })));
+      parsed.rows = suppressedRows.filter(({ suppressed }) => !suppressed).map(({ row }) => row);
       const workspaceId = normUsername(req.account!.username);
       const accountId = collectionScope === "shared" ? null : workspaceId;
       const owner = collectionOwner(collectionScope, workspaceId);
@@ -556,6 +571,7 @@ router.post(
       }
 
       const result = await db.transaction(async (tx) => {
+        await acquirePrivacyIdentityLock(tx, `${owner}:${source.sourceHash}`);
         if (process.env.NODE_ENV !== "test") {
           await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`media-import:${owner}`}))`);
         }
@@ -628,8 +644,23 @@ router.post(
         }).from(mediaContactFieldOverridesTable).where(eq(mediaContactFieldOverridesTable.accountId, owner));
         const currentOverrideSet = new Set(commitOverrides.map((entry) => `${entry.contactId}:${entry.fieldName}`));
         const currentOverrideFingerprint = commitOverrides.map((entry) => `${entry.contactId}:${entry.fieldName}:${entry.value}`);
+        const currentSuppressionsResult = (process.env.VITEST === "true" || process.env.NODE_ENV === "test")
+          ? { rows: [] as any[] }
+          : await tx.execute(sql`SELECT email_hash, name_hash, outlet_hash, linkedin_hash, scope, account_id FROM media_suppressions WHERE active = 1`);
+        const currentSuppressions = currentSuppressionsResult.rows;
+        const commitRows = parsed.rows.filter((row) => {
+          const emailHash = privacyHash(row.email);
+          const nameHash = privacyHash(`${row.firstName} ${row.lastName}`);
+          const outletHash = privacyHash(row.outletName);
+          const linkedinHash = privacyHash(row.linkedinUrl);
+          return !(currentSuppressions as Array<Record<string, unknown>>).some((s) =>
+            (s.scope === "shared" || s.account_id === accountId)
+            && ((emailHash && s.email_hash === emailHash)
+              || (linkedinHash && s.linkedin_hash === linkedinHash)
+              || (nameHash && outletHash && s.name_hash === nameHash && s.outlet_hash === outletHash)));
+        });
         const rawCommitPlan = reconcileMediaImport(
-          parsed.rows,
+          commitRows,
           existingOutlets,
           existingContacts,
           currentOverrideSet,
@@ -698,6 +729,13 @@ router.post(
             sourceType: source.sourceType,
             selectedCategory,
           });
+          if (await isSuppressedWithDb(tx, {
+            name: `${row.firstName} ${row.lastName}`,
+            email: row.email,
+            linkedinUrl: row.linkedinUrl,
+            outlet: row.outletName,
+            accountId: workspaceId,
+          })) throw new Error("SUPPRESSED_IMPORT");
           await tx.insert(mediaContactsTable).values({
             outletId,
             firstName: row.firstName,
@@ -759,6 +797,13 @@ router.post(
             if (overrideSet.has(`${contact.id}:${key}`) || match.overriddenFields.includes(key)) delete next[key];
           }
           if (Object.keys(next).length) {
+            if (await isSuppressedWithDb(tx, {
+              ...contact,
+              ...next,
+              name: `${String(next.firstName ?? contact.firstName ?? "")} ${String(next.lastName ?? contact.lastName ?? "")}`,
+              outlet: row.outletName,
+              accountId: workspaceId,
+            })) throw new Error("SUPPRESSED_IMPORT");
             await tx.update(mediaContactsTable).set({ ...next, updatedAt: new Date() }).where(eq(mediaContactsTable.id, contact.id!));
           }
         }
@@ -811,6 +856,10 @@ router.post(
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to import the media file.";
       req.log.warn({ err: error }, "Media database import rejected");
+      if (message === "SUPPRESSED_IMPORT") {
+        res.status(409).json({ error: "One or more contacts are unavailable for processing. Preview the file again." });
+        return;
+      }
       res.status(/idempotency key|preview is stale|collection changed|manual overrides changed/i.test(message) ? 409 : 400).json({ error: message });
     }
   },
@@ -1151,8 +1200,12 @@ router.get(
       const pendingCorrections = new Set(correctionReports.map((report) => report.contactId));
       const location = interpretation.location.toLowerCase();
       const category = interpretation.category.toLowerCase();
+      const suppressedSearchIds = new Set((await Promise.all(contacts.map(async ({ contact, outletName }) =>
+        await isContactSuppressed({ ...contact, outlet: outletName, accountId: normUsername(req.account!.username) }) ? contact.id : null,
+      ))).filter((id): id is number => id !== null));
 
       const contactResults = contacts.flatMap(({ contact, outletName, outletCategory, outletWebsite, outletCountry, outletReachBand, outletAccountId }) => {
+        if (suppressedSearchIds.has(contact.id)) return [];
         if (contact.accountId !== null && visible !== null && !visible.includes(contact.accountId)) return [];
         const outletAllowed = outletVisible(outletAccountId ?? null, visible);
         const safeOutlet = outletAllowed ? { outletName, outletCategory, outletWebsite, outletCountry, outletReachBand } : { outletName: null, outletCategory: null, outletWebsite: null, outletCountry: null, outletReachBand: null };
@@ -1224,9 +1277,14 @@ router.post("/store/media-db/contacts/:id/status", requirePlatformAuth, async (r
   const note = typeof req.body?.note === "string" ? req.body.note.trim().slice(0, 1000) : "";
   const workspaceId = normUsername(req.account!.username);
   const actorId = req.account!.userId ?? req.platformUser?.id ?? workspaceId;
-  const [event] = await db.insert(mediaContactStatusEventsTable).values({
-    contactId: id, accountId: workspaceId, status, note, createdBy: actorId,
-  }).returning();
+  const event = await db.transaction(async (tx) => {
+    await acquirePrivacyIdentityLock(tx, "status");
+    const [current] = await tx.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, id)).limit(1);
+    const outlet = current?.outletId ? (await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, current.outletId)).limit(1))[0]?.name : "";
+    if (!current || await isSuppressedWithDb(tx, { ...current, outlet, accountId: workspaceId })) throw new Error("SUPPRESSED_CONTACT");
+    return (await tx.insert(mediaContactStatusEventsTable).values({ contactId: id, accountId: workspaceId, status, note, createdBy: actorId }).returning())[0];
+  }).catch((error) => { if (error instanceof Error && error.message === "SUPPRESSED_CONTACT") return null; throw error; });
+  if (!event) { res.status(409).json({ error: "This contact is unavailable for processing." }); return; }
   res.json({ ok: true, statusEvent: event });
 });
 
@@ -1241,9 +1299,14 @@ router.post("/store/media-db/contacts/:id/corrections", requirePlatformAuth, asy
   if (!details || fields.length === 0) { res.status(400).json({ error: "Select at least one field and explain what needs review." }); return; }
   const workspaceId = normUsername(req.account!.username);
   const actorId = req.account!.userId ?? req.platformUser?.id ?? workspaceId;
-  const [report] = await db.insert(mediaContactCorrectionReportsTable).values({
-    contactId: id, accountId: workspaceId, fields, details, reportedBy: actorId,
-  }).returning();
+  const report = await db.transaction(async (tx) => {
+    await acquirePrivacyIdentityLock(tx, "correction");
+    const [current] = await tx.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, id)).limit(1);
+    const outlet = current?.outletId ? (await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, current.outletId)).limit(1))[0]?.name : "";
+    if (!current || await isSuppressedWithDb(tx, { ...current, outlet, accountId: workspaceId })) throw new Error("SUPPRESSED_CONTACT");
+    return (await tx.insert(mediaContactCorrectionReportsTable).values({ contactId: id, accountId: workspaceId, fields, details, reportedBy: actorId }).returning())[0];
+  }).catch((error) => { if (error instanceof Error && error.message === "SUPPRESSED_CONTACT") return null; throw error; });
+  if (!report) { res.status(409).json({ error: "This contact is unavailable for processing." }); return; }
   res.json({ ok: true, correction: report });
 });
 
@@ -1267,7 +1330,11 @@ router.get("/store/media-db/corrections", requirePlatformAuth, async (req: Reque
     .leftJoin(platformUsersTable, sql`${platformUsersTable.id}::text = ${mediaContactCorrectionReportsTable.reportedBy}`)
     .where(status === "all" ? undefined : eq(mediaContactCorrectionReportsTable.status, status))
     .orderBy(desc(mediaContactCorrectionReportsTable.createdAt), desc(mediaContactCorrectionReportsTable.id));
-  const contactIds = Array.from(new Set(rows.map(({ contact }) => contact.id)));
+   const visibleCorrectionRows = (await Promise.all(rows.map(async (entry) => {
+     const outlet = entry.outletName ?? "";
+     return { entry, suppressed: await isContactSuppressed({ ...entry.contact, outlet, accountId: entry.report.accountId }) };
+   }))).filter((item) => !item.suppressed).map((item) => item.entry);
+   const contactIds = Array.from(new Set(visibleCorrectionRows.map(({ contact }) => contact.id)));
   const checks = contactIds.length
     ? await db.select().from(mediaContactSourceChecksTable)
       .where(inArray(mediaContactSourceChecksTable.contactId, contactIds))
@@ -1279,7 +1346,7 @@ router.get("/store/media-db/corrections", requirePlatformAuth, async (req: Reque
     if (!latestCheckByContactAndSource.has(key)) latestCheckByContactAndSource.set(key, check);
   }
   res.json({
-    corrections: rows.map(({ report, contact, outletName, reporterName, reporterEmail }) => ({
+     corrections: visibleCorrectionRows.map(({ report, contact, outletName, reporterName, reporterEmail }) => ({
       ...report,
       contact: {
         id: contact.id,
@@ -1294,7 +1361,7 @@ router.get("/store/media-db/corrections", requirePlatformAuth, async (req: Reque
         linkedinUrl: contact.linkedinUrl,
         twitterHandle: contact.twitterHandle,
         sourceUrl: contact.sourceUrl,
-        accountId: contact.accountId,
+        accountId: normUsername(req.account!.username),
       },
       reporter: { id: report.reportedBy, name: reporterName, email: reporterEmail },
       workspace: report.accountId,
@@ -1316,9 +1383,9 @@ router.post("/store/media-db/corrections/:reportId/source-check", requirePlatfor
   if (row.report.status !== "pending") { res.status(409).json({ error: "This correction report has already been resolved." }); return; }
   if (!row.contact.sourceUrl) { res.status(400).json({ error: "This contact has no public source to check." }); return; }
   const checkedAt = new Date();
-  const claimed = await claimMediaContactForManualReverification(row.contact, checkedAt);
+  const claimed = await claimMediaContactForManualReverification(row.contact, checkedAt, row.report.accountId);
   if (!claimed) { res.status(409).json({ error: "This source is already being checked. Try again shortly." }); return; }
-  const result = await reverifyClaimedMediaContact(claimed, { now: checkedAt });
+  const result = await reverifyClaimedMediaContact(claimed, { now: checkedAt, processingAccountId: row.report.accountId });
   if (result === "lost-claim") { res.status(409).json({ error: "The source changed while it was being checked. Run the check again." }); return; }
   const [sourceCheck] = await db.select().from(mediaContactSourceChecksTable).where(and(
     eq(mediaContactSourceChecksTable.contactId, row.contact.id),
@@ -1341,6 +1408,7 @@ router.post("/store/media-db/corrections/:reportId/resolve", requirePlatformAuth
   const outcome = requestedOutcome as "accepted" | "rejected" | "resolved";
   const reviewedBy = req.account!.userId ?? req.platformUser?.id ?? normUsername(req.account!.username);
   const result = await db.transaction(async (tx) => {
+    await acquirePrivacyIdentityLock(tx, "correction");
     await tx.execute(sql`SELECT id FROM media_contact_correction_reports WHERE id = ${reportId} FOR UPDATE`);
     const [report] = await tx.select().from(mediaContactCorrectionReportsTable)
       .where(eq(mediaContactCorrectionReportsTable.id, reportId)).limit(1);
@@ -1376,6 +1444,10 @@ router.post("/store/media-db/corrections/:reportId/resolve", requirePlatformAuth
       applied = approved.applied;
       skipped = approved.skipped;
       if (!applied.length) return { status: 400, body: { error: "This source check does not support any reported field updates.", skipped } };
+      const resultingOutlet = contact.outletId ? (await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, contact.outletId)).limit(1))[0]?.name : "";
+      if (await isSuppressedWithDb(tx, { ...contact, ...approved.updates, outlet: resultingOutlet, accountId: report.accountId })) {
+        return { status: 409, body: { error: "The approved correction would create a suppressed identity." } };
+      }
       await tx.update(mediaContactsTable).set({ ...approved.updates, updatedAt: new Date() }).where(eq(mediaContactsTable.id, report.contactId));
       await tx.update(mediaContactSourceChecksTable).set({ reviewedAt: new Date() }).where(eq(mediaContactSourceChecksTable.id, sourceCheckId));
     }
@@ -1516,7 +1588,11 @@ router.get(
       const sort = ["firstName", "lastName", "role", "email", "outletName", "createdAt"].includes(String(req.query.sort))
         ? String(req.query.sort) : "lastName";
       const direction = req.query.direction === "desc" ? -1 : 1;
-      const filtered = contactsWithSourceHealth.filter((contact) => {
+      const privacyVisible = (await Promise.all(contactsWithSourceHealth.map(async (contact) => ({
+        contact,
+        suppressed: await isContactSuppressed({ ...contact, outlet: contact.outletName, accountId: normUsername(req.account!.username) }),
+      })))).filter((entry) => !entry.suppressed).map((entry) => entry.contact);
+      const filtered = privacyVisible.filter((contact) => {
         const haystack = [contact.firstName, contact.lastName, contact.role, contact.email, contact.outletName, contact.outletCategory, contact.outletCountry, contact.notes, contact.reviewNotes, contact.geography, contact.beats.join(" "), contact.sectors.join(" ")]
           .filter(Boolean).join(" ").toLowerCase();
         const queryGroups = searchTokens(query);
@@ -1542,11 +1618,13 @@ router.post("/store/media-db/contacts/:id/source-check", requirePlatformAuth, as
   if (!id) { res.status(400).json({ error: "Invalid contact id" }); return; }
   const access = await editableContact(req, id);
   if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+  const manualSourceOutlet = access.row.outletId ? (await db.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, access.row.outletId)).limit(1))[0]?.name : "";
+  if (await isContactSuppressed({ ...access.row, outlet: manualSourceOutlet, accountId: normUsername(req.account!.username) })) { res.status(409).json({ error: "This contact is unavailable for processing." }); return; }
   if (!access.row.sourceUrl) { res.status(400).json({ error: "This contact has no public source to check." }); return; }
   const checkedAt = new Date();
-  const claimed = await claimMediaContactForManualReverification(access.row, checkedAt);
+  const claimed = await claimMediaContactForManualReverification(access.row, checkedAt, normUsername(req.account!.username));
   if (!claimed) { res.status(409).json({ error: "This source is already being checked. Try again shortly." }); return; }
-  const outcome = await reverifyClaimedMediaContact(claimed, { now: checkedAt });
+  const outcome = await reverifyClaimedMediaContact(claimed, { now: checkedAt, processingAccountId: normUsername(req.account!.username) });
   if (outcome === "lost-claim") { res.status(409).json({ error: "The source changed while it was being checked. Run the check again." }); return; }
   const [sourceCheck] = await db.select().from(mediaContactSourceChecksTable)
     .where(and(
@@ -1587,8 +1665,21 @@ router.post("/store/media-db/contacts/:id/source-checks/:checkId/approve", requi
     .from(mediaContactFieldOverridesTable)
     .where(and(eq(mediaContactFieldOverridesTable.contactId, id), eq(mediaContactFieldOverridesTable.accountId, access.owner)));
   const { updates, applied, skipped } = approvedSourceUpdates(check.differences, req.body?.fields, overrides.map((item) => item.fieldName));
-  if (applied.length) await db.update(mediaContactsTable).set({ ...updates, updatedAt: new Date() }).where(eq(mediaContactsTable.id, id));
-  await db.update(mediaContactSourceChecksTable).set({ reviewedAt: new Date() }).where(eq(mediaContactSourceChecksTable.id, checkId));
+  const [preflightContact] = await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, id)).limit(1);
+  if (preflightContact) {
+    const preflightOutlet = preflightContact.outletId ? (await db.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, preflightContact.outletId)).limit(1))[0]?.name : "";
+    if (await isSuppressed({ ...preflightContact, ...updates, outlet: preflightOutlet, accountId: normUsername(req.account!.username) })) { res.status(409).json({ error: "This contact is unavailable for processing." }); return; }
+  }
+  let suppressedApproval = false;
+  await db.transaction(async (tx) => {
+    await acquirePrivacyIdentityLock(tx, "source-check");
+    const [current] = await tx.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, id)).limit(1);
+    const outletName = current?.outletId ? (await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, current.outletId)).limit(1))[0]?.name : "";
+    if (current && await isSuppressedWithDb(tx, { ...current, ...updates, outlet: outletName, accountId: normUsername(req.account!.username) })) { suppressedApproval = true; return; }
+    if (applied.length) await tx.update(mediaContactsTable).set({ ...updates, updatedAt: new Date() }).where(eq(mediaContactsTable.id, id));
+    await tx.update(mediaContactSourceChecksTable).set({ reviewedAt: new Date() }).where(eq(mediaContactSourceChecksTable.id, checkId));
+  });
+  if (suppressedApproval) { res.status(409).json({ error: "This contact is unavailable for processing." }); return; }
   res.json({ ok: true, applied, skipped });
 });
 
@@ -1636,8 +1727,17 @@ router.post(
       const beats = cleanContactArray(body.beats);
       const sectors = cleanContactArray(body.sectors);
       const lastVerifiedAt = cleanVerifiedDate(body.lastVerifiedAt);
-      const [created] = await db
-        .insert(mediaContactsTable)
+      const [created] = await db.transaction(async (tx) => {
+        await acquirePrivacyIdentityLock(tx, "manual-contact");
+        const submittedOutletName = resolvedOutletId ? (await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, resolvedOutletId)).limit(1))[0]?.name : "";
+        if (await isSuppressedWithDb(tx, {
+          name: `${typeof firstName === "string" ? firstName : ""} ${typeof lastName === "string" ? lastName : ""}`,
+          email: typeof stringValues.email === "string" ? stringValues.email : "",
+          linkedinUrl: typeof stringValues.linkedinUrl === "string" ? stringValues.linkedinUrl : "",
+          outlet: submittedOutletName,
+          accountId: normUsername(req.account!.username),
+        })) throw new Error("SUPPRESSED_CONTACT");
+        return tx.insert(mediaContactsTable)
         .values({
           outletId: resolvedOutletId,
           firstName: typeof firstName === "string" ? firstName.trim() : "",
@@ -1647,10 +1747,11 @@ router.post(
           ...(sectors ? { sectors } : {}),
           ...(lastVerifiedAt !== undefined ? { lastVerifiedAt } : {}),
           accountId,
-        })
-        .returning();
+        }).returning();
+      });
       res.json({ ok: true, contact: created });
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message === "SUPPRESSED_CONTACT") { res.status(409).json({ error: "This contact is unavailable for processing." }); return; }
       res.status(500).json({ error: "Failed to create contact" });
     }
   },
@@ -1716,8 +1817,17 @@ router.put(
       const beats = cleanContactArray(body.beats);
       const sectors = cleanContactArray(body.sectors);
       const lastVerifiedAt = cleanVerifiedDate(body.lastVerifiedAt);
-      const [updated] = await db
-        .update(mediaContactsTable)
+      const outletName = resolvedOutletId ? (await db.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, resolvedOutletId)).limit(1))[0]?.name ?? "" : "";
+      const proposed = { ...row, ...stringValues, firstName: typeof body.firstName === "string" ? body.firstName : row.firstName, lastName: typeof body.lastName === "string" ? body.lastName : row.lastName, linkedinUrl: typeof body.linkedinUrl === "string" ? body.linkedinUrl : row.linkedinUrl, email: typeof body.email === "string" ? body.email : row.email };
+      if (await isContactSuppressed({ ...proposed, outlet: outletName, accountId: normUsername(req.account!.username) })) {
+        res.status(409).json({ error: "This contact is unavailable for processing." });
+        return;
+      }
+      const updated = await db.transaction(async (tx) => {
+        await acquirePrivacyIdentityLock(tx, "manual-contact");
+        const txOutletName = resolvedOutletId ? (await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, resolvedOutletId)).limit(1))[0]?.name ?? "" : "";
+        if (await isSuppressedWithDb(tx, { ...proposed, outlet: txOutletName, accountId: normUsername(req.account!.username) })) throw new Error("SUPPRESSED_CONTACT");
+        const [updated] = await tx.update(mediaContactsTable)
         .set({
           outletId: resolvedOutletId,
           ...stringValues,
@@ -1733,24 +1843,30 @@ router.put(
         })
         .where(eq(mediaContactsTable.id, numId))
         .returning();
+        const [canonical] = await tx.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, numId)).limit(1);
+        const canonicalOutlet = canonical?.outletId ? (await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, canonical.outletId)).limit(1))[0]?.name ?? "" : "";
+        if (!canonical || await isSuppressedWithDb(tx, { ...canonical, outlet: canonicalOutlet, accountId: normUsername(req.account!.username) })) throw new Error("SUPPRESSED_CONTACT");
+        const owner = mediaOverrideOwner(canonical.accountId);
+        for (const fieldName of RICH_CONTACT_STRING_FIELDS) {
+          const value = body[fieldName];
+          if (typeof value !== "string" || value.trim() === row[fieldName]) continue;
+          await tx.delete(mediaContactFieldOverridesTable).where(and(eq(mediaContactFieldOverridesTable.contactId, numId), eq(mediaContactFieldOverridesTable.accountId, owner), eq(mediaContactFieldOverridesTable.fieldName, fieldName)));
+          await tx.insert(mediaContactFieldOverridesTable).values({ contactId: numId, accountId: owner, fieldName, value: value.trim() });
+        }
+        for (const fieldName of ["beats", "sectors"] as const) {
+          const value = cleanContactArray(body[fieldName]);
+          if (!value || JSON.stringify(value) === JSON.stringify(row[fieldName])) continue;
+          await tx.delete(mediaContactFieldOverridesTable).where(and(eq(mediaContactFieldOverridesTable.contactId, numId), eq(mediaContactFieldOverridesTable.accountId, owner), eq(mediaContactFieldOverridesTable.fieldName, fieldName)));
+          await tx.insert(mediaContactFieldOverridesTable).values({ contactId: numId, accountId: owner, fieldName, value: JSON.stringify(value) });
+        }
+        return updated;
+      });
       // Only values that actually changed become user-owned. The edit form
       // submits the whole record, so treating every supplied value as an
       // override would block later workbook refreshes for untouched fields.
-      const owner = mediaOverrideOwner(row.accountId);
-      for (const fieldName of RICH_CONTACT_STRING_FIELDS) {
-        const value = body[fieldName];
-        if (typeof value !== "string" || value.trim() === row[fieldName]) continue;
-        await db.delete(mediaContactFieldOverridesTable).where(and(eq(mediaContactFieldOverridesTable.contactId, numId), eq(mediaContactFieldOverridesTable.accountId, owner), eq(mediaContactFieldOverridesTable.fieldName, fieldName)));
-        await db.insert(mediaContactFieldOverridesTable).values({ contactId: numId, accountId: owner, fieldName, value: value.trim() });
-      }
-      for (const fieldName of ["beats", "sectors"] as const) {
-        const value = cleanContactArray(body[fieldName]);
-        if (!value || JSON.stringify(value) === JSON.stringify(row[fieldName])) continue;
-        await db.delete(mediaContactFieldOverridesTable).where(and(eq(mediaContactFieldOverridesTable.contactId, numId), eq(mediaContactFieldOverridesTable.accountId, owner), eq(mediaContactFieldOverridesTable.fieldName, fieldName)));
-        await db.insert(mediaContactFieldOverridesTable).values({ contactId: numId, accountId: owner, fieldName, value: JSON.stringify(value) });
-      }
       res.json({ ok: true, contact: updated });
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message === "SUPPRESSED_CONTACT") { res.status(409).json({ error: "This contact is unavailable for processing." }); return; }
       res.status(500).json({ error: "Failed to update contact" });
     }
   },
@@ -2177,8 +2293,13 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
     const priorEvidence = previousCriteria.evidence ?? {};
     const priorWarnings = previousCriteria.warnings ?? {};
     const visible = await visibleAccounts(req);
-    const contacts = (await db.select().from(mediaContactsTable).where(isNull(mediaContactsTable.deletedAt)))
+    const contactsRaw = (await db.select().from(mediaContactsTable).where(isNull(mediaContactsTable.deletedAt)))
       .filter((contact) => contact.accountId === null || visible === null || visible.includes(contact.accountId));
+    const outletNames = new Map((await db.select({ id: mediaOutletsTable.id, name: mediaOutletsTable.name }).from(mediaOutletsTable)).map((o) => [o.id, o.name]));
+    const contacts = (await Promise.all(contactsRaw.map(async (contact) => ({
+      contact,
+      suppressed: await isContactSuppressed({ ...contact, outlet: contact.outletId ? outletNames.get(contact.outletId) : "", accountId }),
+    })))).filter((entry) => !entry.suppressed).map((entry) => entry.contact);
     const [departed, restrictions] = await Promise.all([
       departedContactIds(contacts.map((contact) => contact.id), owner),
       restrictedContactIds(owner, projectId, storyKey),
@@ -2236,13 +2357,22 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
       const outlet = contact.outletId ? outletById.get(contact.outletId) : undefined;
       return [String(contact.id), assessEditorialFit({ contact, outlet, brief, terms, targetPhrases, evidence: priorEvidence[String(contact.id)] ?? [], departed: departed.has(contact.id), doNotContact: restrictions.has(contact.id) })];
     }));
-    const [set] = await db.insert(mediaRecommendationSetsTable).values({
-      accountId,
-      projectId,
-      storyKey,
-      criteria: { terms, targetPhrases, brief, assessments, evidence: priorEvidence, warnings: priorWarnings, rankingVersion: "editorial-v1", baseScores: Object.fromEntries(ranked.map((item) => [String(item.contact.id), item.score])) },
-    }).returning();
-    if (ranked.length) await db.insert(mediaRecommendationItemsTable).values(ranked.map((item, index) => ({ recommendationSetId: set.id, contactId: item.contact.id, score: item.score, reasons: item.reasons, phraseAttributions: item.phraseAttributions, rank: index + 1 })));
+    const set = await db.transaction(async (tx) => {
+      await acquirePrivacyIdentityLock(tx, "recommendations");
+      for (const item of ranked) {
+        const [current] = await tx.select().from(mediaContactsTable).where(and(eq(mediaContactsTable.id, item.contact.id), isNull(mediaContactsTable.deletedAt))).limit(1);
+        const outlet = current?.outletId ? (await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, current.outletId)).limit(1))[0]?.name : "";
+        if (!current || await isSuppressedWithDb(tx, { ...current, outlet, accountId })) throw new Error("SUPPRESSED_RECOMMENDATION");
+      }
+      const [created] = await tx.insert(mediaRecommendationSetsTable).values({
+        accountId,
+        projectId,
+        storyKey,
+        criteria: { terms, targetPhrases, brief, assessments, evidence: priorEvidence, warnings: priorWarnings, rankingVersion: "editorial-v1", baseScores: Object.fromEntries(ranked.map((item) => [String(item.contact.id), item.score])) },
+      }).returning();
+      if (ranked.length) await tx.insert(mediaRecommendationItemsTable).values(ranked.map((item, index) => ({ recommendationSetId: created.id, contactId: item.contact.id, score: item.score, reasons: item.reasons, phraseAttributions: item.phraseAttributions, rank: index + 1 })));
+      return created;
+    });
     const refined = await rerankRecommendationSet(accountId, projectId, storyKey);
     const contactById = new Map(ranked.map((item) => [item.contact.id, item.contact]));
     res.json({
@@ -2259,7 +2389,10 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
        brief,
        evaluation: await evaluationSummary(accountId, projectId, storyKey, contacts.length, ranked.length),
     });
-  } catch (error) { req.log.error({ err: error }, "media recommendations failed"); res.status(500).json({ error: "Failed to create recommendations" }); }
+  } catch (error) {
+    if (error instanceof Error && error.message === "SUPPRESSED_RECOMMENDATION") { res.status(409).json({ error: "One or more contacts are unavailable for processing." }); return; }
+    req.log.error({ err: error }, "media recommendations failed"); res.status(500).json({ error: "Failed to create recommendations" });
+  }
 });
 
 function discoveryResponse(row: typeof mediaDiscoveriesTable.$inferSelect) {
@@ -2303,6 +2436,8 @@ router.get("/store/media-db/discoveries", requirePlatformAuth, async (req: Reque
     for (const row of rows) {
       if (visible !== null && !visible.includes(row.accountId)) continue;
       if (!(await assertProjectVisible(req, row.projectId))) continue;
+      const candidate = row.candidate as Record<string, unknown>;
+      if (await isSuppressed({ name: typeof candidate.name === "string" ? candidate.name : `${candidate.firstName ?? ""} ${candidate.lastName ?? ""}`, email: typeof candidate.email === "string" ? candidate.email : "", linkedinUrl: typeof candidate.linkedinUrl === "string" ? candidate.linkedinUrl : "", outlet: typeof candidate.outletName === "string" ? candidate.outletName : "", accountId: row.accountId })) continue;
       items.push(discoveryResponse(row));
     }
     res.json({ ok: true, items, canReview: canWriteProjects(req.account!) });
@@ -2337,14 +2472,26 @@ router.post("/store/media-db/discoveries", requirePlatformAuth, async (req: Requ
       res.status(400).json({ error: "This discovery is not present in the verified search results." });
       return;
     }
-    const [created] = await db.insert(mediaDiscoveriesTable).values({
+    const candidateData = candidate as unknown as Record<string, unknown>;
+    const candidateIdentity = {
+      name: typeof candidateData.name === "string" ? candidateData.name : `${candidateData.firstName ?? ""} ${candidateData.lastName ?? ""}`,
+      email: typeof candidateData.email === "string" ? candidateData.email : "",
+      linkedinUrl: typeof candidateData.linkedinUrl === "string" ? candidateData.linkedinUrl : "",
+      outlet: typeof candidateData.outlet === "string" ? candidateData.outlet : typeof candidateData.outletName === "string" ? candidateData.outletName : "",
+      accountId,
+    };
+    const [created] = await db.transaction(async (tx) => {
+      await acquirePrivacyIdentityLock(tx, "discovery");
+      if (await isSuppressedWithDb(tx, candidateIdentity)) throw new Error("SUPPRESSED_DISCOVERY");
+      return tx.insert(mediaDiscoveriesTable).values({
       accountId,
       projectId: trusted.projectId,
       candidateKey: candidate.candidateKey,
       candidate: candidate as unknown as Record<string, unknown>,
-    }).onConflictDoNothing({
+      }).onConflictDoNothing({
       target: [mediaDiscoveriesTable.accountId, mediaDiscoveriesTable.projectId, mediaDiscoveriesTable.candidateKey],
-    }).returning();
+      }).returning();
+    });
     const saved = created ?? (await db.select().from(mediaDiscoveriesTable).where(and(
       eq(mediaDiscoveriesTable.accountId, accountId),
       eq(mediaDiscoveriesTable.projectId, trusted.projectId),
@@ -2353,6 +2500,7 @@ router.post("/store/media-db/discoveries", requirePlatformAuth, async (req: Requ
     if (!saved) throw new Error("Discovery was not persisted");
     res.status(created ? 201 : 200).json({ ok: true, discovery: discoveryResponse(saved) });
   } catch (error) {
+    if (error instanceof Error && error.message === "SUPPRESSED_DISCOVERY") { res.status(409).json({ error: "This discovery is unavailable for processing." }); return; }
     req.log.error({ err: error }, "saving media discovery candidate failed");
     res.status(500).json({ error: "Failed to save this discovery for approval." });
   }
@@ -2367,6 +2515,8 @@ router.post("/store/media-db/discoveries/:id/approve", requirePlatformAuth, asyn
     }
     const visible = await visibleAccounts(req);
     const result = await db.transaction(async (tx) => {
+      await acquirePrivacyIdentityLock(tx, "placement");
+      await acquirePrivacyIdentityLock(tx, "discovery");
       if (process.env.NODE_ENV !== "test") await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`media-discovery:${id}`}))`);
       const [row] = await tx.select().from(mediaDiscoveriesTable).where(eq(mediaDiscoveriesTable.id, id)).limit(1);
       const [project] = row ? await tx.select({ owner: projectsTable.owner, deletedAt: projectsTable.deletedAt }).from(projectsTable).where(eq(projectsTable.id, row.projectId)).limit(1) : [];
@@ -2381,11 +2531,27 @@ router.post("/store/media-db/discoveries/:id/approve", requirePlatformAuth, asyn
         // accounts). Shared outlets are safe to reuse.
         if (contact?.accountId === row.accountId && outlet
           && (outlet.accountId === null || outlet.accountId === row.accountId)) {
+          if (await isSuppressedWithDb(tx, { ...contact, outlet: outlet.name, accountId: row.accountId })) return { suppressed: true as const };
           return { row, contact, outlet, existing: true };
         }
         return { notFound: true as const };
       }
+      if (row.contactId) {
+        const [contact] = await tx.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, row.contactId)).limit(1);
+        if (contact) {
+          const [outlet] = row.outletId ? await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, row.outletId)).limit(1) : [];
+           if (await isSuppressedWithDb(tx, { ...contact, outlet: outlet?.name, accountId: row.accountId })) return { suppressed: true as const };
+        }
+      }
       const candidate = row.candidate as unknown as TrustedMediaDiscovery;
+      const candidateIdentity = candidate as TrustedMediaDiscovery & { linkedinUrl?: string };
+      if (await isSuppressedWithDb(tx, {
+        name: `${candidate.firstName} ${candidate.lastName}`.trim(),
+        email: candidate.email,
+        linkedinUrl: candidateIdentity.linkedinUrl,
+        outlet: candidate.outletName,
+        accountId: row.accountId,
+      })) return { suppressed: true as const };
       const visibleOutlets = (await tx.select().from(mediaOutletsTable).where(isNull(mediaOutletsTable.deletedAt)))
         .filter((item) => item.accountId === null || item.accountId === row.accountId);
       const domain = normalisedOutletDomain(candidate.outletWebsite);
@@ -2491,6 +2657,10 @@ router.post("/store/media-db/discoveries/:id/approve", requirePlatformAuth, asyn
       res.status(409).json({ error: "Rejected discoveries cannot be approved." });
       return;
     }
+    if ("suppressed" in result) {
+      res.status(409).json({ error: "This discovery is unavailable for processing." });
+      return;
+    }
     res.json({ ok: true, discovery: discoveryResponse(result.row), contact: result.contact, outlet: result.outlet, existing: result.existing });
   } catch (error) {
     req.log.error({ err: error }, "approving media discovery failed");
@@ -2537,15 +2707,29 @@ router.put("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
   try {
     const { projectId, storyKey, contactId, decision, note } = req.body ?? {};
     if (typeof projectId !== "string" || typeof storyKey !== "string" || !Number(contactId) || !["shortlisted", "rejected", "contacted"].includes(decision) || !(await assertProjectVisible(req, projectId))) { res.status(400).json({ error: "Invalid recommendation decision or project" }); return; }
-    const accountId = normUsername(req.account!.username);
+     const accountId = await visibleProjectOwner(req, projectId);
+     if (!accountId) { res.status(403).json({ error: "Project is not available to this account" }); return; }
     const visible = await visibleAccounts(req);
-    const contact = await db.select({ accountId: mediaContactsTable.accountId }).from(mediaContactsTable).where(and(eq(mediaContactsTable.id, Number(contactId)), isNull(mediaContactsTable.deletedAt))).limit(1);
+    const contact = await db.select().from(mediaContactsTable).where(and(eq(mediaContactsTable.id, Number(contactId)), isNull(mediaContactsTable.deletedAt))).limit(1);
     if (!contact[0] || (contact[0].accountId !== null && visible !== null && !visible.includes(contact[0].accountId))) { res.status(403).json({ error: "Contact is not available to this account" }); return; }
-    const existing = await db.select({ id: mediaRecommendationDecisionsTable.id }).from(mediaRecommendationDecisionsTable).where(and(eq(mediaRecommendationDecisionsTable.accountId, accountId), eq(mediaRecommendationDecisionsTable.projectId, projectId), eq(mediaRecommendationDecisionsTable.storyKey, storyKey), eq(mediaRecommendationDecisionsTable.contactId, Number(contactId)))).limit(1);
+    const decisionOutlet = contact[0].outletId ? (await db.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, contact[0].outletId)).limit(1))[0]?.name : "";
+     if (await isContactSuppressed({ ...contact[0], outlet: decisionOutlet, accountId })) { res.status(409).json({ error: "This contact is unavailable for processing." }); return; }
     const values = { decision, note: typeof note === "string" ? note.slice(0, 4000) : "" };
-    const [row] = existing[0] ? await db.update(mediaRecommendationDecisionsTable).set(values).where(eq(mediaRecommendationDecisionsTable.id, existing[0].id)).returning() : await db.insert(mediaRecommendationDecisionsTable).values({ accountId, projectId, storyKey, contactId: Number(contactId), ...values }).returning();
+    const row = await db.transaction(async (tx) => {
+      await acquirePrivacyIdentityLock(tx, "recommendation-decision");
+      const [current] = await tx.select().from(mediaContactsTable).where(and(eq(mediaContactsTable.id, Number(contactId)), isNull(mediaContactsTable.deletedAt))).limit(1);
+      const outlet = current?.outletId ? (await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, current.outletId)).limit(1))[0]?.name : "";
+      if (!current || await isSuppressedWithDb(tx, { ...current, outlet, accountId })) throw new Error("SUPPRESSED_RECOMMENDATION");
+      const existing = await tx.select({ id: mediaRecommendationDecisionsTable.id }).from(mediaRecommendationDecisionsTable).where(and(eq(mediaRecommendationDecisionsTable.accountId, accountId), eq(mediaRecommendationDecisionsTable.projectId, projectId), eq(mediaRecommendationDecisionsTable.storyKey, storyKey), eq(mediaRecommendationDecisionsTable.contactId, Number(contactId)))).limit(1);
+      return (existing[0]
+        ? await tx.update(mediaRecommendationDecisionsTable).set(values).where(eq(mediaRecommendationDecisionsTable.id, existing[0].id)).returning()
+        : await tx.insert(mediaRecommendationDecisionsTable).values({ accountId, projectId, storyKey, contactId: Number(contactId), ...values }).returning())[0];
+    });
     res.json({ ok: true, decision: row });
-  } catch (error) { req.log.error({ err: error }, "media decision failed"); res.status(500).json({ error: "Failed to save recommendation decision" }); }
+  } catch (error) {
+    if (error instanceof Error && error.message === "SUPPRESSED_RECOMMENDATION") { res.status(409).json({ error: "This contact is unavailable for processing." }); return; }
+    req.log.error({ err: error }, "media decision failed"); res.status(500).json({ error: "Failed to save recommendation decision" });
+  }
 });
 
 router.put("/store/media-db/recommendations/feedback", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
@@ -2557,21 +2741,35 @@ router.put("/store/media-db/recommendations/feedback", requirePlatformAuth, asyn
     if (!projectId || !storyKey || !contactId || !["more", "less", null].includes(signal) || !(await assertProjectVisible(req, projectId))) {
       res.status(400).json({ error: "Invalid recommendation feedback or project" }); return;
     }
-    const accountId = normUsername(req.account!.username);
-    const [latestSet] = await db.select({ id: mediaRecommendationSetsTable.id }).from(mediaRecommendationSetsTable)
-      .where(and(eq(mediaRecommendationSetsTable.accountId, accountId), eq(mediaRecommendationSetsTable.projectId, projectId), eq(mediaRecommendationSetsTable.storyKey, storyKey)))
-      .orderBy(desc(mediaRecommendationSetsTable.id)).limit(1);
-    const recommended = latestSet ? await db.select({ id: mediaRecommendationItemsTable.id }).from(mediaRecommendationItemsTable)
-      .where(and(eq(mediaRecommendationItemsTable.recommendationSetId, latestSet.id), eq(mediaRecommendationItemsTable.contactId, contactId))).limit(1) : [];
-    if (!recommended[0]) { res.status(404).json({ error: "Recommendation not found for this article" }); return; }
-    const scope = and(eq(mediaRecommendationFeedbackTable.accountId, accountId), eq(mediaRecommendationFeedbackTable.projectId, projectId), eq(mediaRecommendationFeedbackTable.storyKey, storyKey), eq(mediaRecommendationFeedbackTable.contactId, contactId));
-    if (signal === null) {
-      await db.delete(mediaRecommendationFeedbackTable).where(scope);
-    } else {
-      const existing = await db.select({ id: mediaRecommendationFeedbackTable.id }).from(mediaRecommendationFeedbackTable).where(scope).limit(1);
-      if (existing[0]) await db.update(mediaRecommendationFeedbackTable).set({ signal }).where(eq(mediaRecommendationFeedbackTable.id, existing[0].id));
-      else await db.insert(mediaRecommendationFeedbackTable).values({ accountId, projectId, storyKey, contactId, signal });
-    }
+     const accountId = await visibleProjectOwner(req, projectId);
+     if (!accountId) { res.status(403).json({ error: "Project is not available to this account" }); return; }
+    const feedbackContact = await db.select().from(mediaContactsTable).where(and(eq(mediaContactsTable.id, contactId), isNull(mediaContactsTable.deletedAt))).limit(1);
+    if (!feedbackContact[0]) { res.status(404).json({ error: "Contact not found" }); return; }
+    const feedbackOutlet = feedbackContact[0].outletId ? (await db.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, feedbackContact[0].outletId)).limit(1))[0]?.name : "";
+     if (await isContactSuppressed({ ...feedbackContact[0], outlet: feedbackOutlet, accountId })) { res.status(409).json({ error: "This contact is unavailable for processing." }); return; }
+    const feedbackResult = await db.transaction(async (tx) => {
+      await acquirePrivacyIdentityLock(tx, "recommendation-feedback");
+      const [current] = await tx.select().from(mediaContactsTable).where(and(eq(mediaContactsTable.id, contactId), isNull(mediaContactsTable.deletedAt))).limit(1);
+      const outlet = current?.outletId ? (await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, current.outletId)).limit(1))[0]?.name : "";
+      if (!current || await isSuppressedWithDb(tx, { ...current, outlet, accountId })) return { suppressed: true as const };
+      const [latestSet] = await tx.select({ id: mediaRecommendationSetsTable.id }).from(mediaRecommendationSetsTable)
+        .where(and(eq(mediaRecommendationSetsTable.accountId, accountId), eq(mediaRecommendationSetsTable.projectId, projectId), eq(mediaRecommendationSetsTable.storyKey, storyKey)))
+        .orderBy(desc(mediaRecommendationSetsTable.id)).limit(1);
+      const recommended = latestSet ? await tx.select({ id: mediaRecommendationItemsTable.id }).from(mediaRecommendationItemsTable)
+        .where(and(eq(mediaRecommendationItemsTable.recommendationSetId, latestSet.id), eq(mediaRecommendationItemsTable.contactId, contactId))).limit(1) : [];
+      if (!recommended[0]) return { missing: true as const };
+      const scope = and(eq(mediaRecommendationFeedbackTable.accountId, accountId), eq(mediaRecommendationFeedbackTable.projectId, projectId), eq(mediaRecommendationFeedbackTable.storyKey, storyKey), eq(mediaRecommendationFeedbackTable.contactId, contactId));
+      if (signal === null) {
+        await tx.delete(mediaRecommendationFeedbackTable).where(scope);
+      } else {
+        const existing = await tx.select({ id: mediaRecommendationFeedbackTable.id }).from(mediaRecommendationFeedbackTable).where(scope).limit(1);
+        if (existing[0]) await tx.update(mediaRecommendationFeedbackTable).set({ signal }).where(eq(mediaRecommendationFeedbackTable.id, existing[0].id));
+        else await tx.insert(mediaRecommendationFeedbackTable).values({ accountId, projectId, storyKey, contactId, signal });
+      }
+      return { ok: true as const };
+    });
+    if ("suppressed" in feedbackResult) { res.status(409).json({ error: "This contact is unavailable for processing." }); return; }
+    if ("missing" in feedbackResult) { res.status(404).json({ error: "Recommendation not found for this article" }); return; }
     await rerankRecommendationSet(accountId, projectId, storyKey);
     res.json({ ok: true });
   } catch (error) { req.log.error({ err: error }, "media refinement failed"); res.status(500).json({ error: "Failed to refine recommendations" }); }
@@ -2582,7 +2780,8 @@ router.delete("/store/media-db/recommendations/feedback", requirePlatformAuth, a
     const projectId = typeof req.body?.projectId === "string" ? req.body.projectId.trim() : "";
     const storyKey = typeof req.body?.storyKey === "string" ? req.body.storyKey.trim().slice(0, 200) : "";
     if (!projectId || !storyKey || !(await assertProjectVisible(req, projectId))) { res.status(400).json({ error: "Invalid project or article" }); return; }
-    const accountId = normUsername(req.account!.username);
+    const accountId = await visibleProjectOwner(req, projectId);
+    if (!accountId) { res.status(404).json({ error: "Project not found" }); return; }
     await db.delete(mediaRecommendationFeedbackTable).where(and(eq(mediaRecommendationFeedbackTable.accountId, accountId), eq(mediaRecommendationFeedbackTable.projectId, projectId), eq(mediaRecommendationFeedbackTable.storyKey, storyKey)));
     await rerankRecommendationSet(accountId, projectId, storyKey);
     res.json({ ok: true });
@@ -2619,7 +2818,11 @@ router.get("/store/media-db/recommendations", requirePlatformAuth, async (req: R
     .innerJoin(mediaContactsTable, eq(mediaRecommendationItemsTable.contactId, mediaContactsTable.id))
     .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
     .where(and(eq(mediaRecommendationItemsTable.recommendationSetId, set.id), isNull(mediaContactsTable.deletedAt)));
-  const visibleRows = filterVisibleRecommendationItems(rows.map((row) => ({ ...row, contact: row.contact })), visible);
+   const candidateRows = filterVisibleRecommendationItems(rows.map((row) => ({ ...row, contact: row.contact })), visible);
+   const visibleRows = (await Promise.all(candidateRows.map(async (row) => ({
+     row,
+      suppressed: await isContactSuppressed({ ...row.contact, outlet: row.outletName, accountId }),
+   })))).filter((entry) => !entry.suppressed).map((entry) => entry.row);
   const [currentRestrictions, currentDeparted] = await Promise.all([
     restrictedContactIds(accountId, projectId, storyKey),
     departedContactIds(visibleRows.map((row) => row.contact.id), accountId),
@@ -2696,6 +2899,7 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
       // Keep provider calls bounded and auditable. The set itself is already
       // sorted, and only its first five candidates may trigger enrichment.
       for (const row of enrichmentRows) {
+        if (await isContactSuppressed({ ...row.contact, outlet: row.outlet?.name, accountId })) continue;
         const collected = await collectJournalistCoverage({
           contact: {
             name: `${row.contact.firstName} ${row.contact.lastName}`.trim(),
@@ -2743,6 +2947,21 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
     }
     const nextCriteria: RecommendationCriteria = { ...criteria, brief, assessments, evidence, warnings, rankingVersion: "editorial-v1" };
     const committed = await db.transaction(async (tx) => {
+      await acquirePrivacyIdentityLock(tx, "recommendations");
+      const safeEnriched = [];
+      for (const row of enriched) {
+        if (await isSuppressedWithDb(tx, {
+          name: `${row.contact.firstName} ${row.contact.lastName}`.trim(),
+          email: row.contact.email,
+          linkedinUrl: row.contact.linkedinUrl,
+          outlet: row.outlet?.name,
+          accountId,
+        })) continue;
+        safeEnriched.push(row);
+      }
+      if (safeEnriched.length !== enriched.length) {
+        return { race: false as const, suppressed: true as const };
+      }
       // Criteria is the optimistic-lock snapshot. Two slow enrichments can
       // both finish provider calls, but only the first one may commit its
       // evidence and item scores.
@@ -2753,22 +2972,31 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
           sql`${mediaRecommendationSetsTable.criteria} = ${JSON.stringify(criteria)}::jsonb`,
         ))
         .returning();
-      if (!updated) return { race: true as const };
-      await Promise.all(enriched.map((row, index) => tx.update(mediaRecommendationItemsTable)
+      if (!updated) return { race: true as const, suppressed: false };
+      await Promise.all(safeEnriched.map((row, index) => tx.update(mediaRecommendationItemsTable)
         .set({ score: row.score, rank: index + 1 }).where(and(
           eq(mediaRecommendationItemsTable.id, row.item.id),
           eq(mediaRecommendationItemsTable.recommendationSetId, set.id),
         ))));
-      return { race: false as const, updated };
+      return { race: false as const, updated, suppressed: false as const };
     });
     if (committed.race) {
       res.status(409).json({ error: "Recommendations changed while enrichment was running. Reload and try again." });
       return;
     }
+    if (committed.suppressed) {
+      res.status(409).json({ error: "One or more recommendation contacts became unavailable during enrichment." });
+      return;
+    }
     const updatedSet = committed.updated;
+    const safeResponseRows = [];
+    for (const row of rows) {
+      if (await isContactSuppressed({ ...row.contact, outlet: row.outlet?.name, accountId })) continue;
+      safeResponseRows.push(row);
+    }
     res.json({
       ok: true, recommendationSet: updatedSet,
-       items: rows.map((row, index) => {
+       items: safeResponseRows.map((row, index) => {
          const enrichedRow = enriched.find((candidate) => candidate.contact.id === row.contact.id);
          return {
            rank: index + 1,
@@ -2791,7 +3019,8 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
   const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "";
   const storyKey = typeof req.query.storyKey === "string" ? req.query.storyKey : "";
   if (!projectId || !storyKey || !(await assertProjectVisible(req, projectId))) { res.status(404).json({ error: "Project not found" }); return; }
-  const accountId = normUsername(req.account!.username);
+  const accountId = await visibleProjectOwner(req, projectId);
+  if (!accountId) { res.status(404).json({ error: "Project not found" }); return; }
   const decisions = await db.select().from(mediaRecommendationDecisionsTable).where(and(eq(mediaRecommendationDecisionsTable.accountId, accountId), eq(mediaRecommendationDecisionsTable.projectId, projectId), eq(mediaRecommendationDecisionsTable.storyKey, storyKey)));
   const visible = await visibleAccounts(req);
   // Re-running an automatic recommendation intentionally leaves the prior set
@@ -2803,6 +3032,12 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
     .orderBy(desc(mediaRecommendationSetsTable.createdAt), desc(mediaRecommendationSetsTable.id))
     .limit(1);
   const feedback = await db.select().from(mediaRecommendationFeedbackTable).where(and(eq(mediaRecommendationFeedbackTable.accountId, accountId), eq(mediaRecommendationFeedbackTable.projectId, projectId), eq(mediaRecommendationFeedbackTable.storyKey, storyKey)));
+  const decisionContactIds = [...new Set([...decisions.map((d) => d.contactId), ...feedback.map((f) => f.contactId)])];
+  const suppressedDecisionContacts = decisionContactIds.length ? await db.select().from(mediaContactsTable).where(inArray(mediaContactsTable.id, decisionContactIds)) : [];
+  const decisionOutletNames = new Map((await db.select({ id: mediaOutletsTable.id, name: mediaOutletsTable.name }).from(mediaOutletsTable)).map((o) => [o.id, o.name]));
+  const suppressedDecisionIds = new Set((await Promise.all(suppressedDecisionContacts.map(async (c) => await isContactSuppressed({ ...c, outlet: c.outletId ? decisionOutletNames.get(c.outletId) : "", accountId }) ? c.id : null))).filter((id): id is number => id !== null));
+  const safeDecisions = decisions.filter((d) => !suppressedDecisionIds.has(d.contactId));
+  const safeFeedback = feedback.filter((f) => !suppressedDecisionIds.has(f.contactId));
   const recommendationCriteria = (sets[0]?.criteria ?? {}) as RecommendationCriteria;
   const candidateItems = sets.length ? await db.select({ id: mediaRecommendationItemsTable.id, recommendationSetId: mediaRecommendationItemsTable.recommendationSetId, score: mediaRecommendationItemsTable.score, rank: mediaRecommendationItemsTable.rank, reasons: mediaRecommendationItemsTable.reasons, phraseAttributions: mediaRecommendationItemsTable.phraseAttributions, contact: mediaContactsTable, outletName: mediaOutletsTable.name, outletCategory: mediaOutletsTable.category, outletWebsite: mediaOutletsTable.website, outletCountry: mediaOutletsTable.country, outletReachBand: mediaOutletsTable.reachBand, outletAccountId: mediaOutletsTable.accountId, outletDeletedAt: mediaOutletsTable.deletedAt })
     .from(mediaRecommendationItemsTable)
@@ -2813,8 +3048,9 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
     restrictedContactIds(accountId, projectId, storyKey),
     departedContactIds(candidateItems.map((item) => item.contact.id), accountId),
   ]);
+  const safeCandidateItems = candidateItems.filter((item) => !suppressedDecisionIds.has(item.contact.id));
   const seenContacts = new Set<number>();
-  const items = filterVisibleRecommendationItems(candidateItems, visible).filter((item) => {
+  const items = filterVisibleRecommendationItems(safeCandidateItems, visible).filter((item) => {
     if (seenContacts.has(item.contact.id)) return false;
     seenContacts.add(item.contact.id);
     return true;
@@ -2905,7 +3141,7 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
       warnings: [...baseAssessment.warnings, ...(recommendationCriteria.warnings?.[String(row.contact.id)] ?? [])],
     } }];
   });
-  res.json({ decisions, items, decisionContacts, feedback });
+  res.json({ decisions: safeDecisions, items, decisionContacts: decisionContacts.filter((item) => !suppressedDecisionIds.has(item.contactId)), feedback: safeFeedback });
 });
 
 router.get("/store/media-db/outreach", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
@@ -2917,7 +3153,12 @@ router.get("/store/media-db/outreach", requirePlatformAuth, async (req: Request,
     ? and(eq(mediaOutreachTable.accountId, accountId), eq(mediaOutreachTable.projectId, projectId), eq(mediaOutreachTable.storyKey, storyKey))
     : and(eq(mediaOutreachTable.accountId, accountId), eq(mediaOutreachTable.projectId, projectId));
   const outreach = await db.select().from(mediaOutreachTable).where(outreachScope).orderBy(desc(mediaOutreachTable.updatedAt));
-  const ids = outreach.map((row) => row.id);
+  const outreachContactIds = outreach.flatMap((row) => row.contactId ? [row.contactId] : []);
+  const outreachContacts = outreachContactIds.length ? await db.select().from(mediaContactsTable).where(inArray(mediaContactsTable.id, outreachContactIds)) : [];
+  const outreachOutlets = new Map((await db.select({ id: mediaOutletsTable.id, name: mediaOutletsTable.name }).from(mediaOutletsTable)).map((o) => [o.id, o.name]));
+  const blockedOutreach = new Set((await Promise.all(outreachContacts.map(async (c) => (await isContactSuppressed({ ...c, outlet: c.outletId ? outreachOutlets.get(c.outletId) : "", accountId }) ? c.id : null)))).filter((id): id is number => id !== null));
+  const filteredOutreach = outreach.filter((row) => !row.contactId || !blockedOutreach.has(row.contactId));
+  const ids = filteredOutreach.map((row) => row.id);
   let activities: Array<typeof mediaOutreachActivitiesTable.$inferSelect> = [];
   let placements: Array<typeof mediaPlacementsTable.$inferSelect> = [];
   if (ids.length) {
@@ -2926,7 +3167,7 @@ router.get("/store/media-db/outreach", requirePlatformAuth, async (req: Request,
       db.select().from(mediaPlacementsTable).where(inArray(mediaPlacementsTable.outreachId, ids)).orderBy(desc(mediaPlacementsTable.publicationDate)),
     ]);
   }
-  res.json({ outreach: outreach.map((row) => ({ ...row, activities: activities.filter((item) => item.outreachId === row.id), placements: placements.filter((item) => item.outreachId === row.id) })) });
+  res.json({ outreach: filteredOutreach.map((row) => ({ ...row, activities: activities.filter((item) => item.outreachId === row.id), placements: placements.filter((item) => item.outreachId === row.id) })) });
 });
 
 router.post("/store/media-db/outreach", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
@@ -2939,6 +3180,7 @@ router.post("/store/media-db/outreach", requirePlatformAuth, async (req: Request
     const actorAccountId = normUsername(req.account!.username);
     const [contact] = await db.select({ contact: mediaContactsTable, outlet: mediaOutletsTable }).from(mediaContactsTable).leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id)).where(eq(mediaContactsTable.id, contactId)).limit(1);
     if (!contact || (contact.contact.accountId !== null && contact.contact.accountId !== accountId && contact.contact.accountId !== actorAccountId)) { res.status(403).json({ error: "Contact is not available to this project's workspace" }); return; }
+    if (!contact || await isContactSuppressed({ ...contact.contact, outlet: contact.outlet?.name, accountId: accountId })) { res.status(409).json({ error: "This contact is unavailable for processing." }); return; }
     const existing = await db.select().from(mediaOutreachTable).where(and(eq(mediaOutreachTable.accountId, accountId), eq(mediaOutreachTable.projectId, projectId), eq(mediaOutreachTable.storyKey, storyKey), eq(mediaOutreachTable.contactId, contactId))).limit(1);
     if (existing[0]) { res.status(200).json({ ok: true, outreach: existing[0], existing: true }); return; }
     const [blockedByStatus, restrictions] = await Promise.all([
@@ -2952,11 +3194,15 @@ router.post("/store/media-db/outreach", requirePlatformAuth, async (req: Request
     const status: MediaOutreachStatus = "planned";
     const actor = req.account!.username;
     const [row] = await db.transaction(async (tx) => {
+      await acquirePrivacyIdentityLock(tx, "outreach");
+      const [currentContact] = await tx.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, contactId)).limit(1);
+      const [currentOutlet] = currentContact?.outletId ? await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, currentContact.outletId)).limit(1) : [];
+      if (!currentContact || await isSuppressedWithDb(tx, { ...currentContact, outlet: currentOutlet?.name, accountId: accountId })) throw new Error("SUPPRESSED_OUTREACH");
       const created = await tx.insert(mediaOutreachTable).values({
-        accountId, projectId, storyKey, contactId, outletId: contact.contact.outletId, status,
+        accountId, projectId, storyKey, contactId, outletId: currentContact.outletId, status,
         articleSnapshot: { title: typeof req.body?.articleTitle === "string" ? req.body.articleTitle.slice(0, 500) : "" },
-        contactSnapshot: { name: `${contact.contact.firstName} ${contact.contact.lastName}`.trim(), role: contact.contact.role, email: contact.contact.email },
-        outletSnapshot: { name: contact.outlet?.name ?? "", website: contact.outlet?.website ?? "" },
+        contactSnapshot: { name: `${currentContact.firstName} ${currentContact.lastName}`.trim(), role: currentContact.role, email: currentContact.email },
+        outletSnapshot: { name: currentOutlet?.name ?? "", website: "" },
         targetPhrases: normaliseSubmittedPhrases(req.body?.targetPhrases), responsibleTeamMember: typeof req.body?.responsibleTeamMember === "string" ? req.body.responsibleTeamMember.slice(0, 200) : "",
         notes: typeof req.body?.notes === "string" ? req.body.notes.slice(0, 10000) : "", createdBy: actor,
       }).returning();
@@ -2964,7 +3210,10 @@ router.post("/store/media-db/outreach", requirePlatformAuth, async (req: Request
       return created;
     });
     res.status(201).json({ ok: true, outreach: row });
-  } catch (error) { req.log.error({ err: error }, "media outreach create failed"); res.status(500).json({ error: "Failed to create outreach record" }); }
+  } catch (error) {
+    if (error instanceof Error && error.message === "SUPPRESSED_OUTREACH") { res.status(409).json({ error: "This contact is unavailable for processing." }); return; }
+    req.log.error({ err: error }, "media outreach create failed"); res.status(500).json({ error: "Failed to create outreach record" });
+  }
 });
 
 router.put("/store/media-db/outreach/:id", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
@@ -2997,7 +3246,11 @@ router.put("/store/media-db/outreach/:id", requirePlatformAuth, async (req: Requ
       responsibleTeamMember: typeof req.body?.responsibleTeamMember === "string" ? req.body.responsibleTeamMember.slice(0, 200) : current.responsibleTeamMember,
     };
     const [row] = await db.transaction(async (tx) => {
+      await acquirePrivacyIdentityLock(tx, "outreach");
       if (process.env.NODE_ENV !== "test") await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`media-outreach:${id}`}))`);
+      const [linked] = current.contactId ? await tx.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, current.contactId)).limit(1) : [];
+      const [linkedOutlet] = linked?.outletId ? await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, linked.outletId)).limit(1) : [];
+      if (!linked || await isSuppressedWithDb(tx, { ...linked, outlet: linkedOutlet?.name, accountId: accountId })) throw new Error("SUPPRESSED_OUTREACH");
       const changed = await tx.update(mediaOutreachTable).set(updates).where(and(eq(mediaOutreachTable.id, id), eq(mediaOutreachTable.status, current.status))).returning();
       if (!changed[0]) return [];
       if (nextStatus && nextStatus !== current.status) await tx.insert(mediaOutreachActivitiesTable).values({ outreachId: id, accountId, projectId: current.projectId, fromStatus: current.status, toStatus: nextStatus, note: typeof req.body?.activityNote === "string" ? req.body.activityNote.slice(0, 4000) : "", actor: req.account!.username });
@@ -3005,7 +3258,10 @@ router.put("/store/media-db/outreach/:id", requirePlatformAuth, async (req: Requ
     });
     if (!row) { res.status(409).json({ error: "Outreach changed in another session. Reload and try again." }); return; }
     res.json({ ok: true, outreach: row });
-  } catch (error) { req.log.error({ err: error }, "media outreach update failed"); res.status(500).json({ error: "Failed to update outreach record" }); }
+  } catch (error) {
+    if (error instanceof Error && error.message === "SUPPRESSED_OUTREACH") { res.status(409).json({ error: "This contact is unavailable for processing." }); return; }
+    req.log.error({ err: error }, "media outreach update failed"); res.status(500).json({ error: "Failed to update outreach record" });
+  }
 });
 
 router.post("/store/media-db/outreach/:id/placements", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
@@ -3024,10 +3280,14 @@ router.post("/store/media-db/outreach/:id/placements", requirePlatformAuth, asyn
     const values = { canonicalUrl, canonicalUrlKey: canonicalUrl, publicationDate, headline, supportingEvidence, legacySourceRef: typeof req.body?.legacySourceRef === "string" ? req.body.legacySourceRef.slice(0, 500) : null };
     const actor = req.account!.username;
     const result = await db.transaction(async (tx) => {
+      await acquirePrivacyIdentityLock(tx, "placement");
       if (process.env.NODE_ENV !== "test") await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`media-outreach:${id}`}))`);
       if (process.env.NODE_ENV !== "test") await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`media-placement:${accountId}:${outreach.projectId}:${canonicalUrl}`}))`);
       const [lockedOutreach] = await tx.select().from(mediaOutreachTable).where(eq(mediaOutreachTable.id, id)).limit(1);
       if (!lockedOutreach || (lockedOutreach.status !== "accepted" && lockedOutreach.status !== "placed")) return { invalidStatus: true as const };
+      const [linked] = lockedOutreach.contactId ? await tx.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, lockedOutreach.contactId)).limit(1) : [];
+      const [linkedOutlet] = linked?.outletId ? await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, linked.outletId)).limit(1) : [];
+      if (!linked || await isSuppressedWithDb(tx, { ...linked, outlet: linkedOutlet?.name, accountId: accountId })) throw new Error("SUPPRESSED_OUTREACH");
       let [existing] = await tx.select().from(mediaPlacementsTable).where(and(eq(mediaPlacementsTable.accountId, accountId), eq(mediaPlacementsTable.projectId, outreach.projectId), eq(mediaPlacementsTable.canonicalUrlKey, canonicalUrl))).limit(1);
       if (existing && existing.outreachId !== id) return { conflict: existing };
       if (existing && process.env.NODE_ENV !== "test") {
@@ -3054,6 +3314,7 @@ router.post("/store/media-db/outreach/:id/placements", requirePlatformAuth, asyn
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to save placement";
     if (/Placement URL/.test(message) || /Invalid URL/.test(message)) { res.status(400).json({ error: message }); return; }
+    if (message === "SUPPRESSED_OUTREACH") { res.status(409).json({ error: "This contact is unavailable for processing." }); return; }
     req.log.error({ err: error }, "media placement failed"); res.status(500).json({ error: "Failed to save placement" });
   }
 });
@@ -3066,9 +3327,14 @@ router.put("/store/media-db/placements/:id/verification", requirePlatformAuth, a
     const placement = candidate && accountId === candidate.accountId ? candidate : undefined;
     if (!placement || !accountId) { res.status(404).json({ error: "Placement not found" }); return; }
     const [updated] = await db.transaction(async (tx) => {
+      await acquirePrivacyIdentityLock(tx, "placement");
       if (process.env.NODE_ENV !== "test") await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`media-placement-id:${id}`}))`);
       const [current] = await tx.select().from(mediaPlacementsTable).where(eq(mediaPlacementsTable.id, id)).limit(1);
       if (!current || current.accountId !== accountId) return [];
+      const [linkedOutreach] = await tx.select().from(mediaOutreachTable).where(eq(mediaOutreachTable.id, current.outreachId)).limit(1);
+      const [linkedContact] = linkedOutreach?.contactId ? await tx.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, linkedOutreach.contactId)).limit(1) : [];
+      const [linkedOutlet] = linkedContact?.outletId ? await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, linkedContact.outletId)).limit(1) : [];
+      if (!linkedContact || await isSuppressedWithDb(tx, { ...linkedContact, outlet: linkedOutlet?.name, accountId })) throw new Error("SUPPRESSED_OUTREACH");
       const evidence = await fetchPlacementPageEvidence(current.canonicalUrl);
       const verifiedFacts = { ...evidence, canonicalUrl: canonicalPlacementUrl(evidence.canonicalUrl), checkedAt: new Date().toISOString() };
       const verificationHistory = [...current.verificationHistory, { kind: "page_verified", ...verifiedFacts, actor: req.account!.username }];
@@ -3077,6 +3343,7 @@ router.put("/store/media-db/placements/:id/verification", requirePlatformAuth, a
     if (!updated) { res.status(409).json({ error: "The placement changed before verification completed." }); return; }
     res.json({ ok: true, placement: updated });
   } catch (error) {
+    if (error instanceof Error && error.message === "SUPPRESSED_OUTREACH") { res.status(409).json({ error: "This contact is unavailable for processing." }); return; }
     req.log.warn({ err: error }, "media placement page verification failed");
     res.status(422).json({ error: "The placement page could not be verified." });
   }

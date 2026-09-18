@@ -169,6 +169,7 @@ const loadAboutPage = () => import("./marketing/AboutPage");
 const loadContactPage = () => import("./marketing/ContactPage");
 const loadTrustSecurityPage = () => import("./marketing/TrustSecurityPage");
 const loadPrivacyPolicyPage = () => import("./marketing/PrivacyPolicyPage");
+const loadJournalistPrivacyPage = () => import("./marketing/JournalistPrivacyPage");
 const loadTermsConditionsPage = () => import("./marketing/TermsConditionsPage");
 const loadForAgentsPage = () => import("./marketing/ForAgentsPage");
 const loadDashboardPage = () =>
@@ -198,6 +199,9 @@ const UsersAdminPage = lazy(() =>
 );
 const ContactSubmissionsAdminPage = lazy(() =>
   import("./pages/ContactSubmissionsAdminPage").then((m) => ({ default: m.ContactSubmissionsAdminPage }))
+);
+const PrivacyRightsAdminPage = lazy(() =>
+  import("./pages/PrivacyRightsAdminPage").then((m) => ({ default: m.PrivacyRightsAdminPage }))
 );
 const loadSubAccountsPage = () =>
   import("./pages/SubAccountsPage").then((m) => ({ default: m.SubAccountsPage }));
@@ -234,6 +238,7 @@ const AboutPage = lazy(() => import("./marketing/AboutPage"));
 const ContactPage = lazy(() => import("./marketing/ContactPage"));
 const TrustSecurityPage = lazy(() => import("./marketing/TrustSecurityPage"));
 const PrivacyPolicyPage = lazy(() => import("./marketing/PrivacyPolicyPage"));
+const JournalistPrivacyPage = lazy(() => import("./marketing/JournalistPrivacyPage"));
 const TermsConditionsPage = lazy(() => import("./marketing/TermsConditionsPage"));
 const ForAgentsPage = lazy(() => import("./marketing/ForAgentsPage"));
 const DashboardPage = lazy(() =>
@@ -294,6 +299,7 @@ const VIEW_PRELOADERS: Record<string, RoutePreloader> = {
   pricing: loadPricingPage,
   "trust-security": loadTrustSecurityPage,
   "privacy-policy": loadPrivacyPolicyPage,
+  "journalist-privacy": loadJournalistPrivacyPage,
   "terms-conditions": loadTermsConditionsPage,
   "sub-accounts": loadSubAccountsPage,
   guidance: loadGuidancePage,
@@ -463,7 +469,7 @@ function viewToUrl(v: string, insightsArticleId?: string | null): string {
 
 
 function App() {
-  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "insights-admin" | "sub-accounts" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security" | "privacy-policy" | "terms-conditions">(() =>
+  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "insights-admin" | "privacy-admin" | "sub-accounts" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security" | "privacy-policy" | "journalist-privacy" | "terms-conditions">(() =>
     isAuthenticationLanding() ? "platform-home" : (directViewFromLocation() ?? "landing"),
   );
   // One owner for every in-flight authority/cache request. Identity changes
@@ -1625,7 +1631,7 @@ function App() {
   };
 
   const goToView = (v: string) => {
-    if (v === "for-inhouse" || v === "insights" || v === "about" || v === "contact" || v === "for-agents" || v === "for-agencies" || v === "pricing" || v === "trust-security" || v === "privacy-policy" || v === "terms-conditions") {
+    if (v === "for-inhouse" || v === "insights" || v === "about" || v === "contact" || v === "for-agents" || v === "for-agencies" || v === "pricing" || v === "trust-security" || v === "privacy-policy" || v === "journalist-privacy" || v === "terms-conditions") {
       warmRoute(VIEW_PRELOADERS[v]);
       startTransition(() => {
         if (v === "insights") { setInsightsFilter(null); setInsightsArticleId(null); }
@@ -1761,6 +1767,9 @@ function App() {
   if (view === "privacy-policy") {
     return <PrivacyPolicyPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;
   }
+  if (view === "journalist-privacy") {
+    return <JournalistPrivacyPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;
+  }
   if (view === "terms-conditions") {
     return <TermsConditionsPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;
   }
@@ -1787,6 +1796,7 @@ function App() {
                 transitionToView("users-admin");
               }
             }}
+            onPrivacyRights={() => { if (session?.role === "admin") transitionToView("privacy-admin"); }}
             onManageTeam={() => requireSessionThen(() => {
               setAccountSection("team");
               transitionToView("sub-accounts");
@@ -1833,6 +1843,10 @@ function App() {
   if (view === "insights-admin") {
     if (!session || session.insightsCmsAccess !== true) return null;
     return <InsightsAdminPage onBack={() => transitionToView("platform-home")} />;
+  }
+  if (view === "privacy-admin") {
+    if (!session || session.role !== "admin") return null;
+    return <Suspense fallback={<RouteLoading fullScreen />}><PrivacyRightsAdminPage onBack={() => transitionToView("platform-home")} /></Suspense>;
   }
   if ((view as string) === "leads-admin") {
     if (!session || session.role !== "admin") return null;
