@@ -1,11 +1,13 @@
-export type AuditOperationType = "visibility" | "website" | "draft" | "content-draft" | "content-optimise";
+export type AuditOperationType = "visibility" | "website" | "draft" | "intake-auto-fill" | "content-draft" | "content-optimise" | "website-project";
 
 const DEFAULTS: Record<AuditOperationType, number> = {
   visibility: 300,
   website: 120,
   draft: 60,
+  "intake-auto-fill": 90,
   "content-draft": 75,
   "content-optimise": 40,
+  "website-project": 90,
 };
 
 const HISTORY_SIZE = 5;
@@ -22,7 +24,9 @@ function loadHistory(type: AuditOperationType): number[] {
     const raw = localStorage.getItem(storageKey(type));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is number => Number.isFinite(value) && value > 0 && value <= 24 * 60 * 60 * 1000)
+      : [];
   } catch {
     return [];
   }
@@ -45,7 +49,7 @@ export function recordAuditDuration(
   elapsedMs: number,
   estimatedMs?: number,
 ): void {
-  if (elapsedMs <= 0) return;
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0 || elapsedMs > 24 * 60 * 60 * 1000) return;
   const history = loadHistory(type);
   history.push(elapsedMs);
 

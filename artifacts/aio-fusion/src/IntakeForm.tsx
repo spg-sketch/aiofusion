@@ -36,6 +36,7 @@ import { stripEmDashes, normaliseAddedData } from "./lib/utils";
 import CountdownBanner from "./components/CountdownBanner";
 import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "./lib/auditTiming";
 import { getExactTargetPhrases as getCanonicalExactTargetPhrases, type ExactTargetPhrase } from "./lib/exactTargetPhrases";
+import { aiRunKey, discardAiRun, getAiRun, startAiRun, useAiRun } from "./lib/aiRunLifecycle";
 export type { ExactTargetPhrase } from "./lib/exactTargetPhrases";
 
 const vars = {
@@ -748,9 +749,12 @@ type IntakeStatus = "Draft" | "Optimised" | "Accepted";
 export type IntakeAccountProps = {
   accountProfile?: { displayName?: string | null; website?: string | null } | null;
   role?: string | null;
+  sessionId?: string;
+  workspaceId?: string;
 };
 
-export default function IntakePage({ accountProfile, role }: IntakeAccountProps = {}) {
+export default function IntakePage({ accountProfile, role, sessionId = "anonymous", workspaceId = "default" }: IntakeAccountProps = {}) {
+  const runScope = { sessionId, workspaceId, projectId: getActiveProjectId() || "default" };
   const [track, setTrack] = useState<Track>("pr");
   const visibleSections = useMemo(() => sections.filter((s) => s.track === track), [track]);
   const [activeSection, setActiveSection] = useState(0);
@@ -1014,6 +1018,62 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
   const [optimisingField, setOptimisingField] = useState<string | null>(null);
   const [optimiseError, setOptimiseError] = useState<string>("");
   const [optimiseNotice, setOptimiseNotice] = useState("");
+  const autoFillKey = aiRunKey(runScope, "intake-auto-fill");
+  const autoFillRun = useAiRun<{ url: string; companyName?: string }, any>(autoFillKey);
+  const activeDraftField = OPTIMISED_FIELD_IDS.find((id) =>
+    getAiRun(aiRunKey(runScope, "intake-field-draft", id))?.status === "running"
+  ) || aiLoadingField;
+  const draftRunKey = activeDraftField ? aiRunKey(runScope, "intake-field-draft", activeDraftField) : null;
+  const draftRun = useAiRun<{ url: string; fieldId: string }, any>(draftRunKey);
+  const autoFillActive = autoFillRun?.status === "running";
+  const draftActive = draftRun?.status === "running";
+  const appliedRunRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (autoFillRun?.status === "failed") {
+      setAutoFillLoading(false);
+      setAutoFillError(autoFillRun.error || "Could not auto-fill. Please try again.");
+      return;
+    }
+    const result = autoFillRun?.result;
+    if (!autoFillRun || autoFillRun.status !== "succeeded" || appliedRunRef.current === autoFillRun.key || !result) return;
+    appliedRunRef.current = autoFillRun.key;
+    if (result.formData && typeof result.formData === "object") setFormData((prev) => {
+      const next = { ...prev };
+      for (const [k, v] of Object.entries(result.formData as Record<string, unknown>)) {
+        if (typeof v === "string" && v.trim()) next[k] = v;
+        else if (Array.isArray(v) && v.length > 0) next[k] = v as string[];
+      }
+      return next;
+    });
+    if (result.duals && typeof result.duals === "object") setDuals((prev) => ({ ...prev, ...result.duals }));
+    if (result.dualLists && typeof result.dualLists === "object") setDualLists((prev) => ({ ...prev, ...result.dualLists }));
+    if (result.stringLists && typeof result.stringLists === "object") setStringLists((prev) => ({ ...prev, ...result.stringLists }));
+    if (result.spokespeople && Array.isArray(result.spokespeople)) setSpokespeople((prev) => prev.length ? prev : result.spokespeople);
+    if (result.products && Array.isArray(result.products)) setProducts((prev) => prev.length ? prev : result.products);
+    if (result.productQueries && Array.isArray(result.productQueries)) setProductQueries((prev) => prev.length ? prev : result.productQueries);
+    setAutoFillNotice("Set-up fields drafted from your website. Please review and edit before saving.");
+    setAutoFillLoading(false);
+    discardAiRun(autoFillRun.key);
+  }, [autoFillRun]);
+  useEffect(() => {
+    if (draftRun?.status === "failed") {
+      setAiLoadingField(null);
+      setAiError(draftRun.error || "Could not draft this answer. Please try again.");
+      return;
+    }
+    const result = draftRun?.result;
+    if (!draftRun || draftRun.status !== "succeeded" || appliedRunRef.current === draftRun.key || !result) return;
+    appliedRunRef.current = draftRun.key;
+    const fieldId = draftRun.input.fieldId;
+    if (fieldId === "1.1" && typeof result.draft === "string") updateField("1.1", result.draft);
+    else if (fieldId === "1.2" && result.draft) {
+      setDual("1.2", "short", result.draft.short || "");
+      setDual("1.2", "long", result.draft.long || "");
+    }
+    setAiNotice("Drafted from your website. Please review and edit before saving.");
+    setAiLoadingField(null);
+    discardAiRun(draftRun.key);
+  }, [draftRun]);
 
   // CategoryPicker is a modal rather than a popover: put focus in its search
   // field when it opens, keep keyboard focus inside it, and return focus to
@@ -1160,9 +1220,13 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
       setAiError("Add your company website above first, then I can draft this for you.");
       return;
     }
-    const _aiDraftStart = Date.now();
+    const draftKey = aiRunKey(runScope, "intake-field-draft", fieldId);
+    if (getAiRun(draftKey)?.status === "running") return;
     setAiLoadingField(fieldId);
-    try {
+    startAiRun({
+      key: draftKey, scope: runScope, operation: "intake-field-draft", subjectId: fieldId,
+      input: { url, fieldId }, estimateSeconds: getAuditDurationSeconds("draft"),
+      execute: async () => {
       const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
       const resp = await fetch(`${apiBase}/api/ai-assist/draft-field`, {
         method: "POST",
@@ -1175,24 +1239,10 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
         throw new Error(data.error || `HTTP ${resp.status}`);
       }
       const data = await resp.json();
-      if (data.notFound) {
-        setAiNotice("I could not find enough on your website to answer this one confidently. Worth filling it in yourself.");
-        return;
-      }
-      if (fieldId === "1.1" && typeof data.draft === "string") {
-        updateField("1.1", data.draft);
-        setAiNotice("Drafted from your website. Please review and edit before saving.");
-      } else if (fieldId === "1.2" && data.draft) {
-        setDual("1.2", "short", data.draft.short || "");
-        setDual("1.2", "long", data.draft.long || "");
-        setAiNotice("Drafted from your website. Please review and edit before saving.");
-      }
-      recordAuditDuration("draft", Date.now() - _aiDraftStart, getAuditDurationSeconds("draft") * 1000);
-    } catch (err: any) {
-      setAiError(err.message || "Could not draft this answer. Please try again.");
-    } finally {
-      setAiLoadingField(null);
-    }
+      if (data.notFound) throw new Error("I could not find enough on your website to answer this one confidently. Worth filling it in yourself.");
+      return data;
+      },
+    });
   };
 
   const handleAutoFill = async () => {
@@ -1209,20 +1259,25 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
     setAutoFillError("");
     setAutoFillNotice("");
     setAutoFillLoading(true);
-    try {
+    const input = { url, companyName: ((formData["4.1"] as string) || "") || undefined };
+    if (getAiRun(autoFillKey)?.status === "running") return;
+    startAiRun({
+      key: autoFillKey, scope: runScope, operation: "intake-auto-fill", input,
+      estimateSeconds: getAuditDurationSeconds("intake-auto-fill"),
+      execute: async () => {
       const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
-      const companyName = (formData["4.1"] as string) || "";
       const resp = await fetch(`${apiBase}/api/ai-assist/generate-intake`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ url, companyName: companyName || undefined }),
+        body: JSON.stringify(input),
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({ error: "Could not auto-fill. Please try again." }));
         throw new Error(data.error || `HTTP ${resp.status}`);
       }
-      const data = await resp.json();
+      return await resp.json();
+      /*
       if (data.formData && typeof data.formData === "object") {
         setFormData((prev) => {
           const next = { ...prev };
@@ -1284,12 +1339,13 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
       if (Array.isArray(data.productQueries) && data.productQueries.length > 0) {
         setProductQueries(data.productQueries as ProductQuery[]);
       }
-      setAutoFillNotice("All fields filled from your website. Please review each answer before saving.");
-    } catch (err: unknown) {
-      setAutoFillError((err instanceof Error ? err.message : null) || "Could not auto-fill. Please try again.");
-    } finally {
-      setAutoFillLoading(false);
-    }
+      */
+      },
+      onSuccess: (_result, run) => {
+        setAutoFillLoading(false);
+        recordAuditDuration("intake-auto-fill", Date.now() - run.startedAt, run.estimateSeconds * 1000);
+      },
+    });
   };
 
   const AiAssistButton = ({ fieldId }: { fieldId: string }) => {
@@ -2023,15 +2079,18 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                {aiNotice && <p role="status" aria-live="polite" className="text-[12px] font-medium mt-2" style={{ color: "#1F748F" }}>{aiNotice}</p>}
               <div className="mt-3">
                 <CountdownBanner
-                  active={autoFillLoading}
-                  durationSeconds={90}
+                   active={autoFillLoading || autoFillActive}
+                  durationSeconds={autoFillRun?.estimateSeconds ?? getAuditDurationSeconds("intake-auto-fill")}
+                   startedAt={autoFillRun?.startedAt}
                   label="Filling all fields from your website"
+                  sampleCount={getAuditSampleCount("intake-auto-fill")}
                 />
               </div>
               <div className="mt-2">
                 <CountdownBanner
-                  active={aiLoadingField !== null}
+                   active={aiLoadingField !== null || draftActive}
                   durationSeconds={getAuditDurationSeconds("draft")}
+                   startedAt={draftRun?.startedAt}
                   label="Drafting from your website"
                   sampleCount={getAuditSampleCount("draft")}
                 />

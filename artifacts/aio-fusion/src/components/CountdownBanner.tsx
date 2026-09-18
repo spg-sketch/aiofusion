@@ -4,6 +4,7 @@ import { Clock } from "lucide-react";
 interface CountdownBannerProps {
   active: boolean;
   durationSeconds: number;
+  startedAt?: number;
   label?: string;
   sampleCount?: number;
 }
@@ -17,11 +18,20 @@ function formatMmSs(seconds: number): string {
 export default function CountdownBanner({
   active,
   durationSeconds,
+  startedAt,
   label = "Your report is being prepared",
   sampleCount,
 }: CountdownBannerProps) {
-  const [remaining, setRemaining] = useState(durationSeconds);
-  const [overtime, setOvertime] = useState(0);
+  const deriveTime = () => {
+    const elapsed = startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0;
+    return {
+      remaining: Math.max(0, durationSeconds - elapsed),
+      overtime: Math.max(0, elapsed - durationSeconds),
+    };
+  };
+  const initial = deriveTime();
+  const [remaining, setRemaining] = useState(initial.remaining);
+  const [overtime, setOvertime] = useState(initial.overtime);
   const [announcement, setAnnouncement] = useState("");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -34,24 +44,20 @@ export default function CountdownBanner({
       return;
     }
 
-    setRemaining(durationSeconds);
-    setOvertime(0);
+    const update = () => {
+      const elapsed = Math.max(0, Math.floor((Date.now() - (startedAt || Date.now())) / 1000));
+      setRemaining(Math.max(0, durationSeconds - elapsed));
+      setOvertime(Math.max(0, elapsed - durationSeconds));
+    };
+    update();
     setAnnouncement(`${label} started.`);
 
-    intervalRef.current = setInterval(() => {
-      setRemaining((prev) => {
-        if (prev > 0) {
-          return prev - 1;
-        }
-        setOvertime((o) => o + 1);
-        return 0;
-      });
-    }, 1000);
+    intervalRef.current = setInterval(update, 1000);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [active, durationSeconds, label]);
+  }, [active, durationSeconds, label, startedAt]);
 
   const finished = remaining === 0;
 
@@ -86,10 +92,10 @@ export default function CountdownBanner({
         {finished ? (
           <>
             <p className="text-[13px] font-semibold" style={{ color: "#0a1628" }}>
-              Still working - almost there…
+              Still working - the estimate has passed
             </p>
             <p className="text-[11px] mt-0.5 font-light" style={{ color: "#475569" }}>
-              You can switch tabs but please keep this tab open.
+              You can navigate within AIO Fusion, but please keep this browser tab open.
             </p>
           </>
         ) : (
@@ -101,7 +107,7 @@ export default function CountdownBanner({
               </span>
             </p>
             <p className="text-[11px] mt-0.5 font-light" style={{ color: "#475569" }}>
-              You can switch tabs but please keep this tab open.
+              You can navigate within AIO Fusion, but please keep this browser tab open.
               {basisNote && (
                 <span style={{ color: "#64748b" }}>{" "}· {basisNote}</span>
               )}

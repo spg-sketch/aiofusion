@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { syncTechGeoForProject, pushServerTechGeo, deleteServerTechGeo } from "./lib/auditSync";
 import { getWebsite } from "./IntakeForm";
 import { downloadWordDocument } from "./lib/apiHelpers";
 import InfoTip from "./InfoTip";
 import CountdownBanner from "./components/CountdownBanner";
 import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "./lib/auditTiming";
+import { getSession } from "./lib/auth";
+import { aiRunKey, startAiRun, useAiRun } from "./lib/aiRunLifecycle";
 import {
   Globe,
   Search,
@@ -243,11 +245,17 @@ export default function SeoAuditPage({
   activeClient,
   pendingTechGeoId,
   onConsumePendingTechGeo,
+  sessionId,
+  workspaceId,
 }: {
   activeClient: Client;
   pendingTechGeoId?: string | null;
   onConsumePendingTechGeo?: () => void;
+  sessionId?: string;
+  workspaceId?: string;
 }) {
+  const activeProjectRef = useRef(activeClient.id);
+  activeProjectRef.current = activeClient.id;
   const [url, setUrl] = useState<string>(getWebsite);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -255,18 +263,46 @@ export default function SeoAuditPage({
   const [result, setResult] = useState<AuditResult | null>(null);
   const [savedTechGeo, setSavedTechGeo] = useState<SavedTechGeo[]>(() => loadSavedTechGeo(activeClient.id));
   const [justSaved, setJustSaved] = useState(false);
+  const session = getSession();
+  const runScope = {
+    sessionId: sessionId || session?.username || "anonymous",
+    workspaceId: workspaceId || sessionId || session?.companyName || session?.userEmail || session?.username || "default",
+    projectId: activeClient.id,
+  };
+  const runKey = aiRunKey(runScope, "website", "audit");
+  const lifecycleRun = useAiRun<Record<string, string>, AuditResult>(runKey);
+  const loadingFromLifecycle = lifecycleRun?.status === "running";
+  const runEstimate = lifecycleRun?.estimateSeconds ?? getAuditDurationSeconds("website");
+  const runStartedAt = lifecycleRun?.startedAt;
 
   useEffect(() => {
+    if (!lifecycleRun) {
+      setLoading(false);
+      return;
+    }
+    setLoading(lifecycleRun.status === "running");
+    if (lifecycleRun.status === "succeeded") {
+      setResult(lifecycleRun.result ?? null);
+      setError("");
+      setAuditAnnouncement(lifecycleRun.result ? `Website audit complete. Overall score ${lifecycleRun.result.scores.overall} out of 100.` : "");
+    } else if (lifecycleRun.status === "failed") {
+      setError(lifecycleRun.error || "Failed to run audit");
+      setAuditAnnouncement("");
+    }
+  }, [lifecycleRun]);
+
+  useEffect(() => {
+    const projectId = activeClient.id;
     setSavedTechGeo(loadSavedTechGeo(activeClient.id));
-    setResult(null);
+    setResult(lifecycleRun?.status === "succeeded" ? lifecycleRun.result ?? null : null);
     setUrl(getWebsite());
-    setError("");
-    setAuditAnnouncement("");
-    setLoading(false);
+    setError(lifecycleRun?.status === "failed" ? lifecycleRun.error || "Failed to run audit" : "");
+    setAuditAnnouncement(lifecycleRun?.status === "succeeded" ? `Website audit complete. Overall score ${lifecycleRun.result?.scores.overall ?? 0} out of 100.` : "");
+    setLoading(lifecycleRun?.status === "running");
     setJustSaved(false);
     // Sync Tech GEO history from server so all logins see the same scores.
     void syncTechGeoForProject(activeClient.id).then((merged) => {
-      setSavedTechGeo(merged as SavedTechGeo[]);
+      if (activeProjectRef.current === projectId) setSavedTechGeo(merged as SavedTechGeo[]);
     });
   }, [activeClient.id]);
 
@@ -422,14 +458,20 @@ export default function SeoAuditPage({
       setAuditAnnouncement("");
       return;
     }
-    setLoading(true);
+    if (loadingFromLifecycle) return;
     setError("");
     setAuditAnnouncement(`Website audit started for ${trimmedUrl}. Audit in progress.`);
     setResult(null);
     setJustSaved(false);
-    const _auditStart = Date.now();
-
-    try {
+    const projectId = activeClient.id;
+    startAiRun({
+      key: runKey,
+      scope: { ...runScope },
+      operation: "website",
+      subjectId: "audit",
+      input: { url: trimmedUrl },
+      estimateSeconds: getAuditDurationSeconds("website"),
+      execute: async () => {
       const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
       const resp = await fetch(`${apiBase}/api/seo-audit`, {
         method: "POST",
@@ -443,19 +485,33 @@ export default function SeoAuditPage({
         throw new Error(data.error || `HTTP ${resp.status}`);
       }
 
-      const data = await resp.json();
-      setResult(data);
-      saveAudit(data);
-      setAuditAnnouncement(`Website audit complete. Overall score ${data.scores.overall} out of 100.`);
-      recordAuditDuration("website", Date.now() - _auditStart, getAuditDurationSeconds("website") * 1000);
-    } catch (err: any) {
-      const message = err.message || "Failed to run audit";
-      setError(message);
-      // The assertive error region is the single announcement for failures.
-      setAuditAnnouncement("");
-    } finally {
-      setLoading(false);
-    }
+      return await resp.json() as AuditResult;
+      },
+      onSuccess: async (data, run) => {
+        const existing = loadSavedTechGeo(projectId);
+        let next = existing;
+        if (!existing.some((item) => item.result.url === data.url && item.result.fetchedAt === data.fetchedAt)) {
+          const entry: SavedTechGeo = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            savedAt: new Date().toISOString(),
+            score: data.scores.overall,
+            result: data,
+          };
+          next = [entry, ...existing];
+          if (persistSavedTechGeo(projectId, next)) {
+            await pushServerTechGeo(projectId, entry as Parameters<typeof pushServerTechGeo>[1]).catch(() => null);
+            window.dispatchEvent(new Event("aio:saved-audits-changed"));
+          }
+        }
+        if (activeProjectRef.current === projectId) {
+          setResult(data);
+          setSavedTechGeo(next);
+          setJustSaved(true);
+          setAuditAnnouncement(`Website audit complete. Overall score ${data.scores.overall} out of 100.`);
+        }
+        recordAuditDuration("website", (run.completedAt || Date.now()) - run.startedAt, run.estimateSeconds * 1000);
+      },
+    });
   }
 
   return (
@@ -562,8 +618,9 @@ export default function SeoAuditPage({
         )}
         <div aria-hidden="true">
           <CountdownBanner
-            active={loading}
-            durationSeconds={getAuditDurationSeconds("website")}
+            active={loadingFromLifecycle}
+            durationSeconds={runEstimate}
+            startedAt={runStartedAt}
             label="Website audit running"
             sampleCount={getAuditSampleCount("website")}
           />

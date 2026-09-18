@@ -125,20 +125,23 @@ export function GenerationProgress({
   accent = vars.accent,
   compact = false,
   textColor,
+  startedAt,
 }: {
   stages: string[];
   chars: number;
   accent?: string;
   compact?: boolean;
   textColor?: string;
+  startedAt?: number;
 }) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
-    const start = Date.now();
-    setElapsed(0);
-    const id = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 250);
+    const start = startedAt || Date.now();
+    const update = () => setElapsed(Math.max(0, Math.floor((Date.now() - start) / 1000)));
+    update();
+    const id = setInterval(update, 250);
     return () => clearInterval(id);
-  }, []);
+  }, [startedAt]);
   const stageIdx = Math.min(stages.length - 1, Math.floor(elapsed / 6));
   const stage = stages[stageIdx] || stages[stages.length - 1] || "Working…";
   const tint = `${accent}14`;
@@ -146,8 +149,7 @@ export function GenerationProgress({
     <div
       className={`rounded-lg border ${compact ? "px-3 py-2" : "p-4"}`}
       style={{ borderColor: `${accent}40`, background: tint }}
-      role="status"
-      aria-live="polite"
+      role="group"
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
@@ -165,7 +167,7 @@ export function GenerationProgress({
       </div>
       {!compact && (
         <p className="text-[10.5px] font-light mt-2" style={{ color: vars.g500 }}>
-          Generating with AI - this can take up to a couple of minutes for longer pieces. You can keep this tab open.
+          Generating with AI. You can navigate within AIO Fusion, but please keep this browser tab open.
         </p>
       )}
     </div>

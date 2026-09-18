@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { Zap, AlertTriangle, Info, Loader2 } from "lucide-react";
 import CountdownBanner from "./CountdownBanner";
 import type { GenerateStep } from "../types";
+import { aiRunKey, getAiRun, startAiRun, useAiRun, type AiRunScope } from "../lib/aiRunLifecycle";
+import { getAuditDurationSeconds, recordAuditDuration } from "../lib/auditTiming";
 
 const GENERATE_FROM_URL_TIMEOUT_MS = 130_000;
 
@@ -20,10 +22,15 @@ const accentSoft = "#FBE3ED";
 export function GenerateFromUrlModal({
   onCancel,
   onComplete,
+  scope,
 }: {
   onCancel: () => void;
   onComplete: (projectId: string, projectName: string) => void;
+  scope?: AiRunScope;
 }) {
+  const effectiveScope = scope || { sessionId: "anonymous", workspaceId: "default", projectId: "new" };
+  const runKey = aiRunKey(effectiveScope, "website-project-generation");
+  const persistedRun = useAiRun<{ url: string; companyName?: string }, { projectId: string; projectName: string }>(runKey);
   const [url, setUrl] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [step, setStep] = useState<GenerateStep>("idle");
@@ -37,6 +44,23 @@ export function GenerateFromUrlModal({
   const firstFocusRef = useRef<HTMLInputElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const runningRef = useRef(false);
+  const completedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (persistedRun?.status === "running") {
+      setUrl(persistedRun.input.url);
+      setCompanyName(persistedRun.input.companyName || "");
+      setStep("generating");
+      setStepLabel("Generating project");
+      setElapsed(Math.max(0, Math.floor((Date.now() - persistedRun.startedAt) / 1000)));
+    } else if (persistedRun?.status === "succeeded" && persistedRun.result && completedRef.current !== persistedRun.key) {
+      completedRef.current = persistedRun.key;
+      setStep("done");
+      onComplete(persistedRun.result.projectId, persistedRun.result.projectName);
+    } else if (persistedRun?.status === "failed") {
+      setStep("error");
+      setErrorMsg(persistedRun.error || "Something went wrong. Please try again.");
+    }
+  }, [persistedRun, onComplete]);
 
   const isRunning = step !== "idle" && step !== "done" && step !== "error";
   const canSubmit = url.trim().length > 0 && !isRunning;
@@ -81,8 +105,8 @@ export function GenerateFromUrlModal({
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   }
 
-  async function handleGenerate() {
-    if (!canSubmit) return;
+  async function performGenerate(): Promise<{ projectId: string; projectName: string }> {
+    if (!canSubmit) throw new Error("Enter a website URL first.");
     setErrorMsg(null);
     setStep("scraping");
     setStepLabel("Scraping site");
@@ -156,7 +180,7 @@ export function GenerateFromUrlModal({
 
       if (!resultProjectId) throw new Error("The project was not created. Please try again.");
       stopTimer();
-      onComplete(resultProjectId, resultProjectName!);
+      return { projectId: resultProjectId, projectName: resultProjectName! };
     } catch (err: unknown) {
       stopTimer();
       const message = err instanceof DOMException && err.name === "AbortError"
@@ -165,9 +189,24 @@ export function GenerateFromUrlModal({
       setErrorMsg(message);
       setAnnouncement(`Generation error: ${message}`);
       setStep("error");
+      throw new Error(message);
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  function handleGenerate() {
+    if (getAiRun(runKey)?.status === "running") return;
+    const input = { url: url.trim(), companyName: companyName.trim() || undefined };
+    startAiRun({
+      key: runKey, scope: effectiveScope, operation: "website-project-generation",
+      input,
+      estimateSeconds: getAuditDurationSeconds("website-project"),
+      execute: () => performGenerate(),
+      onSuccess: (_result, run) => {
+        recordAuditDuration("website-project", Date.now() - run.startedAt, run.estimateSeconds * 1000);
+      },
+    });
   }
 
   const stepIdx = GENERATE_STEPS.findIndex((s) =>
@@ -263,7 +302,12 @@ export function GenerateFromUrlModal({
             </div>
           </div>
           <div className="mt-3">
-            <CountdownBanner active={isRunning} durationSeconds={90} label="Generating your project from the website" />
+            <CountdownBanner
+              active={isRunning}
+              durationSeconds={persistedRun?.estimateSeconds ?? getAuditDurationSeconds("website-project")}
+              startedAt={persistedRun?.startedAt}
+              label="Generating your project from the website"
+            />
           </div>
           </>
         )}

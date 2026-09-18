@@ -8,6 +8,7 @@ import { getExactTargetPhrases } from "./lib/exactTargetPhrases";
 import { AuditQueryCoverage, auditQueryCoverageHtml } from "./components/AuditQueryCoverage";
 import { syncAuditsForProject, pushServerAudit, deleteServerAudit } from "./lib/auditSync";
 import { getSession } from "./lib/auth";
+import { aiRunKey, discardAiRun, startAiRun, useAiRun, type AiRun } from "./lib/aiRunLifecycle";
 import {
   Eye,
   Search,
@@ -680,11 +681,17 @@ function NarrativeSignalsCard({ signals, companyName }: { signals: { gpt: string
   );
 }
 
-export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId, onConsumePending }: { activeClient: Client; onNavigate?: (p: string) => void; pendingAuditId?: string | null; onConsumePending?: () => void }) {
+export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId, onConsumePending, sessionId, workspaceId }: {
+  activeClient: Client;
+  onNavigate?: (p: string) => void;
+  pendingAuditId?: string | null;
+  onConsumePending?: () => void;
+  sessionId?: string;
+  workspaceId?: string;
+}) {
   const activeProjectRef = useRef(activeClient.id);
   activeProjectRef.current = activeClient.id;
   const generationRequestRef = useRef(0);
-  const auditRequestRef = useRef(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [probeProgress, setProbeProgress] = useState<{ done: number; total: number } | null>(null);
@@ -751,10 +758,8 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   const auditSectors = combinedSectors.filter((s) => selectedSectors.includes(s)).slice(0, 3);
   // LLM search queries (1.6) and competitors (4.8) most directly shape the
   // audit, so they are editable here.
-  // This canonical list is the single source of truth for the displayed count,
-  // request phrases and legacy projectData question strings. It ignores blanks,
-  // de-duplicates harmless variants within a group, and deliberately preserves
-  // the same wording in different buyer-journey groups as distinct targets.
+  // Keep the displayed count, request phrases and legacy project-data questions
+  // aligned. Canonicalisation removes blank/duplicate variants within a group.
   const targetPhrases = getExactTargetPhrases(llmQueries);
   const buyerQuestions = targetPhrases.map((phrase) => phrase.text);
   const targetPhraseCount = targetPhrases.length;
@@ -785,6 +790,42 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   const [confirmedEntity, setConfirmedEntityState] = useState<ConfirmedEntity>(() => getConfirmedEntity());
   // Whether the confirmation control is open for editing (re-opened by "Change").
   const [editingIdentity, setEditingIdentity] = useState(false);
+  const session = getSession();
+  const runScope = {
+    sessionId: sessionId || session?.username || "anonymous",
+    workspaceId: workspaceId || sessionId || session?.companyName || session?.userEmail || session?.username || "default",
+    projectId: activeClient.id,
+  };
+  const runKey = aiRunKey(runScope, "visibility", "audit");
+  const lifecycleRun = useAiRun<Record<string, unknown>, LlmCheckResult>(runKey);
+  const loadingFromLifecycle = lifecycleRun?.status === "running";
+  const runEstimate = lifecycleRun?.estimateSeconds ?? getAuditDurationSeconds("visibility");
+  const runStartedAt = lifecycleRun?.startedAt;
+
+  // Authenticated App renders provide stable identity props and retain runs
+  // across route unmounts. Isolated page renders use anonymous fallback scope,
+  // so discard that test/story state when the standalone component unmounts.
+  useEffect(() => {
+    if (sessionId || workspaceId) return;
+    return () => discardAiRun(runKey);
+  }, [runKey, sessionId, workspaceId]);
+
+  useEffect(() => {
+    generationRequestRef.current += 1;
+    setLlmQueriesGenerating(false);
+    if (!lifecycleRun) {
+      setLoading(false);
+      return;
+    }
+    setLoading(lifecycleRun.status === "running");
+    if (lifecycleRun.status === "succeeded") {
+      setResult(lifecycleRun.result ?? null);
+      setResultIsFromSaved(false);
+      setError("");
+    } else if (lifecycleRun.status === "failed") {
+      setError(lifecycleRun.error || "Failed to run visibility check");
+    }
+  }, [lifecycleRun]);
 
   function saveConfirmedEntity(entity: ConfirmedEntity) {
     setConfirmedEntity(entity);
@@ -798,15 +839,10 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   }, [setupIncomplete]);
 
   useEffect(() => {
-    generationRequestRef.current += 1;
-    auditRequestRef.current += 1;
-    setLlmQueriesGenerating(false);
-    setLoading(false);
-    setProbeProgress(null);
     setCycleData(loadCycle(activeClient.id));
     setSavedAudits(loadSavedAudits(activeClient.id));
-    setResult(null);
-    setError("");
+    setResult(lifecycleRun?.status === "succeeded" ? lifecycleRun.result ?? null : null);
+    setError(lifecycleRun?.status === "failed" ? lifecycleRun.error || "Failed to run visibility check" : "");
     setJustSaved(false);
     setResultIsFromSaved(false);
     setConfirmedEntityState(getConfirmedEntity());
@@ -825,15 +861,12 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   // Fetch audit lock status for this project whenever the active client changes.
   useEffect(() => {
     if (!activeClient.id) return;
-    const projectId = activeClient.id;
     const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
-    fetch(`${apiBase}/api/audit-lock?projectId=${encodeURIComponent(projectId)}&auditType=visibility`, {
+    fetch(`${apiBase}/api/audit-lock?projectId=${encodeURIComponent(activeClient.id)}&auditType=visibility`, {
       credentials: "include",
     })
       .then((r) => r.json())
-      .then((d) => {
-        if (activeProjectRef.current === projectId) setAuditLock(d);
-      })
+      .then((d) => setAuditLock(d))
       .catch(() => { /* non-blocking */ });
   }, [activeClient.id]);
 
@@ -958,19 +991,12 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         : `You have ${targetPhraseCount} queries. Remove ${targetPhraseCount - targetPhraseLimit} to run the audit (maximum ${targetPhraseLimit}).`);
       return;
     }
-    const projectId = activeClient.id;
-    const requestId = ++auditRequestRef.current;
-    const isCurrentRequest = () =>
-      activeProjectRef.current === projectId && auditRequestRef.current === requestId;
-    setLoading(true);
+    if (loadingFromLifecycle) return;
     setError("");
     setResult(null);
     setJustSaved(false);
-    const _auditStart = Date.now();
     setProbeProgress(null);
-
-    try {
-      const keywords = customKeywords
+    const keywords = customKeywords
         .split(",")
         .map((k) => k.trim())
         .filter(Boolean);
@@ -980,9 +1006,18 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       const projectData = getProjectAuthorityData();
       projectData.buyerQuestions = buyerQuestions;
       projectData.competitors = competitors;
-
-      const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
-      const resp = await fetch(`${apiBase}/api/llm-check`, {
+    const projectId = activeClient.id;
+    const capturedScope = { ...runScope };
+    startAiRun({
+      key: runKey,
+      scope: capturedScope,
+      operation: "visibility",
+      subjectId: "audit",
+      input: { companyName: probeName, keywords, force },
+      estimateSeconds: getAuditDurationSeconds("visibility"),
+      execute: async (progress) => {
+        const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
+        const resp = await fetch(`${apiBase}/api/llm-check`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -1052,7 +1087,8 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           if (event === "progress") {
             const done = typeof parsed.done === "number" ? parsed.done : 0;
             const total = typeof parsed.total === "number" ? parsed.total : 0;
-            if (isCurrentRequest()) setProbeProgress({ done, total });
+            if (activeProjectRef.current === projectId) setProbeProgress({ done, total });
+            progress(total > 0 ? (done / total) * 100 : 0);
           } else if (event === "result") {
             finalData = parsed as unknown as LlmCheckResult;
           } else if (event === "error") {
@@ -1063,30 +1099,42 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
 
       if (sseError) throw new Error(sseError);
       if (!finalData) throw new Error("The audit ended before it finished. Please try again.");
-      if (!isCurrentRequest()) return;
 
-      setResult(finalData);
-      setResultIsFromSaved(false);
-      const updated = recordCycle(projectId, authorityIndexFor(finalData));
-      setCycleData(updated);
-      saveAuditToHistory(finalData);
-      recordAuditDuration("visibility", Date.now() - _auditStart, getAuditDurationSeconds("visibility") * 1000);
-      // Refresh audit lock so the UI reflects the new last-run date immediately.
-      const apiBase2 = import.meta.env.DEV ? `https://${window.location.host}` : "";
-      fetch(`${apiBase2}/api/audit-lock?projectId=${encodeURIComponent(projectId)}&auditType=visibility`, { credentials: "include" })
-        .then((r) => r.json())
-        .then((lock) => {
-          if (isCurrentRequest()) setAuditLock(lock);
-        })
-        .catch(() => {});
-    } catch (err: any) {
-      if (isCurrentRequest()) setError(err.message || "Failed to run visibility check");
-    } finally {
-      if (isCurrentRequest()) {
-        setLoading(false);
-        setProbeProgress(null);
-      }
-    }
+      return finalData;
+      },
+      onSuccess: async (finalData, run) => {
+        const updated = recordCycle(projectId, authorityIndexFor(finalData));
+        const existing = loadSavedAudits(projectId);
+        let next = existing;
+        if (!existing.some((audit) => audit.result.checkedAt === finalData.checkedAt)) {
+          const entry: SavedAudit = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            savedAt: new Date().toISOString(),
+            result: finalData,
+          };
+          next = [entry, ...existing];
+          if (persistSavedAudits(projectId, next)) {
+            await pushServerAudit(projectId, entry).catch(() => null);
+            window.dispatchEvent(new Event("aio:saved-audits-changed"));
+          }
+        }
+        if (activeProjectRef.current === projectId) {
+          setResult(finalData);
+          setResultIsFromSaved(false);
+          setCycleData(updated);
+          setSavedAudits(next);
+          setJustSaved(true);
+        }
+        recordAuditDuration("visibility", (run.completedAt || Date.now()) - run.startedAt, run.estimateSeconds * 1000);
+        const apiBase2 = import.meta.env.DEV ? `https://${window.location.host}` : "";
+        fetch(`${apiBase2}/api/audit-lock?projectId=${encodeURIComponent(projectId)}&auditType=visibility`, { credentials: "include" })
+          .then((r) => r.json())
+          .then((lock) => {
+            if (activeProjectRef.current === projectId) setAuditLock(lock);
+          })
+          .catch(() => {});
+      },
+    });
   }
 
   function openReport() {
@@ -1142,7 +1190,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
 
     const topComp = result.topCompetitors[0];
     const execSummary =
-      `${escapeHtml(result.companyName)} appeared in <strong>${appearedCount}</strong> of <strong>${totalQueries}</strong> ${result.phraseMeasurements?.length ? "answered probe queries (including the identity probe)" : "non-branded category queries"} across ChatGPT and Claude (${presencePct}% presence). ` +
+      `${escapeHtml(result.companyName)} appeared in <strong>${appearedCount}</strong> of <strong>${totalQueries}</strong> non-branded category queries across ChatGPT and Claude (${presencePct}% presence). ` +
       (result.topCompetitors.length > 0
         ? `When ${escapeHtml(result.companyName)} was absent, the engines recommended rivals instead${topComp ? `, most often <strong>${escapeHtml(topComp.name)}</strong> (in ${topComp.mentions} of ${result.totalProbes} answers)` : ""}. `
         : `No single rival was recommended often enough to dominate, so there is open space to claim the category. `) +
@@ -1934,8 +1982,9 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             )}
             <div className="mt-4">
               <CountdownBanner
-                active={loading}
-                durationSeconds={getAuditDurationSeconds("visibility")}
+                active={loadingFromLifecycle}
+                durationSeconds={runEstimate}
+                startedAt={runStartedAt}
                 label="Your visibility report is being prepared"
                 sampleCount={getAuditSampleCount("visibility")}
               />

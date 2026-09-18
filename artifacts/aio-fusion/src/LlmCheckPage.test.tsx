@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import LlmCheckPage, { loadSavedAudits, type SavedAudit } from "./LlmCheckPage";
+import { clearAiRuns } from "./lib/aiRunLifecycle";
 
 const CLIENT = { id: "client-1", name: "Acme Ltd", sector: "Consulting" };
 
@@ -171,6 +172,7 @@ function seedSavedAudit(result: object): SavedAudit {
 
 describe("LlmCheckPage saved-audit backward compatibility", () => {
   beforeEach(() => {
+    clearAiRuns();
     localStorage.clear();
   });
 
@@ -178,6 +180,7 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
     cleanup();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    clearAiRuns();
   });
 
   it("loadSavedAudits returns persisted audits and tolerates corrupt storage", () => {
@@ -712,6 +715,7 @@ function supportingResponse(url: string): Response {
 
 describe("LlmCheckPage canonical per-run query input", () => {
   beforeEach(() => {
+    clearAiRuns();
     localStorage.clear();
   });
 
@@ -719,6 +723,7 @@ describe("LlmCheckPage canonical per-run query input", () => {
     cleanup();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    clearAiRuns();
   });
 
   it("runs the current grouped edits, not stale saved setup, in both request fields", async () => {
@@ -821,10 +826,10 @@ describe("LlmCheckPage canonical per-run query input", () => {
       return supportingResponse(url);
     }));
 
-    const view = render(<LlmCheckPage activeClient={CLIENT} />);
+    const view = render(<LlmCheckPage activeClient={CLIENT} sessionId="person" workspaceId="workspace" />);
     fireEvent.click(screen.getByRole("button", { name: /Refine what we probe/i }));
     fireEvent.click(screen.getByRole("button", { name: "Regenerate queries" }));
-    view.rerender(<LlmCheckPage activeClient={second} />);
+    view.rerender(<LlmCheckPage activeClient={second} sessionId="person" workspaceId="workspace" />);
     await screen.findByDisplayValue("Client two query");
 
     resolveGeneration({
@@ -861,10 +866,10 @@ describe("LlmCheckPage canonical per-run query input", () => {
       return supportingResponse(url);
     }));
 
-    const view = render(<LlmCheckPage activeClient={CLIENT} />);
+    const view = render(<LlmCheckPage activeClient={CLIENT} sessionId="person" workspaceId="workspace" />);
     fireEvent.click(screen.getByRole("button", { name: "Run Visibility Audit" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
-    view.rerender(<LlmCheckPage activeClient={second} />);
+    view.rerender(<LlmCheckPage activeClient={second} sessionId="person" workspaceId="workspace" />);
     await screen.findByDisplayValue("Beta Ltd");
 
     resolveRead({
@@ -876,5 +881,6 @@ describe("LlmCheckPage canonical per-run query input", () => {
       expect(screen.getByRole("button", { name: "Run Visibility Audit" })).toBeEnabled();
     });
     expect(JSON.parse(localStorage.getItem(`aio.savedAudits.${second.id}`) || "[]")).toEqual([]);
+    expect(JSON.parse(localStorage.getItem(`aio.savedAudits.${CLIENT.id}`) || "[]")).toHaveLength(1);
   });
 });
