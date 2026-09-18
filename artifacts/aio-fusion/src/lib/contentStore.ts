@@ -150,6 +150,19 @@ export function useContentStore(): number {
   return version;
 }
 
+export function resetContentStore(): void {
+  _archiveCache = null;
+  _plannerCache = null;
+  _scoringCache = null;
+  _pendingArchivePlannerSyncIds.clear();
+  _contentStoreState = {
+    status: "loading",
+    mutationPending: false,
+    mutationError: null,
+  };
+  notifyContentStore();
+}
+
 // Load all content for this session from the server. Fires
 // `aio:content-store-changed` when done so all subscribed components refresh.
 export async function initContentStore(options: { signal?: AbortSignal } = {}): Promise<void> {
@@ -157,12 +170,7 @@ export async function initContentStore(options: { signal?: AbortSignal } = {}): 
   if (signal?.aborted) return;
   // Always reset caches before fetching so that switching accounts on the
   // same browser never leaks one account's data into another's view.
-  _archiveCache = null;
-  _plannerCache = null;
-  _scoringCache = null;
-  _pendingArchivePlannerSyncIds.clear();
-  _contentStoreState = { ..._contentStoreState, status: "loading", mutationError: null };
-  notifyContentStore();
+  resetContentStore();
   try {
     const [archRes, planRes, cfgRes] = await Promise.all([
       fetch(`${apiBase()}/api/store/archive`,       { credentials: "include", signal }),

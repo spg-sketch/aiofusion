@@ -13,7 +13,7 @@ const router: IRouter = Router();
 router.use("/store/projects/:id", memberProjectGate);
 router.use("/store/projects/:id", (req, res, next) => {
   if (req.account && !inAssignedScope(req, String(req.params.id ?? ""))) {
-    res.status(403).json({ error: "Forbidden" });
+    res.status(404).json({ error: "Project not found" });
     return;
   }
   next();
@@ -30,11 +30,11 @@ function canSee(owner: string | null | undefined, visible: string[] | null): boo
 
 async function getProjectOwner(projectId: string): Promise<string | null | undefined> {
   const rows = await db
-    .select({ owner: projectsTable.owner })
+    .select({ owner: projectsTable.owner, deletedAt: projectsTable.deletedAt })
     .from(projectsTable)
     .where(eq(projectsTable.id, projectId))
     .limit(1);
-  return rows[0]?.owner;
+  return rows[0] && !rows[0].deletedAt ? rows[0].owner : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -57,11 +57,11 @@ router.get(
       const visible = await visibleOwners(req);
       const projectOwner = await getProjectOwner(projectId);
       if (projectOwner === undefined) {
-        res.json({ audits: [] });
+        res.status(404).json({ error: "Project not found" });
         return;
       }
       if (!canSee(projectOwner, visible)) {
-        res.status(403).json({ error: "Forbidden" });
+        res.status(404).json({ error: "Project not found" });
         return;
       }
       const rows = await db
@@ -105,7 +105,7 @@ router.post(
         return;
       }
       if (!canSee(projectOwner, visible)) {
-        res.status(403).json({ error: "Forbidden" });
+        res.status(404).json({ error: "Project not found" });
         return;
       }
       const owner = normUsername(req.account!.username);
@@ -150,11 +150,11 @@ router.delete(
       const visible = await visibleOwners(req);
       const projectOwner = await getProjectOwner(projectId);
       if (projectOwner === undefined) {
-        res.json({ ok: true });
+        res.status(404).json({ error: "Project not found" });
         return;
       }
       if (!canSee(projectOwner, visible)) {
-        res.status(403).json({ error: "Forbidden" });
+        res.status(404).json({ error: "Project not found" });
         return;
       }
       await db
@@ -193,11 +193,11 @@ router.get(
       const visible = await visibleOwners(req);
       const projectOwner = await getProjectOwner(projectId);
       if (projectOwner === undefined) {
-        res.json({ diagnostics: [] });
+        res.status(404).json({ error: "Project not found" });
         return;
       }
       if (!canSee(projectOwner, visible)) {
-        res.status(403).json({ error: "Forbidden" });
+        res.status(404).json({ error: "Project not found" });
         return;
       }
       const rows = await db
@@ -241,7 +241,7 @@ router.post(
         return;
       }
       if (!canSee(projectOwner, visible)) {
-        res.status(403).json({ error: "Forbidden" });
+        res.status(404).json({ error: "Project not found" });
         return;
       }
       const owner = normUsername(req.account!.username);
@@ -285,11 +285,11 @@ router.delete(
       const visible = await visibleOwners(req);
       const projectOwner = await getProjectOwner(projectId);
       if (projectOwner === undefined) {
-        res.json({ ok: true });
+        res.status(404).json({ error: "Project not found" });
         return;
       }
       if (!canSee(projectOwner, visible)) {
-        res.status(403).json({ error: "Forbidden" });
+        res.status(404).json({ error: "Project not found" });
         return;
       }
       await db
@@ -329,8 +329,8 @@ function makeGeoRoutes(
       if (!projectId) { res.status(400).json({ error: "Missing project id" }); return; }
       const visible = await visibleOwners(req);
       const projectOwner = await getProjectOwner(projectId);
-      if (projectOwner === undefined) { res.json({ [listKey]: [] }); return; }
-      if (!canSee(projectOwner, visible)) { res.status(403).json({ error: "Forbidden" }); return; }
+      if (projectOwner === undefined) { res.status(404).json({ error: "Project not found" }); return; }
+      if (!canSee(projectOwner, visible)) { res.status(404).json({ error: "Project not found" }); return; }
       const rows = await db
         .select()
         .from(table)
@@ -353,7 +353,7 @@ function makeGeoRoutes(
       const visible = await visibleOwners(req);
       const projectOwner = await getProjectOwner(projectId);
       if (projectOwner === undefined) { res.status(404).json({ error: "Project not found" }); return; }
-      if (!canSee(projectOwner, visible)) { res.status(403).json({ error: "Forbidden" }); return; }
+      if (!canSee(projectOwner, visible)) { res.status(404).json({ error: "Project not found" }); return; }
       const owner = normUsername(req.account!.username);
       await db
         .insert(table)
@@ -370,8 +370,8 @@ function makeGeoRoutes(
       if (!projectId || !entryId) { res.status(400).json({ error: "Missing id" }); return; }
       const visible = await visibleOwners(req);
       const projectOwner = await getProjectOwner(projectId);
-      if (projectOwner === undefined) { res.json({ ok: true }); return; }
-      if (!canSee(projectOwner, visible)) { res.status(403).json({ error: "Forbidden" }); return; }
+      if (projectOwner === undefined) { res.status(404).json({ error: "Project not found" }); return; }
+      if (!canSee(projectOwner, visible)) { res.status(404).json({ error: "Project not found" }); return; }
       await db.update(table).set({ deletedAt: new Date() })
         .where(and(eq(table.id, entryId), eq(table.projectId, projectId)));
       res.json({ ok: true });

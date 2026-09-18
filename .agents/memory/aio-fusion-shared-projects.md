@@ -180,16 +180,17 @@ GET /api/store/projects returns the `owner` column; client hydration (projectSyn
 
 ## Human-reviewed ownership reconciliation
 Project ownership reconciliation must finish an authoritative server project pull
-and managed-account refresh before enabling transfers. Browser-only projects must
-persist both metadata and cached Set-Up; partial recovery stays durably pending in
-that browser and is retried on later audits. Never infer a target owner from names.
-**Why:** a stale browser can omit projects or managed clients created elsewhere,
-and metadata can save while Set-Up fails. Treating either state as reconciled can
-move an incomplete project or present a misleading review list.
+and managed-account refresh before enabling transfers. Never upload an unmatched
+browser-only project: legacy cache entries have no trustworthy account/workspace
+identity, so they can only be reported and removed from the active cache. Never
+infer a target owner from names.
+**Why:** after logout/login or a workspace switch, an old browser cache can belong
+to another account. Recovering its unmatched rows into the current session leaks
+and recreates inaccessible projects.
 **How to apply:** keep transfer controls disabled after any audit/account-refresh
-failure; hydrate the review list from server rows; require explicit project and
-target selection plus confirmation; retain pending recovery until every cached
-piece saves.
+failure; hydrate the review list only from server rows; require explicit project
+and target selection plus confirmation. Any future recovery flow must first bind
+the source data to a verified workspace identity.
 
 ## Master account project removal
 Treat inherited projects beneath Master Admin as projects, not evidence that

@@ -29,9 +29,12 @@ function makeResponse(body: unknown, status = 200) {
 
 const unauthorizedBody = { error: "unauthorized" };
 
+let activeWorkspace = "myagency";
+let visibleProjects: unknown[] = [];
+
 function agencyMeResponse() {
   return makeResponse({
-    account: { username: "myagency", role: "agency" },
+    account: { username: activeWorkspace, role: "agency" },
     impersonating: null,
     setupComplete: true,
     hasPassword: true,
@@ -82,6 +85,8 @@ beforeEach(() => {
   Element.prototype.scrollTo = () => {};
 
   includeNewClient = false;
+  activeWorkspace = "myagency";
+  visibleProjects = [];
 
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     const urlStr = String(url);
@@ -91,7 +96,7 @@ beforeEach(() => {
     // Empty-but-successful project pull so resyncProjects does not take the
     // "unauthorized" branch and re-bootstrap the session.
     if (urlStr.includes("/api/store/projects") && method === "GET") {
-      return makeResponse({ projects: [], deletedIds: [] });
+      return makeResponse({ projects: visibleProjects, deletedIds: [] });
     }
     return makeResponse(unauthorizedBody, 401);
   }));
@@ -201,5 +206,42 @@ describe("project hub excludes managed clients without projects", () => {
       expect(screen.queryByRole("button", { name: /^Start project$/i })).not.toBeInTheDocument();
       expect(screen.getByText(/No projects yet/i)).toBeInTheDocument();
     }, { timeout: 15000 });
+  }, 30000);
+
+  it("clears an open project when another tab changes the authenticated workspace", async () => {
+    visibleProjects = [{
+      id: "account-a-project",
+      name: "Account A Private",
+      owner: "myagency",
+      logo: null,
+      updatedAt: null,
+      data: {
+        id: "account-a-project",
+        name: "Account A Private",
+        owner: "myagency",
+        initials: "AA",
+        color: "#123456",
+      },
+    }];
+    window.history.replaceState({}, "", "/project-hub");
+    const { default: App } = await import("./App");
+    render(<App />);
+
+    const card = await screen.findByRole("button", { name: /Account A Private/i });
+    await act(async () => { card.click(); });
+    expect(await screen.findByText("Account A Private")).toBeInTheDocument();
+
+    // Simulate another tab replacing the shared session cookie with Account B.
+    activeWorkspace = "account-b";
+    visibleProjects = [];
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Account A Private")).not.toBeInTheDocument();
+      expect(screen.getByText(/No projects yet/i)).toBeInTheDocument();
+    });
+    expect(localStorage.getItem("aio.activeProjectId")).toBeNull();
   }, 30000);
 });

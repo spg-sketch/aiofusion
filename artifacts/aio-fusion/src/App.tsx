@@ -1,6 +1,6 @@
 import { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages, setActiveProjectId, getActiveProjectId, getConfirmedEntity, getLlmSearchQueries, getCompetitors } from "./IntakeForm";
 import CountdownBanner from "./components/CountdownBanner";
-import { syncProjectsOnLoad, syncIntakeForProject, pushProjectMeta, deleteRemoteProject, setKnownProjectIds, assertActiveProjectConsistency } from "./lib/projectSync";
+import { syncProjectsOnLoad, syncIntakeForProject, pushProjectMeta, deleteRemoteProject, setKnownProjectIds, assertActiveProjectConsistency, isKnownProjectId } from "./lib/projectSync";
 import { fetchProjectAllowance, shouldBlockProjectCreation, shouldRouteProjectCreationToManagedClients, type PackageCapacity } from "./lib/billingAllowance";
 import { stripEmDashes, normaliseAddedData } from "./lib/utils";
 import { apiBase } from "./lib/contentAi";
@@ -134,7 +134,7 @@ import {
   assignProjectOwner, migrateAssignOwnerlessToAdmin,
   migrateStoredIntakeKeys,
 } from "./lib/projects";
-import { initContentStore, migrateLocalStorageContentToServer, removeDemoSeedData, loadArchive, loadPlannerProjects, useContentStore, saveArchive } from "./lib/contentStore";
+import { initContentStore, migrateLocalStorageContentToServer, removeDemoSeedData, loadArchive, loadPlannerProjects, useContentStore, saveArchive, resetContentStore } from "./lib/contentStore";
 import { MiniDonut } from "./pages/shared";
 import { loadSavedDiagnostics, loadSavedScored, contentGeoKey, techGeoKey } from "./lib/diagnosticStore";
 import { CreateProjectModal } from "./components/CreateProjectModal";
@@ -482,6 +482,8 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const projectRefreshRef = useRef<{ signal: AbortSignal; promise: Promise<void> } | null>(null);
   const [activeClient, setActiveClient] = useState<Client | null>(null);
+  const activeClientRef = useRef<Client | null>(null);
+  activeClientRef.current = activeClient;
   const [currentPage, setCurrentPage] = useState("dashboard");
   // Lazy route chunks can take a moment on their first visit. Navigation is a
   // transition so React keeps the current page visible until the destination
@@ -605,6 +607,18 @@ function App() {
       return projectRefreshRef.current.promise;
     }
     const refresh = (async () => {
+      // The session cookie can change in another tab without producing a 401.
+      // Verify the active workspace identity before accepting any project list
+      // returned under that cookie.
+      const authority = await bootstrapAuth({ signal });
+      if (signal.aborted || generation !== authRequestGeneration.current) return;
+      const expected = confirmedSessionRef.current;
+      if (!authority.session || !expected
+        || authority.session.username !== expected.username
+        || authority.session.role !== expected.role) {
+        refreshAuthoritativeSession.current();
+        return;
+      }
       const [result] = await Promise.all([syncProjectsOnLoad({ signal }), refreshAccountsCache(signal)]);
       if (signal.aborted || generation !== authRequestGeneration.current) return;
       if (result === "unauthorized") {
@@ -630,6 +644,17 @@ function App() {
         const ids = merged.map((p) => p.id);
         setKnownProjectIds(ids);
         assertActiveProjectConsistency(ids);
+        if (activeClientRef.current && !ids.includes(activeClientRef.current.id)) {
+          resetContentStore();
+          setActiveProjectId(null);
+          setActiveClient(null);
+          setPendingAuditId(null);
+          setPendingDiagnosticId(null);
+          setPendingContentGeoId(null);
+          setPendingTechGeoId(null);
+          setCurrentPage("dashboard");
+          transitionToView("platform");
+        }
       }
     })();
     projectRefreshRef.current = { signal, promise: refresh };
@@ -642,7 +667,10 @@ function App() {
 
   useEffect(() => {
     migrateLegacyIntakeToProject();
-    setStoredProjects(loadStoredProjects());
+    // Never render project metadata from a previous browser session before the
+    // authenticated server has supplied this workspace's authorized list.
+    setStoredProjects([]);
+    setKnownProjectIds([]);
     // Reconcile the session with the server (the real authority) before any
     // protected destination becomes reachable. Cache migration/account refresh
     // happens only in the normal post-authority project sync.
@@ -982,6 +1010,12 @@ function App() {
     clearCachedSession();
     confirmedSessionRef.current = null;
     setSessionState(null);
+    setStoredProjects([]);
+    setClientLogos({});
+    setKnownProjectIds([]);
+    setActiveProjectId(null);
+    setActiveClient(null);
+    resetContentStore();
     setNeedsSetup(false);
     setHasPassword(undefined);
     setAccountProfile(null);
@@ -1610,6 +1644,11 @@ function App() {
     void serverLogout();
     clearCachedSession();
     setSessionState(null);
+    setStoredProjects([]);
+    setClientLogos({});
+    setKnownProjectIds([]);
+    setActiveProjectId(null);
+    resetContentStore();
     setAuthLoading(false);
     confirmedSessionRef.current = null;
     authLoadingRef.current = false;
@@ -1969,6 +2008,14 @@ function App() {
           </div>
         ) : undefined}
         onSelectClient={async (client) => {
+          // Cards can outlive a background refresh for one render. Validate at
+          // the final boundary before any project-scoped intake request.
+          if (!isKnownProjectId(client.id) || !visibleProjects.some((project) => project.id === client.id)) {
+            setActiveProjectId(null);
+            setActiveClient(null);
+            await resyncProjects();
+            return;
+          }
           setActiveProjectId(client.id);
           // Pull this project's latest Set-Up from the shared store before
           // opening it, so a colleague's saved work shows here too.

@@ -222,18 +222,19 @@ router.get(
           intake: projectsTable.intake,
           owner: projectsTable.owner,
           updatedAt: projectsTable.updatedAt,
+          deletedAt: projectsTable.deletedAt,
         })
         .from(projectsTable)
         .where(eq(projectsTable.id, id))
         .limit(1);
       const row = rows[0];
-      if (!row) {
-        res.json({ intake: null, updatedAt: null });
+      if (!row || row.deletedAt) {
+        res.status(404).json({ error: "Project not found." });
         return;
       }
       const visible = await visibleOwners(req);
       if (!canSee(row.owner, visible)) {
-        res.status(404).json({ error: "Not found" });
+        res.status(404).json({ error: "Project not found." });
         return;
       }
       res.json({ intake: row.intake ?? null, updatedAt: row.updatedAt ?? null });

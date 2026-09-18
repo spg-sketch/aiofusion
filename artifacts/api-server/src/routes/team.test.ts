@@ -1478,10 +1478,10 @@ describe("team invitations", () => {
     expect((await api("/api/store/archive/arch-sp-2", { sid: cSid, method: "PUT", body: { title: "hack" } })).status).toBe(403);
     expect((await api("/api/store/archive/arch-sp-2", { sid: cSid, method: "DELETE" })).status).toBe(403);
 
-    // Audits: assigned project readable, unassigned forbidden.
+    // Audits: assigned project readable; unassigned is indistinguishable from missing.
     expect((await api("/api/store/projects/sp-1/audits", { sid: cSid })).status).toBe(200);
-    expect((await api("/api/store/projects/sp-2/audits", { sid: cSid })).status).toBe(403);
-    expect((await api("/api/store/projects/sp-2/audits", { sid: cSid, body: { audit: { id: "z", savedAt: "s", result: {} } } })).status).toBe(403);
+    expect((await api("/api/store/projects/sp-2/audits", { sid: cSid })).status).toBe(404);
+    expect((await api("/api/store/projects/sp-2/audits", { sid: cSid, body: { audit: { id: "z", savedAt: "s", result: {} } } })).status).toBe(404);
 
     // Viewer: reads allowed, writes forbidden across surfaces.
     const vInv = await api("/api/platform/team/invite", { sid, body: { email: "v@surface.test", role: "viewer" } });
@@ -1490,6 +1490,14 @@ describe("team invitations", () => {
     expect((await api("/api/store/archive", { sid: vSid })).status).toBe(200);
     expect((await api("/api/store/archive", { sid: vSid, body: { id: "v1", projectId: "sp-1", title: "no" } })).status).toBe(403);
     expect((await api("/api/store/projects/sp-1/audits", { sid: vSid, body: { audit: { id: "v2", savedAt: "s", result: {} } } })).status).toBe(403);
+
+    // Missing, deleted and unassigned project IDs all use the same non-revealing
+    // response on project-scoped reads.
+    expect((await api("/api/store/projects/missing/audits", { sid: cSid })).status).toBe(404);
+    expect((await api("/api/store/projects/sp-2/intake", { sid: cSid })).status).toBe(404);
+    await db.update(projectsTable).set({ deletedAt: new Date() }).where(eq(projectsTable.id, "sp-1"));
+    expect((await api("/api/store/projects/sp-1/audits", { sid: cSid })).status).toBe(404);
+    expect((await api("/api/store/projects/sp-1/intake", { sid: cSid })).status).toBe(404);
 
     // Billing: blocked from all project-data surfaces.
     const bInv = await api("/api/platform/team/invite", { sid, body: { email: "bb@surface.test", role: "billing" } });

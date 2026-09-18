@@ -3,10 +3,9 @@
 //
 // Projects, their Set-Up (intake) answers and logos used to live only in the
 // browser's localStorage, so the same login on a different device (or a
-// colleague on the same login) never saw the same projects. This module mirrors
-// that data to the shared server store so one login sees everything everywhere,
-// while keeping localStorage as a fast local cache and never losing projects
-// that only exist locally yet (they get pushed up on the next sync).
+// colleague on the same login) never saw the same projects. The authenticated
+// server list is now authoritative. localStorage remains a synchronous cache,
+// but it may only contain projects returned for the current server session.
 //
 // The UI still reads localStorage synchronously. This module's job is to keep
 // localStorage and the server in step: pull on load, push on change.
@@ -17,7 +16,6 @@ const LOGOS_KEY = "aio.clientLogos.v1";
 // Per-project timestamp of the last intake save/pull on THIS device, used to
 // decide whether the server copy or the local copy is newer.
 const INTAKE_TIMES_KEY = "aio.intake.updatedAt.v1";
-const RECOVERY_PENDING_KEY = "aio.projectRecovery.pending.v1";
 
 const ACTIVE_PROJECT_KEY = "aio.activeProjectId";
 
@@ -29,20 +27,25 @@ const ACTIVE_PROJECT_KEY = "aio.activeProjectId";
 // user. Updated via setKnownProjectIds after every project sync so that the
 // check inside setActiveProjectId always compares against the latest list.
 let _knownProjectIds: Set<string> = new Set();
+let _knownProjectIdsLoaded = false;
 
 // Register the set of project IDs that are valid for the current user. Call
 // this after every project sync (syncProjectsOnLoad) so the integrity check
 // inside setActiveProjectId stays current.
 export function setKnownProjectIds(ids: string[]): void {
   _knownProjectIds = new Set(ids);
+  _knownProjectIdsLoaded = true;
+}
+
+export function isKnownProjectId(id: string): boolean {
+  return _knownProjectIdsLoaded && _knownProjectIds.has(id);
 }
 
 // Pure utility: reads aio.activeProjectId from localStorage and clears it with
 // a console warning when the stored ID is not in projectIds. A missing ID (no
-// value stored) is a no-op - nothing to validate. An empty projectIds list is
-// treated as "not yet loaded" and is also a no-op.
+// value stored) is a no-op. This function is called only with an authoritative
+// server list, so an empty list clears any stale pointer too.
 export function assertActiveProjectConsistency(projectIds: string[]): void {
-  if (projectIds.length === 0) return;
   const ids = new Set(projectIds);
   let stored: string | null = null;
   try {
@@ -67,6 +70,7 @@ export function assertActiveProjectConsistency(projectIds: string[]): void {
 // the consistency check against the module-level cache so the caller does not
 // need to pass the list explicitly on every switch.
 export function assertActiveProjectConsistencyFromCache(): void {
+  if (!_knownProjectIdsLoaded) return;
   assertActiveProjectConsistency([..._knownProjectIds]);
 }
 
@@ -268,10 +272,9 @@ export async function pushProjectMeta(
   }
 }
 
-// Compare this browser's cache with the active server records and explicitly
-// recover anything that only exists here. This is used by the human-reviewed
-// assignment screen: it reports every browser-only record and whether it was
-// safely persisted before an owner can be changed.
+// Compare this browser's cache with the active server records. Legacy browser
+// records are not account-bound, so unmatched entries can be reported but must
+// never be uploaded into whichever account happens to be signed in now.
 export async function auditAndRecoverLocalProjects(): Promise<
   ProjectReconciliationAudit | null | "unauthorized"
 > {
@@ -294,13 +297,11 @@ async function recoverLocalProjects(invalidatedIds: Set<string>): Promise<
   const deletedIds = new Set(server.deletedIds);
   const localProjects = readJson<StoredProject[]>(PROJECTS_KEY, []);
   const localLogos = readJson<Record<string, string>>(LOGOS_KEY, {});
-  const pendingRecovery = readJson<Record<string, boolean>>(RECOVERY_PENDING_KEY, {});
   const localOnly: ProjectReconciliationAudit["localOnly"] = [];
 
   for (const project of localProjects) {
     if (!project || typeof project.id !== "string") continue;
-    const alreadyOnServer = activeIds.has(project.id);
-    if (alreadyOnServer && !pendingRecovery[project.id]) continue;
+    if (activeIds.has(project.id)) continue;
     if (deletedIds.has(project.id)) {
       localOnly.push({
         id: project.id,
@@ -310,45 +311,17 @@ async function recoverLocalProjects(invalidatedIds: Set<string>): Promise<
       });
       continue;
     }
-    // Mark the record before the first recovery write. If metadata succeeds but
-    // Set-Up does not, this durable browser marker makes the next audit retry
-    // instead of mistaking the newly-created server row for a complete recovery.
-    pendingRecovery[project.id] = true;
-    writeJson(RECOVERY_PENDING_KEY, pendingRecovery);
-    const result = alreadyOnServer
-      ? { ok: true }
-      : await pushProjectMeta(project, localLogos[project.id] ?? null);
-    let intakeRecovered = true;
-    if (result.ok) {
-      ensureDefaultIntakeMigrated();
-      const cachedIntake = readJson<unknown>(intakeKey(project.id), null);
-      intakeRecovered = await pushIntake(
-        project.id,
-        cachedIntake,
-        typeof project.name === "string" ? project.name : "",
-      );
-    }
     localOnly.push({
       id: project.id,
       name: pickName(typeof project.name === "string" ? project.name : ""),
-      recovered: result.ok && intakeRecovered,
-      ...(result.error
-        ? { error: result.error }
-        : !intakeRecovered
-          ? { error: "the project record was recovered, but its cached Set-Up could not be saved" }
-          : {}),
+      recovered: false,
+      error: "browser-only project cannot be safely assigned to the current account",
     });
-    if (result.ok && intakeRecovered) {
-      delete pendingRecovery[project.id];
-      writeJson(RECOVERY_PENDING_KEY, pendingRecovery);
-    }
-    if (result.ok) activeIds.add(project.id);
   }
 
   // Hydrate the browser cache from the authoritative server snapshot before the
-  // review UI is enabled. This makes projects created on another device appear
-  // in the assignment list, while retaining newly recovered local records that
-  // were not part of the original GET response.
+  // review UI is enabled. Projects created on another device appear, while
+  // unmatched browser records are discarded rather than assigned implicitly.
   const serverById = new Map(server.projects.map((project) => [project.id, project]));
   const merged: StoredProject[] = [];
   const mergedLogos: Record<string, string> = {};
@@ -356,8 +329,8 @@ async function recoverLocalProjects(invalidatedIds: Set<string>): Promise<
   for (const localProject of localProjects) {
     if (!localProject || typeof localProject.id !== "string" || deletedIds.has(localProject.id)) continue;
     const serverProject = serverById.get(localProject.id);
-    seen.add(localProject.id);
     if (serverProject) {
+      seen.add(localProject.id);
       merged.push({
         ...localProject,
         ...hydrateServerProject(
@@ -367,9 +340,6 @@ async function recoverLocalProjects(invalidatedIds: Set<string>): Promise<
       });
       const logo = serverProject.logo ?? localLogos[localProject.id];
       if (logo) mergedLogos[localProject.id] = logo;
-    } else {
-      merged.push(localProject);
-      if (localLogos[localProject.id]) mergedLogos[localProject.id] = localLogos[localProject.id];
     }
   }
   for (const serverProject of server.projects) {
@@ -520,15 +490,13 @@ export async function syncProjectsOnLoad(options: { signal?: AbortSignal } = {})
       if (repairRecord || (!sp.logo && localLogos[lp.id])) {
         void pushProjectMeta(hydrated, sp.logo ?? localLogos[lp.id] ?? null, { signal: options.signal });
       }
-    } else {
-      // Local only: keep it and push it up so other devices get it.
-      merged.push(lp);
-      if (localLogos[lp.id]) mergedLogos[lp.id] = localLogos[lp.id];
-      void pushProjectMeta(lp, localLogos[lp.id], { signal: options.signal });
     }
   }
 
   // Then any project that exists only on the server (created elsewhere).
+  // A local-only project is deliberately discarded. There is no trustworthy
+  // account identity attached to the legacy browser cache, so uploading it here
+  // could recreate another account's project after logout/login or switching.
   for (const sp of server.projects) {
     if (seen.has(sp.id) || deleted.has(sp.id)) continue;
     merged.push(hydrateServerProject(sp));
