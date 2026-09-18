@@ -115,16 +115,6 @@ afterEach(() => {
 
 // ─── navigation helpers ───────────────────────────────────────────────────────
 
-/** Switch App to view="platform-home" via synthetic popstate. */
-async function navigateToPlatformHome() {
-  const state = { __aioNav: true, view: "platform-home" };
-  await act(async () => {
-    window.history.pushState(state, "", "/");
-    window.dispatchEvent(new PopStateEvent("popstate", { state }));
-    await new Promise((r) => setTimeout(r, 50));
-  });
-}
-
 /**
  * From view="platform-home" (logged-in), click "Project Hub" to enter the
  * platform view, then create a project and open the intake page.
@@ -168,6 +158,9 @@ describe("accountProfile - boot path via bootstrapAuth", () => {
   it("brand client: intake shows brand prefill note", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (String(url).includes("/api/platform/me")) return brandMeResponse();
+      if (String(url).includes("/api/platform/billing/subscription")) {
+        return makeResponse({ projectsUsed: 0, projectAllowance: 1 });
+      }
       if (String(url).includes("/api/store/projects")) {
         return makeResponse({ projects: [], deletedIds: [] });
       }
@@ -344,14 +337,11 @@ describe("accountProfile - logout clears profile (stale-profile regression)", ()
       return makeResponse(unauthorizedBody, 401);
     }));
 
-    window.history.replaceState({}, "", "/");
+    // Use the canonical protected route so App's initial view is deterministic;
+    // a synthetic popstate can race the history-listener effect under full-suite load.
+    window.history.replaceState({}, "", "/platform");
     const { default: App } = await import("./App");
     render(<App />);
-
-    await act(async () => { await new Promise((r) => setTimeout(r, 150)); });
-
-    // Navigate to platform-home where the Sign out button lives (logged-in state).
-    await navigateToPlatformHome();
 
     // Click Sign out → handleSignOut → setAccountProfile(null) + setView("landing").
     const signOutButton = await screen.findByRole("button", { name: /Sign out/i }, { timeout: 6000 });

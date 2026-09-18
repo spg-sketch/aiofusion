@@ -17,3 +17,9 @@ Rendering the whole `App` (not just a page) in jsdom works, but needs:
 **Why:** Asynchronous page warming can make a test render a real component instead of its intended mock, and shared control labels can let that test pass accidentally.
 
 **How to apply:** Disable nonessential background imports in App-level tests and include at least one mock-only sentinel assertion.
+
+**Rule:** Tests that start on an authenticated page should set its canonical URL before rendering rather than navigating through a timed synthetic history event.
+
+**Why:** Under full-suite load, a fixed delay can expire before the history listener is attached. The synthetic event is lost and assertions run against the public page even though authentication succeeded.
+
+**How to apply:** Initialize the desired route before import/render; reserve simulated navigation for tests that actually exercise navigation and wait for an observable ready state first.

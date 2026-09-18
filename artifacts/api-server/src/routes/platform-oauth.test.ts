@@ -162,11 +162,6 @@ vi.mock("@workspace/db", async () => {
       account_id varchar NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     );
-    CREATE TABLE IF NOT EXISTS media_discoveries (
-      id serial PRIMARY KEY,
-      account_id varchar NOT NULL,
-      created_at timestamptz NOT NULL DEFAULT now()
-    );
     CREATE TABLE IF NOT EXISTS media_contact_field_overrides (
       id serial PRIMARY KEY,
       contact_id uuid,
@@ -238,22 +233,6 @@ vi.mock("@workspace/db", async () => {
       account_id varchar NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     );
-    CREATE TABLE IF NOT EXISTS media_discoveries (
-      id serial PRIMARY KEY,
-      account_id varchar NOT NULL,
-      project_id varchar NOT NULL,
-      candidate_key text NOT NULL,
-      status varchar(20) NOT NULL DEFAULT 'pending',
-      candidate jsonb NOT NULL,
-      created_at timestamptz NOT NULL DEFAULT now(),
-      reviewed_at timestamptz,
-      reviewed_by varchar,
-      rejection_reason text,
-      contact_id integer,
-      outlet_id integer
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS media_discoveries_account_project_candidate_unique
-      ON media_discoveries (account_id, project_id, candidate_key);
     CREATE TABLE IF NOT EXISTS saved_audits (
       id varchar PRIMARY KEY,
       project_id varchar NOT NULL,

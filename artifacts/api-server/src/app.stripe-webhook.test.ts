@@ -1,7 +1,13 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import Stripe from "stripe";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  completeStripeWebhookReadinessProbe,
+  getStripeCheckoutReadiness,
+  setStripeCheckoutReadiness,
+  startStripeWebhookReadinessProbe,
+} from "./lib/stripe-readiness";
 
 const webhook = vi.hoisted(() => ({
   handled: vi.fn(),
@@ -72,8 +78,15 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  webhook.handled.mockClear();
-  webhook.mirrored.mockClear();
+  webhook.handled.mockReset();
+  webhook.mirrored.mockReset();
+  vi.stubEnv("DEPLOYMENT_ENV", "staging");
+  setStripeCheckoutReadiness({ available: false, reason: "webhook_secret_mismatch" });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  setStripeCheckoutReadiness({ available: false, reason: "webhook_validation_pending" });
 });
 
 async function sendWebhook(body: string, signature?: string) {
@@ -108,6 +121,7 @@ describe("Stripe raw-body HTTP webhook route", () => {
       expect.objectContaining({ id: "evt_http_valid", type: "customer.subscription.updated" }),
     );
     expect(webhook.mirrored).toHaveBeenCalledWith(Buffer.from(body), signature);
+    expect(getStripeCheckoutReadiness()).toEqual({ available: true });
   });
 
   it("rejects an invalid signature while preserving the malformed body as raw bytes", async () => {
@@ -122,6 +136,7 @@ describe("Stripe raw-body HTTP webhook route", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "Invalid signature" });
     expect(webhook.handled).toHaveBeenCalledTimes(0);
+    expect(getStripeCheckoutReadiness().available).toBe(false);
   });
 
   it("rejects a missing signature before attempting JSON parsing or business handling", async () => {
@@ -130,5 +145,74 @@ describe("Stripe raw-body HTTP webhook route", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "Invalid webhook request" });
     expect(webhook.handled).toHaveBeenCalledTimes(0);
+    expect(getStripeCheckoutReadiness().available).toBe(false);
+  });
+
+  async function deliver(type = "invoice.paid", object: unknown = { id: "in_recovery" }) {
+    const body = JSON.stringify({ id: "evt_recovery", type, data: { object } });
+    return sendWebhook(body, Stripe.webhooks.generateTestHeaderString({
+      payload: body, secret: "whsec_http_route_test",
+    }));
+  }
+
+  it("keeps checkout closed when signed business processing fails, then recovers on retry", async () => {
+    webhook.handled.mockRejectedValueOnce(new Error("business transaction failed"));
+    expect((await deliver()).status).toBe(500);
+    expect(getStripeCheckoutReadiness().available).toBe(false);
+    expect(webhook.mirrored).not.toHaveBeenCalled();
+    expect((await deliver()).status).toBe(200);
+    expect(getStripeCheckoutReadiness().available).toBe(true);
+  });
+
+  it("does not resolve a tagged readiness probe before successful business handling", async () => {
+    const probe = startStripeWebhookReadinessProbe();
+    webhook.handled.mockRejectedValueOnce(new Error("business transaction failed"));
+    try {
+      const object = { metadata: { aio_webhook_readiness_probe: probe.probeId } };
+      expect((await deliver("customer.created", object)).status).toBe(500);
+      probe.cancel();
+      expect(await probe.verified).toBe(false);
+      expect(getStripeCheckoutReadiness().available).toBe(false);
+    } finally {
+      probe.cancel();
+    }
+  });
+
+  it("keeps a missing stripe.accounts mirror fail-soft and restores checkout", async () => {
+    webhook.mirrored.mockRejectedValueOnce(
+      Object.assign(new Error('relation "stripe.accounts" does not exist'), { code: "42P01" }),
+    );
+    expect((await deliver()).status).toBe(200);
+    expect(webhook.handled).toHaveBeenCalledOnce();
+    expect(getStripeCheckoutReadiness().available).toBe(true);
+  });
+
+  it("does not let a late startup timeout overwrite successful staging recovery", async () => {
+    setStripeCheckoutReadiness({ available: false, reason: "webhook_validation_pending" });
+    expect((await deliver()).status).toBe(200);
+    expect(completeStripeWebhookReadinessProbe(false)).toBe(true);
+    expect(getStripeCheckoutReadiness().available).toBe(true);
+  });
+
+  it("leaves checkout unavailable when the startup timeout has no successful delivery", () => {
+    expect(completeStripeWebhookReadinessProbe(false)).toBe(false);
+    expect(getStripeCheckoutReadiness()).toEqual({
+      available: false, reason: "webhook_secret_mismatch",
+    });
+  });
+
+  it("retains production's tagged startup probe requirement", async () => {
+    vi.stubEnv("DEPLOYMENT_ENV", "production");
+    expect((await deliver()).status).toBe(200);
+    expect(getStripeCheckoutReadiness().available).toBe(false);
+    const probe = startStripeWebhookReadinessProbe();
+    try {
+      expect((await deliver("customer.created", {
+        metadata: { aio_webhook_readiness_probe: probe.probeId },
+      })).status).toBe(200);
+      expect(completeStripeWebhookReadinessProbe(await probe.verified)).toBe(true);
+    } finally {
+      probe.cancel();
+    }
   });
 });

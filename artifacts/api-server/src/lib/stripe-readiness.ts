@@ -13,6 +13,17 @@ export function setStripeCheckoutReadiness(readiness: StripeCheckoutReadiness): 
   checkoutReadiness = readiness;
 }
 
+// A timeout (including slow probe-customer cleanup) must not overwrite evidence
+// from a successful delivery that arrived while startup was still awaiting it.
+export function completeStripeWebhookReadinessProbe(verified: boolean): boolean {
+  if (verified || checkoutReadiness.available) {
+    checkoutReadiness = { available: true };
+    return true;
+  }
+  checkoutReadiness = { available: false, reason: "webhook_secret_mismatch" };
+  return false;
+}
+
 export function getStripeCheckoutReadiness(): StripeCheckoutReadiness {
   const deploymentEnv = process.env.DEPLOYMENT_ENV?.toLowerCase().trim();
   if (deploymentEnv !== "staging" && deploymentEnv !== "production") {
@@ -22,6 +33,22 @@ export function getStripeCheckoutReadiness(): StripeCheckoutReadiness {
 }
 
 const pendingProbes = new Map<string, (verified: boolean) => void>();
+
+/**
+ * Call only AFTER verification with the configured endpoint secret AND
+ * successful business handling. The optional Stripe mirror is not authoritative.
+ * Production retains its tagged-probe requirement.
+ */
+export function observeSuccessfulStripeWebhook(event: {
+  type: string;
+  data?: { object?: unknown };
+}): boolean {
+  observeStripeWebhookReadinessProbe(event);
+  if (process.env.DEPLOYMENT_ENV?.toLowerCase().trim() !== "staging") return false;
+  const recovered = !checkoutReadiness.available;
+  checkoutReadiness = { available: true };
+  return recovered;
+}
 
 export function startStripeWebhookReadinessProbe(timeoutMs = 15_000): {
   probeId: string;

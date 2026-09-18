@@ -405,7 +405,10 @@ import {
   createCheckoutSession,
   createProjectCheckoutSession,
 } from "../lib/billing";
-import { setStripeCheckoutReadiness } from "../lib/stripe-readiness";
+import {
+  observeSuccessfulStripeWebhook,
+  setStripeCheckoutReadiness,
+} from "../lib/stripe-readiness";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1510,6 +1513,59 @@ describe("project add-ons", () => {
     expect(params.metadata.tier).toBe("max");
     expect(params.metadata.slug).toBe("addon-buyer");
     expect(params.success_url).toContain("session_id={CHECKOUT_SESSION_ID}");
+  });
+
+  it("recovers staging checkout for an included Premium project after a successful webhook", async () => {
+    const originalDeploymentEnv = process.env.DEPLOYMENT_ENV;
+    process.env.DEPLOYMENT_ENV = "staging";
+    setStripeCheckoutReadiness({
+      available: false,
+      reason: "webhook_validation_pending",
+    });
+
+    try {
+      const { sid } = await seedSubscribed("addon-staging-recovery", "owner@addon-staging-recovery.test");
+      await db.insert(projectsTable).values({
+        id: "staging-included-premium",
+        name: "Included Premium project",
+        data: {},
+        owner: "addon-staging-recovery",
+      });
+      const sessionsBefore = stripeCalls.sessions.length;
+
+      const blocked = await api("/api/platform/billing/project-checkout", {
+        sid,
+        body: { tier: "max", projectId: "staging-included-premium" },
+      });
+      expect(blocked.status).toBe(503);
+      expect(blocked.json.code).toBe("stripe_webhook_unavailable");
+      expect(stripeCalls.sessions).toHaveLength(sessionsBefore);
+
+      expect(observeSuccessfulStripeWebhook({
+        type: "invoice.payment_succeeded",
+        data: { object: { id: "in_staging_recovery" } },
+      })).toBe(true);
+
+      const recovered = await api("/api/platform/billing/project-checkout", {
+        sid,
+        body: { tier: "max", projectId: "staging-included-premium" },
+      });
+      expect(recovered.status).toBe(200);
+      expect(recovered.json.url).toBe("https://checkout.stripe.com/test-session");
+      expect(stripeCalls.sessions).toHaveLength(sessionsBefore + 1);
+      expect(stripeCalls.sessions.at(-1)).toMatchObject({
+        metadata: {
+          kind: "project-addon",
+          slug: "addon-staging-recovery",
+          tier: "max",
+          projectId: "staging-included-premium",
+        },
+      });
+    } finally {
+      if (originalDeploymentEnv === undefined) delete process.env.DEPLOYMENT_ENV;
+      else process.env.DEPLOYMENT_ENV = originalDeploymentEnv;
+      setStripeCheckoutReadiness({ available: true });
+    }
   });
 
   it("reconciles a paid add-on from Stripe metadata and returns the persisted assignment on replay", async () => {

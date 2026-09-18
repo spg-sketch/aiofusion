@@ -67,6 +67,12 @@ vi.mock("./stripe-client", () => ({
 }));
 vi.mock("./stripe-readiness", () => ({
   setStripeCheckoutReadiness: (value: unknown) => calls.readiness.push(value),
+  completeStripeWebhookReadinessProbe: (valid: boolean) => {
+    calls.readiness.push(valid
+      ? { available: true }
+      : { available: false, reason: "webhook_secret_mismatch" });
+    return valid;
+  },
   startStripeWebhookReadinessProbe: () => ({
     probeId: "probe_test",
     verified: Promise.resolve(calls.probeSucceeds),

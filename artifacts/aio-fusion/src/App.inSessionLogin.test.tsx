@@ -157,6 +157,9 @@ describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () =
       // session immediately - that's fine; we're testing the LOGIN path where
       // we're already signed in from bootstrapAuth's perspective too).
       if (urlStr.includes("/api/platform/me")) return brandMeResponse();
+      if (urlStr.includes("/api/platform/billing/subscription")) {
+        return makeResponse({ projectsUsed: 0, projectAllowance: 1 });
+      }
       if (urlStr.includes("/api/store/projects")) return makeResponse({ projects: [], deletedIds: [] });
       return unauth();
     }));
@@ -214,6 +217,9 @@ describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () =
       const urlStr = String(url);
       if (urlStr.includes("/api/platform/me")) {
         return loggedIn ? brandMeResponse() : unauth();
+      }
+      if (urlStr.includes("/api/platform/billing/subscription")) {
+        return makeResponse({ projectsUsed: 0, projectAllowance: 1 });
       }
       if (urlStr.includes("/api/store/projects")) {
         return makeResponse({ projects: [], deletedIds: [] });

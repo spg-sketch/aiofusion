@@ -7,6 +7,7 @@ import {
   stripeConfigured,
 } from "./stripe-client";
 import {
+  completeStripeWebhookReadinessProbe,
   setStripeCheckoutReadiness,
   startStripeWebhookReadinessProbe,
 } from "./stripe-readiness";
@@ -116,12 +117,7 @@ export async function initStripe(): Promise<void> {
 
   if (deploymentEnv === "staging") {
     try {
-      const valid = await configureStagingWebhookUrl();
-      setStripeCheckoutReadiness(
-        valid
-          ? { available: true }
-          : { available: false, reason: "webhook_secret_mismatch" },
-      );
+      const valid = completeStripeWebhookReadinessProbe(await configureStagingWebhookUrl());
       if (!valid) {
         logger.error(
           "stripe-init: BILLING CHECKOUT DISABLED - the staging webhook endpoint and selected signing secret could not be validated",
@@ -155,12 +151,7 @@ export async function initStripe(): Promise<void> {
     );
     logger.info({ url: webhook?.url }, "stripe-init: managed webhook configured");
     const stripe = await getUncachableStripeClient();
-    const valid = await runWebhookReadinessProbe(stripe);
-    setStripeCheckoutReadiness(
-      valid
-        ? { available: true }
-        : { available: false, reason: "webhook_secret_mismatch" },
-    );
+    const valid = completeStripeWebhookReadinessProbe(await runWebhookReadinessProbe(stripe));
     if (!valid) {
       logger.error(
         "stripe-init: BILLING CHECKOUT DISABLED - the production webhook endpoint and selected signing secret do not match",

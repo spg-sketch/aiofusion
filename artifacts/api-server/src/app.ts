@@ -139,10 +139,12 @@ app.post(
         res.status(400).json({ error: "Invalid signature" });
         return;
       }
-      const { observeStripeWebhookReadinessProbe } = await import("./lib/stripe-readiness");
-      observeStripeWebhookReadinessProbe(event);
-
       await handleStripeEvent(event);
+
+      const { observeSuccessfulStripeWebhook } = await import("./lib/stripe-readiness");
+      if (observeSuccessfulStripeWebhook(event)) {
+        logger.info("stripe webhook: staging checkout readiness restored after successful signed delivery");
+      }
 
       // Mirror into the stripe schema tables (fail-soft - business state above
       // is the source of truth for entitlements).
