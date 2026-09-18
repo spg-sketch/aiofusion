@@ -13,14 +13,16 @@ export async function ensurePlannerContentColumns(): Promise<void> {
         ADD COLUMN IF NOT EXISTS pitch text,
         ADD COLUMN IF NOT EXISTS spokesperson_linkedin text,
         ADD COLUMN IF NOT EXISTS target_phrases jsonb,
-        ADD COLUMN IF NOT EXISTS target_phrase_ids jsonb
+        ADD COLUMN IF NOT EXISTS target_phrase_ids jsonb,
+        ADD COLUMN IF NOT EXISTS optimisation_assessment jsonb
     `);
     await db.execute(sql`
       ALTER TABLE archive_items
         ADD COLUMN IF NOT EXISTS pitch text,
         ADD COLUMN IF NOT EXISTS spokesperson_linkedin text,
         ADD COLUMN IF NOT EXISTS target_phrases jsonb,
-        ADD COLUMN IF NOT EXISTS target_phrase_ids jsonb
+        ADD COLUMN IF NOT EXISTS target_phrase_ids jsonb,
+        ADD COLUMN IF NOT EXISTS optimisation_assessment jsonb
     `);
     logger.info("ensurePlannerContentColumns: columns ready");
   } catch (err) {

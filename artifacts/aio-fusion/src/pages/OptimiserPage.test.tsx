@@ -88,6 +88,8 @@ vi.mock("../InfoTip", () => ({ default: () => null }));
 vi.mock("../components/CountdownBanner", () => ({ default: () => null }));
 
 import { OptimiserPage } from "./OptimiserPage";
+import { streamContent } from "../lib/contentAi";
+import { assessArticleOptimisation } from "../lib/articleScoring";
 
 describe("OptimiserPage target phrase round trips", () => {
   beforeEach(() => {
@@ -209,5 +211,59 @@ describe("OptimiserPage target phrase round trips", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Save to Content Library/i }));
     await waitFor(() => expect(window.alert).toHaveBeenCalledWith(expect.stringMatching(/could not be loaded/i)));
     expect(fixtures.savedArchive).toHaveLength(0);
+  });
+});
+
+describe("OptimiserPage article assessment", () => {
+  beforeEach(() => {
+    fixtures.savedArchive = [];
+    window.alert = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/store/media-db/categories")) {
+        return new Response(JSON.stringify({ categories: fixtures.categories }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
+    }));
+    vi.mocked(streamContent).mockResolvedValue({
+      headline: "A clearer clean energy platform headline",
+      standfirst: "A concise summary grounded in measurable project detail.",
+      bodyCopy: "The clean energy platform gives teams a direct answer.\n\nResearch data supports the result because each claim is presented with evidence.\n\nThe structured conclusion explains what the result means.",
+      changeLog: [{ kind: "structure", text: "Added answer-first structure" }],
+    });
+  });
+  afterEach(() => {
+    cleanup();
+    window.localStorage.clear();
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("calculates real scores, explains the percentage-point change and saves the assessment", async () => {
+    window.localStorage.setItem("aio.optimiser.preload", "archive-source");
+    render(<OptimiserPage onNavigate={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /^Optimise$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Run optimisation/i }));
+    expect(await screen.findAllByText("Article quality score", {}, { timeout: 3000 })).toHaveLength(2);
+    expect(screen.getByText(/percentage-point improvement/i)).toBeInTheDocument();
+    expect(screen.getByText("Structure and completeness")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Save to Content Library/i }));
+    await waitFor(() => expect(fixtures.savedArchive).toHaveLength(1));
+    const saved = (fixtures.savedArchive[0] as Array<Record<string, unknown>>)[0];
+    expect(saved.optimisationAssessment).toMatchObject({ version: "article-quality-v1" });
+  });
+
+  it("restores a saved assessment and invalidates it on edit", async () => {
+    const after = { headline: "Archive headline", standfirst: "", bodyCopy: "Archive body" };
+    (fixtures.archive[0] as typeof fixtures.archive[0] & { optimisationAssessment?: unknown }).optimisationAssessment =
+      assessArticleOptimisation(
+        { headline: "Before headline", standfirst: "", bodyCopy: "Before body" }, after,
+        { selectedMessages: [], targetPhrases: [fixtures.phrase.text], projectDetails: [] },
+        [{ kind: "structure", text: "Improved structure" }],
+      );
+    window.localStorage.setItem("aio.optimiser.preload", "archive-source");
+    render(<OptimiserPage onNavigate={vi.fn()} />);
+    expect(await screen.findByText("Structure and completeness")).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText(/Headline of the piece/i), { target: { value: "Edited headline" } });
+    expect(await screen.findByText("Article quality score not available")).toBeInTheDocument();
   });
 });

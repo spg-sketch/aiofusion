@@ -129,7 +129,7 @@ vi.mock("@workspace/db", async () => {
       headline text, standfirst text, body_copy text, action_notes text, pitch text,
       spokesperson_linkedin text, body text,
       selected_messages jsonb, media_cats jsonb,
-      target_phrases jsonb, target_phrase_ids jsonb,
+      target_phrases jsonb, target_phrase_ids jsonb, optimisation_assessment jsonb,
       pub_date varchar, released_at varchar, release_channel varchar, source varchar,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now(),
@@ -201,6 +201,7 @@ vi.mock("@workspace/db", async () => {
       pub_date varchar,
       target_phrases jsonb,
       target_phrase_ids jsonb,
+      optimisation_assessment jsonb,
       created_at   timestamptz NOT NULL DEFAULT now(),
       updated_at   timestamptz NOT NULL DEFAULT now(),
       deleted_at   timestamptz

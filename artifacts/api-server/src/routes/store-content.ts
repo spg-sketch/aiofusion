@@ -40,6 +40,33 @@ const INVALID_SOURCE_ARCHIVE_ERROR =
 const DUPLICATE_SOURCE_ARCHIVE_ERROR =
   "This library item is already linked to an active Comms Planner row.";
 
+function validOptimisationAssessment(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const assessment = value as Record<string, unknown>;
+  const before = assessment.before as Record<string, unknown> | undefined;
+  const after = assessment.after as Record<string, unknown> | undefined;
+  const beforeContent = assessment.beforeContent as Record<string, unknown> | undefined;
+  const validScore = (score: Record<string, unknown> | undefined) =>
+    Boolean(score)
+    && typeof score!.total === "number"
+    && score!.total >= 0
+    && score!.total <= 100
+    && Array.isArray(score!.factors);
+  const validContent = Boolean(beforeContent)
+    && ["headline", "standfirst", "bodyCopy"].every((key) => typeof beforeContent![key] === "string");
+  if (
+    assessment.version !== "article-quality-v1"
+    || !validScore(before)
+    || !validScore(after)
+    || typeof assessment.improvement !== "number"
+    || assessment.improvement !== (after!.total as number) - (before!.total as number)
+    || !validContent
+    || !["beforeFingerprint", "afterFingerprint", "contextFingerprint"].every((key) => typeof assessment[key] === "string")
+    || !Array.isArray(assessment.changeLog)
+  ) return null;
+  return assessment;
+}
+
 async function lockContentProject(
   executor: Pick<typeof db, "execute">,
   projectId: string,
@@ -172,6 +199,7 @@ router.post(
         mediaCats,
         targetPhrases,
         targetPhraseIds,
+        optimisationAssessment,
         pubDate,
         releasedAt,
         releaseChannel,
@@ -216,6 +244,7 @@ router.post(
           mediaCats: Array.isArray(mediaCats) ? mediaCats : null,
           targetPhrases: Array.isArray(targetPhrases) ? targetPhrases : null,
           targetPhraseIds: Array.isArray(targetPhraseIds) ? targetPhraseIds : null,
+          optimisationAssessment: validOptimisationAssessment(optimisationAssessment),
           pubDate: pubDate ?? null,
           releasedAt: releasedAt ?? null,
           releaseChannel: releaseChannel ?? null,
@@ -279,6 +308,7 @@ router.put(
         mediaCats,
         targetPhrases,
         targetPhraseIds,
+        optimisationAssessment,
         pubDate,
         releasedAt,
         releaseChannel,
@@ -306,6 +336,7 @@ router.put(
           mediaCats: Array.isArray(mediaCats) ? mediaCats : null,
           targetPhrases: Array.isArray(targetPhrases) ? targetPhrases : null,
           targetPhraseIds: Array.isArray(targetPhraseIds) ? targetPhraseIds : null,
+          optimisationAssessment: validOptimisationAssessment(optimisationAssessment),
           pubDate: pubDate ?? null,
           releasedAt: releasedAt ?? null,
           releaseChannel: releaseChannel ?? null,
@@ -508,6 +539,7 @@ router.post(
         pubDate,
         targetPhrases,
         targetPhraseIds,
+        optimisationAssessment,
       } = req.body ?? {};
 
       if (!id || typeof id !== "string") {
@@ -581,6 +613,7 @@ router.post(
              pubDate: pubDate ?? null,
              targetPhrases: Array.isArray(targetPhrases) ? targetPhrases : null,
              targetPhraseIds: Array.isArray(targetPhraseIds) ? targetPhraseIds : null,
+             optimisationAssessment: validOptimisationAssessment(optimisationAssessment),
            })
            .onConflictDoNothing()
            .returning();
@@ -657,6 +690,7 @@ router.put(
         pubDate,
         targetPhrases,
         targetPhraseIds,
+        optimisationAssessment,
       } = req.body ?? {};
 
        const linkedArchiveId =
@@ -715,6 +749,7 @@ router.put(
              pubDate: pubDate ?? null,
              targetPhrases: Array.isArray(targetPhrases) ? targetPhrases : null,
              targetPhraseIds: Array.isArray(targetPhraseIds) ? targetPhraseIds : null,
+             optimisationAssessment: validOptimisationAssessment(optimisationAssessment),
            })
            // Atomic ownership-scoped write (TOCTOU guard); see archive PUT.
            .where(

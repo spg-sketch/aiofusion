@@ -3,6 +3,7 @@ import { getActiveProjectId } from "../IntakeForm";
 import { apiBase } from "./contentAi";
 import { stripEmDashes, normaliseAddedData } from "./utils";
 import type { ExactTargetPhrase } from "./exactTargetPhrases";
+import type { ArticleOptimisationAssessment } from "./articleScoring";
 export type ArchiveItem = {
   id: string;
   title: string;
@@ -29,6 +30,7 @@ export type ArchiveItem = {
   targetPhrases?: ExactTargetPhrase[];
   /** Kept separately so older consumers can use IDs without parsing snapshots. */
   targetPhraseIds?: string[];
+  optimisationAssessment?: ArticleOptimisationAssessment;
 };
 
 export function splitArchiveBody(arc: {
@@ -451,6 +453,7 @@ export type PlannerProject = {
   pubDate?: string;
   targetPhrases?: ExactTargetPhrase[];
   targetPhraseIds?: string[];
+  optimisationAssessment?: ArticleOptimisationAssessment;
 };
 
 /**
@@ -462,7 +465,7 @@ export function articleSnapshotForPlanner(item: ArchiveItem): Pick<PlannerProjec
   "sourceArchiveId" | "title" | "contentType" | "spokesperson" | "headline" |
   "standfirst" | "bodyCopy" | "body" | "actionNotes" | "selectedMessages" |
   "mediaCats" | "pubDate" | "targetPhrases" | "targetPhraseIds" | "pitch" |
-  "spokespersonLinkedIn"
+  "spokespersonLinkedIn" | "optimisationAssessment"
 > {
   return {
     sourceArchiveId: item.id,
@@ -483,6 +486,7 @@ export function articleSnapshotForPlanner(item: ArchiveItem): Pick<PlannerProjec
     targetPhraseIds: item.targetPhraseIds
       ? [...item.targetPhraseIds]
       : item.targetPhrases?.map((phrase) => phrase.id),
+    optimisationAssessment: item.optimisationAssessment,
   };
 }
 
@@ -526,6 +530,7 @@ export function archiveItemForPlanner(project: PlannerProject, id: string, creat
     pubDate: project.pubDate ?? project.releaseDate,
     targetPhrases: project.targetPhrases?.map((phrase) => ({ ...phrase })),
     targetPhraseIds: project.targetPhraseIds?.slice(),
+    optimisationAssessment: project.optimisationAssessment,
     createdAt,
     source: "optimiser",
   };

@@ -19,7 +19,7 @@ vi.mock("@workspace/db", async () => {
       spokesperson varchar, status varchar NOT NULL DEFAULT 'Draft', tags jsonb DEFAULT '[]',
       headline text, standfirst text, body_copy text, action_notes text, pitch text,
       spokesperson_linkedin text, body text, selected_messages jsonb,
-      media_cats jsonb, target_phrases jsonb, target_phrase_ids jsonb, pub_date varchar,
+       media_cats jsonb, target_phrases jsonb, target_phrase_ids jsonb, optimisation_assessment jsonb, pub_date varchar,
       released_at varchar, release_channel varchar, source varchar,
       created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
       deleted_at timestamptz
@@ -34,7 +34,7 @@ vi.mock("@workspace/db", async () => {
        headline text, standfirst text, body_copy text, action_notes text, pitch text,
        spokesperson_linkedin text,
        source_archive_id varchar, body text, selected_messages jsonb, media_cats jsonb, pub_date varchar,
-      target_phrases jsonb, target_phrase_ids jsonb,
+       target_phrases jsonb, target_phrase_ids jsonb, optimisation_assessment jsonb,
       created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
       deleted_at timestamptz
     );
@@ -131,11 +131,15 @@ describe("content store project isolation", () => {
       id: "article-canonical", projectId: "workspace-b-project", title: "Precise article",
       contentType: "Article", status: "Draft", tags: ["article"], headline: "Headline",
       standfirst: "Standfirst", bodyCopy: "The complete body.", body: "Headline\n\nStandfirst\n\nThe complete body.",
-      actionNotes: "Coordinate approval", pitch: "A precise news hook",
-      spokespersonLinkedIn: "https://www.linkedin.com/in/example",
-      selectedMessages: ["Exact message"], mediaCats: ["Trade"],
+      actionNotes: "Coordinate approval", selectedMessages: ["Exact message"], mediaCats: ["Trade"],
       pubDate: "2026-06-01", targetPhrases: [{ id: "phrase-1", text: "exact phrase", intentGroup: "discovery" }],
       targetPhraseIds: ["phrase-1"], createdAt: "2026-01-01T00:00:00.000Z",
+      optimisationAssessment: {
+        version: "article-quality-v1", before: { total: 20, factors: [] }, after: { total: 60, factors: [] },
+        improvement: 40, beforeContent: { headline: "Old", standfirst: "", bodyCopy: "Old body" },
+        beforeFingerprint: "before", afterFingerprint: "after", contextFingerprint: "context",
+        changeLog: [{ kind: "structure", text: "Improved structure" }],
+      },
     };
     expect((await request("/store/archive", { method: "POST", body: JSON.stringify(archive) })).status).toBe(200);
     const archiveAfterPost = await request(
@@ -143,12 +147,9 @@ describe("content store project isolation", () => {
       { method: "GET" },
     );
     expect((await archiveAfterPost.json() as {
-      items: Array<{ id: string; actionNotes: string | null; pitch: string | null; spokespersonLinkedIn: string | null }>;
-    }).items.find((item) => item.id === archive.id)).toMatchObject({
-      actionNotes: "Coordinate approval",
-      pitch: "A precise news hook",
-      spokespersonLinkedIn: "https://www.linkedin.com/in/example",
-    });
+      items: Array<{ id: string; actionNotes: string | null }>;
+    }).items.find((item) => item.id === archive.id)?.actionNotes)
+      .toBe("Coordinate approval");
 
     const archiveUpdate = await request("/store/archive/article-canonical", {
       method: "PUT",
@@ -189,9 +190,9 @@ describe("content store project isolation", () => {
       audience: "Trade", channels: ["Website"], week: 23, status: "Drafting", releaseDate: archive.pubDate,
       notes: archive.actionNotes, headline: archive.headline, standfirst: archive.standfirst,
       bodyCopy: archive.bodyCopy, body: archive.body, actionNotes: archive.actionNotes,
-      pitch: archive.pitch, spokespersonLinkedIn: archive.spokespersonLinkedIn,
       selectedMessages: archive.selectedMessages, mediaCats: archive.mediaCats, pubDate: archive.pubDate,
       targetPhrases: archive.targetPhrases, targetPhraseIds: archive.targetPhraseIds,
+      optimisationAssessment: archive.optimisationAssessment,
     };
     expect((await request("/store/planner", { method: "POST", body: JSON.stringify(planner) })).status).toBe(200);
 
@@ -200,9 +201,9 @@ describe("content store project isolation", () => {
     const listedBody = await listed.json() as { items: Array<Record<string, unknown>> };
     expect(listedBody.items[0]).toMatchObject({
       sourceArchiveId: "article-canonical", body: archive.body, bodyCopy: "The complete body.",
-      pitch: "A precise news hook", spokespersonLinkedIn: "https://www.linkedin.com/in/example",
       selectedMessages: ["Exact message"], mediaCats: ["Trade"], pubDate: "2026-06-01",
       targetPhraseIds: ["phrase-1"],
+      optimisationAssessment: archive.optimisationAssessment,
     });
     const deletion = await request("/store/archive/article-canonical", { method: "DELETE" });
     expect(deletion.status).toBe(409);
@@ -347,5 +348,23 @@ describe("content store project isolation", () => {
         title: "Replacement link",
       }),
     })).status).toBe(200);
+  });
+
+  it("does not persist malformed article assessments", async () => {
+    const response = await request("/store/archive", {
+      method: "POST",
+      body: JSON.stringify({
+        id: "invalid-assessment",
+        projectId: "workspace-b-project",
+        title: "Invalid assessment",
+        contentType: "Article",
+        optimisationAssessment: { version: "invented", before: { total: 999 } },
+      }),
+    });
+    expect(response.status).toBe(200);
+    const listed = await request("/store/archive?projectId=workspace-b-project", { method: "GET" });
+    const item = ((await listed.json()) as { items: Array<Record<string, unknown>> }).items
+      .find((candidate) => candidate.id === "invalid-assessment");
+    expect(item?.optimisationAssessment).toBeNull();
   });
 });

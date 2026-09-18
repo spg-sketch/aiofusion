@@ -18,6 +18,7 @@ import {
   type PlannerProject,
   type ScoringConfig,
 } from "./contentStore";
+import { assessArticleOptimisation } from "./articleScoring";
 
 vi.mock("../IntakeForm", () => ({ getActiveProjectId: () => "default" }));
 vi.mock("./contentAi", () => ({ apiBase: () => "" }));
@@ -218,6 +219,12 @@ describe("article workflow snapshots", () => {
     pubDate: "2026-06-01",
     targetPhrases: [{ id: "phrase-1", text: "exact phrase", intentGroup: "discovery" }],
     targetPhraseIds: ["phrase-1"],
+    optimisationAssessment: assessArticleOptimisation(
+      { headline: "Before", standfirst: "", bodyCopy: "Before body" },
+      { headline: "Exact headline", standfirst: "Exact standfirst", bodyCopy: "Exact full body" },
+      { selectedMessages: ["Message one"], targetPhrases: ["exact phrase"], projectDetails: [] },
+      [{ kind: "structure", text: "Improved structure" }],
+    ),
   };
 
   it("copies a complete article snapshot and keeps one planner identity per archive record", () => {
@@ -233,6 +240,7 @@ describe("article workflow snapshots", () => {
       sourceArchiveId: "a1", body: "Body", actionNotes: "Exact action note",
       selectedMessages: ["Message one"], mediaCats: ["Trade press"], pubDate: "2026-06-01",
       targetPhraseIds: ["phrase-1"],
+      optimisationAssessment: completeArticle.optimisationAssessment,
     });
     expect(repeated.id).toBe(first.id);
     expect(repeated.sourceArchiveId).toBe(completeArticle.id);

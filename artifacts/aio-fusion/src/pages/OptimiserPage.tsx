@@ -18,6 +18,14 @@ import InfoTip from "../InfoTip";
 import CountdownBanner from "../components/CountdownBanner";
 import type { RegisterUnsavedEditor, RequestEditorAction } from "../lib/unsavedChanges";
 import { getFreshCategoryDefaults, normaliseCategory, useDatabaseCategories, validDatabaseCategories } from "../lib/databaseCategories";
+import {
+  ARTICLE_SCORING_VERSION,
+  articleFingerprint,
+  assessArticleOptimisation,
+  scoringContextFingerprint,
+  type ArticleContent,
+  type ArticleOptimisationAssessment,
+} from "../lib/articleScoring";
 function OptimiserPage({
   onNavigate,
   registerUnsavedEditor,
@@ -51,7 +59,9 @@ function OptimiserPage({
   const [actionNotes, setActionNotes] = useState("");
   const [editorFontSize, setEditorFontSize] = useState<number>(13);
   const [optimised, setOptimised] = useState(false);
-  const [optimiseSnapshot, setOptimiseSnapshot] = useState<{ articleHeadline: string; standfirst: string; bodyCopy: string } | null>(null);
+  const [optimiseSnapshot, setOptimiseSnapshot] = useState<ArticleContent | null>(null);
+  const [optimisationAssessment, setOptimisationAssessment] = useState<ArticleOptimisationAssessment | null>(null);
+  const assessmentJustCalculatedRef = useRef(false);
   const [changeLog, setChangeLog] = useState<{ kind: "embed" | "structure" | "flag"; text: string }[]>([]);
   const [optimising, setOptimising] = useState(false);
   const [optimiseError, setOptimiseError] = useState("");
@@ -120,6 +130,12 @@ function OptimiserPage({
       const loadedPubDate = article.pubDate || planner.releaseDate || "";
       setPubDate(loadedPubDate);
       setContentStatus(article.status === "Final" ? "Final" : "Draft");
+      const plannerAssessment = article.optimisationAssessment?.version === ARTICLE_SCORING_VERSION
+        ? article.optimisationAssessment : null;
+      setOptimisationAssessment(plannerAssessment);
+      setOptimised(Boolean(plannerAssessment));
+      setOptimiseSnapshot(plannerAssessment?.beforeContent ?? null);
+      setChangeLog(plannerAssessment?.changeLog ?? []);
       if (article.headline != null || article.standfirst != null || article.bodyCopy != null || article.body != null) {
         const parts = splitArchiveBody(article);
         setArticleHeadline(parts.headline);
@@ -163,6 +179,12 @@ function OptimiserPage({
       setMediaCats(Array.isArray(arc.mediaCats) ? arc.mediaCats : []);
       setPubDate(typeof arc.pubDate === "string" ? arc.pubDate : "");
       setContentStatus(arc.status === "Final" ? "Final" : "Draft");
+      const archiveAssessment = arc.optimisationAssessment?.version === ARTICLE_SCORING_VERSION
+        ? arc.optimisationAssessment : null;
+      setOptimisationAssessment(archiveAssessment);
+      setOptimised(Boolean(archiveAssessment));
+      setOptimiseSnapshot(archiveAssessment?.beforeContent ?? null);
+      setChangeLog(archiveAssessment?.changeLog ?? []);
       setSavedBaseline(JSON.stringify({
         projectTitle: arc.title, contentType: arc.contentType, spokesperson: arc.spokesperson || "",
         selectedMessages: arc.selectedMessages || [], mediaCats: arc.mediaCats || [],
@@ -207,9 +229,12 @@ function OptimiserPage({
     setMediaCats(Array.isArray(a.mediaCats) ? a.mediaCats : []);
     setPubDate(typeof a.pubDate === "string" ? a.pubDate : "");
     setContentStatus(a.status === "Final" ? "Final" : "Draft");
-    setOptimised(false);
-    setOptimiseSnapshot(null);
-    setChangeLog([]);
+    const savedAssessment = a.optimisationAssessment?.version === ARTICLE_SCORING_VERSION
+      ? a.optimisationAssessment : null;
+    setOptimisationAssessment(savedAssessment);
+    setOptimised(Boolean(savedAssessment));
+    setOptimiseSnapshot(savedAssessment?.beforeContent ?? null);
+    setChangeLog(savedAssessment?.changeLog ?? []);
     setShowRetrieve(false);
     setSavedBaseline(JSON.stringify({
       projectTitle: a.title, contentType: a.contentType, spokesperson: a.spokesperson || "",
@@ -244,6 +269,7 @@ function OptimiserPage({
       spokespersonLinkedIn,
       selectedMessages,
       mediaCats: validatedMediaCats,
+      optimisationAssessment: optimisationAssessment ?? undefined,
       pubDate,
       targetPhrases: targetPhrases.map((phrase) => ({ ...phrase })),
       targetPhraseIds: targetPhraseIds.length ? [...targetPhraseIds] : targetPhrases.map((phrase) => phrase.id),
@@ -429,6 +455,34 @@ function OptimiserPage({
     }));
 
   const hasAnyContent = articleHeadline.trim().length > 0 || standfirst.trim().length > 0 || bodyCopy.trim().length > 0;
+  const scoringContext = useMemo(() => ({
+    selectedMessages,
+    targetPhrases: targetPhrases.map((phrase) => phrase.text),
+    projectDetails: projectDataMessages.map((message) => message.value),
+  }), [selectedMessages, targetPhrases, projectDataMessages]);
+  const shownAssessment = optimisationAssessment ?? ((optimised || optimiseSnapshot) && hasAnyContent
+    ? assessArticleOptimisation(
+      { headline: articleHeadline, standfirst, bodyCopy },
+      { headline: articleHeadline, standfirst, bodyCopy },
+      scoringContext,
+      changeLog,
+    )
+    : null);
+  useEffect(() => {
+    if (!optimisationAssessment || !optimised || optimising) return;
+    if (assessmentJustCalculatedRef.current) {
+      assessmentJustCalculatedRef.current = false;
+      return;
+    }
+    const current = { headline: articleHeadline, standfirst, bodyCopy };
+    if (optimisationAssessment.afterFingerprint !== articleFingerprint(current)
+      || optimisationAssessment.contextFingerprint !== scoringContextFingerprint(scoringContext)) {
+      setOptimisationAssessment(null);
+      setOptimiseSnapshot(null);
+      setChangeLog([]);
+      setOptimised(false);
+    }
+  }, [articleHeadline, standfirst, bodyCopy, scoringContext, optimisationAssessment]);
 
   const runOptimise = async () => {
     if (categoriesUnavailable) {
@@ -463,12 +517,26 @@ function OptimiserPage({
         },
         setOptimiseChars,
       );
-      setOptimiseSnapshot(snapshot);
+      setOptimiseSnapshot({ headline: snapshot.articleHeadline, standfirst: snapshot.standfirst, bodyCopy: snapshot.bodyCopy });
       if (typeof data.headline === "string" && data.headline.trim()) setArticleHeadline(data.headline);
       if (typeof data.standfirst === "string" && data.standfirst.trim()) setStandfirst(data.standfirst);
       if (typeof data.bodyCopy === "string" && data.bodyCopy.trim()) setBodyCopy(data.bodyCopy);
       const rawLog = Array.isArray(data.changeLog) ? data.changeLog : [];
-      setChangeLog(rawLog.length > 0 ? rawLog : [{ kind: "structure" as const, text: "Content reviewed and restructured for LLM readability and authority signaling." }]);
+      const nextLog = rawLog.length > 0 ? rawLog : [{ kind: "structure" as const, text: "Content reviewed and restructured for LLM readability and authority signaling." }];
+      const after = {
+        headline: typeof data.headline === "string" && data.headline.trim() ? data.headline : articleHeadline,
+        standfirst: typeof data.standfirst === "string" && data.standfirst.trim() ? data.standfirst : standfirst,
+        bodyCopy: typeof data.bodyCopy === "string" && data.bodyCopy.trim() ? data.bodyCopy : bodyCopy,
+      };
+      const assessment = assessArticleOptimisation(
+        { headline: snapshot.articleHeadline, standfirst: snapshot.standfirst, bodyCopy: snapshot.bodyCopy },
+        after,
+        scoringContext,
+        nextLog,
+      );
+      assessmentJustCalculatedRef.current = true;
+      setOptimisationAssessment(assessment);
+      setChangeLog(nextLog);
       setOptimised(true);
     } catch (err) {
       setOptimiseError(err instanceof Error ? err.message : "The optimisation could not be generated right now. Please try again.");
@@ -480,7 +548,7 @@ function OptimiserPage({
   const rejectOptimised = () => {
     if (!optimiseSnapshot) return;
     if (!window.confirm("Discard the optimised version and restore the copy you originally entered?")) return;
-    setArticleHeadline(optimiseSnapshot.articleHeadline);
+    setArticleHeadline(optimiseSnapshot.headline);
     setStandfirst(optimiseSnapshot.standfirst);
     setBodyCopy(optimiseSnapshot.bodyCopy);
     setOptimiseSnapshot(null);
@@ -872,6 +940,38 @@ OUTPUT INSTRUCTIONS:
 
           </div>
         </div>
+
+        {sourceArchiveId && !optimisationAssessment && (
+          <p className="mt-6 text-center text-xs" style={{ color: vars.g500 }}>Article quality score not available</p>
+        )}
+        {optimised && shownAssessment && (
+          <div className="mt-6 rounded-2xl border p-6" style={{ background: vars.g50, borderColor: vars.g200 }}>
+            <h2 className="aio-type-card-title mb-4" style={{ color: vars.navy }}>Article quality assessment</h2>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="rounded-xl border p-4 text-center" style={{ background: "white", borderColor: vars.g200 }}>
+                <p className="text-xs uppercase" style={{ color: vars.g500 }}>Before</p>
+                <strong className="text-3xl" style={{ color: "#C94A3E" }}>{shownAssessment.before.total}</strong>
+                <p className="text-[11px]" style={{ color: vars.g400 }}>Article quality score</p>
+              </div>
+              <div className="rounded-xl border p-4 text-center" style={{ background: "white", borderColor: vars.g200 }}>
+                <p className="text-xs uppercase" style={{ color: vars.g500 }}>After</p>
+                <strong className="text-3xl" style={{ color: "#1f748f" }}>{shownAssessment.after.total}</strong>
+                <p className="text-[11px]" style={{ color: vars.g400 }}>Article quality score</p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs" style={{ color: vars.g500 }}>
+              {shownAssessment.improvement >= 0 ? "+" : ""}{shownAssessment.improvement} percentage-point improvement
+            </p>
+            <div className="mt-4 space-y-2">
+              {shownAssessment.before.factors.map((factor, index) => (
+                <div key={factor.key} className="flex justify-between text-xs">
+                  <span style={{ color: vars.navy }}>{factor.label}</span>
+                  <span style={{ color: "#1f748f" }}>{shownAssessment.after.factors[index].score}/25</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Content Actions - two intentional rows */}
         <div className="mt-6 flex flex-col gap-3">

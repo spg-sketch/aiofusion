@@ -44,7 +44,6 @@
 - [Scrambled semantic-merge test files](aio-fusion-scrambled-merge-tests.md) — if a rebase-conflict file fails tests, the incoming main version may itself be spliced/broken; rebuild from last coherent commit.
 - [Security alert email recipient](aio-fusion-security-alert-recipient.md) — resolve to earliest OWNER membership (fallback: account email), never latest-membership lookup; non-owners must not get security notices.
 - [App-level jsdom tests](aio-fusion-app-level-jsdom-tests.md) — full-App render needs elementFromPoint/observer stubs + 401 fetch; set URL before importing App (useState initializers capture params).
-- [notify-email test mocks](aio-fusion-notify-email-mock-factories.md) — use importOriginal auto-wrap factories, never static export lists; jsdom App tests need asyncUtilTimeout 5000.
 - [Personal MFA transition](aio-fusion-mfa.md) — never clone shared factors; require proof or verified individual recovery, retaining a named Owner access path before rollout.
 - [Users admin tree filtering](aio-fusion-users-admin-tree-filtering.md) — filters/sections must apply per-account through the whole tree; section-scoped ancestor retention; Vitest 3 vi.fn generics gotcha.
 - [notify-email test mocks](aio-fusion-notify-email-mock-factories.md) — use importOriginal auto-wrap factories, never static export lists; jsdom App tests need asyncUtilTimeout 5000.
@@ -84,3 +83,4 @@
 - [Journalist privacy outcomes](aio-fusion-journalist-privacy.md) — rights decisions require verified identity, explicit human-selected matches and scope; suppressions must be rechecked at every write boundary.
 - [Editor unsaved-change guards](aio-fusion-unsaved-editor-guards.md) — compare exact saved snapshots and defer navigation centrally; saved handoffs must bypass stale registration state.
 - [Database-backed media targeting](aio-fusion-database-media-targeting.md) — content targeting uses populated accessible contact industries; Project Set-Up 1.9 only supplies exact-match defaults.
+- [Article quality scoring](aio-fusion-article-quality-scoring.md) — keep it distinct from campaign Authority and invalidate persisted assessments when content or scoring context changes.

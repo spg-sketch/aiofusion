@@ -25,7 +25,7 @@ describe("ensurePlannerContentColumns", () => {
     await pool.end();
   });
 
-  it("adds lossless Creator fields to legacy content tables and is idempotent", async () => {
+  it("adds lossless Creator and Optimiser fields to legacy tables idempotently", async () => {
     await ensurePlannerContentColumns();
     await ensurePlannerContentColumns();
 
@@ -38,34 +38,52 @@ describe("ensurePlannerContentColumns", () => {
       SELECT table_name, column_name, data_type, is_nullable
       FROM information_schema.columns
       WHERE table_name IN ('archive_items', 'planner_items')
-        AND column_name IN ('pitch', 'spokesperson_linkedin')
+        AND column_name IN ('pitch', 'spokesperson_linkedin', 'optimisation_assessment')
       ORDER BY table_name, column_name
     `);
 
     expect(columns.rows).toEqual([
+      { table_name: "archive_items", column_name: "optimisation_assessment", data_type: "jsonb", is_nullable: "YES" },
       { table_name: "archive_items", column_name: "pitch", data_type: "text", is_nullable: "YES" },
       { table_name: "archive_items", column_name: "spokesperson_linkedin", data_type: "text", is_nullable: "YES" },
+      { table_name: "planner_items", column_name: "optimisation_assessment", data_type: "jsonb", is_nullable: "YES" },
       { table_name: "planner_items", column_name: "pitch", data_type: "text", is_nullable: "YES" },
       { table_name: "planner_items", column_name: "spokesperson_linkedin", data_type: "text", is_nullable: "YES" },
     ]);
 
     await db.execute(sql`
-      INSERT INTO archive_items (id, pitch, spokesperson_linkedin)
-      VALUES ('archive-1', 'News hook', 'https://www.linkedin.com/in/archive')
+      INSERT INTO archive_items (id, pitch, spokesperson_linkedin, optimisation_assessment)
+      VALUES ('archive-1', 'News hook', 'https://www.linkedin.com/in/archive', '{"version":"article-quality-v1"}')
     `);
     await db.execute(sql`
-      INSERT INTO planner_items (id, pitch, spokesperson_linkedin)
-      VALUES ('planner-1', 'Planner hook', 'https://www.linkedin.com/in/planner')
+      INSERT INTO planner_items (id, pitch, spokesperson_linkedin, optimisation_assessment)
+      VALUES ('planner-1', 'Planner hook', 'https://www.linkedin.com/in/planner', '{"version":"article-quality-v1"}')
     `);
-    const values = await db.execute(sql<{ id: string; pitch: string; spokesperson_linkedin: string }>`
-      SELECT id, pitch, spokesperson_linkedin FROM archive_items
+    const values = await db.execute(sql<{
+      id: string;
+      pitch: string;
+      spokesperson_linkedin: string;
+      optimisation_assessment: { version: string };
+    }>`
+      SELECT id, pitch, spokesperson_linkedin, optimisation_assessment FROM archive_items
       UNION ALL
-      SELECT id, pitch, spokesperson_linkedin FROM planner_items
+      SELECT id, pitch, spokesperson_linkedin, optimisation_assessment FROM planner_items
       ORDER BY id
     `);
+
     expect(values.rows).toEqual([
-      { id: "archive-1", pitch: "News hook", spokesperson_linkedin: "https://www.linkedin.com/in/archive" },
-      { id: "planner-1", pitch: "Planner hook", spokesperson_linkedin: "https://www.linkedin.com/in/planner" },
+      {
+        id: "archive-1",
+        pitch: "News hook",
+        spokesperson_linkedin: "https://www.linkedin.com/in/archive",
+        optimisation_assessment: { version: "article-quality-v1" },
+      },
+      {
+        id: "planner-1",
+        pitch: "Planner hook",
+        spokesperson_linkedin: "https://www.linkedin.com/in/planner",
+        optimisation_assessment: { version: "article-quality-v1" },
+      },
     ]);
   });
 });

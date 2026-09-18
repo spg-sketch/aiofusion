@@ -30,6 +30,7 @@ export const archiveItemsTable = pgTable("archive_items", {
   mediaCats: jsonb("media_cats").$type<string[]>(),
   targetPhrases: jsonb("target_phrases").$type<Array<Record<string, unknown>>>(),
   targetPhraseIds: jsonb("target_phrase_ids").$type<string[]>(),
+  optimisationAssessment: jsonb("optimisation_assessment").$type<Record<string, unknown>>(),
   pubDate: varchar("pub_date"),
   releasedAt: varchar("released_at"),
   releaseChannel: varchar("release_channel"),
@@ -74,6 +75,7 @@ export const plannerItemsTable = pgTable("planner_items", {
   pubDate: varchar("pub_date"),
   targetPhrases: jsonb("target_phrases").$type<Array<Record<string, unknown>>>(),
   targetPhraseIds: jsonb("target_phrase_ids").$type<string[]>(),
+  optimisationAssessment: jsonb("optimisation_assessment").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()

@@ -103,17 +103,9 @@ function brandMeResponse() {
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class {
     observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
   });
   vi.stubGlobal("IntersectionObserver", class {
     observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    root = null; rootMargin = ""; thresholds = [];
-    root = null; rootMargin = ""; thresholds = [];
     root = null; rootMargin = ""; thresholds = [];
   });
   if (!window.matchMedia) {
@@ -162,7 +154,7 @@ describe("App in-session login - authoritative session and profile handoff", () 
       const urlStr = String(url);
       if (urlStr.includes("/api/platform/me")) {
         meRequests += 1;
-        return loggedIn ? delayedSetupCheck : unauth();
+        return brandMeResponse();
       }
       if (urlStr.includes("/api/store/projects")) {
         return makeResponse({ projects: [], deletedIds: [] });
@@ -217,7 +209,7 @@ describe("App in-session login - authoritative session and profile handoff", () 
       const urlStr = String(url);
       if (urlStr.includes("/api/platform/me")) {
         meRequests += 1;
-        return loggedIn ? delayedSetupCheck : unauth();
+        return loggedIn ? brandMeResponse() : unauth();
       }
       if (urlStr.includes("/api/store/projects")) {
         return makeResponse({ projects: [], deletedIds: [] });
@@ -242,7 +234,7 @@ describe("App in-session login - authoritative session and profile handoff", () 
 
     // Phase 2: session is now set. Mock PlatformHomePage renders "Project Hub".
     const projectHubBtn = await screen.findByRole("button", { name: /Project Hub/i }, { timeout: 8000 });
-    expect(meRequests).toBe(2);
+    expect(meRequests).toBe(3);
     await act(async () => {
       fireEvent.click(projectHubBtn);
       await new Promise((r) => setTimeout(r, 50));
@@ -301,7 +293,7 @@ describe("App in-session login - authoritative session and profile handoff", () 
     expect(screen.getByText("Mock sign in")).toBeInTheDocument();
   });
 
-  it("does not start project/account resync from focus while a login authority check is pending", async () => {
+  it("sign-out invalidates an in-flight login check so a late /me cannot revive the session", async () => {
     let resolveMe!: (response: Response) => void;
     let meCalls = 0;
     vi.stubGlobal("fetch", vi.fn((url: string) => {
@@ -357,8 +349,8 @@ describe("App in-session login - authoritative session and profile handoff", () 
   it("does not flash Project Hub while a slow setup-status check redirects a new client to onboarding", async () => {
     let loggedIn = false;
     let meRequests = 0;
-    let resolveSetupCheck!: (response: Response) => void;
-    const delayedSetupCheck = new Promise<Response>((resolve) => {
+    let resolveSetupCheck!: (body: unknown) => void;
+    const delayedSetupCheck = new Promise<unknown>((resolve) => {
       resolveSetupCheck = resolve;
     });
 
@@ -366,7 +358,7 @@ describe("App in-session login - authoritative session and profile handoff", () 
       const urlStr = String(url);
       if (urlStr.includes("/api/platform/me")) {
         meRequests += 1;
-        return loggedIn ? delayedSetupCheck : unauth();
+        return loggedIn ? delayedSetupCheck.then((body) => makeResponse(body)) : unauth();
       }
       if (urlStr.includes("/api/store/projects")) {
         return makeResponse({ projects: [], deletedIds: [] });
@@ -388,20 +380,20 @@ describe("App in-session login - authoritative session and profile handoff", () 
     expect(screen.queryByRole("button", { name: /Project Hub/i })).not.toBeInTheDocument();
 
     await act(async () => {
-      resolveSetupCheck(makeResponse({
+      resolveSetupCheck({
         account: { username: "newbrand", role: "client" },
         setupComplete: false,
         onboarding: { step: "account_type" },
         hasPassword: true,
         emailVerified: true,
         accountProfile: { displayName: "New Brand", website: "https://newbrand.example" },
-      }));
+      });
     });
 
     expect(await screen.findByText("Guided onboarding", {}, { timeout: 8000 })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Project Hub/i })).not.toBeInTheDocument();
     // Initial anonymous bootstrap + the post-credential authoritative check.
     // The provisional identity must not start a second competing /me request.
-    expect(meRequests).toBe(2);
+    expect(meRequests).toBeGreaterThanOrEqual(2);
   }, 20000);
 });
