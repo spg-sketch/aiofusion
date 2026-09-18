@@ -67,11 +67,20 @@ const project = {
 
 describe("ClientSelectorPage project-only hub", () => {
   it("uses the server allowance for a client beta: the first project is available and the second is not", async () => {
-    vi.mocked(global.fetch).mockResolvedValue(
+    vi.mocked(global.fetch).mockImplementation(async () =>
       new Response(JSON.stringify({
-        projectsUsed: 0,
-        projectAllowance: 1,
-        trial: { status: "active" },
+        packageCapacity: {
+          billingSlug: "beta-client",
+          kind: "client",
+          access: "beta",
+          included: 1,
+          purchased: 0,
+          reserved: 0,
+          used: 0,
+          remaining: 1,
+          allowance: 1,
+          overLimit: false,
+        },
       }), { status: 200 }),
     );
     const { rerender } = render(
@@ -83,11 +92,20 @@ describe("ClientSelectorPage project-only hub", () => {
     );
     await waitFor(() => expect(screen.getByRole("button", { name: /create your first project/i })).toBeEnabled());
 
-    vi.mocked(global.fetch).mockResolvedValue(
+    vi.mocked(global.fetch).mockImplementation(async () =>
       new Response(JSON.stringify({
-        projectsUsed: 1,
-        projectAllowance: 1,
-        trial: { status: "active" },
+        packageCapacity: {
+          billingSlug: "beta-client",
+          kind: "client",
+          access: "beta",
+          included: 1,
+          purchased: 0,
+          reserved: 1,
+          used: 1,
+          remaining: 0,
+          allowance: 1,
+          overLimit: false,
+        },
       }), { status: 200 }),
     );
     rerender(
@@ -103,8 +121,21 @@ describe("ClientSelectorPage project-only hub", () => {
   });
 
   it("keeps a paid client's purchased project slot available", async () => {
-    vi.mocked(global.fetch).mockResolvedValue(
-      new Response(JSON.stringify({ projectsUsed: 1, projectAllowance: 2 }), { status: 200 }),
+    vi.mocked(global.fetch).mockImplementation(async () =>
+      new Response(JSON.stringify({
+        packageCapacity: {
+          billingSlug: "paid-client",
+          kind: "client",
+          access: "paid",
+          included: 1,
+          purchased: 1,
+          reserved: 1,
+          used: 1,
+          remaining: 1,
+          allowance: 2,
+          overLimit: false,
+        },
+      }), { status: 200 }),
     );
     render(
       <ClientSelectorPage
@@ -116,8 +147,24 @@ describe("ClientSelectorPage project-only hub", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /create project/i })).toBeEnabled());
   });
 
-  it("does not block a non-billing client member who can create projects", () => {
+  it("uses the safe capacity endpoint for a content member who can create projects", async () => {
     const fetchMock = vi.mocked(global.fetch);
+    fetchMock.mockImplementation(async () =>
+      new Response(JSON.stringify({
+        packageCapacity: {
+          billingSlug: "client-member",
+          kind: "client",
+          access: "paid",
+          included: 1,
+          purchased: 0,
+          reserved: 0,
+          used: 0,
+          remaining: 1,
+          allowance: 1,
+          overLimit: false,
+        },
+      }), { status: 200 }),
+    );
     render(
       <ClientSelectorPage
         {...baseProps}
@@ -125,8 +172,11 @@ describe("ClientSelectorPage project-only hub", () => {
         session={{ username: "client-member", role: "client", membershipRole: "content" }}
       />,
     );
-    expect(screen.getByRole("button", { name: /create your first project/i })).toBeEnabled();
-    expect(fetchMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByRole("button", { name: /create your first project/i })).toBeEnabled());
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/platform/billing/capacity"),
+      expect.objectContaining({ credentials: "include", cache: "no-store" }),
+    );
   });
 
   it("fails closed while allowance is pending, and ignores a stale session response", async () => {

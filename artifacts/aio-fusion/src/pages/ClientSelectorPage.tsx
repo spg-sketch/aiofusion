@@ -14,9 +14,6 @@ const teal = "#1A647B";
 const ink = "#0a1628";
 const accent = "#C8497A";
 const accentSoft = "#FBE3ED";
-// Partner-managed client workspaces retain their pre-billing affordance.
-const LEGACY_MANAGED_CLIENT_PROJECT_CAP = 3;
-
 type AuditScoreState =
   | { status: "loading" }
   | { status: "ready"; score: number | null }
@@ -123,11 +120,11 @@ export default function ClientSelectorPage({
   const isManagedClient = !!session?.agencyManagedClient;
   const isDirectClient = isClient && !isManagedClient;
   const managedClientCanCreate =
-    !isManagedClient || displayClients.length < LEGACY_MANAGED_CLIENT_PROJECT_CAP;
-  // Billing subscription is intentionally unavailable to content/viewer
-  // members. They can still create projects, so leave their existing create
-  // flow alone rather than treating a 403 as a full allowance.
-  const clientCanReadAllowance = session?.membershipRole == null || session.membershipRole === "owner";
+    !isManagedClient || displayClients.length === 0;
+  // The capacity endpoint is available to project-capable owner, admin and
+  // content members without exposing subscription or payment details.
+  const clientCanReadAllowance = session?.membershipRole == null
+    || ["owner", "admin", "content"].includes(session.membershipRole);
   const shouldCheckAllowance = isDirectClient && clientCanReadAllowance;
 
   useEffect(() => {
@@ -154,7 +151,8 @@ export default function ClientSelectorPage({
   const createDisabled = clientAtLimit || createUnavailable;
   const limitMessage = shouldCheckAllowance
     ? allowanceState.status === "ready" && allowanceState.value.atLimit
-      ? allowanceState.value.trial?.status === "active"
+      ? allowanceState.value.packageCapacity?.access === "beta"
+        || allowanceState.value.trial?.status === "active"
         ? "Your beta trial includes 1 project. Upgrade your plan to add another."
         : "Your project allowance has been reached. Upgrade your plan or add a project slot to continue."
       : allowanceState.status === "loading" || allowanceState.status === "idle"

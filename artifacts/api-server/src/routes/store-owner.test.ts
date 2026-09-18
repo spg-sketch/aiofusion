@@ -9,6 +9,7 @@ const h = vi.hoisted(() => {
   type Row = Record<string, unknown>;
   type Pred =
     | { kind: "eq"; col: string; val: unknown }
+    | { kind: "isNull"; col: string }
     | { kind: "inArray"; col: string; vals: unknown[] }
     | { kind: "and"; parts: Pred[] };
 
@@ -32,6 +33,7 @@ const h = vi.hoisted(() => {
   function matches(row: Row, pred: Pred | undefined): boolean {
     if (!pred) return true;
     if (pred.kind === "eq") return row[pred.col] === pred.val;
+    if (pred.kind === "isNull") return row[pred.col] == null;
     if (pred.kind === "inArray") return pred.vals.includes(row[pred.col]);
     return pred.parts.every((p) => matches(row, p));
   }
@@ -46,6 +48,7 @@ const state = h.state;
 
 vi.mock("drizzle-orm", () => ({
   eq: (col: { __col: string }, val: unknown) => ({ kind: "eq", col: col.__col, val }),
+  isNull: (col: { __col: string }) => ({ kind: "isNull", col: col.__col }),
   inArray: (col: { __col: string }, vals: unknown[]) => ({ kind: "inArray", col: col.__col, vals }),
   and: (...parts: unknown[]) => ({ kind: "and", parts }),
   sql: Object.assign(() => ({}), { raw: () => ({}) }),
@@ -109,11 +112,21 @@ vi.mock("@workspace/db", () => {
 // tiny in-memory fake). Ownership-authorization behaviour is what's under
 // test here; billing detach/allowance logic is covered by billing.test.ts.
 vi.mock("../lib/billing", () => ({
-  getProjectAllowance: () => Promise.resolve(999),
+  checkProjectCapacityUnlocked: () => Promise.resolve({
+    allowed: true,
+    capacity: {
+      billingSlug: "agency", kind: "agency", access: "paid",
+      included: 3, purchased: 0, reserved: 0, used: 0,
+      remaining: 3, allowance: 3, overLimit: false,
+    },
+  }),
   assignAddonToNewProjectUnlocked: () => Promise.resolve(),
   withBillingLock: (_slug: string, fn: (s: string) => Promise<unknown>) => fn(_slug),
-  listBillingProjects: () => Promise.resolve([]),
-  detachAddonForProjectTransfer: () => Promise.resolve(),
+  withBillingLocks: (_slugs: string[], fn: (roots: string[]) => Promise<unknown>) => fn(_slugs),
+  resolveBillingSlug: (slug: string) => Promise.resolve(slug === "client1" ? "agency" : slug),
+  detachAddonForProjectTransferUnlocked: () => Promise.resolve(),
+  releaseAddonForDeletedProjectUnlocked: () => Promise.resolve(),
+  reconcileProjectAddonOwnershipUnlocked: () => Promise.resolve(),
 }));
 
 import storeRouter from "./store";

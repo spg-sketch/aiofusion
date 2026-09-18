@@ -1,7 +1,7 @@
 import { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages, setActiveProjectId, getActiveProjectId, getConfirmedEntity, getLlmSearchQueries, getCompetitors } from "./IntakeForm";
 import CountdownBanner from "./components/CountdownBanner";
 import { syncProjectsOnLoad, syncIntakeForProject, pushProjectMeta, deleteRemoteProject, setKnownProjectIds, assertActiveProjectConsistency } from "./lib/projectSync";
-import { fetchProjectAllowance } from "./lib/billingAllowance";
+import { fetchProjectAllowance, shouldBlockProjectCreation, shouldRouteProjectCreationToManagedClients, type PackageCapacity } from "./lib/billingAllowance";
 import { stripEmDashes, normaliseAddedData } from "./lib/utils";
 import { apiBase } from "./lib/contentAi";
 import { loadSavedAudits } from "./LlmCheckPage";
@@ -517,6 +517,7 @@ function App() {
   );
   const [clientLogos, setClientLogos] = useState<Record<string, string>>(() => loadClientLogos());
   const [namingProject, setNamingProject] = useState(false);
+  const [createProjectCapacity, setCreateProjectCapacity] = useState<PackageCapacity | null>(null);
   // Keep one server-stable draft across a lost upsert response. The modal
   // remains open on any persistence error and retries this exact id.
   const pendingProjectDraftRef = useRef<{
@@ -743,18 +744,32 @@ function App() {
   };
 
   const beginCreateProject = () => requireSessionThen(() => {
+    // Agency-root projects do not consume the managed client/project product
+    // correctly. Start from client selection so the project is created with a
+    // server-authorized managed-client owner.
+    if (shouldRouteProjectCreationToManagedClients(session ?? {})) {
+      setAccountSection("clients");
+      transitionToView("sub-accounts");
+      return;
+    }
     void (async () => {
-      const canReadBillingAllowance =
-        session?.membershipRole == null || session.membershipRole === "owner";
-      if (
-        session?.role !== "admin"
-        && canReadBillingAllowance
-      ) {
+      if (session?.role !== "admin") {
         const allowance = await fetchProjectAllowance();
-        if (allowance?.atLimit) {
+        const owner = session?.username.toLowerCase();
+        const ownerHasProject = !!owner && loadStoredProjects().some(
+          (project) => (project.owner || "").toLowerCase() === owner,
+        );
+        const blocked = allowance?.packageCapacity
+          ? shouldBlockProjectCreation(allowance.packageCapacity, {
+              agencyManagedClient: session?.agencyManagedClient === true,
+              ownerHasProject,
+            })
+          : allowance?.atLimit === true;
+        if (blocked) {
           await openProjectBilling();
           return;
         }
+        setCreateProjectCapacity(allowance?.packageCapacity ?? null);
       }
       setPendingProjectError(null);
       pendingProjectDraftRef.current = null;
@@ -1827,6 +1842,7 @@ function App() {
           <CreateProjectModal
             initialName={pendingProjectDraftRef.current?.project.name}
             error={pendingProjectError}
+            packageCapacity={createProjectCapacity}
             onCancel={cancelCreateProject}
             onCreate={confirmCreateProject}
           />
@@ -1977,6 +1993,7 @@ function App() {
         <CreateProjectModal
           initialName={pendingProjectDraftRef.current?.project.name}
           error={pendingProjectError}
+          packageCapacity={createProjectCapacity}
           onCancel={cancelCreateProject}
           onCreate={confirmCreateProject}
         />

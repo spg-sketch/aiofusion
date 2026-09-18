@@ -55,4 +55,30 @@ describe("CreateProjectModal", () => {
     expect(trigger).toHaveFocus();
     trigger.remove();
   });
+
+  it("shows the authoritative package breakdown without blocking existing work", () => {
+    render(
+      <CreateProjectModal
+        onCancel={vi.fn()}
+        onCreate={vi.fn()}
+        packageCapacity={{
+          billingSlug: "agency",
+          kind: "agency",
+          included: 3,
+          purchased: 1,
+          reserved: 4,
+          used: 3,
+          remaining: 0,
+          allowance: 4,
+          overLimit: false,
+        }}
+      />,
+    );
+    const capacity = screen.getByTestId("create-project-capacity");
+    expect(capacity).toHaveTextContent("3 included");
+    expect(capacity).toHaveTextContent("1 purchased");
+    expect(capacity).toHaveTextContent("4 reserved");
+    expect(capacity).toHaveTextContent("0 remaining");
+    expect(capacity).toHaveTextContent("Each managed client can have one project");
+  });
 });

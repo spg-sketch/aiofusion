@@ -1145,9 +1145,12 @@ describe("team invitations", () => {
   it("full lifecycle: invite → public info → accept → member session with role + project access", async () => {
     const { sid } = await seedAgency("acme-agency", "owner@acme.test");
 
-    // Seed projects so project access can be scoped.
-    await api("/api/store/projects/upsert", { sid, body: { id: "proj-1", name: "Project One", data: {} } });
-    await api("/api/store/projects/upsert", { sid, body: { id: "proj-2", name: "Project Two", data: {} } });
+    // Legacy Agency-owned projects stay accessible to scoped members, although
+    // new customer projects now belong to individual managed client accounts.
+    await db.insert(projectsTable).values([
+      { id: "proj-1", name: "Project One", owner: "acme-agency", data: {} },
+      { id: "proj-2", name: "Project Two", owner: "acme-agency", data: {} },
+    ]);
 
     // Owner invites a content member scoped to proj-1.
     const invite = await api("/api/platform/team/invite", {
@@ -1355,7 +1358,7 @@ describe("team invitations", () => {
 
   it("blocks viewer members from writes and billing members from project access entirely", async () => {
     const { sid } = await seedAgency("roles-agency", "owner@roles.test");
-    await api("/api/store/projects/upsert", { sid, body: { id: "roles-proj", name: "P", data: {} } });
+    await db.insert(projectsTable).values({ id: "roles-proj", name: "P", owner: "roles-agency", data: {} });
 
     // Viewer
     const vi_ = await api("/api/platform/team/invite", { sid, body: { email: "v@roles.test", role: "viewer" } });
@@ -1442,8 +1445,10 @@ describe("team invitations", () => {
 
   it("enforces scoping and roles on archive, planner and audit surfaces", async () => {
     const { sid } = await seedAgency("surface-agency", "owner@surface.test");
-    await api("/api/store/projects/upsert", { sid, body: { id: "sp-1", name: "P1", data: {} } });
-    await api("/api/store/projects/upsert", { sid, body: { id: "sp-2", name: "P2", data: {} } });
+    await db.insert(projectsTable).values([
+      { id: "sp-1", name: "P1", owner: "surface-agency", data: {} },
+      { id: "sp-2", name: "P2", owner: "surface-agency", data: {} },
+    ]);
     // Owner seeds archive items + an audit in both projects.
     for (const pid of ["sp-1", "sp-2"]) {
       const a = await api("/api/store/archive", { sid, body: { id: `arch-${pid}`, projectId: pid, title: "t" } });

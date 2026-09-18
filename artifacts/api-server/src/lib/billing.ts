@@ -290,6 +290,12 @@ export interface ProjectAddon {
   subscriptionId: string;
   tier: ProjectTier;
   projectId: string | null;
+  // Agency packages may be reserved by an empty managed client before its
+  // first project exists. The eventual project consumes this same package.
+  ownerSlug?: string | null;
+  // false for a tier-only upgrade attached to an already-included project.
+  // Missing means true for backwards-compatible capacity add-ons.
+  grantsCapacity?: boolean;
   pendingTier?: ProjectTier;
   purchasedAt: string;
 }
@@ -336,8 +342,55 @@ export async function withBillingLock<T>(
   slug: string,
   fn: (billingSlug: string) => Promise<T>,
 ): Promise<T> {
-  const billingSlug = await resolveBillingSlug(normUsername(slug));
-  return withSlugLock(billingSlug, () => fn(billingSlug));
+  const owner = normUsername(slug);
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const billingSlug = await resolveBillingSlug(owner);
+    const outcome = await withSlugLock(billingSlug, async () => {
+      // Reparenting can occur while this caller waits in the old root's queue.
+      // Never execute the critical section under a stale billing pool.
+      if ((await resolveBillingSlug(owner)) !== billingSlug) {
+        return { stable: false as const };
+      }
+      return { stable: true as const, value: await fn(billingSlug) };
+    });
+    if (outcome.stable) return outcome.value;
+  }
+  throw new Error(`billing: account hierarchy kept changing while locking ${owner}`);
+}
+
+// Acquire multiple billing pools in canonical order. This is used by transfers
+// so source and destination capacity/add-on state cannot change between the
+// decision and write. Duplicate roots collapse to one lock.
+export async function withBillingLocks<T>(
+  slugs: string[],
+  fn: (billingSlugs: string[]) => Promise<T>,
+): Promise<T> {
+  const owners = slugs.map(normUsername);
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const roots = [
+      ...new Set(await Promise.all(owners.map((owner) => resolveBillingSlug(owner)))),
+    ].sort();
+    const acquire = (
+      index: number,
+    ): Promise<{ stable: false } | { stable: true; value: T }> =>
+      index < roots.length
+        ? withSlugLock(roots[index]!, () => acquire(index + 1))
+        : (async () => {
+            const freshRoots = [
+              ...new Set(await Promise.all(owners.map((owner) => resolveBillingSlug(owner)))),
+            ].sort();
+            if (
+              freshRoots.length !== roots.length
+              || freshRoots.some((root, rootIndex) => root !== roots[rootIndex])
+            ) {
+              return { stable: false as const };
+            }
+            return { stable: true as const, value: await fn(roots) };
+          })();
+    const outcome = await acquire(0);
+    if (outcome.stable) return outcome.value;
+  }
+  throw new Error("billing: account hierarchy kept changing while locking billing roots");
 }
 
 // ---------------------------------------------------------------------------
@@ -546,6 +599,214 @@ export async function getProjectAddons(slug: string): Promise<ProjectAddon[]> {
   }
 }
 
+export type PackageKind = "agency" | "client" | "master";
+export type PackageAccess = "none" | "beta" | "paid" | "free";
+
+export interface PackageCapacity {
+  billingSlug: string;
+  kind: PackageKind;
+  access: PackageAccess;
+  included: number;
+  purchased: number;
+  /** Capacity units currently reserved (not merely projects created). */
+  reserved: number;
+  /** Number of live projects represented by those reservations. */
+  used: number;
+  /** null is the explicit, unlimited Master exception. */
+  remaining: number | null;
+  /** null is the explicit, unlimited Master exception. */
+  allowance: number | null;
+  overLimit: boolean;
+}
+
+type CapacitySnapshotOptions = {
+  excludeProjectId?: string;
+  addProjectOwner?: string;
+};
+
+async function packageCapacitySnapshot(
+  slug: string,
+  options: CapacitySnapshotOptions = {},
+): Promise<PackageCapacity> {
+  const billingSlug = await resolveBillingSlug(slug);
+  const root = await getAccount(billingSlug);
+  const role = normalizeRole(root?.role);
+  const state = await getBillingState(billingSlug);
+  // A recorded plan is authoritative for the legacy `user` role, which
+  // predates the Agency/Client split.
+  const kind: PackageKind = role === "admin"
+    ? "master"
+    : role === "agency" || (role === "user" && state?.plan !== "inhouse")
+      ? "agency"
+      : "client";
+  const trial = getBetaTrialSummary(state);
+  const access: PackageAccess = hasPaidSubscription(state)
+    ? "paid"
+    : state?.freeAccess
+      ? "free"
+      : trial.status === "active"
+        ? "beta"
+        : "none";
+  const addons = kind === "master" ? [] : await getProjectAddons(billingSlug);
+
+  let included = 0;
+  if (access === "beta") {
+    included = kind === "agency" ? BETA_TRIAL_AGENCY_PROJECT_CAP : BETA_TRIAL_CLIENT_PROJECT_CAP;
+  } else if (access === "paid") {
+    const rootIncluded = kind === "agency"
+      ? INCLUDED_PROJECTS.agency
+      : INCLUDED_PROJECTS.inhouse;
+    // Explicit Agency/Client roles cap stale or mismatched plan data
+    // conservatively. Only the legacy `user` role derives its package kind
+    // authoritatively from the recorded plan.
+    included = state?.plan
+      ? role === "user"
+        ? INCLUDED_PROJECTS[state.plan]
+        : Math.min(rootIncluded, INCLUDED_PROJECTS[state.plan])
+      : rootIncluded;
+  } else if (access === "free") {
+    // Free access follows the root account kind without treating a stale plan
+    // left by account reclassification as newly purchased package capacity.
+    included = kind === "agency" ? INCLUDED_PROJECTS.agency : INCLUDED_PROJECTS.inhouse;
+  }
+
+  const accountRows = await db.execute(sql`SELECT username, parent FROM platform_accounts`);
+  const accounts = ((accountRows as unknown as { rows?: Array<{ username: string; parent: string | null }> }).rows ?? [])
+    .map((row) => ({ username: normUsername(row.username), parent: normUsername(row.parent ?? "") }));
+  const owners = new Set(await billingSubtreeOwners(billingSlug));
+  const archivedRows = await db
+    .select({ key: platformMetaTable.key })
+    .from(platformMetaTable);
+  const archived = new Set(
+    archivedRows
+      .map((row) => row.key)
+      .filter((key) => key.startsWith("account:archived:"))
+      .map((key) => normUsername(key.slice("account:archived:".length))),
+  );
+  const projects = await listBillingProjects(billingSlug);
+  const counts = new Map<string, number>();
+  for (const project of projects) {
+    if (project.id === options.excludeProjectId) continue;
+    counts.set(project.owner, (counts.get(project.owner) ?? 0) + 1);
+  }
+  if (options.addProjectOwner) {
+    const owner = normUsername(options.addProjectOwner);
+    if (owners.has(owner)) counts.set(owner, (counts.get(owner) ?? 0) + 1);
+  }
+  const used = [...counts.values()].reduce((sum, count) => sum + count, 0);
+  let reserved = used;
+  if (kind === "agency") {
+    reserved = counts.get(billingSlug) ?? 0;
+    for (const account of accounts) {
+      if (account.username === billingSlug || !owners.has(account.username)) continue;
+      const live = counts.get(account.username) ?? 0;
+      // Active empty managed clients reserve a unit. Archived empty clients
+      // release theirs, but archived clients with live data remain consuming.
+      reserved += archived.has(account.username) ? live : Math.max(1, live);
+    }
+  }
+  if (kind === "master") {
+    return {
+      billingSlug,
+      kind,
+      access: "free",
+      included: 0,
+      purchased: 0,
+      reserved,
+      used,
+      remaining: null,
+      allowance: null,
+      overLimit: false,
+    };
+  }
+  const purchased = access === "paid"
+    ? addons.filter((addon) => addon.grantsCapacity !== false).length
+    : 0;
+  const allowance = included + purchased;
+  return {
+    billingSlug,
+    kind,
+    access,
+    included,
+    purchased,
+    reserved,
+    used,
+    remaining: Math.max(0, allowance - reserved),
+    allowance,
+    overLimit: reserved > allowance,
+  };
+}
+
+export async function getPackageCapacity(slug: string): Promise<PackageCapacity> {
+  return packageCapacitySnapshot(slug);
+}
+
+export async function checkProjectCapacityUnlocked(
+  owner: string,
+  projectId: string,
+): Promise<{ allowed: boolean; error?: string; capacity: PackageCapacity }> {
+  const target = normUsername(owner);
+  const current = await packageCapacitySnapshot(target);
+  const before = await packageCapacitySnapshot(target, { excludeProjectId: projectId });
+  const [existing] = await db
+    .select({ owner: projectsTable.owner, deletedAt: projectsTable.deletedAt })
+    .from(projectsTable)
+    .where(eq(projectsTable.id, projectId))
+    .limit(1);
+
+  // Existing legacy agency-root projects remain readable/editable, but normal
+  // operations cannot create, restore or transfer another project to the root.
+  if (
+    before.kind === "agency"
+    && target === before.billingSlug
+    && (!existing || existing.deletedAt || normUsername(existing.owner ?? "") !== target)
+  ) {
+    return {
+      allowed: false,
+      error: "Agency projects must belong to a managed client.",
+      capacity: current,
+    };
+  }
+
+  if (before.kind === "agency" && target !== before.billingSlug) {
+    const projects = await listBillingProjects(before.billingSlug);
+    const otherAtDestination = projects.some(
+      (project) => project.id !== projectId && project.owner === target,
+    );
+    if (otherAtDestination) {
+      return {
+        allowed: false,
+        error: "Each managed client can have one project.",
+        capacity: current,
+      };
+    }
+  }
+
+  const after = await packageCapacitySnapshot(target, {
+    excludeProjectId: projectId,
+    addProjectOwner: target,
+  });
+  const existingLiveInSameBillingRoot = !!existing
+    && !existing.deletedAt
+    && !!existing.owner
+    && (await resolveBillingSlug(existing.owner)) === current.billingSlug;
+  const allowed = after.allowance === null
+    || (current.access !== "none" && (
+      after.reserved <= after.allowance
+      // Existing live excess may move within the same billing pool so customers
+      // can normalize legacy ownership without increasing the excess. A deleted
+      // or brand-new project cannot revive an unfunded over-limit reservation.
+      || (existingLiveInSameBillingRoot && after.reserved <= current.reserved)
+    ));
+  return allowed
+    ? { allowed: true, capacity: after }
+    : {
+        allowed: false,
+        error: `You've reached your ${after.allowance}-package allowance.`,
+        capacity: current,
+      };
+}
+
 export async function saveProjectAddons(slug: string, addons: ProjectAddon[]): Promise<void> {
   const value = JSON.stringify(addons);
   await db
@@ -560,19 +821,8 @@ export const LEGACY_PROJECT_CAP = 2;
 
 export async function getProjectAllowance(slug: string): Promise<number> {
   try {
-    const billingSlug = await resolveBillingSlug(slug);
-    const state = await getBillingState(billingSlug);
-    if (!isEntitled(state)) return 0;
-    if (getBetaTrialSummary(state).status === "active") {
-      // Await inside the fail-closed boundary: resolving a legacy account can
-      // itself fail, and that must deny capacity rather than escape this catch.
-      return await getBetaTrialProjectCap(billingSlug, state);
-    }
-    const addons = await getProjectAddons(billingSlug);
-    // Entitled accounts get exactly their plan's included projects plus
-    // purchased add-ons. A plan-less legacy free-access row keeps the old cap.
-    if (!state!.plan) return LEGACY_PROJECT_CAP;
-    return INCLUDED_PROJECTS[state!.plan] + addons.length;
+    const capacity = await getPackageCapacity(slug);
+    return capacity.allowance ?? Number.MAX_SAFE_INTEGER;
   } catch (err) {
     logger.warn({ err, slug }, "billing: getProjectAllowance failed - denying additional capacity");
     return 0;
@@ -607,30 +857,117 @@ export async function detachAddonForProjectTransfer(
   const newRoot = await resolveBillingSlug(normUsername(newOwnerSlug));
   if (oldRoot === newRoot) return; // same billing pool - binding stays valid
   await withSlugLock(oldRoot, async () => {
-    const addons = await getProjectAddons(oldRoot);
-    const addon = addons.find((a) => a.projectId === projectId);
-    if (!addon) return;
-    // Clear the tier FIRST; only persist the detached binding once the scoped
-    // clear confirms the project was still ours. If the clear matches nothing
-    // the project has already left the subtree (a concurrent transfer, which
-    // itself ran this detach) - leave the binding for that flow to resolve.
-    const cleared = await setProjectTierScoped(oldRoot, projectId, null);
-    if (!cleared && (await isProjectInBillingSubtree(oldRoot, projectId))) {
-      // Unexpected: still ours but nothing updated (deleted row, etc).
-      logger.warn({ oldRoot, projectId }, "billing: transfer detach could not clear tier - binding kept");
-      return;
-    }
-    // The slot returns to the purchaser unassigned. pendingTier is kept: it
-    // belongs to the SUBSCRIPTION (Stripe already bills the lower price from
-    // renewal), so the renewal webhook must still lower the add-on's tier
-    // even while it sits unassigned.
-    addon.projectId = null;
-    await saveProjectAddons(oldRoot, addons);
-    logger.warn(
-      { oldRoot, newRoot, projectId, subscriptionId: addon.subscriptionId },
-      "billing: project left its billing subtree - add-on detached, tier cleared",
-    );
+    await detachAddonForProjectTransferUnlocked(oldRoot, projectId, newRoot);
   });
+}
+
+export async function detachAddonForProjectTransferUnlocked(
+  oldRoot: string,
+  projectId: string,
+  newRoot: string,
+): Promise<void> {
+  if (oldRoot === newRoot) return;
+  const addons = await getProjectAddons(oldRoot);
+  const addon = addons.find((a) => a.projectId === projectId);
+  if (!addon) return;
+  const cleared = await setProjectTierScoped(oldRoot, projectId, null);
+  if (!cleared && (await isProjectInBillingSubtree(oldRoot, projectId))) {
+    logger.warn({ oldRoot, projectId }, "billing: transfer detach could not clear tier - binding kept");
+    return;
+  }
+  addon.projectId = null;
+  const capacity = await getPackageCapacity(oldRoot);
+  if (capacity.kind !== "agency") addon.ownerSlug = null;
+  await saveProjectAddons(oldRoot, addons);
+  logger.warn(
+    { oldRoot, newRoot, projectId, subscriptionId: addon.subscriptionId },
+    "billing: project left its billing subtree - add-on detached, tier cleared",
+  );
+}
+
+// Release a deleted project's add-on while preserving an Agency managed
+// client's reservation. Direct Client packages return to the unassigned pool.
+// Call while holding the billing-root lock and before (or atomically with) the
+// soft-delete so the scoped tier clear can still match the live row.
+export async function releaseAddonForDeletedProjectUnlocked(
+  billingSlug: string,
+  projectId: string,
+): Promise<void> {
+  const addons = await getProjectAddons(billingSlug);
+  const addon = addons.find((candidate) => candidate.projectId === projectId);
+  if (!addon) return;
+  await setProjectTierScoped(billingSlug, projectId, null);
+  addon.projectId = null;
+  const capacity = await getPackageCapacity(billingSlug);
+  if (capacity.kind !== "agency") addon.ownerSlug = null;
+  await saveProjectAddons(billingSlug, addons);
+}
+
+// Reconcile an already-completed same-billing-root ownership transfer. A
+// package reserved by the source managed client stays with that client; the
+// destination project may consume only its own reserved package (if any).
+export async function reconcileProjectAddonOwnershipUnlocked(
+  billingSlug: string,
+  projectId: string,
+  previousOwner: string,
+  targetOwner: string,
+): Promise<void> {
+  const source = normUsername(previousOwner);
+  const target = normUsername(targetOwner);
+  if (source === target) return;
+  const addons = await getProjectAddons(billingSlug);
+  const oldAddon = addons.find((candidate) => candidate.projectId === projectId);
+  if (oldAddon) {
+    await setProjectTierScoped(billingSlug, projectId, null);
+    oldAddon.projectId = null;
+    oldAddon.ownerSlug = source;
+  }
+  const targetAddon = addons.find(
+    (candidate) =>
+      candidate.grantsCapacity !== false
+      && !candidate.projectId
+      && candidate.ownerSlug === target,
+  );
+  if (targetAddon && await setProjectTierScoped(billingSlug, projectId, targetAddon.tier)) {
+    targetAddon.projectId = projectId;
+  }
+  if (oldAddon || targetAddon) await saveProjectAddons(billingSlug, addons);
+}
+
+// Called after a managed client has been inserted while its billing-root lock
+// is held. If that empty client pushed reservations beyond the included
+// package, bind the oldest purchased package now; its first project reuses it.
+export async function reserveAddonForOwnerUnlocked(
+  billingSlug: string,
+  ownerSlug: string,
+): Promise<void> {
+  const owner = normUsername(ownerSlug);
+  const addons = await getProjectAddons(billingSlug);
+  if (addons.some((addon) => addon.ownerSlug === owner)) return;
+  const free = addons.find(
+    (addon) => addon.grantsCapacity !== false && !addon.projectId && !addon.ownerSlug,
+  );
+  if (!free) return;
+  const capacity = await getPackageCapacity(billingSlug);
+  if (capacity.reserved <= capacity.included) return;
+  free.ownerSlug = owner;
+  await saveProjectAddons(billingSlug, addons);
+}
+
+// Release an empty managed-client reservation (archive/reparent). A package
+// already attached to a live project is intentionally left untouched.
+export async function releaseAddonForOwnerUnlocked(
+  billingSlug: string,
+  ownerSlug: string,
+): Promise<void> {
+  const owner = normUsername(ownerSlug);
+  const addons = await getProjectAddons(billingSlug);
+  const addon = addons.find(
+    (candidate) => !candidate.projectId && candidate.ownerSlug === owner,
+  );
+  if (!addon) return;
+  addon.ownerSlug = null;
+  await saveProjectAddons(billingSlug, addons);
 }
 
 // Same as assignAddonToNewProject but assumes the caller ALREADY holds the
@@ -640,24 +977,52 @@ export async function assignAddonToNewProjectUnlocked(
   billingSlug: string,
   projectId: string,
 ): Promise<void> {
+  const [project] = await db
+    .select({ owner: projectsTable.owner, deletedAt: projectsTable.deletedAt })
+    .from(projectsTable)
+    .where(eq(projectsTable.id, projectId))
+    .limit(1);
+  if (!project || project.deletedAt) return;
+  const owner = normUsername(project?.owner ?? "");
   const addons = await getProjectAddons(billingSlug);
-  const free = addons.find((a) => !a.projectId);
+  const existing = addons.find((addon) => addon.projectId === projectId);
+  // A same-owner retry is idempotent. If the owner write committed but the
+  // post-commit add-on reconciliation failed, use the authoritative live row
+  // to heal the stale reservation instead of returning early.
+  if (existing) {
+    const recordedOwner = normUsername(existing.ownerSlug ?? billingSlug);
+    if (recordedOwner !== owner) {
+      await reconcileProjectAddonOwnershipUnlocked(
+        billingSlug,
+        projectId,
+        recordedOwner,
+        owner,
+      );
+    }
+    return;
+  }
+  const reserved = addons.find(
+    (a) => a.grantsCapacity !== false && !a.projectId && a.ownerSlug === owner,
+  );
+  const free = reserved ?? addons.find(
+    (a) => a.grantsCapacity !== false && !a.projectId && !a.ownerSlug,
+  );
   if (!free) return;
 
   // Add-ons are purchased for projects BEYOND the plan's included allowance.
   // A new project that still falls within the included count must not
   // automatically consume a paid slot - that would mean the account gets an
   // add-on "for free" and the next genuinely extra project has no slot to use.
-  const state = await getBillingState(billingSlug);
-  if (state?.plan) {
-    const allProjects = await listBillingProjects(billingSlug);
-    const included = INCLUDED_PROJECTS[state.plan] ?? 0;
-    // `allProjects` already includes the newly-inserted project (we are called
-    // after the INSERT, inside the billing lock). If the count is still within
-    // the included ceiling this project does not need a purchased slot.
-    if (allProjects.length <= included) {
+  if (!reserved) {
+    const capacity = await getPackageCapacity(billingSlug);
+    if (capacity.reserved <= capacity.included) {
       logger.info(
-        { slug: billingSlug, projectId, included, projectCount: allProjects.length },
+        {
+          slug: billingSlug,
+          projectId,
+          included: capacity.included,
+          reserved: capacity.reserved,
+        },
         "billing: new project is within included allowance - not consuming a purchased add-on slot",
       );
       return;
@@ -666,6 +1031,7 @@ export async function assignAddonToNewProjectUnlocked(
 
   if (!(await setProjectTierScoped(billingSlug, projectId, free.tier))) return;
   free.projectId = projectId;
+  free.ownerSlug = owner || null;
   await saveProjectAddons(billingSlug, addons);
   logger.info(
     { slug: billingSlug, projectId, tier: free.tier, subscriptionId: free.subscriptionId },
@@ -1123,6 +1489,11 @@ async function handleProjectAddonPurchased(
   await withSlugLock(slug, async () => {
     const addons = await getProjectAddons(slug);
     if (addons.some((a) => a.subscriptionId === subscriptionId)) return; // replayed
+    // Attaching to a project already beyond the included package funds that
+    // project's existence. Attaching within included capacity is tier-only.
+    // New checkout sessions state this explicitly. Missing metadata belongs to
+    // legacy sessions, whose add-ons historically funded project existence.
+    const grantsCapacity = session.metadata?.["capacityGrant"] !== "false";
     if (requestedProjectId) {
       // A stale checkout can outlive another purchase that has already
       // claimed this project. Never overwrite that durable assignment; keep
@@ -1146,6 +1517,10 @@ async function handleProjectAddonPurchased(
       subscriptionId,
       tier,
       projectId,
+      ownerSlug: projectId
+        ? normUsername((await listBillingProjects(slug)).find((project) => project.id === projectId)?.owner ?? "")
+        : null,
+      grantsCapacity,
       purchasedAt: new Date().toISOString(),
     });
     await saveProjectAddons(slug, addons);
@@ -1335,23 +1710,30 @@ export async function handleSubscriptionDeleted(event: Stripe.Event): Promise<vo
       if (idx < 0) return false;
       const [removed] = addons.splice(idx, 1);
       await saveProjectAddons(slug, addons);
-      if (removed!.projectId) {
+      if (removed!.projectId && removed!.grantsCapacity !== false) {
         // The cancelled slot funded this project - retire it (soft-delete,
         // recoverable) so the account cannot keep an unpaid extra project.
         await softDeleteProjectScoped(slug, removed!.projectId);
-      } else {
+      } else if (!removed!.projectId) {
         // Unassigned slot: normally no project consumed it, but if a create
         // slipped through while the slot counted towards the allowance the
         // account may now be over. Flag for support rather than guessing
         // which project to retire.
-        const used = (await listBillingProjects(slug)).length;
-        const allowance = await getProjectAllowance(slug);
-        if (used > allowance) {
+        const capacity = await getPackageCapacity(slug);
+        if (capacity.overLimit) {
           logger.error(
-            { slug, used, allowance, subscriptionId: subscription.id },
+            {
+              slug,
+              reserved: capacity.reserved,
+              allowance: capacity.allowance,
+              subscriptionId: subscription.id,
+            },
             "billing: account over allowance after unassigned add-on cancellation",
           );
         }
+      } else {
+        // A tier-only upgrade never funded the project's existence.
+        await setProjectTierScoped(slug, removed!.projectId, null);
       }
       logger.warn(
         { slug, subscriptionId: subscription.id, projectId: removed!.projectId },
@@ -1949,6 +2331,7 @@ export async function createProjectCheckoutSession(opts: {
     slug,
     kind: "project-addon",
     tier: opts.tier,
+    capacityGrant: opts.projectId ? "false" : "true",
     ...(opts.projectId ? { projectId: opts.projectId } : {}),
   };
   const session = await createSessionWithTax(stripe, slug, {

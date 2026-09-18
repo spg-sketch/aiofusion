@@ -139,7 +139,29 @@ vi.mock("../lib/platform-auth", () => ({
 }));
 
 vi.mock("../lib/billing", () => ({
-  getProjectAllowance: () => Promise.resolve(h.allowance),
+  checkProjectCapacityUnlocked: async (owner: string, projectId: string) => {
+    const rows = await h.client.query(
+      "SELECT id FROM projects WHERE owner = $1 AND id <> $2 AND deleted_at IS NULL",
+      [owner, projectId],
+    );
+    const allowed = rows.rows.length < h.allowance;
+    return {
+      allowed,
+      error: allowed ? undefined : "Package capacity reached.",
+      capacity: {
+        billingSlug: owner,
+        kind: owner === "admin" ? "master" : "client",
+        access: "paid",
+        included: h.allowance,
+        purchased: 0,
+        reserved: rows.rows.length,
+        used: rows.rows.length,
+        remaining: Math.max(0, h.allowance - rows.rows.length),
+        allowance: h.allowance,
+        overLimit: rows.rows.length > h.allowance,
+      },
+    };
+  },
   assignAddonToNewProjectUnlocked: () => Promise.resolve(),
   withBillingLock: async (_slug: string, fn: (slug: string) => Promise<unknown>) => {
     let root = _slug;
@@ -155,24 +177,14 @@ vi.mock("../lib/billing", () => ({
     h.lockOwners.push(root);
     return fn(root);
   },
-  listBillingProjects: async (slug: string) => {
-    const allowed = new Set([slug]);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const account of h.accounts) {
-        if (account.parent && allowed.has(account.parent) && !allowed.has(account.username)) {
-          allowed.add(account.username);
-          changed = true;
-        }
-      }
-    }
-    const rows = await h.client.query(
-      "SELECT id, name, tier, owner FROM projects WHERE deleted_at IS NULL",
-    );
-    return rows.rows.filter((row: { owner: string | null }) => allowed.has(row.owner ?? ""));
+  withBillingLocks: (_slugs: string[], fn: (roots: string[]) => Promise<unknown>) => fn(_slugs),
+  resolveBillingSlug: async (slug: string) => {
+    const account = h.accounts.find((item) => item.username === slug);
+    return account?.parent && account.parent !== "admin" ? account.parent : slug;
   },
-  detachAddonForProjectTransfer: () => Promise.resolve(),
+  detachAddonForProjectTransferUnlocked: () => Promise.resolve(),
+  releaseAddonForDeletedProjectUnlocked: () => Promise.resolve(),
+  reconcileProjectAddonOwnershipUnlocked: () => Promise.resolve(),
 }));
 
 vi.mock("../lib/admin-events", () => ({

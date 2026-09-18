@@ -4,6 +4,7 @@ import { apiBase } from "../lib/apiHelpers";
 import { CheckoutReturnLoading } from "./CheckoutReturnLoading";
 import { BillingInformationPrompt, focusBillingSection } from "./BillingInformationPrompt";
 import { billingMoney, useTierProration } from "../hooks/useTierProration";
+import type { PackageCapacity } from "../lib/billingAllowance";
 
 const ink = vars.navy;
 const accent = vars.accent;
@@ -45,6 +46,9 @@ type SubscriptionInfo = {
   includedProjects: number;
   projectAllowance: number;
   projectsUsed: number;
+  packageCapacity?: PackageCapacity;
+  /** Temporary compatibility with pre-contract responses. */
+  capacity?: PackageCapacity;
   latestInvoiceUrl?: string | null;
   portalAvailable: boolean;
   checkoutAvailable: boolean;
@@ -212,7 +216,7 @@ function PaymentSuccessState({
   );
 }
 
-function ProjectAddonSuccessState({ addon }: { addon: ConfirmedAddon }) {
+function ProjectAddonSuccessState({ addon, kind }: { addon: ConfirmedAddon; kind: "agency" | "client" }) {
   const tierLabel = TIER_LABELS[addon.tier];
 
   return (
@@ -224,7 +228,7 @@ function ProjectAddonSuccessState({ addon }: { addon: ConfirmedAddon }) {
       style={{ background: "#ECFDF5", border: "1px solid #A7F3D0" }}
     >
       <h3 className="aio-type-card-title" style={{ color: "#166534" }}>
-        Additional project workspace purchased
+        {kind === "agency" ? "Additional client/project package purchased" : "Additional project workspace purchased"}
       </h3>
       <p className="aio-type-supporting mt-1" style={{ color: "#166534" }}>
         Tier: <strong>{tierLabel}</strong>
@@ -236,10 +240,12 @@ function ProjectAddonSuccessState({ addon }: { addon: ConfirmedAddon }) {
       ) : (
         <>
           <p className="aio-type-supporting mt-1" style={{ color: "#166534" }}>
-            One extra workspace is now available.
+            {kind === "agency"
+              ? "One managed-client and project package is now available."
+              : "One extra workspace is now available."}
           </p>
           <p className="aio-type-supporting mt-1" style={{ color: "#166534" }}>
-            Your next new project will use <strong>{tierLabel}</strong>.
+            {kind === "agency" ? "Your next managed client can use" : "Your next new project will use"} <strong>{tierLabel}</strong>.
           </p>
         </>
       )}
@@ -281,6 +287,7 @@ export function SubscriptionCard({
   const [confirmedAddon, setConfirmedAddon] = useState<ConfirmedAddon | null>(null);
   const [verifiedAfterConfirmation, setVerifiedAfterConfirmation] = useState(false);
   const paidSubscription = info?.status === "active" || info?.status === "past_due";
+  const packageCapacity = info?.packageCapacity ?? info?.capacity;
 
   useEffect(() => {
     let cancelled = false;
@@ -531,7 +538,7 @@ export function SubscriptionCard({
           <PaymentSuccessState info={info} verifiedCheckout={checkoutConfirmed} />
         )}
         {checkoutResult === "success" && checkoutConfirmationKind === "project-addon" && checkoutConfirmed && confirmedAddon && (
-          <ProjectAddonSuccessState addon={confirmedAddon} />
+          <ProjectAddonSuccessState addon={confirmedAddon} kind={packageCapacity?.kind === "agency" ? "agency" : "client"} />
         )}
         {checkoutResult === "success" && (checkoutSessionId || onboarding) && (
           !checkoutConfirmed
@@ -563,7 +570,7 @@ export function SubscriptionCard({
           <div className="mb-5 rounded-xl p-4" style={{ background: "#FBE3ED55", border: `1px solid ${accent}55` }}>
             <p className="aio-type-card-title mb-1" style={{ color: ink }}>Try AIO Fusion free for 60 days</p>
             <p className="aio-type-body mb-3" style={{ color: vars.g600 }}>
-              No card required. Your one-time trial starts when you confirm and includes {info.applicablePlan === "inhouse" ? "one project workspace" : "two project workspaces"}.
+              No card required. Your one-time trial starts when you confirm and includes {info.applicablePlan === "inhouse" ? "one project in your account" : "two managed clients with one project each"}.
             </p>
             <button
               type="button"
@@ -612,10 +619,34 @@ export function SubscriptionCard({
               )}
             </div>
             <p className="aio-type-supporting" style={{ color: vars.g500 }}>
-              {info.includedProjects} Premium project{info.includedProjects === 1 ? "" : "s"} included.
+              {packageCapacity?.kind === "agency"
+                ? `${packageCapacity.included} managed client/project packages included.`
+                : `${packageCapacity?.included ?? info.includedProjects} Premium project${(packageCapacity?.included ?? info.includedProjects) === 1 ? "" : "s"} included in this account.`}
             </p>
             <RenewalDetails status={info.status} currentPeriodEnd={info.currentPeriodEnd} />
-            {info.entitled && (
+            {info.entitled && packageCapacity ? (
+              <div className="aio-type-supporting mt-2" data-testid="package-capacity-summary" style={{ color: vars.g500 }}>
+                <p>
+                  <strong style={{ color: ink }}>{packageCapacity.included}</strong> included ·{" "}
+                  <strong style={{ color: ink }}>{packageCapacity.purchased}</strong> purchased ·{" "}
+                  <strong style={{ color: ink }}>{packageCapacity.reserved}</strong> reserved ·{" "}
+                  <strong style={{ color: ink }}>{packageCapacity.used}</strong> projects used ·{" "}
+                  <strong style={{ color: ink }}>{packageCapacity.remaining === null ? "Unlimited" : Math.max(0, packageCapacity.remaining)}</strong> remaining ·{" "}
+                  <strong style={{ color: ink }}>{packageCapacity.allowance === null ? "Unlimited" : packageCapacity.allowance}</strong> total allowance
+                </p>
+                {packageCapacity.kind === "agency" && (
+                  <p className="mt-1">An empty managed client still reserves its client/project package until it is archived or removed.</p>
+                )}
+                {packageCapacity.overLimit && (
+                  <p className="mt-1" style={{ color: "#92400E" }}>
+                    Existing work remains readable, but no new {packageCapacity.kind === "agency" ? "managed clients or projects" : "projects"} can be added while this account is over its package limit.
+                  </p>
+                )}
+                {!packageCapacity.overLimit && (
+                  <p className="mt-1" style={{ color: "#166534" }}>Within package allowance.</p>
+                )}
+              </div>
+            ) : info.entitled && (
               <p className="aio-type-supporting mt-1" style={{ color: vars.g500 }}>
                 Projects: <strong style={{ color: ink }}>{info.projectsUsed} of {info.projectAllowance}</strong> in use
                 {info.unassignedAddons.length > 0 && (
@@ -655,9 +686,13 @@ export function SubscriptionCard({
         ) : (
           <div>
             <p className="aio-type-body mb-4" style={{ color: vars.g500 }}>
-              {trial.status === "active"
+               {trial.status === "active"
                 ? "You can continue your beta trial without payment, or start a paid subscription now."
-                : `Subscribe to the ${planLabel} plan. ${info.includedProjects} Premium project${info.includedProjects === 1 ? "" : "s"} included.`} Review your total at checkout.
+                 : `Subscribe to the ${planLabel} plan. ${packageCapacity
+                   ? packageCapacity.kind === "agency"
+                     ? `${packageCapacity.included} managed clients with one Premium project each included.`
+                     : `${packageCapacity.included} Premium project${packageCapacity.included === 1 ? "" : "s"} in your account included.`
+                   : `${info.includedProjects} Premium project${info.includedProjects === 1 ? "" : "s"} included.`}`} Review your total at checkout.
             </p>
             <RestartChooser info={info} frequency={frequency} setFrequency={setFrequency} starting={starting} onStart={startCheckout} error={error} />
           </div>
@@ -747,6 +782,8 @@ function AddProjectCard({ info }: { info: SubscriptionInfo }) {
       && Number.isFinite(price.actionsPerMonth),
     );
   });
+  const agencyPackage = (info.packageCapacity ?? info.capacity)?.kind === "agency";
+  const directClientPackage = (info.packageCapacity ?? info.capacity)?.kind === "client";
 
   async function buy() {
     if (!paidSubscription || !info.companyRecordComplete || !pricesReady || !info.checkoutAvailable) return;
@@ -774,9 +811,15 @@ function AddProjectCard({ info }: { info: SubscriptionInfo }) {
 
   return (
     <div data-testid="add-project-card" className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-       <h2 className="aio-type-card-title mb-1" style={{ color: ink }}>Add a project workspace</h2>
+       <h2 className="aio-type-card-title mb-1" style={{ color: ink }}>
+         {agencyPackage ? "Add a client/project package" : "Add a project workspace"}
+       </h2>
       <p className="aio-type-body mb-4" style={{ color: vars.g500 }}>
-         Add one independent project workspace for another brand, client, or programme. Billed annually. Once paid, your next new project uses the tier you choose here. This adds a separate workspace, not extra runtime capacity inside an existing project.
+         {agencyPackage
+           ? "Add capacity for one managed client with one independent project workspace. Billed annually. An empty client reserves the purchased package, and its first project uses that same package."
+           : directClientPackage
+             ? "Add one independent project workspace in this account for another brand, product, or programme. Billed annually. Once paid, your next new project uses the tier you choose here. This does not create another client account."
+             : "Add one independent project workspace for another brand, client, or programme. Billed annually. Once paid, your next new project uses the tier you choose here. This adds a separate workspace, not extra runtime capacity inside an existing project."}
       </p>
        {pricesReady ? (
          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 max-w-2xl">
@@ -784,7 +827,7 @@ function AddProjectCard({ info }: { info: SubscriptionInfo }) {
              <button
                key={t}
                type="button"
-               aria-label={`Add a ${TIER_LABELS[t]} project workspace`}
+                aria-label={`Add a ${TIER_LABELS[t]} ${agencyPackage ? "client/project package" : "project workspace"}`}
                onClick={() => setTier(t)}
                className="rounded-xl p-4 text-left transition-all"
                style={{
@@ -826,6 +869,9 @@ function AddProjectCard({ info }: { info: SubscriptionInfo }) {
         </button>
         {error && <span className="aio-type-supporting" style={{ color: "#991B1B" }}>{error}</span>}
       </div>
+      <p className="aio-type-meta mt-3" style={{ color: vars.g500 }}>
+        Tier upgrades are charged immediately at the prorated amount shown before confirmation. Downgrades take effect at renewal. Cancelling a package retires its funded project at the end of the paid period; existing work remains available until then.
+      </p>
     </div>
   );
 }

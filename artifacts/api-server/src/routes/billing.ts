@@ -26,7 +26,8 @@ import {
   getCheckoutErrorResponse,
   isLiveStripeMode,
   getBetaTrialSummary,
-  getBetaTrialProjectCap,
+  getPackageCapacity,
+  resolveBillingSlug,
   startBetaTrial,
   checkoutClaimMatchesSession,
   handleCheckoutCompleted,
@@ -47,6 +48,26 @@ import { logger } from "../lib/logger";
 import { getCompanyBillingRecord } from "../lib/company-billing-record";
 
 const router: IRouter = Router();
+
+// Capacity is safe for project-capable members and follows managed accounts to
+// the agency billing root. It deliberately exposes no customer, invoice or
+// payment-method details.
+router.get("/platform/billing/capacity", requirePlatformAuth, async (req, res) => {
+  try {
+    if (req.account?.membershipRole === "billing") {
+      res.status(403).json({ error: "You do not have access to projects." });
+      return;
+    }
+    const slug = normUsername(req.account!.username);
+    const billingSlug = await resolveBillingSlug(slug);
+    const capacity = await getPackageCapacity(billingSlug);
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ packageCapacity: capacity });
+  } catch (err) {
+    logger.error({ err }, "billing: failed to load package capacity");
+    res.status(500).json({ error: "Could not load package capacity." });
+  }
+});
 
 function isMissingStripeResource(err: unknown): boolean {
   return (
@@ -111,14 +132,12 @@ router.get("/platform/billing/subscription", requirePlatformAuth, async (req, re
     const prices = PLAN_PRICES[ctx.plan];
     const entitled = isEntitled(state);
     const trial = getBetaTrialSummary(state);
-    const [addons, projects, latestInvoice, companyRecord, trialAllowance] = await Promise.all([
+    const [addons, projects, latestInvoice, companyRecord, capacity] = await Promise.all([
       getProjectAddons(ctx.slug),
       listBillingProjects(ctx.slug),
       getLatestInvoiceLink(ctx.slug),
       getCompanyBillingRecord(ctx.slug),
-      trial.status === "active"
-        ? getBetaTrialProjectCap(ctx.slug, state)
-        : Promise.resolve<number | null>(null),
+      getPackageCapacity(ctx.slug),
     ]);
     const included = state?.plan ? INCLUDED_PROJECTS[state.plan] : INCLUDED_PROJECTS[ctx.plan];
     res.setHeader("Cache-Control", "no-store");
@@ -137,10 +156,9 @@ router.get("/platform/billing/subscription", requirePlatformAuth, async (req, re
       includedProjects: included,
       // Always expose the effective allowance used by the server-side project
       // creation guard. Active trials use the billing-root role-aware cap.
-      projectAllowance: trial.status === "active"
-        ? trialAllowance ?? 0
-        : entitled ? included + addons.length : 0,
+      projectAllowance: capacity.allowance ?? Number.MAX_SAFE_INTEGER,
       projectsUsed: projects.length,
+      capacity,
       latestInvoiceUrl: latestInvoice,
       portalAvailable: stripeConfigured() && !!state?.stripeCustomerId,
       checkoutAvailable: stripeConfigured(),

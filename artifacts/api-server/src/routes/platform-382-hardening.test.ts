@@ -91,8 +91,11 @@ vi.mock("@workspace/db", async () => {
     );
     CREATE TABLE IF NOT EXISTS projects (
       id varchar PRIMARY KEY,
-      username varchar NOT NULL,
-      data jsonb,
+      username varchar,
+      name varchar NOT NULL DEFAULT '',
+      data jsonb NOT NULL DEFAULT '{}',
+      intake jsonb,
+      logo text,
       owner varchar,
       tier varchar(16),
       deleted_at timestamptz,
@@ -713,6 +716,41 @@ describe("workspace metadata deletion", () => {
     });
 
     await expectOnlySimilarWorkspaceMetadataRemains("vibe-studio", "vibe-studio-uk");
+  });
+
+  it("releases an empty managed client's purchased reservation when the client is deleted", async () => {
+    await seedAccount("delete-capacity-agency", { role: "agency" });
+    await seedAccount("delete-capacity-client", {
+      role: "client",
+      parent: "delete-capacity-agency",
+    });
+    await db.update(platformCompaniesTable)
+      .set({ freeAccess: true, plan: "agency" })
+      .where(eq(platformCompaniesTable.slug, "delete-capacity-agency"));
+    await db.insert(platformMetaTable).values({
+      key: "projectAddons:delete-capacity-agency",
+      value: JSON.stringify([{
+        subscriptionId: "sub_delete_capacity",
+        tier: "standard",
+        projectId: null,
+        ownerSlug: "delete-capacity-client",
+        purchasedAt: new Date().toISOString(),
+      }]),
+    });
+
+    await withServer(async (base) => {
+      const res = await fetch(`${base}/api/platform/accounts/delete`, {
+        method: "POST",
+        headers: acctHeader({ username: "delete-capacity-agency", role: "agency" }),
+        body: JSON.stringify({ username: "delete-capacity-client" }),
+      });
+      expect(res.status).toBe(200);
+    });
+
+    const [stored] = await db.select().from(platformMetaTable)
+      .where(eq(platformMetaTable.key, "projectAddons:delete-capacity-agency"));
+    const [addon] = JSON.parse(stored!.value) as Array<{ ownerSlug?: string | null }>;
+    expect(addon.ownerSlug).toBeNull();
   });
 
   it("removes all workspace metadata on self-deletion without touching a similar slug", async () => {

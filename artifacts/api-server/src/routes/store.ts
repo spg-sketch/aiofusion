@@ -19,13 +19,15 @@ import {
 import { shouldSnapshot, type ProjectContent } from "../lib/snapshot-guards";
 import { logAdminEvent } from "../lib/admin-events";
 import {
-  getProjectAllowance,
+  checkProjectCapacityUnlocked,
   assignAddonToNewProjectUnlocked,
   withBillingLock,
-  listBillingProjects,
-  detachAddonForProjectTransfer,
+  withBillingLocks,
+  resolveBillingSlug,
+  detachAddonForProjectTransferUnlocked,
+  releaseAddonForDeletedProjectUnlocked,
+  reconcileProjectAddonOwnershipUnlocked,
 } from "../lib/billing";
-import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
@@ -133,6 +135,26 @@ async function getOwner(id: string): Promise<string | null | undefined> {
     .where(eq(projectsTable.id, id))
     .limit(1);
   return rows[0]?.owner;
+}
+
+// Owner is accepted only for a new row. Existing sync writes cannot move a
+// project; transfers use the dedicated, capacity-checked endpoint.
+async function creationOwner(req: Request, res: Response, visible: string[] | null): Promise<string | null> {
+  const owner = normUsername(req.body?.owner ?? req.account!.username);
+  if (!owner || !canSee(owner, visible) || !(await getAccount(owner))) {
+    res.status(403).json({ error: "You cannot create a project for that account." });
+    return null;
+  }
+  return owner;
+}
+
+function sendCapacityError(res: Response, decision: Awaited<ReturnType<typeof checkProjectCapacityUnlocked>>) {
+  res.status(403).json({
+    error: `${decision.error ?? "Package capacity reached"} ${decision.capacity.kind === "agency" ? "Manage client packages in your agency's Billing settings." : "Manage additional projects in Billing settings."}`,
+    limitReached: true,
+    billingSlug: decision.capacity.billingSlug,
+    packageCapacity: decision.capacity,
+  });
 }
 
 // List the live projects this account may see, plus the ids of any deleted ones
@@ -245,9 +267,11 @@ router.post(
         res.status(403).json({ error: "You cannot modify this project." });
         return;
       }
-      const isNewProject = existingOwner === undefined;
       const now = new Date();
-      const owner = normUsername(req.account!.username);
+      const owner = existingOwner === undefined
+        ? await creationOwner(req, res, visible)
+        : normUsername(existingOwner ?? req.account!.username);
+      if (!owner) return;
       const incomingName = typeof name === "string" ? name.trim() : "";
       const incomingDataEmpty = dataIsEmpty(data);
       const incomingLogo = typeof logo === "string" && logo ? logo : null;
@@ -262,12 +286,15 @@ router.post(
         // purchased add-ons; unsubscribed accounts keep the legacy cap of 2.
         // The count spans the whole billing subtree, matching the allowance.
         // Admins are never restricted.
+        const lockedOwner = await getOwner(id);
+        if (lockedOwner !== undefined && (!canSee(lockedOwner, visible)
+          || (existingOwner !== undefined && lockedOwner !== existingOwner))) {
+          return { conflict: true as const };
+        }
+        const isNewProject = lockedOwner === undefined;
         if (isNewProject && req.account!.role !== "admin") {
-          const used = (await listBillingProjects(billingSlug)).length;
-          const allowance = await getProjectAllowance(billingSlug);
-          if (used >= allowance) {
-            return { limitReached: true as const, allowance };
-          }
+          const decision = await checkProjectCapacityUnlocked(owner, id);
+          if (!decision.allowed) return { limitReached: true as const, decision };
         }
         const saved = await db
           .insert(projectsTable)
@@ -310,20 +337,17 @@ router.post(
         // A brand-new project consumes the oldest unassigned purchased add-on
         // (if any) so it immediately carries the paid-for tier. Runs inside
         // this critical section (unlocked variant - we already hold the lock).
-        if (isNewProject && saved[0]) {
-          try {
-            await assignAddonToNewProjectUnlocked(billingSlug, id);
-          } catch (err) {
-            logger.warn({ err, id }, "store: add-on assignment failed (non-fatal)");
-          }
+        if (saved[0]) {
+          await assignAddonToNewProjectUnlocked(billingSlug, id);
         }
         return { limitReached: false as const, saved };
       });
+      if ("conflict" in outcome) {
+        res.status(409).json({ error: "Project ownership changed. Refresh and try again." });
+        return;
+      }
       if (outcome.limitReached) {
-        res.status(403).json({
-          error: `You've reached your ${outcome.allowance}-project allowance. You can add another project from the Billing section of your account settings.`,
-          limitReached: true,
-        });
+        sendCapacityError(res, outcome.decision);
         return;
       }
       const saved = outcome.saved;
@@ -359,9 +383,11 @@ router.post(
         res.status(403).json({ error: "You cannot modify this project." });
         return;
       }
-      const isNewProject = existingOwner === undefined;
       const now = new Date();
-      const owner = normUsername(req.account!.username);
+      const owner = existingOwner === undefined
+        ? await creationOwner(req, res, visible)
+        : normUsername(existingOwner ?? req.account!.username);
+      if (!owner) return;
       const incomingIntakeEmpty = intakeIsEmpty(intake);
       // The confirmed company identity (for an ambiguous brand name) rides inside
       // the intake blob, but it is not counted as a "real Set-Up answer" by
@@ -376,12 +402,15 @@ router.post(
       // Allowance check, insert and add-on assignment run as one critical
       // section under the billing account's lock, matching /upsert.
       const outcome = await withBillingLock(owner, async (billingSlug) => {
+        const lockedOwner = await getOwner(id);
+        if (lockedOwner !== undefined && (!canSee(lockedOwner, visible)
+          || (existingOwner !== undefined && lockedOwner !== existingOwner))) {
+          return { conflict: true as const };
+        }
+        const isNewProject = lockedOwner === undefined;
         if (isNewProject && req.account!.role !== "admin") {
-          const used = (await listBillingProjects(billingSlug)).length;
-          const allowance = await getProjectAllowance(billingSlug);
-          if (used >= allowance) {
-            return { limitReached: true as const, allowance };
-          }
+          const decision = await checkProjectCapacityUnlocked(owner, id);
+          if (!decision.allowed) return { limitReached: true as const, decision };
         }
         const saved = await db
           .insert(projectsTable)
@@ -424,20 +453,17 @@ router.post(
           .returning(projectRowColumns);
         // Intake-created projects consume a purchased add-on slot the same
         // way upsert-created ones do (unlocked - we already hold the lock).
-        if (isNewProject && saved[0]) {
-          try {
-            await assignAddonToNewProjectUnlocked(billingSlug, id);
-          } catch (err) {
-            logger.warn({ err, id }, "store: add-on assignment failed (non-fatal)");
-          }
+        if (saved[0]) {
+          await assignAddonToNewProjectUnlocked(billingSlug, id);
         }
         return { limitReached: false as const, saved };
       });
+      if ("conflict" in outcome) {
+        res.status(409).json({ error: "Project ownership changed. Refresh and try again." });
+        return;
+      }
       if (outcome.limitReached) {
-        res.status(403).json({
-          error: `You've reached your ${outcome.allowance}-project allowance. You can add another project from the Billing section of your account settings.`,
-          limitReached: true,
-        });
+        sendCapacityError(res, outcome.decision);
         return;
       }
       const saved = outcome.saved;
@@ -496,25 +522,45 @@ router.post(
         res.status(404).json({ error: "That account does not exist." });
         return;
       }
-      // A paid add-on tier never travels to a different billing account: if
-      // the project is moving outside its current billing subtree, detach the
-      // add-on binding and clear the tier BEFORE ownership changes (while the
-      // scoped tier update still matches the old subtree).
-      if (existingOwner) {
-        await detachAddonForProjectTransfer(existingOwner, id, target);
+      const outcome = await withBillingLocks([existingOwner ?? target, target], async () => {
+        const [current] = await db.select({ owner: projectsTable.owner, deletedAt: projectsTable.deletedAt })
+          .from(projectsTable).where(eq(projectsTable.id, id)).limit(1);
+        if (!current || current.owner !== existingOwner || !canSee(current.owner, visible)) {
+          return { conflict: true as const };
+        }
+        if (current.owner === target) {
+          // A previous request may have committed ownership but lost its
+          // response or failed while assigning the purchased package.
+          if (!current.deletedAt) await assignAddonToNewProjectUnlocked(await resolveBillingSlug(target), id);
+          return { ok: true as const };
+        }
+        const destinationRoot = await resolveBillingSlug(target);
+        const sourceRoot = current.owner ? await resolveBillingSlug(current.owner) : destinationRoot;
+        if (!current.deletedAt && req.account!.role !== "admin") {
+          const decision = await checkProjectCapacityUnlocked(target, id);
+          if (!decision.allowed) return { decision };
+        }
+        if (current.owner) {
+          await detachAddonForProjectTransferUnlocked(sourceRoot, id, destinationRoot);
+        }
+        // Match the exact owner read under the locks, not merely visibility.
+        const updated = await db.update(projectsTable)
+          .set({ owner: target, updatedAt: new Date() })
+          .where(and(eq(projectsTable.id, id), current.owner === null
+            ? isNull(projectsTable.owner) : eq(projectsTable.owner, current.owner)))
+          .returning({ id: projectsTable.id });
+        if (!updated.length) return { conflict: true as const };
+        if (sourceRoot === destinationRoot && current.owner) {
+          await reconcileProjectAddonOwnershipUnlocked(destinationRoot, id, current.owner, target);
+        }
+        if (!current.deletedAt) await assignAddonToNewProjectUnlocked(destinationRoot, id);
+        return { ok: true as const };
+      });
+      if ("decision" in outcome && outcome.decision) {
+        sendCapacityError(res, outcome.decision);
+        return;
       }
-      // Atomic guard: scope the update to rows the caller may touch, so the
-      // authorization holds even if ownership changed after the check above.
-      // `returning` tells us whether a row actually matched: if ownership shifted
-      // out of the caller's scope between the check and the write, no row is
-      // updated and we report the conflict instead of a false success.
-      const scope = ownerPredicate(visible);
-      const updated = await db
-        .update(projectsTable)
-        .set({ owner: target, updatedAt: new Date() })
-        .where(scope ? and(eq(projectsTable.id, id), scope) : eq(projectsTable.id, id))
-        .returning({ id: projectsTable.id });
-      if (updated.length === 0) {
+      if ("conflict" in outcome) {
         res.status(409).json({ error: "You cannot reassign this project." });
         return;
       }
@@ -563,35 +609,25 @@ router.post(
         res.status(403).json({ error: "You cannot delete this project." });
         return;
       }
-      // Atomic guard: scope the soft-delete to rows the caller may touch, so
-      // the authorization holds even if ownership changed after the check above.
-      const scope = ownerPredicate(visible);
-      // Back up the project's current state before it is removed, so a deletion
-      // is recoverable from the history too. This is a destructive operation, so
-      // if the backup cannot be written we refuse to delete rather than risk an
-      // unrecoverable removal.
-      const current = await db
-        .select(projectRowColumns)
-        .from(projectsTable)
-        .where(eq(projectsTable.id, id))
-        .limit(1);
-      if (current[0]) {
-        const backedUp = await snapshotProject(current[0] as ProjectRowSlim, "pre-delete");
-        if (!backedUp) {
-          res.status(503).json({ error: "Could not back up before deleting. Please try again." });
-          return;
-        }
+      const outcome = await withBillingLock(existingOwner ?? req.account!.username, async (billingSlug) => {
+        const [current] = await db.select(projectRowColumns).from(projectsTable)
+          .where(eq(projectsTable.id, id)).limit(1);
+        if (!current || current.owner !== existingOwner || !canSee(current.owner, visible)) return "conflict";
+        if (!(await snapshotProject(current as ProjectRowSlim, "pre-delete"))) return "backup-failed";
+        const scope = ownerPredicate(visible);
+        const deleted = await db.update(projectsTable).set({ deletedAt: new Date(), tier: null })
+          .where(and(eq(projectsTable.id, id), scope, current.owner === null
+            ? isNull(projectsTable.owner) : eq(projectsTable.owner, current.owner)))
+          .returning({ id: projectsTable.id });
+        if (!deleted.length) return "conflict";
+        await releaseAddonForDeletedProjectUnlocked(billingSlug, id);
+        return "ok";
+      });
+      if (outcome === "backup-failed") {
+        res.status(503).json({ error: "Could not back up before deleting. Please try again." });
+        return;
       }
-      const deleted = await db
-        .update(projectsTable)
-        .set({ deletedAt: new Date() })
-        .where(scope ? and(eq(projectsTable.id, id), scope) : eq(projectsTable.id, id))
-        .returning({ id: projectsTable.id });
-      // The owner/scope check above is only a friendly early rejection. The
-      // scoped UPDATE is the authorization boundary: ownership can change
-      // between the read and this write. Never report success when the
-      // authorized row was no longer there (or no longer in scope).
-      if (deleted.length === 0) {
+      if (outcome === "conflict") {
         res.status(409).json({ error: "You cannot delete this project." });
         return;
       }
@@ -754,22 +790,23 @@ router.post(
           .where(eq(projectsTable.id, id))
           .limit(1);
         if (!lockedCurrent) return "not-found" as const;
+        if (lockedCurrent.owner !== current[0]?.owner || !canSee(lockedCurrent.owner, visible)) {
+          return "not-found" as const;
+        }
 
         // Restoring a version over an already-live project does not consume a
         // project slot. Recovering a deleted project does, so only the latter
         // needs the allowance check.
         if (lockedCurrent.deletedAt && req.account!.role !== "admin") {
-          const used = (await listBillingProjects(billingSlug)).length;
-          const allowance = await getProjectAllowance(billingSlug);
-          if (used >= allowance) return { limitReached: true as const, allowance };
+          const decision = await checkProjectCapacityUnlocked(lockOwner, id);
+          if (!decision.allowed) return { decision };
         }
-        return restore(lockedCurrent);
+        const result = await restore(lockedCurrent);
+        if (result === "ok") await assignAddonToNewProjectUnlocked(billingSlug, id);
+        return result;
       });
       if (typeof outcome === "object") {
-        res.status(403).json({
-          error: `You've reached your ${outcome.allowance}-project allowance. You can add another project from the Billing section of your account settings.`,
-          limitReached: true,
-        });
+        sendCapacityError(res, outcome.decision);
         return;
       }
       if (outcome === "backup-failed") {

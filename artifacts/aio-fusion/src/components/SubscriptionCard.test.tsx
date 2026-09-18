@@ -125,6 +125,86 @@ function activeSubscription() {
 }
 
 describe("billing descriptions", () => {
+  it("shows agency package reservations and account-appropriate purchase terms", async () => {
+    const info = {
+      ...activeSubscription(),
+      packageCapacity: {
+        billingSlug: "agency",
+        kind: "agency",
+        access: "paid",
+        included: 3,
+        purchased: 1,
+        reserved: 4,
+        used: 3,
+        remaining: 0,
+        allowance: 4,
+        overLimit: false,
+      },
+      tierPrices: {
+        standard: { yearlyTotal: 10000, actionsPerMonth: 50 },
+        premium: { yearlyTotal: 20000, actionsPerMonth: 100 },
+        max: { yearlyTotal: 30000, actionsPerMonth: 200 },
+      },
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => ({
+      ok: true,
+      json: async () => String(input).endsWith("/api/platform/billing/subscription")
+        ? info
+        : { invoices: [] },
+    } as Response)));
+
+    render(<SubscriptionCard />);
+
+    const summary = await screen.findByTestId("package-capacity-summary");
+    expect(summary).toHaveTextContent("3 included");
+    expect(summary).toHaveTextContent("1 purchased");
+    expect(summary).toHaveTextContent("4 reserved");
+    expect(summary).toHaveTextContent("3 projects used");
+    expect(summary).toHaveTextContent("0 remaining");
+    expect(summary).toHaveTextContent("4 total allowance");
+    expect(summary).toHaveTextContent("Within package allowance");
+    expect(summary).toHaveTextContent("empty managed client still reserves");
+    const addCard = screen.getByTestId("add-project-card");
+    expect(addCard).toHaveTextContent("Add a client/project package");
+    expect(addCard).toHaveTextContent("Billed annually");
+    expect(addCard).toHaveTextContent("Tier upgrades are charged immediately at the prorated amount");
+    expect(addCard).toHaveTextContent("Downgrades take effect at renewal");
+    expect(addCard).toHaveTextContent("Cancelling a package retires its funded project");
+  });
+
+  it("describes direct-client capacity as one account with project add-ons", async () => {
+    const info = {
+      ...activeSubscription(),
+      applicablePlan: "inhouse",
+      plan: "inhouse",
+      packageCapacity: {
+        billingSlug: "direct-client",
+        kind: "client",
+        access: "paid",
+        included: 1,
+        purchased: 2,
+        reserved: 3,
+        used: 3,
+        remaining: 0,
+        allowance: 3,
+        overLimit: false,
+      },
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => ({
+      ok: true,
+      json: async () => String(input).endsWith("/api/platform/billing/subscription")
+        ? info
+        : { invoices: [] },
+    } as Response)));
+
+    render(<SubscriptionCard />);
+
+    expect(await screen.findByText("1 Premium project included in this account.")).toBeInTheDocument();
+    const addCard = screen.getByTestId("add-project-card");
+    expect(addCard).toHaveTextContent("Add a project workspace");
+    expect(addCard).toHaveTextContent("This does not create another client account");
+  });
+
   it("does not show the beta checkout warning for an active paid subscription", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => ({
       ok: true,

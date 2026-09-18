@@ -108,8 +108,11 @@ vi.mock("@workspace/db", async () => {
     );
     CREATE TABLE IF NOT EXISTS projects (
       id varchar PRIMARY KEY,
-      username varchar NOT NULL,
-      data jsonb,
+      username varchar,
+      name varchar NOT NULL DEFAULT '',
+      data jsonb NOT NULL DEFAULT '{}',
+      intake jsonb,
+      logo text,
       owner varchar,
       tier varchar(16),
       deleted_at timestamptz,
@@ -358,6 +361,15 @@ describe("POST /api/platform/accounts -- welcome token for new client contact", 
       role: "user",
       status: "active",
     });
+    await db.insert(platformCompaniesTable).values({
+      slug: AGENCY_USERNAME,
+      role: "agency",
+      freeAccess: true,
+      plan: "agency",
+    }).onConflictDoUpdate({
+      target: platformCompaniesTable.slug,
+      set: { freeAccess: true, plan: "agency" },
+    });
 
     ({ server, baseUrl } = await startServer());
   });
@@ -386,6 +398,9 @@ describe("POST /api/platform/accounts -- welcome token for new client contact", 
     await db
       .delete(platformCompaniesTable)
       .where(eq(platformCompaniesTable.slug, CLIENT_USERNAME));
+    await db
+      .delete(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, AGENCY_USERNAME));
     await db
       .delete(platformAccountsTable)
       .where(eq(platformAccountsTable.username, CLIENT_USERNAME));
@@ -566,6 +581,10 @@ describe("POST /api/platform/accounts -- idempotent creation", () => {
     await db.insert(platformAccountsTable).values([
       { username: AGENCY, passwordHash: hashPassword("agency-password"), role: "user", status: "active" },
       { username: OTHER_AGENCY, passwordHash: hashPassword("other-password"), role: "user", status: "active" },
+    ]);
+    await db.insert(platformCompaniesTable).values([
+      { slug: AGENCY, role: "agency", freeAccess: true, plan: "agency" },
+      { slug: OTHER_AGENCY, role: "agency", freeAccess: true, plan: "agency" },
     ]);
     ({ server, baseUrl } = await startServer());
   });
@@ -794,6 +813,15 @@ describe("POST /api/platform/accounts -- idempotent creation", () => {
         })
       ).status,
     ).toBe(200);
+
+    // These accounts have already proven key independence. Archive the empty
+    // reservations before exercising actor-scoped key reuse so this test does
+    // not intentionally exceed the three-unit free Agency package.
+    await db.insert(platformMetaTable).values([
+      { key: "account:archived:idemp-conflict", value: "true" },
+      { key: "account:archived:idemp-independent-a", value: "true" },
+      { key: "account:archived:idemp-independent-b", value: "true" },
+    ]);
 
     const actorScopedBody = {
       username: "idemp-scoped",

@@ -154,7 +154,19 @@ import {
   saveCompanyBillingRecord,
   validateCompanyBillingFields,
 } from "../lib/company-billing-record";
-import { getBillingState, getBetaTrialSummary, hasPaidSubscription, startBetaTrial } from "../lib/billing";
+import {
+  assignAddonToNewProjectUnlocked,
+  detachAddonForProjectTransferUnlocked,
+  getBillingState,
+  getBetaTrialSummary,
+  getPackageCapacity,
+  hasPaidSubscription,
+  releaseAddonForOwnerUnlocked,
+  reserveAddonForOwnerUnlocked,
+  startBetaTrial,
+  withBillingLock,
+  withBillingLocks,
+} from "../lib/billing";
 import type { PlanKey } from "../lib/billing-plans";
 
 const router: IRouter = Router();
@@ -5042,6 +5054,27 @@ class AccountCreationError extends Error {
   }
 }
 
+function packageCapacityError(allowance: number | null): string {
+  return allowance === 0
+    ? "Your package does not currently include any client capacity. Start a trial or choose a plan before adding a client."
+    : `You've reached your ${allowance}-client/project package allowance. Archive an empty client or add capacity in Billing before continuing.`;
+}
+
+function isAgencyRootRole(role: unknown): boolean {
+  return role === "agency" || role === "user";
+}
+
+async function liveProjectCount(username: string): Promise<number> {
+  const [{ value }] = await db
+    .select({ value: count() })
+    .from(projectsTable)
+    .where(and(
+      eq(projectsTable.owner, normUsername(username)),
+      isNull(projectsTable.deletedAt),
+    ));
+  return Number(value);
+}
+
 router.post(
   "/platform/accounts",
   requirePlatformAuth,
@@ -5081,10 +5114,22 @@ router.post(
       // When set, the username is a suggestion derived from the company name;
       // append a numeric suffix instead of failing on a collision.
       const autoUsername = req.body?.autoUsername === true;
-      const creationRequestKey = req.body?.creationRequestKey;
+      const legacyCreationRequestKey = req.body?.creationRequestKey;
+      const standardIdempotencyKey = req.body?.idempotencyKey;
+      if (legacyCreationRequestKey !== undefined
+        && standardIdempotencyKey !== undefined
+        && legacyCreationRequestKey !== standardIdempotencyKey) {
+        res.status(400).json({ error: "Conflicting account creation request keys." });
+        return;
+      }
+      const creationRequestKey = standardIdempotencyKey ?? legacyCreationRequestKey;
       if (creationRequestKey !== undefined
         && (typeof creationRequestKey !== "string" || !/^[A-Za-z0-9_-]{16,128}$/.test(creationRequestKey))) {
         res.status(400).json({ error: "Invalid account creation request key." });
+        return;
+      }
+      if (autoUsername && !creationRequestKey) {
+        res.status(400).json({ error: "An account creation request key is required when choosing a username automatically." });
         return;
       }
       // Optional client logo, validated exactly like the profile-image route.
@@ -5132,7 +5177,9 @@ router.post(
         suppliedPassword,
       })).digest("hex");
       const passwordHash = hashPassword(password);
-      const result = await db.transaction(async (tx) => {
+      const createAccount = async (
+        capacity?: Awaited<ReturnType<typeof getPackageCapacity>>,
+      ) => db.transaction(async (tx) => {
         if (receiptKey) {
           // The unique key serializes retries across API processes. The claim,
           // account and final receipt commit together, or all roll back.
@@ -5165,6 +5212,9 @@ router.post(
         // Check capacity after replay: a lost response must remain recoverable
         // even when the newly created account consumed the final seat.
         if (actor.role !== "admin") {
+          if (!capacity || capacity.kind !== "agency" || capacity.remaining === null || capacity.remaining < 1) {
+            throw new AccountCreationError(403, packageCapacityError(capacity?.allowance ?? 0));
+          }
           const [parentAccount] = await tx.select().from(platformAccountsTable)
             .where(eq(platformAccountsTable.username, actorUsername)).limit(1);
           if (parentAccount?.maxSeats != null) {
@@ -5188,6 +5238,15 @@ router.post(
             .returning({ username: platformAccountsTable.username });
           if (rows.length) {
             username = candidate;
+            await tx.insert(platformCompaniesTable).values({
+              slug: candidate,
+              role,
+              parentSlug: actorUsername,
+              email: contactEmail || null,
+              website: website || null,
+              displayName: displayName.trim().slice(0, 128) || null,
+              status: "active",
+            });
             inserted = true;
             break;
           }
@@ -5223,6 +5282,23 @@ router.post(
         }
         return { username, replayed: false, welcomeLinkCreated };
       });
+      // Master has an explicit unlimited exception. Agency creates share the
+      // same billing-root lock as project creates so an empty client
+      // reservation and a simultaneous project cannot consume the final unit.
+      const result = actor.role === "admin"
+        ? await createAccount()
+        : await withBillingLock(actorUsername, async (billingSlug) => {
+            // Capacity is read while the shared billing lock is held, before
+            // opening the creation transaction. This avoids a second DB
+            // connection escaping a transaction (and deadlocking PGlite),
+            // while the lock still makes the snapshot authoritative.
+            const capacity = await getPackageCapacity(billingSlug);
+            const created = await createAccount(capacity);
+            // Idempotent on replay, and repairs a prior post-commit binding
+            // failure without creating another account.
+            await reserveAddonForOwnerUnlocked(billingSlug, created.username);
+            return created;
+          });
       username = result.username;
       if (result.replayed) {
         res.json({ ok: true, username, welcomeLinkCreated: result.welcomeLinkCreated });
@@ -5263,6 +5339,7 @@ router.post(
         res.status(error.status).json({ error: error.message });
         return;
       }
+      logger.error({ err: error }, "accounts: failed to create account");
       res.status(500).json({ error: "Failed to create account" });
     }
   },
@@ -5934,9 +6011,42 @@ router.post(
         res.status(403).json({ error: "You cannot archive this account." });
         return;
       }
-      await setArchived(target, archive);
+      const parent = existing.parent ? await getAccount(existing.parent) : null;
+      const isAgencyClient = normalizeRole(existing.role) === "client"
+        && isAgencyRootRole(parent?.role);
+      if (isAgencyClient) {
+        await withBillingLock(target, async (billingSlug) => {
+          const current = await getAccount(target);
+          if (!current || current.parent !== existing.parent || !(await canManage(actor, target))) {
+            throw new AccountCreationError(409, "This account moved while the archive change was waiting. Refresh and try again.");
+          }
+          const wasArchived = (await db.select({ key: platformMetaTable.key })
+            .from(platformMetaTable)
+            .where(eq(platformMetaTable.key, archiveKey(target)))
+            .limit(1)).length > 0;
+          const projectCount = await liveProjectCount(target);
+          if (actor.role !== "admin" && !archive && wasArchived && projectCount === 0) {
+            const capacity = await getPackageCapacity(billingSlug);
+            if (capacity.remaining === null || capacity.remaining < 1) {
+              throw new AccountCreationError(403, packageCapacityError(capacity.allowance));
+            }
+          }
+          await setArchived(target, archive);
+          if (archive && projectCount === 0) {
+            await releaseAddonForOwnerUnlocked(billingSlug, target);
+          } else if (!archive && wasArchived) {
+            await reserveAddonForOwnerUnlocked(billingSlug, target);
+          }
+        });
+      } else {
+        await setArchived(target, archive);
+      }
       res.json({ ok: true });
-    } catch {
+    } catch (error) {
+      if (error instanceof AccountCreationError) {
+        res.status(error.status).json({ error: error.message, limitReached: true });
+        return;
+      }
       res.status(500).json({ error: "Failed to update account" });
     }
   },
@@ -6519,27 +6629,63 @@ router.post(
           return;
         }
       }
-      // Reassign the deleted account's projects to the actor first, so they
-      // remain visible (visibility is derived from current ownership). Without
-      // this, a deleted owner would orphan its projects out of the parent's view.
-      await db
-        .update(projectsTable)
-        .set({ owner: normUsername(actor.username) })
-        .where(eq(projectsTable.owner, target));
-      // Remove membership rows for this company explicitly before the account
-      // row is deleted, so the cascade FK (platform_companies.slug →
-      // platform_accounts.username) does not race against the DELETE below on
-      // databases where the constraint has not yet been backfilled by the
-      // startup migration. This is safe to run regardless of FK state.
-      await db
-        .delete(platformMembershipsTable)
-        .where(eq(platformMembershipsTable.companySlug, target));
-      await db
-        .delete(platformCompaniesTable)
-        .where(eq(platformCompaniesTable.slug, target));
-      await db
-        .delete(platformAccountsTable)
-        .where(eq(platformAccountsTable.username, target));
+      const actorUsername = normUsername(actor.username);
+      await withBillingLocks([target, actorUsername], async () => {
+        const current = await getAccount(target);
+        if (!current
+          || current.parent !== existing.parent
+          || current.role !== existing.role
+          || !(await canManage(actor, target))) {
+          throw new AccountCreationError(409, "This account changed while the deletion was waiting. Refresh and try again.");
+        }
+        const liveProjects = await db
+          .select({ id: projectsTable.id })
+          .from(projectsTable)
+          .where(and(eq(projectsTable.owner, target), isNull(projectsTable.deletedAt)));
+        const sourceCapacity = await getPackageCapacity(target);
+        const destinationCapacity = await getPackageCapacity(actorUsername);
+        const oldRoot = sourceCapacity.billingSlug;
+        const newRoot = destinationCapacity.billingSlug;
+        const archived = (await db.select({ key: platformMetaTable.key })
+          .from(platformMetaTable)
+          .where(eq(platformMetaTable.key, archiveKey(target)))
+          .limit(1)).length > 0;
+        if (oldRoot !== newRoot) {
+          for (const project of liveProjects) {
+            await detachAddonForProjectTransferUnlocked(oldRoot, project.id, newRoot);
+          }
+        }
+        if (!archived && liveProjects.length === 0 && sourceCapacity.kind === "agency") {
+          await releaseAddonForOwnerUnlocked(oldRoot, target);
+        }
+        try {
+          await db.transaction(async (tx) => {
+            // Reassign projects first so deleting their owner cannot orphan
+            // them outside the actor's visibility tree.
+            await tx.update(projectsTable)
+              .set({ owner: actorUsername })
+              .where(eq(projectsTable.owner, target));
+            await tx.delete(platformMembershipsTable)
+              .where(eq(platformMembershipsTable.companySlug, target));
+            await tx.delete(platformCompaniesTable)
+              .where(eq(platformCompaniesTable.slug, target));
+            await tx.delete(platformAccountsTable)
+              .where(eq(platformAccountsTable.username, target));
+          });
+        } catch (error) {
+          // The account transaction rolled back. Repair any add-on binding
+          // released before it so a failed delete cannot create phantom room.
+          if (!archived && liveProjects.length === 0 && sourceCapacity.kind === "agency") {
+            await reserveAddonForOwnerUnlocked(oldRoot, target);
+          }
+          if (oldRoot !== newRoot) {
+            for (const project of liveProjects) {
+              await assignAddonToNewProjectUnlocked(oldRoot, project.id);
+            }
+          }
+          throw error;
+        }
+      });
       await deleteWorkspaceMetadata(target);
       void logAdminEvent(
         { username: actor.username, id: actor.userId },
@@ -6549,7 +6695,12 @@ router.post(
         { deletedRole: existing.role, projectsReassignedTo: normUsername(actor.username) },
       );
       res.json({ ok: true });
-    } catch {
+    } catch (error) {
+      if (error instanceof AccountCreationError) {
+        res.status(error.status).json({ error: error.message });
+        return;
+      }
+      logger.error({ err: error, target: req.body?.username }, "accounts: failed to delete account");
       res.status(500).json({ error: "Failed to delete account" });
     }
   },
@@ -7145,6 +7296,23 @@ router.post(
         res.json({ ok: true });
         return;
       }
+      if (existing.parent) {
+        const parent = await getAccount(existing.parent);
+        if (isAgencyRootRole(parent?.role) && accountTypeRole !== "client") {
+          res.status(400).json({ error: "A managed agency client must remain a Client account. Move it directly under Master before changing its type." });
+          return;
+        }
+      }
+      if (accountTypeRole === "client") {
+        const [{ value: childCount }] = await db
+          .select({ value: count() })
+          .from(platformAccountsTable)
+          .where(eq(platformAccountsTable.parent, target));
+        if (Number(childCount) > 0) {
+          res.status(409).json({ error: "An Agency with client accounts cannot be changed to a Client. Move or delete its client accounts first." });
+          return;
+        }
+      }
       const prevRole = existing.role;
       const transition = await transitionWorkspaceAccountType(target, accountTypeRole);
       if (!transition.ok) {
@@ -7242,19 +7410,176 @@ router.post(
           res.status(400).json({ error: "Cannot nest under a client account. Choose an agency or admin." });
           return;
         }
+        if (isAgencyRootRole(parentAccount.role) && normalizeRole(existing.role) !== "client") {
+          res.status(400).json({ error: "Only Client accounts can be placed under an Agency." });
+          return;
+        }
       }
       const prevParent = existing.parent ?? null;
       const resolvedParent = newParent ?? "admin";
-      await db
-        .update(platformAccountsTable)
-        .set({ parent: resolvedParent })
-        .where(eq(platformAccountsTable.username, target));
-      // Keep platform_companies.parentSlug in sync so the company hierarchy
-      // layer stays consistent with the legacy accounts layer.
-      await db
-        .update(platformCompaniesTable)
-        .set({ parentSlug: resolvedParent })
-        .where(eq(platformCompaniesTable.slug, target));
+      const destination = newParent ? await getAccount(newParent) : null;
+      const destinationIsAgency = isAgencyRootRole(destination?.role);
+      const source = prevParent ? await getAccount(prevParent) : null;
+      const sourceIsAgency = isAgencyRootRole(source?.role);
+      if (prevParent === resolvedParent) {
+        // A prior attempt may have committed the hierarchy after completing
+        // only part of the add-on reconciliation. Re-run the destination-side
+        // bindings on an otherwise no-op retry; all helpers are idempotent.
+        if (destinationIsAgency) {
+          await withBillingLocks([target, newParent!], async () => {
+            const current = await getAccount(target);
+            if (!current || (current.parent ?? null) !== prevParent) {
+              throw new AccountCreationError(409, "This account moved while the transfer was waiting. Refresh and try again.");
+            }
+            const projectRows = await db.select({ id: projectsTable.id })
+              .from(projectsTable)
+              .where(and(eq(projectsTable.owner, target), isNull(projectsTable.deletedAt)));
+            const archived = (await db.select({ key: platformMetaTable.key })
+              .from(platformMetaTable)
+              .where(eq(platformMetaTable.key, archiveKey(target)))
+              .limit(1)).length > 0;
+            const newRoot = (await getPackageCapacity(newParent!)).billingSlug;
+            if (!archived) await reserveAddonForOwnerUnlocked(newRoot, target);
+            for (const project of projectRows) {
+              await assignAddonToNewProjectUnlocked(newRoot, project.id);
+            }
+          });
+        }
+        res.json({ ok: true });
+        return;
+      }
+      const lockSlugs = [
+        target,
+        sourceIsAgency ? prevParent! : target,
+        destinationIsAgency ? newParent! : target,
+      ];
+      await withBillingLocks(lockSlugs, async () => {
+        const current = await getAccount(target);
+        if (!current || (current.parent ?? null) !== prevParent) {
+          throw new AccountCreationError(409, "This account moved while the transfer was waiting. Refresh and try again.");
+        }
+        const projectRows = await db
+          .select({ id: projectsTable.id })
+          .from(projectsTable)
+          .where(and(eq(projectsTable.owner, target), isNull(projectsTable.deletedAt)));
+        const archived = (await db.select({ key: platformMetaTable.key })
+          .from(platformMetaTable)
+          .where(eq(platformMetaTable.key, archiveKey(target)))
+          .limit(1)).length > 0;
+        if (destinationIsAgency && projectRows.length > 1) {
+          throw new AccountCreationError(409, "A managed client can have only one live project. Archive extra projects before moving this account under an Agency.");
+        }
+        if (destinationIsAgency) {
+          const capacity = await getPackageCapacity(newParent!);
+          const marginal = archived ? projectRows.length : Math.max(1, projectRows.length);
+          if (capacity.remaining === null || capacity.remaining < marginal) {
+            throw new AccountCreationError(403, packageCapacityError(capacity.allowance));
+          }
+        }
+
+        const oldRoot = sourceIsAgency
+          ? (await getPackageCapacity(prevParent!)).billingSlug
+          : target;
+        const newRoot = destinationIsAgency
+          ? (await getPackageCapacity(newParent!)).billingSlug
+          : target;
+        const addonSnapshots = new Map<string, string | null>();
+        if (oldRoot !== newRoot) {
+          for (const root of new Set([oldRoot, newRoot])) {
+            const [stored] = await db.select({ value: platformMetaTable.value })
+              .from(platformMetaTable)
+              .where(eq(platformMetaTable.key, `projectAddons:${root}`))
+              .limit(1);
+            addonSnapshots.set(root, stored?.value ?? null);
+          }
+        }
+        const projectTierSnapshots = await db.select({
+          id: projectsTable.id,
+          tier: projectsTable.tier,
+        }).from(projectsTable).where(inArray(projectsTable.id, projectRows.map((project) => project.id)));
+        const [companyBefore] = await db.select({ parentSlug: platformCompaniesTable.parentSlug })
+          .from(platformCompaniesTable).where(eq(platformCompaniesTable.slug, target)).limit(1);
+        const [managedBefore] = await db.select({ value: platformMetaTable.value })
+          .from(platformMetaTable).where(eq(platformMetaTable.key, managedKey(target))).limit(1);
+        let hierarchyCommitted = false;
+        try {
+          if (oldRoot !== newRoot) {
+            for (const project of projectRows) {
+              await detachAddonForProjectTransferUnlocked(oldRoot, project.id, newRoot);
+            }
+            // The reservation belongs to the client/account boundary, not to
+            // an individual project. Once that client leaves this billing
+            // root it must always be released, including project-bearing
+            // clients whose detached add-on deliberately retained ownerSlug.
+            if (sourceIsAgency) {
+              await releaseAddonForOwnerUnlocked(oldRoot, target);
+            }
+          }
+
+          await db.transaction(async (tx) => {
+            await tx.update(platformAccountsTable)
+              .set({ parent: resolvedParent })
+              .where(eq(platformAccountsTable.username, target));
+            await tx.update(platformCompaniesTable)
+              .set({ parentSlug: resolvedParent })
+              .where(eq(platformCompaniesTable.slug, target));
+            if (destinationIsAgency) {
+              await tx.insert(platformMetaTable)
+                .values({ key: managedKey(target), value: "true" })
+                .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: "true" } });
+              await tx.delete(platformSessionsTable)
+                .where(eq(platformSessionsTable.username, target));
+            }
+          });
+          hierarchyCommitted = true;
+          // Destination capacity and scoped tier writes must see the incoming
+          // client in its new billing subtree. Both roots stay locked until
+          // reconciliation succeeds or the exact prior state is restored.
+          if (destinationIsAgency) {
+            if (!archived) {
+              await reserveAddonForOwnerUnlocked(newRoot, target);
+            }
+            for (const project of projectRows) {
+              await assignAddonToNewProjectUnlocked(newRoot, project.id);
+            }
+          }
+        } catch (error) {
+          // Restore hierarchy, metadata and tiers together. Do not resurrect
+          // revoked sessions: requiring a fresh login after a failed transfer
+          // is safer than restoring an old access grant.
+          await db.transaction(async (tx) => {
+            if (hierarchyCommitted) {
+              await tx.update(platformAccountsTable).set({ parent: prevParent })
+                .where(eq(platformAccountsTable.username, target));
+              if (companyBefore) {
+                await tx.update(platformCompaniesTable).set({ parentSlug: companyBefore.parentSlug })
+                  .where(eq(platformCompaniesTable.slug, target));
+              }
+              const key = managedKey(target);
+              if (managedBefore) {
+                await tx.insert(platformMetaTable).values({ key, value: managedBefore.value })
+                  .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: managedBefore.value } });
+              } else {
+                await tx.delete(platformMetaTable).where(eq(platformMetaTable.key, key));
+              }
+            }
+            for (const [root, value] of addonSnapshots) {
+              const key = `projectAddons:${root}`;
+              if (value === null) {
+                await tx.delete(platformMetaTable).where(eq(platformMetaTable.key, key));
+              } else {
+                await tx.insert(platformMetaTable).values({ key, value })
+                  .onConflictDoUpdate({ target: platformMetaTable.key, set: { value } });
+              }
+            }
+            for (const project of projectTierSnapshots) {
+              await tx.update(projectsTable).set({ tier: project.tier })
+                .where(eq(projectsTable.id, project.id));
+            }
+          });
+          throw error;
+        }
+      });
       void logAdminEvent(
         { username: actor.username, id: actor.userId },
         "account_reparent",
@@ -7263,7 +7588,11 @@ router.post(
         { previousParent: prevParent, newParent: resolvedParent },
       );
       res.json({ ok: true });
-    } catch {
+    } catch (error) {
+      if (error instanceof AccountCreationError) {
+        res.status(error.status).json({ error: error.message, limitReached: true });
+        return;
+      }
       res.status(500).json({ error: "Failed to move account" });
     }
   },

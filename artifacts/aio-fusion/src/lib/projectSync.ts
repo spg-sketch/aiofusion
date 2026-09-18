@@ -240,7 +240,7 @@ export type ProjectReconciliationAudit = {
 export async function pushProjectMeta(
   project: StoredProject,
   logo?: string | null,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; owner?: string } = {},
 ): Promise<PushProjectResult> {
   try {
     const res = await fetch(`${apiBase()}/api/store/projects/upsert`, {
@@ -253,6 +253,7 @@ export async function pushProjectMeta(
         name: typeof project.name === "string" ? project.name : "",
         data: project,
         logo: logo ?? null,
+        ...(options.owner ? { owner: options.owner } : {}),
       }),
     });
     if (res.ok) return { ok: true };

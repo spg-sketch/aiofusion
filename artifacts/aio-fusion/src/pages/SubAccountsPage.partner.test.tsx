@@ -29,10 +29,10 @@ vi.mock("../lib/projectStore", () => ({
 const auditAndRecoverLocalProjects = vi.fn();
 type PushProjectResult = { ok?: boolean; error?: string; limitReached?: boolean; project?: unknown };
 const pushProjectMeta = vi.fn<
-  (project: unknown, logo?: string | null) => Promise<PushProjectResult>
+  (project: unknown, logo?: string | null, options?: { owner?: string }) => Promise<PushProjectResult>
 >(async (_project: unknown, _logo?: string | null) => ({}));
 vi.mock("../lib/projectSync", () => ({
-  pushProjectMeta: (project: unknown, logo?: string | null) => pushProjectMeta(project, logo),
+  pushProjectMeta: (project: unknown, logo?: string | null, options?: { owner?: string }) => pushProjectMeta(project, logo, options),
   auditAndRecoverLocalProjects: () => auditAndRecoverLocalProjects(),
 }));
 vi.mock("../lib/accountLabels", () => ({ accountLabel: (u: { username: string }) => u.username }));
@@ -243,7 +243,6 @@ describe("agency partner client rows", () => {
     fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
 
     await vi.waitFor(() => expect(serverAddUser).toHaveBeenCalled());
-    await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("new-client"));
     await vi.waitFor(() => expect(pushProjectMeta).toHaveBeenCalledOnce());
     const [project] = pushProjectMeta.mock.calls[0] as unknown as [{ id: string; name: string; owner: string }];
     expect(JSON.parse(sessionStorage.getItem("aio:pending-client-project")!)).toEqual(expect.objectContaining({
@@ -253,6 +252,7 @@ describe("agency partner client rows", () => {
     }));
     expect(project).toEqual(expect.objectContaining({ name: "New Client Co", owner: "new-client" }));
     releasePush({ ok: true });
+    await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("new-client"));
     await vi.waitFor(() => expect(sessionStorage.getItem("aio:open-client-projects")).toBeTruthy());
     expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({
       username: "new-client",
@@ -348,7 +348,7 @@ describe("agency partner client rows", () => {
     redirect.restore();
   });
 
-  it("saves the named client project only after the confirmed child session is active", async () => {
+  it("saves the named project directly to the server-authorized client owner before entering its hub", async () => {
     const order: string[] = [];
     serverAddUser.mockResolvedValueOnce({ ok: true as const, username: "named-client" });
     serverImpersonate.mockImplementationOnce(async (username: string) => {
@@ -366,8 +366,10 @@ describe("agency partner client rows", () => {
     fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
 
     await vi.waitFor(() => expect(pushProjectMeta).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("named-client"));
     const [project] = pushProjectMeta.mock.calls[0] as unknown as [{ id: string; name: string; owner: string }];
-    expect(order).toEqual(["impersonate:named-client", "save-project"]);
+    expect(order).toEqual(["save-project", "impersonate:named-client"]);
+    expect(pushProjectMeta.mock.calls[0]?.[2]).toEqual({ owner: "named-client" });
     expect(project).toEqual(expect.objectContaining({
       name: "Named Client Co",
       owner: "named-client",
@@ -380,7 +382,7 @@ describe("agency partner client rows", () => {
     expect(serverAddUser).toHaveBeenCalledOnce();
   });
 
-  it("creates a zero-project Client Project under the child account after impersonation", async () => {
+  it("creates a zero-project Client Project for the server-authorized owner before entering it", async () => {
     getSubAccounts.mockReturnValue([partnerClientRows[1]]);
     const order: string[] = [];
     serverImpersonate.mockImplementationOnce(async (username: string) => {
@@ -397,8 +399,10 @@ describe("agency partner client rows", () => {
     fireEvent.click(screen.getByRole("button", { name: /^create project$/i }));
 
     await vi.waitFor(() => expect(pushProjectMeta).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("client-two"));
     const [project] = pushProjectMeta.mock.calls[0] as unknown as [{ id: string; name: string; owner: string }];
-    expect(order).toEqual(["impersonate:client-two", "save-project"]);
+    expect(order).toEqual(["save-project", "impersonate:client-two"]);
+    expect(pushProjectMeta.mock.calls[0]?.[2]).toEqual({ owner: "client-two" });
     expect(project).toEqual(expect.objectContaining({
       name: "client-two",
       owner: "client-two",
@@ -430,13 +434,14 @@ describe("agency partner client rows", () => {
 
     await vi.waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Project save failed."));
     expect(serverAddUser).toHaveBeenCalledOnce();
-    expect(serverImpersonate).toHaveBeenCalledOnce();
+    expect(serverImpersonate).not.toHaveBeenCalled();
     expect(pushProjectMeta).toHaveBeenCalledOnce();
     const firstProject = (pushProjectMeta.mock.calls[0] as unknown as [{ id: string }])[0];
 
     fireEvent.click(screen.getByRole("button", { name: /retry navigation to project hub/i }));
 
     await vi.waitFor(() => expect(pushProjectMeta).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledOnce());
     const secondProject = (pushProjectMeta.mock.calls[1] as unknown as [{ id: string }])[0];
     expect(secondProject.id).toBe(firstProject.id);
     expect(serverAddUser).toHaveBeenCalledOnce();

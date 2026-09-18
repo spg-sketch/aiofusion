@@ -91,15 +91,30 @@ describe("SubAccountsPage left-hand navigation", () => {
 
   it("shows an agency how many paid project slots are used and remain", async () => {
     vi.spyOn(global, "fetch").mockImplementation(async (input) => {
-      if (String(input).includes("/api/platform/billing/subscription")) {
-        return new Response(JSON.stringify({ projectsUsed: 2, projectAllowance: 6 }), { status: 200 });
+      if (String(input).includes("/api/platform/billing/capacity")) {
+        return new Response(JSON.stringify({
+          packageCapacity: {
+            billingSlug: "acme-agency",
+            kind: "agency",
+            access: "paid",
+            included: 3,
+            purchased: 3,
+            reserved: 2,
+            used: 2,
+            remaining: 4,
+            allowance: 6,
+            overLimit: false,
+          },
+        }), { status: 200 });
       }
       return new Response(JSON.stringify({}), { status: 404 });
     });
 
     render(<SubAccountsPage {...baseProps} session={agencySession as any} initialSection="clients" />);
 
-    expect(await screen.findByText("2 of 6 project slots used · 4 remaining")).toBeTruthy();
+    expect(await screen.findByText(
+      "3 included · 3 purchased · 2 reserved · 2 projects used · 4 remaining · 6 allowance · within limit",
+    )).toBeTruthy();
   });
 
   it("switches sections when a nav item is clicked (one section at a time)", () => {

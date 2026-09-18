@@ -11,6 +11,7 @@ const h = vi.hoisted(() => {
 
   const state = {
     accounts: [] as Array<{ username: string; passwordHash: string; role: string; parent: string | null }>,
+    companies: [] as Array<{ slug: string; role: string; parentSlug: string | null }>,
     meta: [] as Array<{ key: string; value: string }>,
   };
 
@@ -20,6 +21,7 @@ const h = vi.hoisted(() => {
     parent: { __col: "parent" },
   };
   const platformMetaTable = { __table: "meta", key: { __col: "key" } };
+  const platformCompaniesTable = { __table: "companies", slug: { __col: "slug" } };
 
   function matches(row: Row, pred: Pred | undefined): boolean {
     if (!pred) return true;
@@ -28,10 +30,11 @@ const h = vi.hoisted(() => {
   function rowsFor(table: unknown): Row[] {
     if (table === platformAccountsTable) return state.accounts as Row[];
     if (table === platformMetaTable) return state.meta as Row[];
+    if (table === platformCompaniesTable) return state.companies as Row[];
     return [];
   }
 
-  return { state, platformAccountsTable, platformMetaTable, matches, rowsFor };
+  return { state, platformAccountsTable, platformCompaniesTable, platformMetaTable, matches, rowsFor };
 });
 
 vi.mock("drizzle-orm", () => ({
@@ -88,6 +91,16 @@ vi.mock("@workspace/db", () => {
         };
       },
     }),
+    update: (table: unknown) => ({
+      set: (values: Record<string, unknown>) => ({
+        where: (pred: any) => {
+          for (const row of h.rowsFor(table)) {
+            if (h.matches(row, pred)) Object.assign(row, values);
+          }
+          return Promise.resolve();
+        },
+      }),
+    }),
      delete: (table: unknown) => ({
       where: (pred: any) => {
         const rows = h.rowsFor(table);
@@ -103,12 +116,38 @@ vi.mock("@workspace/db", () => {
     db,
     projectsTable: {},
     platformAccountsTable: h.platformAccountsTable,
+    platformCompaniesTable: h.platformCompaniesTable,
     platformMetaTable: h.platformMetaTable,
     platformSessionsTable: {},
     platformUsersTable: {},
     adminEventsTable: {},
   };
 });
+
+vi.mock("../lib/billing", () => ({
+  getBillingState: () => Promise.resolve(null),
+  getBetaTrialSummary: () => ({ status: "eligible", startedAt: null, endsAt: null, daysRemaining: 0 }),
+  getPackageCapacity: (slug: string) => Promise.resolve({
+    billingSlug: slug,
+    kind: "agency",
+    access: "free",
+    included: 999,
+    purchased: 0,
+    reserved: 0,
+    used: 0,
+    remaining: 999,
+    allowance: 999,
+    overLimit: false,
+  }),
+  hasPaidSubscription: () => false,
+  releaseAddonForOwnerUnlocked: () => Promise.resolve(),
+  reserveAddonForOwnerUnlocked: () => Promise.resolve(),
+  startBetaTrial: () => Promise.resolve(null),
+  withBillingLock: (_slug: string, fn: (slug: string) => Promise<unknown>) => fn(_slug),
+  withBillingLocks: (slugs: string[], fn: (roots: string[]) => Promise<unknown>) => fn(slugs),
+  assignAddonToNewProjectUnlocked: () => Promise.resolve(),
+  detachAddonForProjectTransferUnlocked: () => Promise.resolve(),
+}));
 
 import platformRouter from "./platform";
 
@@ -138,6 +177,7 @@ describe("POST /api/platform/accounts (creation gating + role coercion)", () => 
       { username: "client1", passwordHash: "", role: "client", parent: "agency" },
     ];
     h.state.meta = [];
+    h.state.companies = [];
     actor = { username: "admin", role: "admin" };
 
     const app = express();
@@ -222,6 +262,7 @@ describe("POST /api/platform/accounts (creation gating + role coercion)", () => 
       password: "pw123456",
       role: "client",
       autoUsername: true,
+      creationRequestKey: "master-auto-create-0001",
     });
     expect(status).toBe(200);
     expect(json.ok).toBe(true);
@@ -240,6 +281,7 @@ describe("POST /api/platform/accounts (creation gating + role coercion)", () => 
       password: "pw123456",
       role: "client",
       autoUsername: true,
+      creationRequestKey: "agency-auto-create-0001",
     });
     expect(status).toBe(200);
     // The created account (with a suffix) must have "agency" as its parent.

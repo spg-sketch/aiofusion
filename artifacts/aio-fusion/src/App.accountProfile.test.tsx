@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor, cleanup, configure, act, fireEvent } from "@testing-library/react";
 
-vi.mock("./lib/billingAllowance", () => ({
+vi.mock("./lib/billingAllowance", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./lib/billingAllowance")>()),
   fetchProjectAllowance: vi.fn(async () => ({ projectsUsed: 0, projectAllowance: 1, atLimit: false })),
 }));
 
@@ -190,7 +191,7 @@ describe("accountProfile - boot path via bootstrapAuth", () => {
     { timeout: 8000 });
   }, 30000);
 
-  it("agency session: intake shows agency context note (not brand note)", async () => {
+  it("agency root session routes New Project to managed client selection", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (String(url).includes("/api/platform/me")) return agencyMeResponse();
       if (String(url).includes("/api/store/projects")) {
@@ -205,15 +206,13 @@ describe("accountProfile - boot path via bootstrapAuth", () => {
 
     await act(async () => { await new Promise((r) => setTimeout(r, 150)); });
 
-    await enterPlatformAndCreateProject("Agency Client");
+    const projectHubBtn = await screen.findByRole("button", { name: /Project Hub/i }, { timeout: 8000 });
+    fireEvent.click(projectHubBtn);
+    const createBtn = await screen.findByRole("button", { name: /Create your first project/i }, { timeout: 6000 });
+    fireEvent.click(createBtn);
 
-    await waitFor(() =>
-      expect(screen.getByText(/This intake is for your client/i))
-        .toBeInTheDocument(),
-    { timeout: 8000 });
-
-    expect(screen.queryByText(/We've pre-filled your company name and website/i))
-      .not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Add a Client Project/i })).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("e.g. Acme Robotics")).not.toBeInTheDocument();
   }, 30000);
 });
 

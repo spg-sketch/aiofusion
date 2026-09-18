@@ -26,7 +26,7 @@ vi.mock("@workspace/db", async () => {
       status varchar NOT NULL DEFAULT 'active'
     );
     CREATE TABLE IF NOT EXISTS platform_companies (
-      id varchar PRIMARY KEY,
+      id varchar PRIMARY KEY DEFAULT (gen_random_uuid()::text),
       slug varchar(64) NOT NULL UNIQUE REFERENCES platform_accounts(username) ON DELETE CASCADE,
       role varchar NOT NULL DEFAULT 'agency',
       parent_slug varchar(64),
@@ -55,7 +55,7 @@ vi.mock("@workspace/db", async () => {
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS platform_sessions (
-      id varchar PRIMARY KEY,
+      sid varchar PRIMARY KEY,
       username varchar NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now(),
       expires_at timestamptz NOT NULL DEFAULT (now() + interval '30 days'),
@@ -135,11 +135,17 @@ import {
   platformInvitationsTable,
   platformMembershipsTable,
   platformMetaTable,
+  platformSessionsTable,
   projectsTable,
   platformUsersTable,
 } from "@workspace/db";
 import { sendAccountTypeChangedEmail } from "../lib/notify-email";
-import { eq } from "drizzle-orm";
+import {
+  assignAddonToNewProjectUnlocked,
+  getProjectAddons,
+  handleSubscriptionDeleted,
+} from "../lib/billing";
+import { eq, sql } from "drizzle-orm";
 import platformRouter from "./platform";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -807,5 +813,553 @@ describe("POST /api/platform/settings/account-type", () => {
       .where(eq(platformMembershipsTable.userId, member!.id));
     expect(membership?.role).toBe("content");
     expect(membership?.projectAccess).toBeNull();
+  });
+});
+
+describe("package capacity at account boundaries", () => {
+  async function request(
+    actor: { username: string; role: string },
+    path: string,
+    body: Record<string, unknown>,
+  ) {
+    const srv = makeApp(actor).listen(0);
+    await new Promise<void>((r) => srv.once("listening", r));
+    const { port } = srv.address() as AddressInfo;
+    const response = await fetch(`http://localhost:${port}/api${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json = await response.json() as Record<string, unknown>;
+    await new Promise<void>((resolve) => srv.close(() => resolve()));
+    return { status: response.status, json };
+  }
+
+  async function seedFreeAgency(username: string) {
+    await seed(username, "agency");
+    await db.update(platformCompaniesTable)
+      .set({ freeAccess: true, plan: "agency" })
+      .where(eq(platformCompaniesTable.slug, username));
+  }
+
+  it("serializes concurrent auto-username retries and creates one complete account", async () => {
+    await seedFreeAgency("capacity-create-agency");
+    const body = {
+      username: "capacity-brand",
+      role: "client",
+      autoUsername: true,
+      creationRequestKey: "capacity-create-request-0001",
+      displayName: "Capacity Brand",
+    };
+    const [first, retry] = await Promise.all([
+      request({ username: "capacity-create-agency", role: "agency" }, "/platform/accounts", body),
+      request({ username: "capacity-create-agency", role: "agency" }, "/platform/accounts", body),
+    ]);
+    expect(first.status).toBe(200);
+    expect(retry.status).toBe(200);
+    expect(first.json.username).toBe(retry.json.username);
+
+    const username = String(first.json.username);
+    const accounts = await db.select().from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, username));
+    const companies = await db.select().from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, username));
+    const managed = await db.select().from(platformMetaTable)
+      .where(eq(platformMetaTable.key, `account:managed:${username}`));
+    expect(accounts).toHaveLength(1);
+    expect(companies).toHaveLength(1);
+    expect(companies[0]?.parentSlug).toBe("capacity-create-agency");
+    expect(managed).toHaveLength(1);
+  });
+
+  it("counts empty clients as reservations and rejects the concurrent fourth create", async () => {
+    await seedFreeAgency("capacity-race-agency");
+    const calls = Array.from({ length: 4 }, (_, index) =>
+      request(
+        { username: "capacity-race-agency", role: "agency" },
+        "/platform/accounts",
+        {
+          username: `capacity-race-client-${index}`,
+          role: "client",
+          autoUsername: true,
+          creationRequestKey: `capacity-race-request-${index.toString().padStart(4, "0")}`,
+        },
+      ));
+    const results = await Promise.all(calls);
+    expect(results.filter((result) => result.status === 200)).toHaveLength(3);
+    expect(results.filter((result) => result.status === 403)).toHaveLength(1);
+  });
+
+  it("blocks restoring an empty client when all package units are reserved", async () => {
+    await seedFreeAgency("capacity-restore-agency");
+    for (const suffix of ["one", "two", "three", "archived"]) {
+      await seed(`capacity-restore-${suffix}`, "client", true, "capacity-restore-agency");
+    }
+    await db.insert(platformMetaTable).values({
+      key: "account:archived:capacity-restore-archived",
+      value: "true",
+    });
+
+    const result = await request(
+      { username: "capacity-restore-agency", role: "agency" },
+      "/platform/accounts/archive",
+      { username: "capacity-restore-archived", archive: false },
+    );
+    expect(result.status).toBe(403);
+    expect(result.json.limitReached).toBe(true);
+    const archived = await db.select().from(platformMetaTable)
+      .where(eq(platformMetaTable.key, "account:archived:capacity-restore-archived"));
+    expect(archived).toHaveLength(1);
+  });
+
+  it("keeps repeated restores idempotent and gives Master an explicit capacity exception", async () => {
+    await seedFreeAgency("capacity-idempotent-restore-agency");
+    for (const suffix of ["one", "two", "three", "master-restore"]) {
+      await seed(
+        `capacity-idempotent-${suffix}`,
+        "client",
+        true,
+        "capacity-idempotent-restore-agency",
+      );
+    }
+    // Repeating restore for an already-active empty client has zero marginal
+    // cost even though the package is full.
+    const repeated = await request(
+      { username: "capacity-idempotent-restore-agency", role: "agency" },
+      "/platform/accounts/archive",
+      { username: "capacity-idempotent-one", archive: false },
+    );
+    expect(repeated.status).toBe(200);
+
+    await db.insert(platformMetaTable).values({
+      key: "account:archived:capacity-idempotent-master-restore",
+      value: "true",
+    });
+    const masterRestore = await request(
+      { username: "admin", role: "admin" },
+      "/platform/accounts/archive",
+      { username: "capacity-idempotent-master-restore", archive: false },
+    );
+    expect(masterRestore.status).toBe(200);
+    const archived = await db.select().from(platformMetaTable)
+      .where(eq(platformMetaTable.key, "account:archived:capacity-idempotent-master-restore"));
+    expect(archived).toHaveLength(0);
+  });
+
+  it("enforces destination capacity and preserves both hierarchy tables on a rejected transfer", async () => {
+    await seedFreeAgency("capacity-source-agency");
+    await seedFreeAgency("capacity-full-agency");
+    await seed("capacity-moving-client", "client", true, "capacity-source-agency");
+    for (const suffix of ["a", "b", "c"]) {
+      await seed(`capacity-full-${suffix}`, "client", true, "capacity-full-agency");
+    }
+    await db.insert(projectsTable).values({
+      id: "capacity-moving-project",
+      name: "Moving",
+      owner: "capacity-moving-client",
+    });
+
+    const result = await request(
+      { username: "admin", role: "admin" },
+      "/platform/accounts/reparent",
+      { username: "capacity-moving-client", newParent: "capacity-full-agency" },
+    );
+    expect(result.status).toBe(403);
+    const [account] = await db.select().from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, "capacity-moving-client"));
+    const [company] = await db.select().from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, "capacity-moving-client"));
+    expect(account?.parent).toBe("capacity-source-agency");
+    expect(company?.parentSlug).not.toBe("capacity-full-agency");
+  });
+
+  it("moves a project-bearing client into available capacity and revokes its sessions", async () => {
+    await seedFreeAgency("capacity-move-source");
+    await seedFreeAgency("capacity-move-destination");
+    await seed("capacity-move-client", "client", true, "capacity-move-source");
+    for (const suffix of ["a", "b"]) {
+      await seed(`capacity-move-existing-${suffix}`, "client", true, "capacity-move-destination");
+    }
+    await db.insert(projectsTable).values({
+      id: "capacity-move-project",
+      name: "Moving",
+      owner: "capacity-move-client",
+    });
+    await db.insert(platformSessionsTable).values({
+      sid: "capacity-move-session",
+      username: "capacity-move-client",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    const result = await request(
+      { username: "admin", role: "admin" },
+      "/platform/accounts/reparent",
+      { username: "capacity-move-client", newParent: "capacity-move-destination" },
+    );
+    expect(result.status).toBe(200);
+    const [account] = await db.select().from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, "capacity-move-client"));
+    const [company] = await db.select().from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, "capacity-move-client"));
+    const sessions = await db.select().from(platformSessionsTable)
+      .where(eq(platformSessionsTable.username, "capacity-move-client"));
+    const managed = await db.select().from(platformMetaTable)
+      .where(eq(platformMetaTable.key, "account:managed:capacity-move-client"));
+    expect(account?.parent).toBe("capacity-move-destination");
+    expect(company?.parentSlug).toBe("capacity-move-destination");
+    expect(sessions).toHaveLength(0);
+    expect(managed).toHaveLength(1);
+  });
+
+  it("releases a departing project client's purchased slot for replacement and cancellation", async () => {
+    const agency = "capacity-paid-move-source";
+    await seed(agency, "agency");
+    await db.update(platformCompaniesTable).set({
+      plan: "agency",
+      subscriptionStatus: "active",
+      stripeCustomerId: "cus_capacity_paid_move",
+      stripeSubscriptionId: "sub_capacity_paid_move_main",
+    }).where(eq(platformCompaniesTable.slug, agency));
+    for (const suffix of ["one", "two", "three", "departing"]) {
+      await seed(`capacity-paid-${suffix}`, "client", true, agency);
+      await db.update(platformCompaniesTable)
+        .set({ parentSlug: agency })
+        .where(eq(platformCompaniesTable.slug, `capacity-paid-${suffix}`));
+    }
+    await db.insert(projectsTable).values({
+      id: "capacity-paid-departing-project",
+      name: "Departing",
+      owner: "capacity-paid-departing",
+      tier: "standard",
+    });
+    await db.insert(platformMetaTable).values({
+      key: `projectAddons:${agency}`,
+      value: JSON.stringify([{
+        subscriptionId: "sub_capacity_paid_original_addon",
+        tier: "standard",
+        projectId: "capacity-paid-departing-project",
+        ownerSlug: "capacity-paid-departing",
+        grantsCapacity: true,
+        purchasedAt: new Date().toISOString(),
+      }]),
+    });
+
+    const moved = await request(
+      { username: "admin", role: "admin" },
+      "/platform/accounts/reparent",
+      { username: "capacity-paid-departing", newParent: "" },
+    );
+    expect(moved.status).toBe(200);
+    expect(await getProjectAddons(agency)).toMatchObject([{
+      subscriptionId: "sub_capacity_paid_original_addon",
+      projectId: null,
+      ownerSlug: null,
+    }]);
+
+    const replacement = await request(
+      { username: agency, role: "agency" },
+      "/platform/accounts",
+      {
+        username: "capacity-paid-replacement",
+        role: "client",
+        autoUsername: true,
+        idempotencyKey: "capacity-paid-replacement-request",
+      },
+    );
+    expect(replacement.status).toBe(200);
+    await db.insert(projectsTable).values({
+      id: "capacity-paid-replacement-project",
+      name: "Replacement",
+      owner: "capacity-paid-replacement",
+    });
+    await assignAddonToNewProjectUnlocked(agency, "capacity-paid-replacement-project");
+    expect(await getProjectAddons(agency)).toMatchObject([{
+      subscriptionId: "sub_capacity_paid_original_addon",
+      tier: "standard",
+      projectId: "capacity-paid-replacement-project",
+      ownerSlug: "capacity-paid-replacement",
+    }]);
+    const [funded] = await db.select().from(projectsTable)
+      .where(eq(projectsTable.id, "capacity-paid-replacement-project"));
+    expect(funded?.tier).toBe("standard");
+
+    await handleSubscriptionDeleted({
+      id: "evt_capacity_paid_original_cancel",
+      type: "customer.subscription.deleted",
+      data: {
+        object: {
+          id: "sub_capacity_paid_original_addon",
+          customer: "cus_capacity_paid_move",
+          metadata: { kind: "project-addon" },
+        },
+      },
+    } as any);
+    const [retired] = await db.select().from(projectsTable)
+      .where(eq(projectsTable.id, "capacity-paid-replacement-project"));
+    expect(retired?.deletedAt).not.toBeNull();
+    expect(retired?.tier).toBeNull();
+  });
+
+  it("restores source add-on bindings when the hierarchy transaction rolls back", async () => {
+    const source = "capacity-rollback-source";
+    const destination = "capacity-rollback-destination";
+    const client = "capacity-rollback-client";
+    const project = "capacity-rollback-project";
+    await seed(source, "agency");
+    await seedFreeAgency(destination);
+    await db.update(platformCompaniesTable).set({
+      plan: "agency",
+      subscriptionStatus: "active",
+      stripeCustomerId: "cus_capacity_rollback",
+      stripeSubscriptionId: "sub_capacity_rollback_main",
+    }).where(eq(platformCompaniesTable.slug, source));
+    await seed(client, "client", true, source);
+    await db.update(platformCompaniesTable).set({ parentSlug: source })
+      .where(eq(platformCompaniesTable.slug, client));
+    await db.insert(projectsTable).values({ id: project, name: "Rollback", owner: client, tier: "max" });
+    await db.insert(platformMetaTable).values({
+      key: `projectAddons:${source}`,
+      value: JSON.stringify([{
+        subscriptionId: "sub_capacity_rollback_addon",
+        tier: "max",
+        projectId: project,
+        ownerSlug: client,
+        grantsCapacity: true,
+        purchasedAt: new Date().toISOString(),
+      }]),
+    });
+    await db.execute(sql`
+      CREATE OR REPLACE FUNCTION fail_capacity_reparent() RETURNS trigger AS $$
+      BEGIN
+        IF OLD.slug = 'capacity-rollback-client' THEN
+          RAISE EXCEPTION 'injected reparent failure';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `);
+    await db.execute(sql`
+      CREATE TRIGGER capacity_reparent_failure
+      BEFORE UPDATE ON platform_companies
+      FOR EACH ROW EXECUTE FUNCTION fail_capacity_reparent()
+    `);
+    try {
+      const result = await request(
+        { username: "admin", role: "admin" },
+        "/platform/accounts/reparent",
+        { username: client, newParent: destination },
+      );
+      expect(result.status).toBe(500);
+      const [account] = await db.select().from(platformAccountsTable)
+        .where(eq(platformAccountsTable.username, client));
+      expect(account?.parent).toBe(source);
+      expect(await getProjectAddons(source)).toMatchObject([{
+        subscriptionId: "sub_capacity_rollback_addon",
+        tier: "max",
+        projectId: project,
+        ownerSlug: client,
+      }]);
+      const [restoredProject] = await db.select().from(projectsTable)
+        .where(eq(projectsTable.id, project));
+      expect(restoredProject?.tier).toBe("max");
+    } finally {
+      await db.execute(sql`DROP TRIGGER IF EXISTS capacity_reparent_failure ON platform_companies`);
+      await db.execute(sql`DROP FUNCTION IF EXISTS fail_capacity_reparent()`);
+    }
+  });
+
+  it("binds the destination's unassigned premium slot immediately and cancellation retires the moved project", async () => {
+    const source = "capacity-destination-bind-source";
+    const destination = "capacity-destination-bind-target";
+    const client = "capacity-destination-bind-client";
+    const project = "capacity-destination-bind-project";
+    await seedFreeAgency(source);
+    await seed(destination, "agency");
+    await db.update(platformCompaniesTable).set({
+      plan: "agency",
+      subscriptionStatus: "active",
+      stripeCustomerId: "cus_capacity_destination_bind",
+      stripeSubscriptionId: "sub_capacity_destination_bind_main",
+    }).where(eq(platformCompaniesTable.slug, destination));
+    for (const suffix of ["one", "two", "three"]) {
+      await seed(`capacity-destination-existing-${suffix}`, "client", true, destination);
+      await db.update(platformCompaniesTable).set({ parentSlug: destination })
+        .where(eq(platformCompaniesTable.slug, `capacity-destination-existing-${suffix}`));
+    }
+    await seed(client, "client", true, source);
+    await db.update(platformCompaniesTable).set({ parentSlug: source })
+      .where(eq(platformCompaniesTable.slug, client));
+    await db.insert(projectsTable).values({ id: project, name: "Destination bind", owner: client });
+    await db.insert(platformMetaTable).values({
+      key: `projectAddons:${destination}`,
+      value: JSON.stringify([{
+        subscriptionId: "sub_capacity_destination_premium",
+        tier: "premium",
+        projectId: null,
+        ownerSlug: null,
+        grantsCapacity: true,
+        purchasedAt: new Date().toISOString(),
+      }]),
+    });
+
+    const moved = await request(
+      { username: "admin", role: "admin" },
+      "/platform/accounts/reparent",
+      { username: client, newParent: destination },
+    );
+    expect(moved.status).toBe(200);
+    expect(await getProjectAddons(destination)).toMatchObject([{
+      subscriptionId: "sub_capacity_destination_premium",
+      tier: "premium",
+      projectId: project,
+      ownerSlug: client,
+    }]);
+    const [funded] = await db.select().from(projectsTable).where(eq(projectsTable.id, project));
+    expect(funded?.tier).toBe("premium");
+
+    await handleSubscriptionDeleted({
+      id: "evt_capacity_destination_premium_cancel",
+      type: "customer.subscription.deleted",
+      data: {
+        object: {
+          id: "sub_capacity_destination_premium",
+          customer: "cus_capacity_destination_bind",
+          metadata: { kind: "project-addon" },
+        },
+      },
+    } as any);
+    const [retired] = await db.select().from(projectsTable).where(eq(projectsTable.id, project));
+    expect(retired?.deletedAt).not.toBeNull();
+    expect(retired?.tier).toBeNull();
+  });
+
+  it("rolls back both billing roots and hierarchy when destination add-on persistence fails, then retries cleanly", async () => {
+    const source = "capacity-destination-fail-source";
+    const destination = "capacity-destination-fail-target";
+    const client = "capacity-destination-fail-client";
+    const project = "capacity-destination-fail-project";
+    for (const agency of [source, destination]) {
+      await seed(agency, "agency");
+      await db.update(platformCompaniesTable).set({
+        plan: "agency",
+        subscriptionStatus: "active",
+        stripeCustomerId: `cus_${agency}`,
+        stripeSubscriptionId: `sub_${agency}_main`,
+      }).where(eq(platformCompaniesTable.slug, agency));
+      for (const suffix of ["one", "two", "three"]) {
+        await seed(`${agency}-${suffix}`, "client", true, agency);
+        await db.update(platformCompaniesTable).set({ parentSlug: agency })
+          .where(eq(platformCompaniesTable.slug, `${agency}-${suffix}`));
+      }
+    }
+    await seed(client, "client", true, source);
+    await db.update(platformCompaniesTable).set({ parentSlug: source })
+      .where(eq(platformCompaniesTable.slug, client));
+    await db.insert(projectsTable).values({
+      id: project,
+      name: "Destination failure",
+      owner: client,
+      tier: "standard",
+    });
+    const sourceAddonValue = JSON.stringify([{
+      subscriptionId: "sub_capacity_destination_fail_source",
+      tier: "standard",
+      projectId: project,
+      ownerSlug: client,
+      grantsCapacity: true,
+      purchasedAt: new Date().toISOString(),
+    }]);
+    const destinationAddonValue = JSON.stringify([{
+      subscriptionId: "sub_capacity_destination_fail_premium",
+      tier: "premium",
+      projectId: null,
+      ownerSlug: null,
+      grantsCapacity: true,
+      purchasedAt: new Date().toISOString(),
+    }]);
+    await db.insert(platformMetaTable).values([
+      { key: `projectAddons:${source}`, value: sourceAddonValue },
+      { key: `projectAddons:${destination}`, value: destinationAddonValue },
+    ]);
+    await db.execute(sql`
+      CREATE OR REPLACE FUNCTION fail_destination_addon_write() RETURNS trigger AS $$
+      BEGIN
+        IF NEW.key = 'projectAddons:capacity-destination-fail-target'
+          AND NEW.value LIKE '%capacity-destination-fail-client%' THEN
+          RAISE EXCEPTION 'injected destination add-on failure';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `);
+    await db.execute(sql`
+      CREATE TRIGGER destination_addon_write_failure
+      BEFORE UPDATE ON platform_meta
+      FOR EACH ROW EXECUTE FUNCTION fail_destination_addon_write()
+    `);
+    try {
+      const failed = await request(
+        { username: "admin", role: "admin" },
+        "/platform/accounts/reparent",
+        { username: client, newParent: destination },
+      );
+      expect(failed.status).toBe(500);
+      const [failedAccount] = await db.select().from(platformAccountsTable)
+        .where(eq(platformAccountsTable.username, client));
+      const [failedCompany] = await db.select().from(platformCompaniesTable)
+        .where(eq(platformCompaniesTable.slug, client));
+      expect(failedAccount?.parent).toBe(source);
+      expect(failedCompany?.parentSlug).toBe(source);
+      expect(await getProjectAddons(source)).toEqual(JSON.parse(sourceAddonValue));
+      expect(await getProjectAddons(destination)).toEqual(JSON.parse(destinationAddonValue));
+      const [restoredProject] = await db.select().from(projectsTable).where(eq(projectsTable.id, project));
+      expect(restoredProject?.tier).toBe("standard");
+    } finally {
+      await db.execute(sql`DROP TRIGGER IF EXISTS destination_addon_write_failure ON platform_meta`);
+      await db.execute(sql`DROP FUNCTION IF EXISTS fail_destination_addon_write()`);
+    }
+
+    const retry = await request(
+      { username: "admin", role: "admin" },
+      "/platform/accounts/reparent",
+      { username: client, newParent: destination },
+    );
+    expect(retry.status).toBe(200);
+    const [movedAccount] = await db.select().from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, client));
+    expect(movedAccount?.parent).toBe(destination);
+    expect(await getProjectAddons(source)).toMatchObject([{
+      subscriptionId: "sub_capacity_destination_fail_source",
+      projectId: null,
+      ownerSlug: null,
+    }]);
+    expect(await getProjectAddons(destination)).toMatchObject([{
+      subscriptionId: "sub_capacity_destination_fail_premium",
+      projectId: project,
+      ownerSlug: client,
+      tier: "premium",
+    }]);
+    const [fundedProject] = await db.select().from(projectsTable).where(eq(projectsTable.id, project));
+    expect(fundedProject?.tier).toBe("premium");
+  });
+
+  it("keeps managed clients as leaves across role and reparent operations", async () => {
+    await seedFreeAgency("capacity-boundary-agency");
+    await seed("capacity-boundary-client", "client", true, "capacity-boundary-agency");
+    const roleChange = await request(
+      { username: "admin", role: "admin" },
+      "/platform/accounts/role",
+      { username: "capacity-boundary-client", role: "agency" },
+    );
+    expect(roleChange.status).toBe(400);
+
+    await seed("capacity-parent-with-child", "agency");
+    await seed("capacity-child", "client", true, "capacity-parent-with-child");
+    const clientChange = await request(
+      { username: "admin", role: "admin" },
+      "/platform/accounts/role",
+      { username: "capacity-parent-with-child", role: "client" },
+    );
+    expect(clientChange.status).toBe(409);
   });
 });

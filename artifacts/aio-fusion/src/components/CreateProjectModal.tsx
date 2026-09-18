@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import { Plus, ArrowRight, Upload, Image as ImageIcon } from "lucide-react";
 import { vars } from "../marketing/vars";
+import type { PackageCapacity } from "../lib/billingAllowance";
 
 const ink = "#0a1628";
 const accent = "#C8497A";
 
-export function CreateProjectModal({ onCancel, onCreate, initialName, forClientName, error }: {
+export function CreateProjectModal({ onCancel, onCreate, initialName, forClientName, error, packageCapacity }: {
   onCancel: () => void;
   onCreate: (name: string, logo?: string) => void | Promise<void | { ok?: boolean }>;
   /** Pre-fills the project name (e.g. the client's company name when starting from a hub placeholder card). */
@@ -14,6 +15,8 @@ export function CreateProjectModal({ onCancel, onCreate, initialName, forClientN
   forClientName?: string;
   /** Persistence failures keep the dialog open and explain why retry is needed. */
   error?: string | null;
+  /** Server-calculated capacity shown as guidance; the save endpoint remains authoritative. */
+  packageCapacity?: PackageCapacity | null;
 }) {
   const [name, setName] = useState(initialName ?? "");
   const [logo, setLogo] = useState<string | null>(null);
@@ -111,6 +114,22 @@ export function CreateProjectModal({ onCancel, onCreate, initialName, forClientN
           <p className="text-[13px] font-medium mb-5 px-4 py-3 rounded-xl" style={{ background: "#FBE3ED", color: accent }}>
             This project will be created in the Client Project for <strong>{forClientName}</strong>.
           </p>
+        )}
+        {packageCapacity && (
+          <div className="text-[13px] leading-relaxed mb-5 px-4 py-3 rounded-xl" data-testid="create-project-capacity" style={{ background: vars.g50, color: vars.g600, border: `1px solid ${vars.g200}` }}>
+            <p>
+              <strong style={{ color: ink }}>{packageCapacity.included}</strong> included ·{" "}
+              <strong style={{ color: ink }}>{packageCapacity.purchased}</strong> purchased ·{" "}
+              <strong style={{ color: ink }}>{packageCapacity.reserved}</strong> reserved ·{" "}
+              <strong style={{ color: ink }}>{packageCapacity.used}</strong> used ·{" "}
+              <strong style={{ color: ink }}>{packageCapacity.remaining === null ? "Unlimited" : Math.max(0, packageCapacity.remaining)}</strong> remaining ·{" "}
+              <strong style={{ color: ink }}>{packageCapacity.allowance === null ? "Unlimited" : packageCapacity.allowance}</strong> allowance
+            </p>
+            <p className="mt-1">{packageCapacity.overLimit ? "Over package limit. Existing hubs remain readable." : "Within package allowance."}</p>
+            {packageCapacity.kind === "agency" && (
+              <p className="mt-1">Each managed client can have one project. Creating its first project uses the package that client already reserves.</p>
+            )}
+          </div>
         )}
         {error && (
           <p role="alert" className="text-[13px] leading-relaxed mb-4 px-4 py-3 rounded-xl" style={{ background: "#FEF2F2", color: "#B91C1C", border: "1px solid #FECACA" }}>

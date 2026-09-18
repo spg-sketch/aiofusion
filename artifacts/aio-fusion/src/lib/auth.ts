@@ -804,7 +804,15 @@ export async function serverAddUser(
     ...(extra?.autoUsername ? { autoUsername: true } : {}),
     ...(extra?.logoDataUrl ? { logoDataUrl: extra.logoDataUrl } : {}),
     ...(extra?.managed ? { managed: true } : {}),
-    ...(extra?.creationRequestKey ? { creationRequestKey: extra.creationRequestKey } : {}),
+    ...(extra?.creationRequestKey
+      ? {
+          // idempotencyKey is the public API contract. Keep the local option
+          // name stable for existing callers that preserve uncertain retries;
+          // creationRequestKey keeps mixed-version deployments recoverable.
+          idempotencyKey: extra.creationRequestKey,
+          creationRequestKey: extra.creationRequestKey,
+        }
+      : {}),
   });
   if (!ok) {
     return {

@@ -118,8 +118,11 @@ vi.mock("@workspace/db", async () => {
     );
     CREATE TABLE IF NOT EXISTS projects (
       id varchar PRIMARY KEY,
-      username varchar NOT NULL,
-      data jsonb,
+      username varchar,
+      name varchar NOT NULL DEFAULT '',
+      data jsonb NOT NULL DEFAULT '{}',
+      intake jsonb,
+      logo text,
       owner varchar,
       tier varchar(16),
       deleted_at timestamptz,
@@ -388,7 +391,6 @@ describe("POST /api/platform/accounts/access", () => {
         email: CONTACT_EMAIL,
       },
     ]);
-
     ({ server, baseUrl } = await startServer());
   });
 
@@ -1123,6 +1125,12 @@ describe("agency partner clients are permanently managed", () => {
         email: PARTNER_CONTACT,
       },
     ]);
+    await db.insert(platformCompaniesTable).values({
+      slug: PARTNER,
+      role: "agency",
+      freeAccess: true,
+      plan: "agency",
+    });
     ({ server, baseUrl } = await startServer());
   });
 

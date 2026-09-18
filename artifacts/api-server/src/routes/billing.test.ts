@@ -440,6 +440,11 @@ import {
   getBillingState,
   getProjectAddons,
   getProjectAllowance,
+  getPackageCapacity,
+  checkProjectCapacityUnlocked,
+  reserveAddonForOwnerUnlocked,
+  withSlugLock,
+  withBillingLock,
   assignAddonToNewProject,
   syncStripeBillingDetails,
   handleSubscriptionUpdated,
@@ -480,6 +485,9 @@ async function api(
     method: opts.method ?? (opts.body !== undefined ? "POST" : "GET"),
     headers: {
       "content-type": "application/json",
+      // CPU-heavy parallel PGlite suites can outlive an idle keep-alive
+      // socket. Use a fresh connection rather than retrying mutation requests.
+      connection: "close",
       ...(cookies ? { cookie: cookies } : {}),
     },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
@@ -1548,6 +1556,377 @@ describe("project add-ons", () => {
     expect(await getProjectAllowance("allow-none")).toBe(0);
   });
 
+  it("stale plan data cannot inflate capacity after an explicit account reclassification", async () => {
+    await seedSubscribed("allow-client-stale-agency", "client@allow-stale.test");
+    await db
+      .update(platformCompaniesTable)
+      .set({ plan: "agency" })
+      .where(eq(platformCompaniesTable.slug, "allow-client-stale-agency"));
+    expect((await getPackageCapacity("allow-client-stale-agency")).included).toBe(1);
+
+    await seedSubscribed("allow-agency-stale-client", "agency@allow-stale.test", "agency");
+    await db
+      .update(platformCompaniesTable)
+      .set({ plan: "inhouse" })
+      .where(eq(platformCompaniesTable.slug, "allow-agency-stale-client"));
+    expect((await getPackageCapacity("allow-agency-stale-client")).included).toBe(1);
+
+    await seedWorkspace("allow-free-agency-stale-client", "free@allow-stale.test", {
+      accountRole: "agency",
+    });
+    await db
+      .update(platformCompaniesTable)
+      .set({ freeAccess: true, plan: "inhouse" })
+      .where(eq(platformCompaniesTable.slug, "allow-free-agency-stale-client"));
+    expect((await getPackageCapacity("allow-free-agency-stale-client")).included).toBe(3);
+  });
+
+  it("binds and retires a Direct Client add-on despite a stale Agency plan", async () => {
+    await seedSubscribed("addon-stale-agency-plan", "owner@addon-stale-plan.test");
+    await db
+      .update(platformCompaniesTable)
+      .set({ plan: "agency" })
+      .where(eq(platformCompaniesTable.slug, "addon-stale-agency-plan"));
+    await db.insert(projectsTable).values([
+      {
+        id: "addon-stale-included",
+        name: "Included",
+        data: {},
+        owner: "addon-stale-agency-plan",
+      },
+      {
+        id: "addon-stale-funded",
+        name: "Funded",
+        data: {},
+        owner: "addon-stale-agency-plan",
+      },
+    ]);
+    await handleStripeEvent(
+      fakeEvent("evt_addon_stale_buy", "checkout.session.completed", {
+        mode: "subscription",
+        payment_status: "paid",
+        customer: "cus_addon-stale-agency-plan",
+        subscription: "sub_addon_stale_plan",
+        metadata: {
+          slug: "addon-stale-agency-plan",
+          kind: "project-addon",
+          tier: "max",
+        },
+      }),
+    );
+    await assignAddonToNewProject(
+      "addon-stale-agency-plan",
+      "addon-stale-funded",
+    );
+    expect(await getProjectAddons("addon-stale-agency-plan")).toEqual([
+      expect.objectContaining({ projectId: "addon-stale-funded" }),
+    ]);
+
+    await handleStripeEvent(
+      fakeEvent("evt_addon_stale_cancel", "customer.subscription.deleted", {
+        id: "sub_addon_stale_plan",
+        customer: "cus_addon-stale-agency-plan",
+        metadata: { kind: "project-addon" },
+      }),
+    );
+    const [funded] = await db
+      .select({ deletedAt: projectsTable.deletedAt, tier: projectsTable.tier })
+      .from(projectsTable)
+      .where(eq(projectsTable.id, "addon-stale-funded"));
+    expect(funded!.deletedAt).not.toBeNull();
+    expect(funded!.tier).toBeNull();
+  });
+
+  it("re-resolves a queued billing lock after the account is reparented", async () => {
+    await seedSubscribed("lock-root-old", "old@lock-root.test", "agency");
+    await seedSubscribed("lock-root-new", "new@lock-root.test", "agency");
+    await seedWorkspace("lock-moving-child", "child@lock-root.test", {
+      accountRole: "client",
+      parent: "lock-root-old",
+    });
+    let releaseOldLock!: () => void;
+    const blocker = withSlugLock(
+      "lock-root-old",
+      () => new Promise<void>((resolve) => {
+        releaseOldLock = resolve;
+      }),
+    );
+    while (!releaseOldLock) await Promise.resolve();
+    const pending = withBillingLock("lock-moving-child", async (root) => root);
+    await db
+      .update(platformAccountsTable)
+      .set({ parent: "lock-root-new" })
+      .where(eq(platformAccountsTable.username, "lock-moving-child"));
+    releaseOldLock();
+    await blocker;
+    expect(await pending).toBe("lock-root-new");
+  });
+
+  it("counts empty managed clients as Agency reservations and conservatively counts legacy excess", async () => {
+    const { sid } = await seedSubscribed("capacity-agency", "owner@capacity-agency.test", "agency");
+    await seedWorkspace("capacity-empty", "empty@capacity.test", {
+      accountRole: "client",
+      parent: "capacity-agency",
+    });
+    await seedWorkspace("capacity-busy", "busy@capacity.test", {
+      accountRole: "client",
+      parent: "capacity-agency",
+    });
+    await db.insert(projectsTable).values([
+      { id: "capacity-root-legacy", name: "Legacy root", data: {}, owner: "capacity-agency" },
+      { id: "capacity-busy-1", name: "Busy 1", data: {}, owner: "capacity-busy" },
+      { id: "capacity-busy-2", name: "Busy 2", data: {}, owner: "capacity-busy" },
+    ]);
+
+    const capacity = await getPackageCapacity("capacity-agency");
+    expect(capacity).toMatchObject({
+      kind: "agency",
+      access: "paid",
+      included: 3,
+      purchased: 0,
+      reserved: 4,
+      used: 3,
+      remaining: 0,
+      allowance: 3,
+      overLimit: true,
+    });
+    const response = await api("/api/platform/billing/capacity", { sid });
+    expect(response.status).toBe(200);
+    expect(response.json.packageCapacity).toMatchObject({ reserved: 4, overLimit: true });
+  });
+
+  it("allows a full Agency reservation's first project but denies a second managed-client project", async () => {
+    await seedSubscribed("capacity-first-root", "root@capacity-first.test", "agency");
+    for (const child of ["capacity-first-a", "capacity-first-b", "capacity-first-c"]) {
+      await seedWorkspace(child, `${child}@test.example`, {
+        accountRole: "client",
+        parent: "capacity-first-root",
+      });
+    }
+    const first = await checkProjectCapacityUnlocked("capacity-first-a", "capacity-first-project");
+    expect(first.allowed).toBe(true);
+    expect(first.capacity.reserved).toBe(3);
+    await db.insert(projectsTable).values({
+      id: "capacity-first-project",
+      name: "First",
+      data: {},
+      owner: "capacity-first-a",
+    });
+    const second = await checkProjectCapacityUnlocked("capacity-first-a", "capacity-second-project");
+    expect(second.allowed).toBe(false);
+    expect(second.error).toContain("one project");
+  });
+
+  it("does not let an expired entitlement use an already-reserved empty client slot", async () => {
+    const { sid } = await seedWorkspace("capacity-expired-root", "root@capacity-expired.test", {
+      accountRole: "agency",
+    });
+    await seedWorkspace("capacity-expired-child", "child@capacity-expired.test", {
+      accountRole: "client",
+      parent: "capacity-expired-root",
+    });
+    expect((await api("/api/platform/billing/trial", { sid, method: "POST" })).status).toBe(201);
+    await db.execute(sql`
+      UPDATE platform_companies
+      SET beta_trial_ends_at = now() - interval '1 day'
+      WHERE slug = 'capacity-expired-root'
+    `);
+    const decision = await checkProjectCapacityUnlocked(
+      "capacity-expired-child",
+      "capacity-expired-project",
+    );
+    expect(decision.allowed).toBe(false);
+    expect(decision.capacity.access).toBe("none");
+  });
+
+  it("compares a same-root transfer with actual usage so legacy excess can move into an empty client", async () => {
+    await seedSubscribed("capacity-transfer-root", "root@capacity-transfer.test", "agency");
+    for (const child of ["capacity-transfer-a", "capacity-transfer-b", "capacity-transfer-c"]) {
+      await seedWorkspace(child, `${child}@test.example`, {
+        accountRole: "client",
+        parent: "capacity-transfer-root",
+      });
+    }
+    await db.insert(projectsTable).values({
+      id: "capacity-transfer-legacy",
+      name: "Legacy root",
+      data: {},
+      owner: "capacity-transfer-root",
+    });
+    const decision = await checkProjectCapacityUnlocked(
+      "capacity-transfer-a",
+      "capacity-transfer-legacy",
+    );
+    expect(decision.allowed).toBe(true);
+    expect(decision.capacity.reserved).toBe(3);
+  });
+
+  it("blocks new Agency-root projects while preserving an existing legacy root project", async () => {
+    await seedSubscribed("capacity-root-rule", "owner@capacity-root-rule.test", "agency");
+    await db.insert(projectsTable).values({
+      id: "capacity-existing-root",
+      name: "Legacy",
+      data: {},
+      owner: "capacity-root-rule",
+    });
+    expect((await checkProjectCapacityUnlocked("capacity-root-rule", "capacity-existing-root")).allowed).toBe(true);
+    const denied = await checkProjectCapacityUnlocked("capacity-root-rule", "capacity-new-root");
+    expect(denied.allowed).toBe(false);
+    expect(denied.error).toContain("managed client");
+  });
+
+  it("an archived client only releases capacity when it has no live project", async () => {
+    await seedSubscribed("capacity-archive-root", "root@capacity-archive.test", "agency");
+    await seedWorkspace("capacity-archive-child", "child@capacity-archive.test", {
+      accountRole: "client",
+      parent: "capacity-archive-root",
+    });
+    await db.insert(platformMetaTable).values({
+      key: "account:archived:capacity-archive-child",
+      value: "true",
+    });
+    expect((await getPackageCapacity("capacity-archive-root")).reserved).toBe(0);
+    await db.insert(projectsTable).values({
+      id: "capacity-archive-live",
+      name: "Still live",
+      data: {},
+      owner: "capacity-archive-child",
+    });
+    expect((await getPackageCapacity("capacity-archive-root")).reserved).toBe(1);
+  });
+
+  it("binds a purchased Agency package to an empty client and reuses it for the first project", async () => {
+    await seedSubscribed("capacity-bind-root", "root@capacity-bind.test", "agency");
+    for (const child of ["capacity-bind-a", "capacity-bind-b", "capacity-bind-c", "capacity-bind-extra"]) {
+      await seedWorkspace(child, `${child}@test.example`, {
+        accountRole: "client",
+        parent: "capacity-bind-root",
+      });
+    }
+    await handleStripeEvent(
+      fakeEvent("evt_capacity_bind", "checkout.session.completed", {
+        mode: "subscription",
+        payment_status: "paid",
+        customer: "cus_capacity-bind-root",
+        subscription: "sub_capacity_bind",
+        metadata: { slug: "capacity-bind-root", kind: "project-addon", tier: "max" },
+      }),
+    );
+    await reserveAddonForOwnerUnlocked("capacity-bind-root", "capacity-bind-extra");
+    expect(await getProjectAddons("capacity-bind-root")).toMatchObject([
+      { subscriptionId: "sub_capacity_bind", ownerSlug: "capacity-bind-extra", projectId: null },
+    ]);
+    await db.insert(projectsTable).values({
+      id: "capacity-bind-project",
+      name: "First",
+      data: {},
+      owner: "capacity-bind-extra",
+    });
+    await assignAddonToNewProject("capacity-bind-root", "capacity-bind-project");
+    expect(await getProjectAddons("capacity-bind-root")).toMatchObject([
+      { ownerSlug: "capacity-bind-extra", projectId: "capacity-bind-project", tier: "max" },
+    ]);
+  });
+
+  it("cancelling a package reserved by an empty client preserves data and exposes the excess", async () => {
+    await seedSubscribed("capacity-cancel-root", "root@capacity-cancel.test", "agency");
+    for (const child of ["capacity-cancel-a", "capacity-cancel-b", "capacity-cancel-c", "capacity-cancel-extra"]) {
+      await seedWorkspace(child, `${child}@test.example`, {
+        accountRole: "client",
+        parent: "capacity-cancel-root",
+      });
+    }
+    await handleStripeEvent(
+      fakeEvent("evt_capacity_cancel_buy", "checkout.session.completed", {
+        mode: "subscription",
+        payment_status: "paid",
+        customer: "cus_capacity-cancel-root",
+        subscription: "sub_capacity_cancel",
+        metadata: { slug: "capacity-cancel-root", kind: "project-addon", tier: "standard" },
+      }),
+    );
+    await reserveAddonForOwnerUnlocked("capacity-cancel-root", "capacity-cancel-extra");
+    await handleStripeEvent(
+      fakeEvent("evt_capacity_cancel_delete", "customer.subscription.deleted", {
+        id: "sub_capacity_cancel",
+        customer: "cus_capacity-cancel-root",
+        metadata: { kind: "project-addon" },
+      }),
+    );
+    expect(await getProjectAddons("capacity-cancel-root")).toHaveLength(0);
+    expect(await getPackageCapacity("capacity-cancel-root")).toMatchObject({
+      reserved: 4,
+      allowance: 3,
+      overLimit: true,
+    });
+    // Existing excess is not destructively normalized, but the cancelled,
+    // unfunded empty reservation cannot be turned back into a live project.
+    expect(
+      (await checkProjectCapacityUnlocked("capacity-cancel-extra", "capacity-cancel-first")).allowed,
+    ).toBe(false);
+  });
+
+  it("cannot restore or replace a cancelled Agency package's funded project", async () => {
+    await seedSubscribed("capacity-cancel-project-root", "root@capacity-cancel-project.test", "agency");
+    for (const child of [
+      "capacity-cancel-project-a",
+      "capacity-cancel-project-b",
+      "capacity-cancel-project-c",
+      "capacity-cancel-project-extra",
+    ]) {
+      await seedWorkspace(child, `${child}@test.example`, {
+        accountRole: "client",
+        parent: "capacity-cancel-project-root",
+      });
+    }
+    await handleStripeEvent(
+      fakeEvent("evt_capacity_cancel_project_buy", "checkout.session.completed", {
+        mode: "subscription",
+        payment_status: "paid",
+        customer: "cus_capacity-cancel-project-root",
+        subscription: "sub_capacity_cancel_project",
+        metadata: {
+          slug: "capacity-cancel-project-root",
+          kind: "project-addon",
+          tier: "standard",
+        },
+      }),
+    );
+    await reserveAddonForOwnerUnlocked(
+      "capacity-cancel-project-root",
+      "capacity-cancel-project-extra",
+    );
+    await db.insert(projectsTable).values({
+      id: "capacity-cancel-project-funded",
+      name: "Funded",
+      data: {},
+      owner: "capacity-cancel-project-extra",
+    });
+    await assignAddonToNewProject(
+      "capacity-cancel-project-root",
+      "capacity-cancel-project-funded",
+    );
+    await handleStripeEvent(
+      fakeEvent("evt_capacity_cancel_project_delete", "customer.subscription.deleted", {
+        id: "sub_capacity_cancel_project",
+        customer: "cus_capacity-cancel-project-root",
+        metadata: { kind: "project-addon" },
+      }),
+    );
+    expect(
+      (await checkProjectCapacityUnlocked(
+        "capacity-cancel-project-extra",
+        "capacity-cancel-project-funded",
+      )).allowed,
+    ).toBe(false);
+    expect(
+      (await checkProjectCapacityUnlocked(
+        "capacity-cancel-project-extra",
+        "capacity-cancel-project-replacement",
+      )).allowed,
+    ).toBe(false);
+  });
+
   it("project-checkout requires an active subscription and a valid tier", async () => {
     const { sid } = await seedWorkspace("addon-unsub", "owner@addonunsub.test", { accountRole: "client" });
     expect((await api("/api/platform/billing/project-checkout", { sid, body: { tier: "gold" } })).status).toBe(400);
@@ -1799,13 +2178,37 @@ describe("project add-ons", () => {
         mode: "subscription",
         customer: "cus_addon-attach",
         subscription: "sub_addon_2",
-        metadata: { slug: "addon-attach", kind: "project-addon", tier: "max", projectId: "attach-proj" },
+        metadata: {
+          slug: "addon-attach",
+          kind: "project-addon",
+          tier: "max",
+          projectId: "attach-proj",
+          capacityGrant: "false",
+        },
       }),
     );
 
     expect(await getProjectActionLimit("addon-attach", "attach-proj")).toBe(150);
     const addons = await getProjectAddons("addon-attach");
     expect(addons[0]!.projectId).toBe("attach-proj");
+    expect(addons[0]!.grantsCapacity).toBe(false);
+    // Upgrading an included project's action tier must not manufacture another
+    // client/project package.
+    expect((await getPackageCapacity("addon-attach")).purchased).toBe(0);
+
+    await handleStripeEvent(
+      fakeEvent("evt_addon_2_deleted", "customer.subscription.deleted", {
+        id: "sub_addon_2",
+        customer: "cus_addon-attach",
+        metadata: { kind: "project-addon" },
+      }),
+    );
+    const [stillLive] = await db
+      .select({ tier: projectsTable.tier, deletedAt: projectsTable.deletedAt })
+      .from(projectsTable)
+      .where(eq(projectsTable.id, "attach-proj"));
+    expect(stillLive?.deletedAt).toBeNull();
+    expect(stillLive?.tier).toBeNull();
   });
 
   it("fulfilment stores the slot unassigned when the target project left the account", async () => {
@@ -2182,6 +2585,88 @@ describe("project add-ons", () => {
     ]);
     expect(limits.filter((l) => l === 150)).toHaveLength(1);
     expect(addons[0]!.projectId).toBeTruthy();
+  });
+
+  it("replayed project assignment is idempotent and does not bind a second package", async () => {
+    await seedSubscribed("addon-retry", "owner@addonretry.test");
+    for (const [eventId, subscriptionId] of [
+      ["evt_addon_retry_1", "sub_addon_retry_1"],
+      ["evt_addon_retry_2", "sub_addon_retry_2"],
+    ] as const) {
+      await handleStripeEvent(
+        fakeEvent(eventId, "checkout.session.completed", {
+          mode: "subscription",
+          payment_status: "paid",
+          customer: "cus_addon-retry",
+          subscription: subscriptionId,
+          metadata: { slug: "addon-retry", kind: "project-addon", tier: "max" },
+        }),
+      );
+    }
+    await db.insert(projectsTable).values([
+      { id: "retry-included", name: "Included", data: {}, owner: "addon-retry" },
+      { id: "retry-extra", name: "Extra", data: {}, owner: "addon-retry" },
+    ]);
+    await assignAddonToNewProject("addon-retry", "retry-extra");
+    await assignAddonToNewProject("addon-retry", "retry-extra");
+    const addons = await getProjectAddons("addon-retry");
+    expect(addons.filter((addon) => addon.projectId === "retry-extra")).toHaveLength(1);
+    expect(addons.filter((addon) => addon.projectId === null)).toHaveLength(1);
+  });
+
+  it("a same-owner retry heals add-on metadata after a committed same-root transfer", async () => {
+    await seedSubscribed("addon-heal-root", "owner@addonheal.test", "agency");
+    for (const child of [
+      "addon-heal-included-a",
+      "addon-heal-included-b",
+      "addon-heal-included-c",
+      "addon-heal-source",
+      "addon-heal-target",
+    ]) {
+      await seedWorkspace(child, `${child}@test.example`, {
+        accountRole: "client",
+        parent: "addon-heal-root",
+      });
+    }
+    for (const [eventId, subscriptionId] of [
+      ["evt_addon_heal_1", "sub_addon_heal_1"],
+      ["evt_addon_heal_2", "sub_addon_heal_2"],
+    ] as const) {
+      await handleStripeEvent(
+        fakeEvent(eventId, "checkout.session.completed", {
+          mode: "subscription",
+          payment_status: "paid",
+          customer: "cus_addon-heal-root",
+          subscription: subscriptionId,
+          metadata: { slug: "addon-heal-root", kind: "project-addon", tier: "max" },
+        }),
+      );
+    }
+    await reserveAddonForOwnerUnlocked("addon-heal-root", "addon-heal-source");
+    await reserveAddonForOwnerUnlocked("addon-heal-root", "addon-heal-target");
+    await db.insert(projectsTable).values({
+      id: "addon-heal-project",
+      name: "Heal",
+      data: {},
+      owner: "addon-heal-source",
+    });
+    await assignAddonToNewProject("addon-heal-root", "addon-heal-project");
+
+    // Simulate the owner update committing while its post-commit metadata
+    // reconciliation failed. The endpoint's no-op retry calls assignment again.
+    await db
+      .update(projectsTable)
+      .set({ owner: "addon-heal-target" })
+      .where(eq(projectsTable.id, "addon-heal-project"));
+    await assignAddonToNewProject("addon-heal-root", "addon-heal-project");
+
+    const addons = await getProjectAddons("addon-heal-root");
+    expect(
+      addons.find((addon) => addon.ownerSlug === "addon-heal-source"),
+    ).toMatchObject({ projectId: null });
+    expect(
+      addons.find((addon) => addon.ownerSlug === "addon-heal-target"),
+    ).toMatchObject({ projectId: "addon-heal-project" });
   });
 
   it("project-tier rejects included projects and unknown projects", async () => {

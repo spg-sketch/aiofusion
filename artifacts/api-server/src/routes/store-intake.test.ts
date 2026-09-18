@@ -92,7 +92,7 @@ vi.mock("@workspace/db", async () => {
 // These resolve to the mocked module above: the same pglite-backed db and the
 // real projectsTable, so the test seeds and asserts through the very engine the
 // route writes to.
-import { db, projectsTable } from "@workspace/db";
+import { db, platformAccountsTable, projectsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import storeRouter from "./store";
 
@@ -166,6 +166,10 @@ describe("POST /api/store/projects/intake (blank never overwrites populated, DB-
 
   beforeEach(async () => {
     await db.delete(projectsTable);
+    await db
+      .insert(platformAccountsTable)
+      .values({ username: "admin", passwordHash: "", role: "admin", status: "active" })
+      .onConflictDoNothing();
   });
 
   async function seedPopulated(id: string) {

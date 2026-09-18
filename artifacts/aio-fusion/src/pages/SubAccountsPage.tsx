@@ -14,7 +14,7 @@ import { apiBase } from "../lib/apiHelpers";
 import { accountLabel } from "../lib/accountLabels";
 import { loadStoredProjects, saveStoredProjects } from "../lib/projectStore";
 import { auditAndRecoverLocalProjects, pushProjectMeta, type ProjectReconciliationAudit } from "../lib/projectSync";
-import { fetchProjectAllowance } from "../lib/billingAllowance";
+import { fetchProjectAllowance, type PackageCapacity } from "../lib/billingAllowance";
 import type { Client } from "../lib/projectTypes";
 import { createStoredProject } from "../lib/projects";
 import { TeamSection } from "./TeamSection";
@@ -99,7 +99,7 @@ function SubAccountsPage({
   const accent = "#C8497A";
   const accentSoft = "#FBE3ED";
   const [tick, setTick] = useState(0);
-  const [projectAllowanceSummary, setProjectAllowanceSummary] = useState<{ used: number; total: number } | null>(null);
+  const [packageCapacity, setPackageCapacity] = useState<PackageCapacity | null>(null);
   const [reconciliationAudit, setReconciliationAudit] = useState<ProjectReconciliationAudit | null>(null);
   const [reconciliationError, setReconciliationError] = useState<string | null>(null);
   const [reconciliationLoading, setReconciliationLoading] = useState(false);
@@ -113,16 +113,26 @@ function SubAccountsPage({
   // behalf: client rows get a simplified button set (no passwords, no
   // sign-in access) and new clients are always created as managed.
   const isAgencyPartner = session.role === "agency";
+  const agencyPackageIsFull = isAgencyPartner
+    && packageCapacity?.remaining != null
+    && packageCapacity.remaining <= 0;
   useEffect(() => {
     if (!isAgencyPartner) return;
     void fetchProjectAllowance().then((allowance) => {
       if (!allowance) return;
-      setProjectAllowanceSummary({
+      setPackageCapacity(allowance.packageCapacity ?? {
+        billingSlug: session.username,
+        kind: "agency",
+        included: allowance.projectAllowance,
+        purchased: 0,
+        reserved: allowance.projectsUsed,
         used: allowance.projectsUsed,
-        total: allowance.projectAllowance,
+        remaining: Math.max(0, allowance.projectAllowance - allowance.projectsUsed),
+        allowance: allowance.projectAllowance,
+        overLimit: allowance.projectsUsed > allowance.projectAllowance,
       });
     });
-  }, [isAgencyPartner]);
+  }, [isAgencyPartner, session.username, tick]);
   // Clients under an agency partner never see billing - the agency is billed.
   const canSeeBilling = !session.agencyManagedClient && (session.membershipRole == null || session.membershipRole === "owner" || session.membershipRole === "admin" || session.membershipRole === "billing");
   // Agency-managed partner clients have no team of their own - collaboration
@@ -691,6 +701,10 @@ function SubAccountsPage({
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
     if (clientCreationInFlightRef.current || pendingClientCreation) return;
+    if (agencyPackageIsFull) {
+      setAddError("Your client/project package is full. Add another annual package in Billing before creating a managed client.");
+      return;
+    }
     setAddError(null);
     setAddSuccess(null);
     setNavigationRetry(null);
@@ -765,10 +779,9 @@ function SubAccountsPage({
         clientCreationAttemptRef.current = null;
         setClientCreationUncertain(false);
 
-        // Agency clients are workspaces managed by the agency, not separate
-        // client logins. Create the first project only after the authorized
-        // child session is active: /api/store/projects/upsert deliberately
-        // stamps new rows from req.account, never from a client-supplied owner.
+        // The agency remains the authenticated operator. The target owner is
+        // sent separately so the server can authorize and stamp the new row;
+        // never create under the agency and transfer afterwards.
         if (isAgencyPartner) {
           const project = createStoredProject(companyName, {
             owner: result.username,
@@ -786,12 +799,23 @@ function SubAccountsPage({
             throw new Error("This browser could not prepare the Client Project. Check storage permissions and try again.");
           }
           setPendingClientCreation({ username: result.username, projectId: project.id });
+          try {
+            await persistPendingClientProject(projectIntent);
+          } catch (error) {
+            showNavigationFailure({
+              username: result.username,
+              projectId: null,
+              openProjectHub: true,
+              originalUsername: session.username,
+              projectIntent,
+            }, error, false, false);
+            return;
+          }
           const navigated = await navigateToAccount(
             result.username,
             null,
             true,
             session.username,
-            projectIntent,
           );
           if (!navigated) return;
         }
@@ -850,6 +874,7 @@ function SubAccountsPage({
     const result = await pushProjectMeta(
       intent.project as unknown as Record<string, unknown> & { id: string },
       intent.logo,
+      { owner: intent.username },
     );
     if (!result.ok) {
       throw new Error(result.error ?? "The Client Project could not be saved. Try again.");
@@ -986,7 +1011,20 @@ function SubAccountsPage({
     const target = navigationRetry;
     if (!target.switched) {
       if (!target.uncertain) {
-        void navigateToAccount(target.username, target.projectId, target.openProjectHub, target.originalUsername, target.projectIntent);
+        if (target.projectIntent) {
+          navigationLockRef.current = true;
+          setEnterError(null);
+          setNavigationRetry(null);
+          setEnteringUsername(target.username);
+          void persistPendingClientProject(target.projectIntent)
+            .then(() => {
+              navigationLockRef.current = false;
+              return navigateToAccount(target.username, target.projectId, target.openProjectHub, target.originalUsername);
+            })
+            .catch((error) => showNavigationFailure(target, error, false, false));
+        } else {
+          void navigateToAccount(target.username, target.projectId, target.openProjectHub, target.originalUsername);
+        }
         return;
       }
 
@@ -1064,7 +1102,15 @@ function SubAccountsPage({
       setEnterError("This browser could not prepare the Client Project. Check storage permissions and try again.");
       return;
     }
-    await navigateToAccount(account.username, null, true, session.username, intent);
+    setEnteringUsername(account.username);
+    try {
+      await persistPendingClientProject(intent);
+      await navigateToAccount(account.username, null, true, session.username);
+    } catch (error) {
+      setEnterError(error instanceof Error ? error.message : "The Client Project could not be saved. Try again.");
+    } finally {
+      setEnteringUsername(null);
+    }
   };
 
   // Agency partner shortcut: enter the client's workspace and land on their
@@ -1962,6 +2008,16 @@ function SubAccountsPage({
               </div>
             )}
             <div className="md:col-span-6 flex items-end">
+              {agencyPackageIsFull ? (
+                <button
+                  type="button"
+                  onClick={() => selectSection("billing")}
+                  className="aio-button aio-button--primary w-full md:w-auto text-white"
+                  style={{ background: accent }}
+                >
+                  <FileText size={14} /> Add a package in Billing
+                </button>
+              ) : (
               <button
                 type="submit"
                  disabled={addingClient || logoProcessing || pendingClientCreation !== null}
@@ -1970,10 +2026,11 @@ function SubAccountsPage({
               >
                  {addingClient ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} {pendingClientCreation ? "Project save pending" : isAgencyPartner ? "Add Client Project" : "Add client"}
               </button>
+              )}
             </div>
              <p className="aio-type-supporting md:col-span-12" style={{ color: vars.g500 }}>
               {isAgencyPartner
-                ? "Your agency manages this client and their projects. There is no separate client login or password, and billing stays with your agency."
+                 ? "Each managed client reserves one package unit and can have one project. There is no separate client login or password, and billing stays with your agency."
                 : newManaged
                 ? "No email will be sent and the client won't be able to sign in - you manage everything on their behalf."
                 : "If you add a key contact email, we'll let them know their account has been created and they can set their own password."}
@@ -1995,9 +2052,9 @@ function SubAccountsPage({
           <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
             <div className="flex flex-wrap items-center justify-between gap-2">
                <h2 className="aio-type-section-title" style={{ color: ink }}>{isAgencyPartner ? "Your Client Projects" : "Your client accounts"} ({subAccounts.length}{archivedSubAccounts.length > 0 ? ` + ${archivedSubAccounts.length} archived` : ""})</h2>
-              {isAgencyPartner && projectAllowanceSummary && (
+              {isAgencyPartner && packageCapacity && (
                 <span className="inline-flex items-center rounded-full px-3 py-1 text-[11px] font-bold" style={{ background: accentSoft, color: accent }}>
-                  {projectAllowanceSummary.used} of {projectAllowanceSummary.total} project slots used · {Math.max(0, projectAllowanceSummary.total - projectAllowanceSummary.used)} remaining
+                  {packageCapacity.included} included · {packageCapacity.purchased} purchased · {packageCapacity.reserved} reserved · {packageCapacity.used} projects used · {packageCapacity.remaining === null ? "Unlimited" : Math.max(0, packageCapacity.remaining)} remaining · {packageCapacity.allowance === null ? "Unlimited" : packageCapacity.allowance} allowance · {packageCapacity.overLimit ? "over limit" : "within limit"}
                 </span>
               )}
             </div>
@@ -2221,6 +2278,11 @@ function SubAccountsPage({
                              : <Plus size={12} />}
                            Create Project
                          </button>
+                       )}
+                       {isAgencyPartner && owned.length > 1 && (
+                         <p role="status" className="aio-type-supporting mb-2" style={{ color: "#92400E" }}>
+                           This client has historical projects above the current one-project limit. Existing hubs remain available, but no more can be added.
+                         </p>
                        )}
                       {owned.length === 0 ? (
                         <p className="aio-type-supporting italic" style={{ color: vars.g400 }}>No projects yet.</p>
