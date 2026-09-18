@@ -258,7 +258,7 @@ content_type = "image/png"
 [[outputs]]
 id = "mOm7X5YoC1Dtnl5RVKrdV"
 uri = "file://screenshots/settings-button-review.html"
-type = "text"
+type = "html"
 title = "Account Settings: before and after"
 description = "Desktop/mobile comparisons of workspace component fixtures, plus the unchanged staging Hub reference. No deployment."
 logical_id = "547903b5-51e9-4780-b296-fd171d6532f2"
@@ -272,7 +272,7 @@ content_type = "text/html"
 [[outputs]]
 id = "ST6V9EfetOMkQgiFAkMcB"
 uri = "file://docs/brand/aio-fusion-brand-guidelines.html"
-type = "text"
+type = "html"
 title = "Brand guidelines and consistency audit"
 description = "Proposed guidelines with Project Hub unchanged, section priorities and clear evidence limits."
 logical_id = "84b18209-78d0-4bcb-9519-3330304dfc12"
@@ -324,3 +324,31 @@ mtime_ms = 1789554184659
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/75c2b84a-8a0d-43f0-bfb8-72bc652e351e/5ed9b7fa-4cd1-480d-9d61-70ff56f5d9a4"
 storage_version_token = "1789554223609142"
 content_type = "image/png"
+
+[[outputs]]
+id = "KrISZmcrm4zBqgfIL8w2J"
+uri = "file://deliverables/aio-fusion-qa-v1.5/AIO-Fusion-Master-QA-v1.5-OWNER-APPROVAL-DRAFT.docx"
+type = "word_document"
+title = "AIO Fusion Master Q&A v1.5"
+description = "Editable sales-ready Word draft. All ten sections retained. Owner approval required before external release."
+logical_id = "8802f194-cda6-45e5-9eaf-cb1d957e7ada"
+content_hash = "sha256:9c115cf8c0c9165102fe1b0a5048bf8dca7f535308791852effc5749661085ef"
+size = 48324
+mtime_ms = 1789742680121
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/8802f194-cda6-45e5-9eaf-cb1d957e7ada/7b57a9a1-39e4-4896-91b7-62570d8b09b2"
+storage_version_token = "1789742735772000"
+content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+[[outputs]]
+id = "tyzo7RqkyNY4NBjMqv85i"
+uri = "file://deliverables/aio-fusion-qa-v1.5/AIO-Fusion-Master-QA-v1.5-INTERNAL-REVIEW-DO-NOT-SHARE.docx"
+type = "word_document"
+title = "INTERNAL ONLY: v1.4 to v1.5 annotated review"
+description = "Original wording, exact replacements and reasons across 51 content blocks, plus unresolved claims and audience guidance. Must not accompany the prospect copy."
+logical_id = "f2410732-7ffe-4478-b257-c2980958084b"
+content_hash = "sha256:90ada9333010a16d22fbe6e0e2e18f2db8d4f127d85fe270ee3263ff3fa60188"
+size = 71973
+mtime_ms = 1789742680545
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/f2410732-7ffe-4478-b257-c2980958084b/78979a37-c876-447c-99a0-2d59a9312d4c"
+storage_version_token = "1789742736463869"
+content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
