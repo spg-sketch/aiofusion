@@ -124,7 +124,6 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
     try {
       await savePlannerProjects([proj, ...projects.filter((project) => project.id !== proj.id)]);
       alert(`"${proj.title}" added to the Comms Planner (w/c ${weekDateLabel(wk)}).`);
-      onNavigate("planner");
     } catch {
       setActionError(getContentStoreState().mutationError === "authentication" ? "Your session expired. Sign in again before retrying." : "The planner item was not saved. Check your connection and retry.");
     }

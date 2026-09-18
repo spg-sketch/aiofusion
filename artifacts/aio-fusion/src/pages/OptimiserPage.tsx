@@ -208,7 +208,6 @@ function OptimiserPage({
     try {
       await savePlannerProjects([proj, ...projects.filter((project) => project.id !== proj.id)]);
       alert(`"${proj.title}" added to the Comms Planner (w/c ${weekDateLabel(proj.week)}).`);
-      onNavigate("planner");
     } catch {
       alert("The article was saved to Content Library, but its planner row was not saved. Retry Push to Comms Planner to finish linking it.");
     }
