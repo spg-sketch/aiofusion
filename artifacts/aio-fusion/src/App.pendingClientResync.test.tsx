@@ -229,7 +229,7 @@ describe("project hub excludes managed clients without projects", () => {
 
     const card = await screen.findByRole("button", { name: /Account A Private/i });
     await act(async () => { card.click(); });
-    expect(await screen.findByText("Account A Private")).toBeInTheDocument();
+    expect((await screen.findAllByText("Account A Private")).length).toBeGreaterThan(0);
 
     // Simulate another tab replacing the shared session cookie with Account B.
     activeWorkspace = "account-b";
@@ -239,7 +239,7 @@ describe("project hub excludes managed clients without projects", () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText("Account A Private")).not.toBeInTheDocument();
+      expect(screen.queryAllByText("Account A Private")).toHaveLength(0);
       expect(screen.getByText(/No projects yet/i)).toBeInTheDocument();
     });
     expect(localStorage.getItem("aio.activeProjectId")).toBeNull();

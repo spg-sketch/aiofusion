@@ -103,9 +103,17 @@ function brandMeResponse() {
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class {
     observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
   });
   vi.stubGlobal("IntersectionObserver", class {
     observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    root = null; rootMargin = ""; thresholds = [];
+    root = null; rootMargin = ""; thresholds = [];
     root = null; rootMargin = ""; thresholds = [];
   });
   if (!window.matchMedia) {
@@ -154,7 +162,7 @@ describe("App in-session login - authoritative session and profile handoff", () 
       const urlStr = String(url);
       if (urlStr.includes("/api/platform/me")) {
         meRequests += 1;
-        return brandMeResponse();
+        return loggedIn ? delayedSetupCheck.then((body) => makeResponse(body)) : unauth();
       }
       if (urlStr.includes("/api/store/projects")) {
         return makeResponse({ projects: [], deletedIds: [] });
@@ -171,7 +179,7 @@ describe("App in-session login - authoritative session and profile handoff", () 
     // Mock PlatformHomePage shows "Project Hub" (session confirmed by
     // bootstrapAuth). Navigate into the platform.
     const projectHubBtn = await screen.findByRole("button", { name: /Project Hub/i }, { timeout: 8000 });
-    expect(meRequests).toBe(2);
+    expect(meRequests).toBe(3);
     await act(async () => {
       fireEvent.click(projectHubBtn);
       await new Promise((r) => setTimeout(r, 50));
@@ -209,7 +217,7 @@ describe("App in-session login - authoritative session and profile handoff", () 
       const urlStr = String(url);
       if (urlStr.includes("/api/platform/me")) {
         meRequests += 1;
-        return loggedIn ? brandMeResponse() : unauth();
+        return loggedIn ? delayedSetupCheck.then((body) => makeResponse(body)) : unauth();
       }
       if (urlStr.includes("/api/store/projects")) {
         return makeResponse({ projects: [], deletedIds: [] });
@@ -293,7 +301,7 @@ describe("App in-session login - authoritative session and profile handoff", () 
     expect(screen.getByText("Mock sign in")).toBeInTheDocument();
   });
 
-  it("sign-out invalidates an in-flight login check so a late /me cannot revive the session", async () => {
+  it("does not start project/account resync from focus while a login authority check is pending", async () => {
     let resolveMe!: (response: Response) => void;
     let meCalls = 0;
     vi.stubGlobal("fetch", vi.fn((url: string) => {

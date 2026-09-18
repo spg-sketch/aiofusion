@@ -53,6 +53,7 @@ import { ContentCreatorPage } from "./ContentCreatorPage";
 import { OptimiserPage } from "./OptimiserPage";
 import { ArchivePage } from "./ArchivePage";
 import { PlannerPage } from "./PlannerPage";
+import { loadEditorRecovery, saveEditorRecovery } from "../lib/unsavedChanges";
 
 type StoredArchive = ArchiveItem & { projectId: string };
 type StoredPlanner = PlannerProject & { projectId: string };
@@ -158,6 +159,7 @@ describe("Push to Comms Planner stays on the current page", () => {
     window.localStorage.setItem("aio.creator.preload", source.id);
     plannerWriteGate = new Promise<void>((resolve) => { releasePlannerWrite = resolve; });
     const navigate = vi.fn();
+
     const creator = render(<ContentCreatorPage onNavigate={navigate} />);
     expect((await screen.findAllByText(/durable clean energy/)).length).toBeGreaterThan(0);
     fillCreator();
@@ -257,6 +259,91 @@ describe("Push to Comms Planner stays on the current page", () => {
   });
 
   it.each([
+    {
+      name: "Content Creator",
+      editor: "creator" as const,
+      recoveredTitle: "Recovered creator headline",
+      renderEditor: () => render(<ContentCreatorPage onNavigate={vi.fn()} />),
+      data: {
+        projectName: "Recovered creator project", contentType: "Article",
+        articleHeadline: "Recovered creator headline", standfirst: "Recovered creator standfirst",
+        headline: "Recovered creator pitch", transcript: "Recovered creator body", actionNotes: "Recovered creator notes",
+        spokesperson: "Alex Smith", spokesLi: "", mediaTarget: ["Clean Energy"], contentStatus: "Draft" as const,
+        pubDate: "", targetPhrases: [], selectedMessages: ["Existing message feedback"], sourceArchiveCreatedAt: null,
+      },
+    },
+    {
+      name: "Content Optimiser",
+      editor: "optimiser" as const,
+      recoveredTitle: "Recovered optimiser title",
+      renderEditor: () => render(<OptimiserPage onNavigate={vi.fn()} />),
+      data: {
+        projectTitle: "Recovered optimiser title", contentType: "Article", spokesperson: "Alex Smith",
+        selectedMessages: ["Existing message feedback"], mediaCats: ["Clean Energy"], targetPhrases: [],
+        targetPhraseIds: [], contentStatus: "Draft" as const, pubDate: "", llmTarget: "General (All LLMs)",
+        articleHeadline: "Recovered optimiser headline", standfirst: "Recovered optimiser standfirst",
+        bodyCopy: "Recovered optimiser body", actionNotes: "Recovered optimiser notes", creatorPitch: "",
+        spokespersonLinkedIn: "", sourceArchiveCreatedAt: null,
+      },
+    },
+  ])("$name restores an interrupted draft and clears it after a confirmed save", async ({ editor, recoveredTitle, renderEditor, data }) => {
+    await ready();
+    window.localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "workspace-a", role: "client" }));
+    const { sourceArchiveCreatedAt: _sourceArchiveCreatedAt, ...editorFields } = data;
+    const snapshot = JSON.stringify(editorFields);
+    saveEditorRecovery(editor, "workspace-a", "project-1", null, snapshot, data);
+
+    renderEditor();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/unfinished Content/);
+    fireEvent.click(screen.getByRole("button", { name: "Restore draft" }));
+    expect(await screen.findByDisplayValue(recoveredTitle)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Save to Content Library/i }));
+    await waitFor(() => expect(serverArchive).toHaveLength(1));
+    await waitFor(() => expect(loadEditorRecovery(editor, "workspace-a", "project-1")).toBeNull());
+  });
+
+  it("Optimiser withdraws an article recovery prompt after a different library article is retrieved", async () => {
+    const articleB: StoredArchive = {
+      id: "article-b",
+      projectId: "project-1",
+      title: "Confirmed article B",
+      contentType: "Article",
+      spokesperson: "Alex Smith",
+      status: "Draft",
+      tags: ["optimiser"],
+      body: "Article B headline\n\nArticle B standfirst\n\nArticle B body",
+      headline: "Article B headline",
+      standfirst: "Article B standfirst",
+      bodyCopy: "Article B body",
+      mediaCats: ["Clean Energy"],
+      createdAt: new Date().toISOString(),
+      source: "optimiser",
+    };
+    await ready([articleB]);
+    window.localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "workspace-a", role: "client" }));
+    const recoveryData = {
+      projectTitle: "Recovered article A", contentType: "Article", spokesperson: "Alex Smith",
+      selectedMessages: [], mediaCats: ["Clean Energy"], targetPhrases: [], targetPhraseIds: [],
+      contentStatus: "Draft" as const, pubDate: "", llmTarget: "General (All LLMs)",
+      articleHeadline: "Recovered A headline", standfirst: "", bodyCopy: "Recovered A body",
+      actionNotes: "", creatorPitch: "", spokespersonLinkedIn: "", sourceArchiveCreatedAt: new Date().toISOString(),
+    };
+    const { sourceArchiveCreatedAt: _sourceArchiveCreatedAt, ...editorFields } = recoveryData;
+    saveEditorRecovery("optimiser", "workspace-a", "project-1", "article-a", JSON.stringify(editorFields), recoveryData);
+
+    render(<OptimiserPage onNavigate={vi.fn()} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/unfinished Content Optimiser/);
+
+    fireEvent.click(screen.getByRole("button", { name: /Retrieve content draft/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmed article B/i }));
+
+    expect(await screen.findByDisplayValue("Confirmed article B")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    expect(loadEditorRecovery("optimiser", "workspace-a", "project-1")?.sourceArchiveId).toBe("article-a");
+  });
+
+  it.each([
     ["Creator", fillCreator],
     ["Optimiser", fillOptimiser],
   ])("%s stops before planner persistence when its library save fails", async (name, fill) => {
@@ -293,6 +380,7 @@ describe("Push to Comms Planner stays on the current page", () => {
     };
     await ready([item]);
     const navigate = vi.fn();
+
     render(<ArchivePage onNavigate={navigate} />);
     const query = screen.getByLabelText("Enter keyword");
     fireEvent.change(query, { target: { value: "Filtered" } });

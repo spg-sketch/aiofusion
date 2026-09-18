@@ -18,10 +18,29 @@ import { CategoryPickerModal, CONTENT_TYPES, countWords, Labelled } from "./shar
 import InfoTip from "../InfoTip";
 import { loadSavedAudits } from "../LlmCheckPage";
 import CountdownBanner from "../components/CountdownBanner";
-import type { RegisterUnsavedEditor } from "../lib/unsavedChanges";
 import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "../lib/auditTiming";
 import { getFreshCategoryDefaults, normaliseCategory, useDatabaseCategories, validDatabaseCategories } from "../lib/databaseCategories";
+import { clearEditorRecovery, loadEditorRecovery, saveEditorRecovery, type EditorRecoverySnapshot, type RegisterUnsavedEditor } from "../lib/unsavedChanges";
+import { getSession } from "../lib/auth";
 type CreatorFieldKey = "headline" | "standfirst" | "pitch" | "transcript" | "actionNotes";
+
+type CreatorRecoveryData = {
+  projectName: string;
+  contentType: string;
+  articleHeadline: string;
+  standfirst: string;
+  headline: string;
+  transcript: string;
+  actionNotes: string;
+  spokesperson: string;
+  spokesLi: string;
+  mediaTarget: string[];
+  contentStatus: "Draft" | "Review" | "Final";
+  pubDate: string;
+  targetPhrases: ExactTargetPhrase[];
+  selectedMessages: string[];
+  sourceArchiveCreatedAt: string | null;
+};
 
 const CREATOR_FIELD_LABELS: Record<CreatorFieldKey, string> = {
   headline: "headline",
@@ -74,6 +93,8 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
   // than silently creating another article every time it is saved.
   const [sourceArchiveId, setSourceArchiveId] = useState<string | null>(null);
   const [sourceArchiveCreatedAt, setSourceArchiveCreatedAt] = useState<string | null>(null);
+  const [preloadResolved, setPreloadResolved] = useState(false);
+  const [pendingRecovery, setPendingRecovery] = useState<EditorRecoverySnapshot<CreatorRecoveryData> | null>(null);
   const pendingArchiveIdRef = useRef<string | null>(null);
   const [savedBaseline, setSavedBaseline] = useState(() => JSON.stringify({
     projectName, contentType, articleHeadline, standfirst, headline, transcript, actionNotes,
@@ -115,7 +136,10 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
   useEffect(() => {
     let archiveId = "";
     try { archiveId = localStorage.getItem("aio.creator.preload") || ""; } catch { /* noop */ }
-    if (!archiveId) return;
+    if (!archiveId) {
+      setPreloadResolved(true);
+      return;
+    }
     try { localStorage.removeItem("aio.creator.preload"); } catch { /* noop */ }
     const arc = loadArchive().find((a) => a.id === archiveId);
     if (arc) {
@@ -150,6 +174,7 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
         pubDate: arc.pubDate || "", targetPhrases: loadedPhrases, selectedMessages: arc.selectedMessages || [],
       }));
     }
+    setPreloadResolved(true);
   }, []);
 
   const editorSnapshot = useMemo(() => JSON.stringify({
@@ -157,6 +182,62 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
     spokesperson, spokesLi, mediaTarget, contentStatus, pubDate, targetPhrases,
     selectedMessages: selectedMessagesSnapshot,
   }), [projectName, contentType, articleHeadline, standfirst, headline, transcript, actionNotes, spokesperson, spokesLi, mediaTarget, contentStatus, pubDate, targetPhrases, selectedMessagesSnapshot]);
+
+  const workspaceId = getSession()?.username || "";
+  const projectId = getActiveProjectId() || "default";
+  const recoveryData = useMemo<CreatorRecoveryData>(() => ({
+    projectName, contentType, articleHeadline, standfirst, headline, transcript, actionNotes,
+    spokesperson, spokesLi, mediaTarget, contentStatus, pubDate, targetPhrases,
+    selectedMessages: selectedMessagesSnapshot, sourceArchiveCreatedAt,
+  }), [projectName, contentType, articleHeadline, standfirst, headline, transcript, actionNotes, spokesperson, spokesLi, mediaTarget, contentStatus, pubDate, targetPhrases, selectedMessagesSnapshot, sourceArchiveCreatedAt]);
+
+  useEffect(() => {
+    if (!preloadResolved || !workspaceId) return;
+    const recovery = loadEditorRecovery<CreatorRecoveryData>("creator", workspaceId, projectId);
+    setPendingRecovery(
+      recovery &&
+      recovery.snapshot !== editorSnapshot &&
+      (sourceArchiveId === null || recovery.sourceArchiveId === sourceArchiveId)
+        ? recovery
+        : null,
+    );
+  }, [preloadResolved, workspaceId, projectId, sourceArchiveId]);
+
+  useEffect(() => {
+    if (!preloadResolved || !workspaceId || editorSnapshot === savedBaseline || pendingRecovery) return;
+    const timer = window.setTimeout(() => {
+      saveEditorRecovery("creator", workspaceId, projectId, sourceArchiveId, editorSnapshot, recoveryData);
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [preloadResolved, workspaceId, projectId, sourceArchiveId, editorSnapshot, savedBaseline, recoveryData, pendingRecovery]);
+
+  const restoreRecovery = () => {
+    if (!pendingRecovery) return;
+    const data = pendingRecovery.data;
+    setProjectName(data.projectName);
+    setContentType(data.contentType);
+    setArticleHeadline(data.articleHeadline);
+    setStandfirst(data.standfirst);
+    setHeadline(data.headline);
+    setTranscript(data.transcript);
+    setActionNotes(data.actionNotes);
+    setSpokesperson(data.spokesperson);
+    setSpokesLi(data.spokesLi);
+    setMediaTarget([...data.mediaTarget]);
+    setContentStatus(data.contentStatus);
+    setPubDate(data.pubDate);
+    setTargetPhrases(data.targetPhrases.map((phrase) => ({ ...phrase })));
+    setSelectedMessagesSnapshot([...data.selectedMessages]);
+    setSourceArchiveId(pendingRecovery.sourceArchiveId);
+    setSourceArchiveCreatedAt(data.sourceArchiveCreatedAt);
+    pendingArchiveIdRef.current = pendingRecovery.sourceArchiveId;
+    setPendingRecovery(null);
+  };
+
+  const discardRecovery = () => {
+    clearEditorRecovery("creator", workspaceId, projectId, pendingRecovery?.snapshot);
+    setPendingRecovery(null);
+  };
 
   useEffect(() => {
     if (defaultedCategoriesRef.current || restoredSourceRef.current || databaseCategories.status !== "ready") return;
@@ -201,6 +282,7 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
       setSourceArchiveCreatedAt(item.createdAt);
       pendingArchiveIdRef.current = item.id;
       setSavedBaseline(snapshotAtStart);
+      clearEditorRecovery("creator", workspaceId, projectId, snapshotAtStart);
       if (!options.silent) alert(`Saved "${item.title}" to Content Library.`);
       return item;
     } catch (error) {
@@ -598,6 +680,19 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
           </p>
         </div>
       </div>
+
+      {pendingRecovery && (
+        <div role="alert" className="mb-4 rounded-xl border bg-white p-4 flex items-center justify-between gap-4 flex-wrap" style={{ borderColor: "rgba(200,73,122,0.45)" }}>
+          <div>
+            <p className="text-[13px] font-semibold" style={{ color: vars.navy }}>An unfinished Content Creator draft was recovered</p>
+            <p className="text-[12px] mt-1" style={{ color: vars.g600 }}>Restore the locally recovered changes, or discard them and keep the last confirmed version.</p>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={restoreRecovery} className="px-3 py-2 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Restore draft</button>
+            <button type="button" onClick={discardRecovery} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Discard recovered draft</button>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl border p-6 sm:p-8 space-y-5" style={{ borderColor: vars.g200 }}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">

@@ -5,6 +5,7 @@ import { fetchProjectAllowance, shouldBlockProjectCreation, shouldRouteProjectCr
 import { stripEmDashes, normaliseAddedData } from "./lib/utils";
 import { apiBase } from "./lib/contentAi";
 import { loadSavedAudits } from "./LlmCheckPage";
+import { setAiRunIdentity } from "./lib/aiRunLifecycle";
 import InfoTip from "./InfoTip";
 import {
   type Session as LocalSession,
@@ -1317,6 +1318,12 @@ function App() {
 
   useEffect(() => { removeDemoSeedData(); }, []);
 
+  const aiSessionId = session?.userEmail || session?.userName || session?.username || "";
+  const aiWorkspaceId = session?.username || "";
+  useEffect(() => {
+    setAiRunIdentity(aiSessionId, aiWorkspaceId);
+  }, [aiSessionId, aiWorkspaceId]);
+
   // Keep the sidebar trigger badge in sync when GeorgeSupport marks a reply as seen
   useEffect(() => {
     const handler = (e: Event) => {
@@ -2121,6 +2128,7 @@ function App() {
       )}
       {showGenerateFromUrl && (
         <GenerateFromUrlModal
+          scope={{ sessionId: aiSessionId, workspaceId: aiWorkspaceId, projectId: "new" }}
           onCancel={() => setShowGenerateFromUrl(false)}
           onComplete={async (projectId, _projectName) => {
             setShowGenerateFromUrl(false);
@@ -2175,11 +2183,27 @@ function App() {
           {currentPage === "dashboard" && (
             <DashboardPage onNavigate={transitionToPage} activeClient={activeClient} />
           )}
-          {currentPage === "intake" && <IntakePage accountProfile={accountProfile} role={session?.role ?? null} />}
+          {currentPage === "intake" && (
+            <IntakePage
+              accountProfile={accountProfile}
+              role={session?.role ?? null}
+              sessionId={aiSessionId}
+              workspaceId={aiWorkspaceId}
+            />
+          )}
           {currentPage === "diagnostic" && (
             <DiagnosticPage activeClient={activeClient} pendingDiagnosticId={pendingDiagnosticId} onConsumePendingDiagnostic={() => setPendingDiagnosticId(null)} />
           )}
-          {currentPage === "llm-check" && <LlmCheckPage activeClient={activeClient} onNavigate={transitionToPage} pendingAuditId={pendingAuditId} onConsumePending={() => setPendingAuditId(null)} />}
+          {currentPage === "llm-check" && (
+            <LlmCheckPage
+              activeClient={activeClient}
+              onNavigate={transitionToPage}
+              pendingAuditId={pendingAuditId}
+              onConsumePending={() => setPendingAuditId(null)}
+              sessionId={aiSessionId}
+              workspaceId={aiWorkspaceId}
+            />
+          )}
           {currentPage === "optimiser" && (
             <OptimiserPage
               onNavigate={transitionToPage}
@@ -2187,7 +2211,15 @@ function App() {
               requestEditorAction={requestDeparture}
             />
           )}
-          {currentPage === "seo-audit" && <SeoAuditPage activeClient={activeClient} pendingTechGeoId={pendingTechGeoId} onConsumePendingTechGeo={() => setPendingTechGeoId(null)} />}
+          {currentPage === "seo-audit" && (
+            <SeoAuditPage
+              activeClient={activeClient}
+              pendingTechGeoId={pendingTechGeoId}
+              onConsumePendingTechGeo={() => setPendingTechGeoId(null)}
+              sessionId={aiSessionId}
+              workspaceId={aiWorkspaceId}
+            />
+          )}
           {currentPage === "geo-content" && <GeoContentPage activeClient={activeClient} pendingContentGeoId={pendingContentGeoId} onConsumePendingContentGeo={() => setPendingContentGeoId(null)} />}
           {currentPage === "planner" && <PlannerPage onNavigate={transitionToPage} />}
           {currentPage === "creator" && <ContentCreatorPage onNavigate={transitionToPage} registerUnsavedEditor={registerUnsavedEditor} />}

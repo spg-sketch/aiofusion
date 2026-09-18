@@ -16,7 +16,6 @@ import { getKeyMessages, loadIntakeData, getActiveProjectId, getProjectDataMessa
 import { CategoryPickerModal, CONTENT_TYPES, Labelled, countWords } from "./shared";
 import InfoTip from "../InfoTip";
 import CountdownBanner from "../components/CountdownBanner";
-import type { RegisterUnsavedEditor, RequestEditorAction } from "../lib/unsavedChanges";
 import { getFreshCategoryDefaults, normaliseCategory, useDatabaseCategories, validDatabaseCategories } from "../lib/databaseCategories";
 import {
   ARTICLE_SCORING_VERSION,
@@ -26,6 +25,8 @@ import {
   type ArticleContent,
   type ArticleOptimisationAssessment,
 } from "../lib/articleScoring";
+import { clearEditorRecovery, loadEditorRecovery, saveEditorRecovery, type EditorRecoverySnapshot, type RegisterUnsavedEditor, type RequestEditorAction } from "../lib/unsavedChanges";
+import { getSession } from "../lib/auth";
 function OptimiserPage({
   onNavigate,
   registerUnsavedEditor,
@@ -75,6 +76,8 @@ function OptimiserPage({
   const [retrieveQuery, setRetrieveQuery] = useState("");
   const [sourceArchiveId, setSourceArchiveId] = useState<string | null>(null);
   const [sourceArchiveCreatedAt, setSourceArchiveCreatedAt] = useState<string | null>(null);
+  const [preloadResolved, setPreloadResolved] = useState(false);
+  const [pendingRecovery, setPendingRecovery] = useState<EditorRecoverySnapshot<OptimiserRecoveryData> | null>(null);
   const [creatorPitch, setCreatorPitch] = useState("");
   const [spokespersonLinkedIn, setSpokespersonLinkedIn] = useState("");
   const pendingArchiveIdRef = useRef<string | null>(null);
@@ -105,7 +108,10 @@ function OptimiserPage({
   useEffect(() => {
     let archiveId = "";
     try { archiveId = localStorage.getItem("aio.optimiser.preload") || ""; } catch { /* noop */ }
-    if (!archiveId) return;
+    if (!archiveId) {
+      setPreloadResolved(true);
+      return;
+    }
     try { localStorage.removeItem("aio.optimiser.preload"); } catch { /* noop */ }
     const planner = loadPlannerProjects().find((p) => p.id === archiveId);
     if (planner) {
@@ -156,6 +162,7 @@ function OptimiserPage({
         bodyCopy: parts.bodyCopy, actionNotes: article.actionNotes || "", creatorPitch: article.pitch || "",
         spokespersonLinkedIn: article.spokespersonLinkedIn || "",
       }));
+      setPreloadResolved(true);
       return;
     }
     const arc = loadArchive().find((a) => a.id === archiveId);
@@ -196,6 +203,7 @@ function OptimiserPage({
         spokespersonLinkedIn: arc.spokespersonLinkedIn || "",
       }));
     }
+    setPreloadResolved(true);
   }, []);
 
   const editorSnapshot = useMemo(() => JSON.stringify({
@@ -203,6 +211,64 @@ function OptimiserPage({
     contentStatus, pubDate, llmTarget, articleHeadline, standfirst, bodyCopy, actionNotes,
     creatorPitch, spokespersonLinkedIn,
   }), [projectTitle, contentType, spokesperson, selectedMessages, mediaCats, targetPhrases, targetPhraseIds, contentStatus, pubDate, llmTarget, articleHeadline, standfirst, bodyCopy, actionNotes, creatorPitch, spokespersonLinkedIn]);
+
+  const workspaceId = getSession()?.username || "";
+  const projectId = getActiveProjectId() || "default";
+  const recoveryData = useMemo<OptimiserRecoveryData>(() => ({
+    projectTitle, contentType, spokesperson, selectedMessages, mediaCats, targetPhrases, targetPhraseIds,
+    contentStatus, pubDate, llmTarget, articleHeadline, standfirst, bodyCopy, actionNotes,
+    creatorPitch, spokespersonLinkedIn, sourceArchiveCreatedAt,
+  }), [projectTitle, contentType, spokesperson, selectedMessages, mediaCats, targetPhrases, targetPhraseIds, contentStatus, pubDate, llmTarget, articleHeadline, standfirst, bodyCopy, actionNotes, creatorPitch, spokespersonLinkedIn, sourceArchiveCreatedAt]);
+
+  useEffect(() => {
+    if (!preloadResolved || !workspaceId) return;
+    const recovery = loadEditorRecovery<OptimiserRecoveryData>("optimiser", workspaceId, projectId);
+    setPendingRecovery(
+      recovery &&
+      recovery.snapshot !== editorSnapshot &&
+      (sourceArchiveId === null || recovery.sourceArchiveId === sourceArchiveId)
+        ? recovery
+        : null,
+    );
+  }, [preloadResolved, workspaceId, projectId, sourceArchiveId]);
+
+  useEffect(() => {
+    if (!preloadResolved || !workspaceId || editorSnapshot === savedBaseline || pendingRecovery) return;
+    const timer = window.setTimeout(() => {
+      saveEditorRecovery("optimiser", workspaceId, projectId, sourceArchiveId, editorSnapshot, recoveryData);
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [preloadResolved, workspaceId, projectId, sourceArchiveId, editorSnapshot, savedBaseline, recoveryData, pendingRecovery]);
+
+  const restoreRecovery = () => {
+    if (!pendingRecovery) return;
+    const data = pendingRecovery.data;
+    setProjectTitle(data.projectTitle);
+    setContentType(data.contentType);
+    setSpokesperson(data.spokesperson);
+    setSelectedMessages([...data.selectedMessages]);
+    setMediaCats([...data.mediaCats]);
+    setTargetPhrases(data.targetPhrases.map((phrase) => ({ ...phrase })));
+    setTargetPhraseIds([...data.targetPhraseIds]);
+    setContentStatus(data.contentStatus);
+    setPubDate(data.pubDate);
+    setLlmTarget(data.llmTarget);
+    setArticleHeadline(data.articleHeadline);
+    setStandfirst(data.standfirst);
+    setBodyCopy(data.bodyCopy);
+    setActionNotes(data.actionNotes);
+    setCreatorPitch(data.creatorPitch);
+    setSpokespersonLinkedIn(data.spokespersonLinkedIn);
+    setSourceArchiveId(pendingRecovery.sourceArchiveId);
+    setSourceArchiveCreatedAt(data.sourceArchiveCreatedAt);
+    pendingArchiveIdRef.current = pendingRecovery.sourceArchiveId;
+    setPendingRecovery(null);
+  };
+
+  const discardRecovery = () => {
+    clearEditorRecovery("optimiser", workspaceId, projectId, pendingRecovery?.snapshot);
+    setPendingRecovery(null);
+  };
 
   useEffect(() => {
     if (defaultedCategoriesRef.current || restoredSourceRef.current || databaseCategories.status !== "ready") return;
@@ -282,6 +348,7 @@ function OptimiserPage({
       setSourceArchiveCreatedAt(item.createdAt);
       pendingArchiveIdRef.current = item.id;
       setSavedBaseline(snapshotAtStart);
+      clearEditorRecovery("optimiser", workspaceId, projectId, snapshotAtStart);
       if (!options.silent) alert(`Saved "${item.title}" to Content Library as ${status}.`);
       return item;
     } catch (error) {
@@ -695,6 +762,19 @@ OUTPUT INSTRUCTIONS:
             <Archive size={16} /> Retrieve content draft
           </button>
         </div>
+
+        {pendingRecovery && (
+          <div role="alert" className="mb-4 rounded-xl border bg-white p-4 flex items-center justify-between gap-4 flex-wrap" style={{ borderColor: "rgba(200,73,122,0.45)" }}>
+            <div>
+              <p className="text-[13px] font-semibold" style={{ color: vars.navy }}>An unfinished Content Optimiser draft was recovered</p>
+              <p className="text-[12px] mt-1" style={{ color: vars.g600 }}>Restore the locally recovered changes, or discard them and keep the last confirmed version.</p>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={restoreRecovery} className="px-3 py-2 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Restore draft</button>
+              <button type="button" onClick={discardRecovery} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Discard recovered draft</button>
+            </div>
+          </div>
+        )}
 
         {!intakeReady && (
           <div className="mb-4 p-3 rounded-xl flex items-start gap-2" style={{ background: vars.creamDeep, border: `1px solid ${vars.gold}33` }}>
@@ -1297,3 +1377,11 @@ OUTPUT INSTRUCTIONS:
 }
 
 export { OptimiserPage };
+
+type OptimiserRecoveryData = {
+  projectTitle: string; contentType: string; spokesperson: string; selectedMessages: string[];
+  mediaCats: string[]; targetPhrases: NonNullable<ArchiveItem["targetPhrases"]>; targetPhraseIds: string[];
+  contentStatus: "Draft" | "Review" | "Final"; pubDate: string; llmTarget: string;
+  articleHeadline: string; standfirst: string; bodyCopy: string; actionNotes: string;
+  creatorPitch: string; spokespersonLinkedIn: string; sourceArchiveCreatedAt: string | null;
+};
