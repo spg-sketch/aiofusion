@@ -248,6 +248,10 @@ function PlatformHomePage({
       } else {
         setLoginError("Two-factor sign-in could not be started. Please try again.");
       }
+    } else if (status === "mfa_recovery_required") {
+      setMfaChallenge(null);
+      document.cookie = "aio_oauth_mfa_token=; path=/; max-age=0";
+      setLoginError("Your existing two-factor protection needs verified individual recovery. Contact an authorised Master Owner to arrange recovery for your own sign-in identity. Your shared workspace and data will not be deleted.");
     } else if (status === "pending") {
       // Legacy servers may still send this for accounts awaiting approval.
       setLoginError("Your account is awaiting approval. Please try again later or contact support.");

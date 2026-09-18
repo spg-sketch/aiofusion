@@ -446,6 +446,7 @@ import {
   incrementSessionVersion,
 } from "../lib/platform-auth";
 import { MEDIA_DISCOVERY_INSTRUCTIONS_KEY } from "../lib/media-discovery-instructions";
+import { saveMfaState, generateTotpSecret, recordMfaSession } from "../lib/mfa";
 import { resolvePlatformAccount } from "../middleware/platform-auth";
 import mainRouter from "./index";
 
@@ -739,6 +740,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /platform/team/invites/:token/revoke",
   "PATCH /platform/team/members/:userId",
   "POST /platform/team/members/:userId/remove",
+  "POST /platform/team/members/:userId/reset-mfa",
   "POST /platform/team/seat-limit",
   "GET /platform/team/violations",
   "POST /platform/team/violations/fix",
@@ -1133,7 +1135,19 @@ describe("media discovery house prompt integration", () => {
       output: [],
       usage: { input_tokens: 10, output_tokens: 2 },
     });
-    const sid = await createPlatformSession("admin");
+    const [company] = await db.insert(platformCompaniesTable).values({
+      slug: "admin", role: "admin", status: "active", setupComplete: true,
+    }).returning();
+    const [person] = await db.insert(platformUsersTable).values({
+      email: "media-owner@example.test", emailVerified: true,
+    }).returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: person!.id, companyId: company!.id, companySlug: "admin", role: "owner",
+    });
+    const subject = `user:${person!.id}`;
+    await saveMfaState(subject, { secret: generateTotpSecret(), enabled: true, recoveryHashes: [] });
+    const sid = await createPlatformSession("admin", null, person!.id, company!.id);
+    await recordMfaSession(sid, subject, person!.sessionVersion);
     const response = await api(`/api/content/media-discover`, {
       method: "POST",
       sid,

@@ -151,6 +151,17 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
     });
   });
 
+  it("OAuth legacy MFA transition requires verified personal recovery after URL cleanup", async () => {
+    document.cookie = "aio_oauth_mfa_token=stale-shared-token; path=/";
+    await renderAppAt("/?oauth_status=mfa_recovery_required");
+    await waitFor(() => {
+      expect(screen.getByText(/existing two-factor protection needs verified individual recovery/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Set up two-factor authentication")).not.toBeInTheDocument();
+    expect(document.cookie).not.toContain("stale-shared-token");
+    expect(window.location.search).toBe("");
+  });
+
   it("oauth_status=error&oauth_msg=invalid_state shows the friendly error message", async () => {
     await renderAppAt("/?oauth_status=error&oauth_msg=invalid_state");
 

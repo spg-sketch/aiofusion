@@ -20,10 +20,12 @@ const mock = vi.hoisted(() => {
   const accountRows: AccountRow[] = [];
 
   // Used by ensurePlatformUser / ensurePlatformCompany / getUserByEmail.
-  const usersByEmail = new Map<string, { id: string; email: string; name: string | null; googleId: string | null; passwordHash: string | null }>();
+  type UserRow = { id: string; email: string; name: string | null; googleId: string | null; passwordHash: string | null; emailVerified: boolean | null; sessionVersion: number };
+  const usersByEmail = new Map<string, UserRow>();
   const companiesBySlug = new Map<string, { id: string; slug: string; role: string; parentSlug: string | null; maxSeats: number | null; status: string }>();
   const companiesById = new Map<string, { id: string; slug: string; role: string; parentSlug: string | null; maxSeats: number | null; status: string }>();
-  const memberships = new Set<string>(); // "userId::companyId" pairs
+  const memberships = new Map<string, { userId: string; companyId: string; companySlug: string; role: string }>();
+  const metaRows = new Map<string, { key: string; value: string }>();
 
   // Used by getPlatformSessionAccount tests.
   type SessionRow = {
@@ -34,7 +36,7 @@ const mock = vi.hoisted(() => {
   const sessionRows = new Map<string, SessionRow>();
 
   // For session_version checks: userId → { sessionVersion }
-  const usersById = new Map<string, { id: string; sessionVersion: number }>();
+  const usersById = new Map<string, Partial<UserRow> & { id: string; sessionVersion: number }>();
   let emailVerificationLookupError = false;
   let membershipLookupError = false;
 
@@ -78,6 +80,65 @@ const mock = vi.hoisted(() => {
             }),
           };
         }
+        if (tbl.__table === "platform_memberships") {
+          const chain = {
+            innerJoin: () => chain,
+            where: (pred: { __eq?: string; __and?: Array<{ __eq?: string }> }) => {
+              const matchingRows = () => {
+                if (membershipLookupError) throw new Error("membership lookup unavailable");
+                const values = pred.__and?.map((part) => part.__eq) ?? [pred.__eq];
+                return [...memberships.values()].filter((membership) =>
+                  values.every((value) => value == null
+                    || membership.userId === value
+                    || membership.companyId === value
+                    || membership.companySlug === value)).map((row) => {
+                  const company = companiesById.get(row.companyId) ?? companiesBySlug.get(row.companySlug);
+                  return {
+                    ...row,
+                    slug: row.companySlug,
+                    status: company?.status,
+                    role: company?.role,
+                  };
+                });
+              };
+              return {
+              limit: () => {
+                try {
+                  const [row] = matchingRows();
+                  return Promise.resolve(row ? [row] : []);
+                } catch (error) {
+                  return Promise.reject(error);
+                }
+              },
+              then: (
+                resolve: (value: unknown) => unknown,
+                reject: (error: unknown) => unknown,
+              ) => {
+                try {
+                  return resolve(matchingRows());
+                } catch (error) {
+                  return reject(error);
+                }
+              },
+            };
+            },
+            then: (resolve: (value: unknown) => unknown) => resolve([...memberships.values()]),
+          };
+          return chain;
+        }
+        if (tbl.__table === "platform_meta") {
+          return {
+            where: (pred: { __eq?: string; __inArray?: string[] }) => ({
+              limit: () => {
+                const row = pred.__eq ? metaRows.get(pred.__eq) : undefined;
+                return Promise.resolve(row ? [row] : []);
+              },
+              then: (resolve: (value: unknown) => unknown) => resolve(
+                pred.__inArray?.flatMap((key) => metaRows.has(key) ? [metaRows.get(key)!] : []) ?? [],
+              ),
+            }),
+          };
+        }
         if (tbl.__table === "platform_companies") {
           return {
             where: (pred: { __eq?: string }) => ({
@@ -101,18 +162,6 @@ const mock = vi.hoisted(() => {
                 const sid = pred.__eq;
                 const row = sid ? sessionRows.get(sid) : undefined;
                 return Promise.resolve(row ? [row] : []);
-              },
-            }),
-          };
-        }
-        if (tbl.__table === "platform_memberships") {
-          return {
-            where: (pred: { __and: { __eq: string }[] }) => ({
-              limit: () => {
-                if (membershipLookupError) return Promise.reject(new Error("membership lookup unavailable"));
-                const [userId, companyId] = pred.__and.map((p) => p.__eq);
-                return Promise.resolve(memberships.has(`${userId}::${companyId}`)
-                  ? [{ role: "owner", projectAccess: null }] : []);
               },
             }),
           };
@@ -149,7 +198,10 @@ const mock = vi.hoisted(() => {
                 name: (values.name as string | null) ?? null,
                 googleId: (values.googleId as string | null) ?? null,
                 passwordHash: (values.passwordHash as string | null) ?? null,
+                emailVerified: (values.emailVerified as boolean | null) ?? null,
+                sessionVersion: (values.sessionVersion as number | null) ?? 0,
               });
+              usersById.set(usersByEmail.get(email)!.id, usersByEmail.get(email)!);
             }
             return [usersByEmail.get(email)];
           }
@@ -170,7 +222,16 @@ const mock = vi.hoisted(() => {
           }
           if (tbl.__table === "platform_memberships") {
             const key = `${values.userId}::${values.companyId}`;
-            memberships.add(key);
+            memberships.set(key, {
+              userId: values.userId as string,
+              companyId: values.companyId as string,
+              companySlug: values.companySlug as string,
+              role: (values.role as string) ?? "owner",
+            });
+          }
+          if (tbl.__table === "platform_meta") {
+            const key = values.key as string;
+            metaRows.set(key, { key, value: values.value as string });
           }
           return [];
         };
@@ -227,6 +288,7 @@ const mock = vi.hoisted(() => {
     memberships,
     sessionRows,
     fullAccountRows,
+    metaRows,
     emailVerificationLookupError: {
       get value() { return emailVerificationLookupError; },
       set value(next: boolean) { emailVerificationLookupError = next; },
@@ -510,10 +572,37 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
     mock.sessionRows.clear();
     mock.fullAccountRows.clear();
     mock.companiesById.clear();
-    mock.emailVerificationLookupError.value = false;
+    mock.usersById.clear();
     mock.memberships.clear();
+    mock.metaRows.clear();
+    mock.emailVerificationLookupError.value = false;
     mock.membershipLookupError.value = false;
   });
+
+  function seedNamedIdentity(userId: string, companyId: string, slug: string, role = "agency") {
+    mock.usersById.set(userId, {
+      id: userId,
+      email: `${userId}@example.com`,
+      emailVerified: true,
+      sessionVersion: 0,
+    });
+    mock.memberships.set(`${userId}::${companyId}`, {
+      userId,
+      companyId,
+      companySlug: slug,
+      role: "owner",
+    });
+    mock.fullAccountRows.set(slug, {
+      username: slug,
+      passwordHash: "scrypt$salt$hash",
+      role,
+      parent: null,
+      maxSeats: null,
+      email: `${userId}@example.com`,
+      website: null,
+      status: "active",
+    });
+  }
 
   it("returns null for an unknown session id", async () => {
     const result = await getPlatformSessionAccount("nonexistent-sid");
@@ -529,6 +618,7 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
       expiresAt: PAST,
       ipHint: null,
       createdAt: new Date(),
+      sessionVersion: 0,
     });
     const result = await getPlatformSessionAccount("expired-sid");
     expect(result).toBeNull();
@@ -545,6 +635,7 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
       maxSeats: null,
       status: "active",
     });
+    seedNamedIdentity("user-uuid-001", companyId, "myagency");
     mock.sessionRows.set("valid-new-sid", {
       sid: "valid-new-sid",
       username: "myagency",
@@ -553,9 +644,9 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
       expiresAt: FUTURE,
       ipHint: null,
       createdAt: new Date(),
+      sessionVersion: 0,
     });
 
-    mock.memberships.add(`user-uuid-001::${companyId}`);
     const result = await getPlatformSessionAccount("valid-new-sid");
     expect(result).not.toBeNull();
     expect(result!.username).toBe("myagency");
@@ -597,6 +688,7 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
       expiresAt: FUTURE,
       ipHint: null,
       createdAt: new Date(),
+      sessionVersion: 0,
     });
     mock.emailVerificationLookupError.value = true;
 
@@ -622,7 +714,9 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
       expiresAt: FUTURE,
       ipHint: null,
       createdAt: new Date(),
+      sessionVersion: 0,
     });
+    seedNamedIdentity("user-uuid-002", "missing-company-uuid", "myagency");
 
     const result = await getPlatformSessionAccount("orphan-company-sid");
     expect(result).toBeNull();
@@ -684,6 +778,7 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
       status: "active",
     };
     mock.companiesById.set(companyId, companyRow);
+    seedNamedIdentity("user-uuid-role-change", companyId, "rolechange-agency");
     mock.sessionRows.set("role-change-new-sid", {
       sid: "role-change-new-sid",
       username: "rolechange-agency",
@@ -692,9 +787,9 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
       expiresAt: FUTURE,
       ipHint: null,
       createdAt: new Date(),
+      sessionVersion: 0,
     });
 
-    mock.memberships.add(`user-uuid-role-change::${companyId}`);
     // First call: should return the original role.
     const before = await getPlatformSessionAccount("role-change-new-sid");
     expect(before).not.toBeNull();
@@ -829,6 +924,7 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
       maxSeats: null,
       status: "pending_approval",
     });
+    seedNamedIdentity("user-pend-001", companyId, "pending-co");
     mock.sessionRows.set("new-path-pending-sid", {
       sid: "new-path-pending-sid",
       username: "pending-co",
@@ -837,9 +933,9 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
       expiresAt: FUTURE,
       ipHint: null,
       createdAt: new Date(),
+      sessionVersion: 0,
     });
 
-    mock.memberships.add(`user-pend-001::${companyId}`);
     const result = await getPlatformSessionAccount("new-path-pending-sid");
     expect(result).not.toBeNull();
     expect(result?.username).toBe("pending-co");
@@ -876,6 +972,13 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
     });
     // User and session both at version 3.
     mock.usersById.set("user-ok-v3", { id: "user-ok-v3", sessionVersion: 3 });
+    mock.memberships.set(`user-ok-v3::${companyId}`, {
+      userId: "user-ok-v3", companyId, companySlug: "ok-version-co", role: "owner",
+    });
+    mock.fullAccountRows.set("ok-version-co", {
+      username: "ok-version-co", passwordHash: "scrypt$salt$hash", role: "agency",
+      parent: null, maxSeats: null, email: "ok@example.com", website: null, status: "active",
+    });
     mock.sessionRows.set("ok-version-sid", {
       sid: "ok-version-sid", username: "ok-version-co",
       userId: "user-ok-v3", activeCompanyId: companyId,
@@ -883,28 +986,33 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
       sessionVersion: 3,
     });
 
-    mock.memberships.add(`user-ok-v3::${companyId}`);
     const result = await getPlatformSessionAccount("ok-version-sid");
     expect(result).not.toBeNull();
     expect(result!.username).toBe("ok-version-co");
   });
 
-  it("skips the version check for sessions with null sessionVersion (legacy sessions)", async () => {
+  it("accepts a migrated user-bound session when its version is current", async () => {
     const companyId = "co-legacy-nocheck";
     mock.companiesById.set(companyId, {
       id: companyId, slug: "legacy-nocheck-co", role: "agency",
       parentSlug: null, maxSeats: null, status: "active",
     });
-    // Even if we have a user with a version, null sessionVersion on session skips the check.
+    // Migrated named sessions carry the same current version as their user.
     mock.usersById.set("user-legacy-v5", { id: "user-legacy-v5", sessionVersion: 5 });
+    mock.memberships.set(`user-legacy-v5::${companyId}`, {
+      userId: "user-legacy-v5", companyId, companySlug: "legacy-nocheck-co", role: "owner",
+    });
+    mock.fullAccountRows.set("legacy-nocheck-co", {
+      username: "legacy-nocheck-co", passwordHash: "scrypt$salt$hash", role: "agency",
+      parent: null, maxSeats: null, email: "legacy-v5@example.com", website: null, status: "active",
+    });
     mock.sessionRows.set("legacy-null-version-sid", {
       sid: "legacy-null-version-sid", username: "legacy-nocheck-co",
       userId: "user-legacy-v5", activeCompanyId: companyId,
       expiresAt: FUTURE, ipHint: null, createdAt: new Date(),
-      sessionVersion: null, // legacy - skip version check
+      sessionVersion: 5,
     });
 
-    mock.memberships.add(`user-legacy-v5::${companyId}`);
     const result = await getPlatformSessionAccount("legacy-null-version-sid");
     expect(result).not.toBeNull();
     expect(result!.username).toBe("legacy-nocheck-co");

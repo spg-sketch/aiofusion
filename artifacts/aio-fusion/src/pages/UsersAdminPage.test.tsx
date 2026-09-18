@@ -105,7 +105,7 @@ function renderPage(users: User[]) {
 // 1. Top-level filter tests
 // ---------------------------------------------------------------------------
 
-describe("UsersAdminPage - 2FA filter: top-level accounts", () => {
+describe("UsersAdminPage - workspace lists do not imply personal MFA", () => {
   it("shows all top-level users when filter is off", async () => {
     renderPage([
       mkUser("alice", { mfaEnabled: true }),
@@ -121,7 +121,7 @@ describe("UsersAdminPage - 2FA filter: top-level accounts", () => {
     expect(screen.getByText("dave")).toBeInTheDocument();
   });
 
-  it("hides mfaEnabled top-level users in both sections when filter is on", async () => {
+  it("does not expose workspace MFA badges or filters even with stale cached MFA metadata", async () => {
     renderPage([
       mkUser("alice", { mfaEnabled: true }),
       mkUser("bob"),
@@ -130,30 +130,29 @@ describe("UsersAdminPage - 2FA filter: top-level accounts", () => {
     ]);
 
     await waitFor(() => expect(screen.getByText("alice")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /only without 2fa/i }));
-
-    expect(screen.queryByText("alice")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /only without 2fa/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("2FA on")).not.toBeInTheDocument();
+    expect(screen.getByText(/Two-factor authentication belongs to each person/)).toBeInTheDocument();
+    expect(screen.getByText("alice")).toBeInTheDocument();
     expect(screen.getByText("bob")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Archived accounts" }));
-    expect(screen.queryByText("carol")).not.toBeInTheDocument();
+    expect(screen.getByText("carol")).toBeInTheDocument();
     expect(screen.getByText("dave")).toBeInTheDocument();
   });
 
-  it("shows empty-state in active section when all active accounts have 2FA", async () => {
+  it("keeps active workspace rows regardless of cached MFA", async () => {
     renderPage([
       mkUser("alice", { mfaEnabled: true }),
       mkUser("dave", { archived: true }),
     ]);
 
     await waitFor(() => expect(screen.getByText("alice")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /only without 2fa/i }));
-
-    expect(screen.getByText(/no active agency accounts/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no active agency accounts/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Archived accounts" }));
     expect(screen.getByText("dave")).toBeInTheDocument();
   });
 
-  it("shows empty-state in archived section when all archived accounts have 2FA", async () => {
+  it("keeps archived workspace rows regardless of cached MFA", async () => {
     renderPage([
       mkUser("bob"),
       mkUser("carol", { mfaEnabled: true, archived: true }),
@@ -161,20 +160,17 @@ describe("UsersAdminPage - 2FA filter: top-level accounts", () => {
 
     await waitFor(() => expect(screen.getByText("bob")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Archived accounts" }));
-    fireEvent.click(screen.getByRole("button", { name: /only without 2fa/i }));
-
-    expect(screen.getByText(/no archived accounts match these filters/i)).toBeInTheDocument();
+    expect(screen.getByText("carol")).toBeInTheDocument();
+    expect(screen.queryByText(/no archived accounts match these filters/i)).not.toBeInTheDocument();
   });
 
-  it("restores all accounts when the filter is toggled off again", async () => {
+  it("does not expose workspace MFA reset actions", async () => {
     renderPage([mkUser("alice", { mfaEnabled: true }), mkUser("bob")]);
 
     await waitFor(() => expect(screen.getByText("alice")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("button", { name: /only without 2fa/i }));
-    expect(screen.queryByText("alice")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /without 2fa \(on\)/i }));
+    fireEvent.click(screen.getAllByTitle("More actions")[0]);
+    expect(screen.queryByRole("button", { name: /reset two-factor/i })).not.toBeInTheDocument();
     expect(screen.getByText("alice")).toBeInTheDocument();
     expect(screen.getByText("bob")).toBeInTheDocument();
   });
@@ -184,31 +180,27 @@ describe("UsersAdminPage - 2FA filter: top-level accounts", () => {
 // 2. Nested account filter tests - same-section children
 // ---------------------------------------------------------------------------
 
-describe("UsersAdminPage - 2FA filter: nested accounts", () => {
-  it("hides a nested mfaEnabled child when both parent and child have mfaEnabled", async () => {
+describe("UsersAdminPage - nested workspaces ignore cached MFA", () => {
+  it("keeps a parent and child that both have old workspace MFA metadata", async () => {
     renderPage([
       mkUser("parent", { mfaEnabled: true }),
       mkUser("child", { mfaEnabled: true, parent: "parent" }),
     ]);
 
     await waitFor(() => expect(screen.getByText("parent")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /only without 2fa/i }));
-
-    expect(screen.queryByText("parent")).not.toBeInTheDocument();
-    expect(screen.queryByText("child")).not.toBeInTheDocument();
+    expect(screen.getByText("parent")).toBeInTheDocument();
+    expect(screen.getByText("child")).toBeInTheDocument();
   });
 
-  it("hides a nested mfaEnabled child even when the parent has no mfaEnabled", async () => {
+  it("keeps a nested child independently of the parent's old MFA metadata", async () => {
     renderPage([
       mkUser("parent"),
       mkUser("child", { mfaEnabled: true, parent: "parent" }),
     ]);
 
     await waitFor(() => expect(screen.getByText("child")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /only without 2fa/i }));
-
-    expect(screen.getByText("parent")).toBeInTheDocument();   // parent passes directly
-    expect(screen.queryByText("child")).not.toBeInTheDocument(); // child has mfaEnabled
+    expect(screen.getByText("parent")).toBeInTheDocument();
+    expect(screen.getByText("child")).toBeInTheDocument();
   });
 
   it("keeps an mfaEnabled parent visible when it has a non-mfaEnabled child (ancestor context)", async () => {
@@ -218,7 +210,6 @@ describe("UsersAdminPage - 2FA filter: nested accounts", () => {
     ]);
 
     await waitFor(() => expect(screen.getByText("parent")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /only without 2fa/i }));
 
     expect(screen.getByText("parent")).toBeInTheDocument(); // kept for ancestor context
     expect(screen.getByText("child")).toBeInTheDocument();
@@ -235,8 +226,7 @@ describe("UsersAdminPage - 2FA filter: nested accounts", () => {
     fireEvent.click(screen.getByRole("button", { name: "Archived accounts" }));
     // The archived child appears in the archived section.
     expect(screen.getByText("archivedchild")).toBeInTheDocument();
-    // With filter on, archived child (no mfa) stays visible.
-    fireEvent.click(screen.getByRole("button", { name: /only without 2fa/i }));
+    expect(screen.queryByRole("button", { name: /only without 2fa/i })).not.toBeInTheDocument();
     expect(screen.getByText("archivedchild")).toBeInTheDocument();
   });
 });
@@ -261,25 +251,19 @@ describe("UsersAdminPage - hierarchy: archived parent / active child", () => {
     expect(screen.getByText("archivedparent")).toBeInTheDocument();
   });
 
-  it("active orphan appears in active section with filter on when it has no mfaEnabled", async () => {
+  it("active orphan remains in the active section regardless of cached MFA", async () => {
     renderPage([
       mkUser("archivedparent", { archived: true, mfaEnabled: true }),
       mkUser("activechild", { parent: "archivedparent" }),
     ]);
 
     await waitFor(() => expect(screen.getByText("activechild")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /only without 2fa/i }));
-
-    // activechild passes the active-section filter (no mfa).
     expect(screen.getByText("activechild")).toBeInTheDocument();
-    // archivedparent has mfa and NO archived descendants without mfa → hidden in archived section.
+    // Archived parent is not in the active view.
     expect(screen.queryByText("archivedparent")).not.toBeInTheDocument();
   });
 
-  it("archived parent with mfaEnabled does NOT appear in archived section due to active child (no cross-boundary propagation)", async () => {
-    // The archived parent has mfaEnabled; its only child is active (not archived).
-    // The archived-section filter must NOT include archivedparent just because
-    // activechild passes the active filter - that would be misleading.
+  it("archived parents remain in their own section regardless of cached MFA", async () => {
     renderPage([
       mkUser("archivedparent", { archived: true, mfaEnabled: true }),
       mkUser("activechild", { parent: "archivedparent" }),
@@ -287,9 +271,8 @@ describe("UsersAdminPage - hierarchy: archived parent / active child", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Archived accounts" }));
     await waitFor(() => expect(screen.getByText("archivedparent")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /only without 2fa/i }));
-
-    expect(screen.queryByText("archivedparent")).not.toBeInTheDocument();
+    expect(screen.getByText("archivedparent")).toBeInTheDocument();
+    expect(screen.queryByText("activechild")).not.toBeInTheDocument();
   });
 
   it("deeper mixed chain: active → archived → active (each in its own section)", async () => {
@@ -306,8 +289,6 @@ describe("UsersAdminPage - hierarchy: archived parent / active child", () => {
     expect(screen.getByText("c")).toBeInTheDocument();
     expect(screen.queryByText("b")).not.toBeInTheDocument();
 
-    // With filter on: none have mfaEnabled so all remain visible.
-    fireEvent.click(screen.getByRole("button", { name: /only without 2fa/i }));
     expect(screen.getByText("a")).toBeInTheDocument();
     expect(screen.getByText("c")).toBeInTheDocument();
 

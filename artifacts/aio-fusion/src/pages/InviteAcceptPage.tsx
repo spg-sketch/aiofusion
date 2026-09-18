@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { Loader2, Mail, ShieldCheck, AlertTriangle, LogOut } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type InviteInfo, serverDeclineInvite, serverGetInviteInfo, serverAcceptInvite, serverLogout } from "../lib/auth";
+import { type InviteInfo, type MfaChallenge, bootstrapAuth, clearSession, setSession, serverDeclineInvite, serverGetInviteInfo, serverAcceptInvite, serverLogout } from "../lib/auth";
 import { apiBase } from "../lib/apiHelpers";
+import { MfaLoginStep } from "../components/MfaPanels";
 
 const ink = "#0a1628";
 const accent = "#C8497A";
@@ -26,6 +27,11 @@ export function InviteAcceptPage({ token, onAccepted }: { token: string; onAccep
   const [signingOut, setSigningOut] = useState(false);
   const [declining, setDeclining] = useState(false);
   const [declined, setDeclined] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const [mfaChallenge, setMfaChallenge] = useState<MfaChallenge | null>(null);
+  const [verifyingSession, setVerifyingSession] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [mfaCancelled, setMfaCancelled] = useState(false);
 
   useEffect(() => {
     void serverGetInviteInfo(token).then((r) => {
@@ -41,8 +47,26 @@ export function InviteAcceptPage({ token, onAccepted }: { token: string; onAccep
 
   const needsPassword = !invite?.existingUser;
 
+  const confirmSession = async () => {
+    setMfaChallenge(null);
+    setVerificationError(null);
+    setVerifyingSession(true);
+    // MFA completion only supplies a provisional session, just like password
+    // sign-in. Do not expose a destination until the cookie passes /me.
+    clearSession();
+    const authority = await bootstrapAuth();
+    setVerifyingSession(false);
+    if (!authority.session) {
+      setVerificationError(authority.error ?? "Your session could not be verified. Please sign in to finish joining the workspace.");
+      return;
+    }
+    setSession(authority.session);
+    onAccepted();
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting || accepted) return;
     setSubmitError(null);
     setSignedInAsDifferentUser(false);
     if (needsPassword) {
@@ -52,7 +76,18 @@ export function InviteAcceptPage({ token, onAccepted }: { token: string; onAccep
     setSubmitting(true);
     void serverAcceptInvite({ token, name: name.trim() || undefined, password: needsPassword ? password : undefined }).then((r) => {
       setSubmitting(false);
-      if (r.ok) onAccepted();
+      if ("mfa" in r) {
+        clearSession();
+        setAccepted(true);
+        setPassword("");
+        setConfirm("");
+        setMfaChallenge(r.mfa);
+      } else if (r.ok) {
+        setAccepted(true);
+        setPassword("");
+        setConfirm("");
+        void confirmSession();
+      }
       else {
         setSubmitError(r.error ?? "Failed to accept invitation.");
         setSignedInAsDifferentUser(r.reason === "signed_in_as_different_user");
@@ -103,6 +138,42 @@ export function InviteAcceptPage({ token, onAccepted }: { token: string; onAccep
                 Go to AIO Fusion
               </a>
             </div>
+          ) : accepted ? (
+            mfaChallenge ? (
+              <MfaLoginStep
+                challenge={mfaChallenge}
+                onSuccess={() => { void confirmSession(); }}
+                onCancel={() => {
+                  clearSession();
+                  setMfaChallenge(null);
+                  setMfaCancelled(true);
+                }}
+              />
+            ) : (
+              <div className="space-y-4">
+                <h1 className="text-[18px] font-bold" style={{ fontFamily: "'Alice', Georgia, serif" }}>
+                  {verifyingSession ? "Verifying your session…" : "Invitation accepted"}
+                </h1>
+                <p className="text-[13px]" style={{ color: vars.g600 }}>
+                  Your invitation has been accepted. You do not need to accept it again.
+                  {mfaCancelled && " Sign in to complete your personal two-factor authentication."}
+                </p>
+                {verifyingSession && <Loader2 aria-label="Verifying session" size={18} className="animate-spin" />}
+                {verificationError && (
+                  <>
+                    <p role="alert" className="text-[13px]" style={{ color: accent }}>{verificationError}</p>
+                    <button type="button" onClick={() => { void confirmSession(); }} className="text-[13px] font-bold">
+                      Retry session verification
+                    </button>
+                  </>
+                )}
+                {!verifyingSession && (
+                  <a href={`${import.meta.env.BASE_URL}?oauth_status=ok`} className="inline-block text-[13px] font-bold">
+                    Continue to sign in
+                  </a>
+                )}
+              </div>
+            )
           ) : declined ? (
             <div className="text-center py-6">
               <Mail size={28} color={accent} className="mx-auto mb-3" />

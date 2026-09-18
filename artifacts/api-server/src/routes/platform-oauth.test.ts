@@ -358,7 +358,8 @@ vi.mock("../lib/notify-email", async (importOriginal) => {
   }
   return mock;
 });
-vi.mock("../lib/mfa", () => ({
+vi.mock("../lib/mfa", async (original) => ({
+  ...await original<typeof import("../lib/mfa")>(),
   getMfaState: () => Promise.resolve(null),
   getMfaEnabledSet: () => Promise.resolve(new Set()),
   saveMfaState: () => Promise.resolve(),
@@ -396,6 +397,7 @@ import {
   hashPassword, ensurePlatformUser, createPlatformSession, getPlatformSessionAccount,
 } from "../lib/platform-auth";
 import { createMfaPendingToken } from "../lib/mfa";
+import * as mfa from "../lib/mfa";
 import platformRouter from "./platform";
 import teamRouter from "./team";
 
@@ -478,7 +480,7 @@ function makeGoogleStub(opts: {
     googleId = "google-id-123",
     name = "Test User",
     picture,
-    verifiedEmail = false,
+    verifiedEmail = true,
     avatarBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xdb, 0x00, 0x43]),
     trackTokenCalls,
   } = opts;
@@ -830,7 +832,7 @@ describe("Google POST callback - code redemption", () => {
     expect(cookies["aio_sid"]).toBeTruthy();
   });
 
-  it("routes a verified AIO Fusion Google identity into Master as support", async () => {
+  it("does not grant new Master membership merely from a verified Google staff domain", async () => {
     const staffEmail = "google.staff@aiofusion.ai";
     await db.insert(platformAccountsTable).values({
       username: "admin",
@@ -846,23 +848,11 @@ describe("Google POST callback - code redemption", () => {
 
     const postRes = await postCallback("valid_aio_staff_code", STATE);
     expect(postRes.status).toBe(302);
-    expect(postRes.headers.get("location")).toContain("oauth_status=ok");
-    expect(postRes.headers.get("location")).not.toContain("mfa_mode=");
-    expect(postRes.headers.get("location")).not.toContain("needs_setup=1");
-    expect(parseCookies(postRes.headers)["aio_sid"]).toBeTruthy();
+    expect(postRes.headers.get("location")).toContain("oauth_status=error");
+    expect(parseCookies(postRes.headers)["aio_sid"]).toBeUndefined();
 
     const [user] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.email, staffEmail)).limit(1);
-    const [membership] = await db
-      .select()
-      .from(platformMembershipsTable)
-      .where(eq(platformMembershipsTable.userId, user!.id))
-      .limit(1);
-    expect(user?.emailVerified).toBe(true);
-    expect(membership).toMatchObject({ companySlug: "admin", role: "viewer" });
-
-    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.userId, user!.id));
-    await db.delete(platformSessionsTable).where(eq(platformSessionsTable.userId, user!.id));
-    await db.delete(platformUsersTable).where(eq(platformUsersTable.id, user!.id));
+    expect(user).toBeUndefined();
   });
 
   it("imports the Google picture as a user avatar without touching the workspace logo", async () => {
@@ -1358,7 +1348,7 @@ describe("Microsoft POST callback - code redemption", () => {
     expect(cookies["aio_sid"]).toBeTruthy();
   });
 
-  it("routes an AIO Fusion Microsoft identity into Master as support", async () => {
+  it("does not grant new Master membership merely from a Microsoft staff domain", async () => {
     const staffEmail = "microsoft.staff@aiofusion.ai";
     await db.insert(platformAccountsTable).values({
       username: "admin",
@@ -1373,24 +1363,11 @@ describe("Microsoft POST callback - code redemption", () => {
 
     const postRes = await postMsCallback("valid_ms_aio_staff_code", STATE);
     expect(postRes.status).toBe(302);
-    expect(postRes.headers.get("location")).toContain("oauth_status=ok");
-    expect(postRes.headers.get("location")).not.toContain("mfa_mode=");
-    expect(postRes.headers.get("location")).not.toContain("needs_setup=1");
-    expect(parseCookies(postRes.headers)["aio_sid"]).toBeTruthy();
+    expect(postRes.headers.get("location")).toContain("oauth_status=error");
+    expect(parseCookies(postRes.headers)["aio_sid"]).toBeUndefined();
 
     const [user] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.email, staffEmail)).limit(1);
-    const [membership] = await db
-      .select()
-      .from(platformMembershipsTable)
-      .where(eq(platformMembershipsTable.userId, user!.id))
-      .limit(1);
-    expect(user?.emailVerified).toBe(true);
-    expect(user?.microsoftId).toBe("microsoft-aio-staff");
-    expect(membership).toMatchObject({ companySlug: "admin", role: "viewer" });
-
-    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.userId, user!.id));
-    await db.delete(platformSessionsTable).where(eq(platformSessionsTable.userId, user!.id));
-    await db.delete(platformUsersTable).where(eq(platformUsersTable.id, user!.id));
+    expect(user).toBeUndefined();
   });
 });
 
@@ -1599,8 +1576,18 @@ describe("removed Master staff OAuth access", () => {
   let baseUrl: string;
   const otherSlug = "oauth-revoked-other";
   const ownerEmail = "oauth-revocation-owner@test.test";
+  let actualMfa: typeof import("../lib/mfa");
 
   beforeEach(async () => {
+    actualMfa = await vi.importActual<typeof import("../lib/mfa")>("../lib/mfa");
+    // This fixture exercises real personal assurance rather than the general
+    // OAuth suite's factor-free transport mocks.
+    vi.spyOn(mfa, "getMfaState").mockImplementation(actualMfa.getMfaState);
+    vi.spyOn(mfa, "createMfaPendingToken").mockImplementation(actualMfa.createMfaPendingToken);
+    vi.spyOn(mfa, "verifyMfaPendingToken").mockImplementation(actualMfa.verifyMfaPendingToken);
+    vi.spyOn(mfa, "verifyTotp").mockImplementation(actualMfa.verifyTotp);
+    vi.spyOn(mfa, "generateRecoveryCodes").mockImplementation(actualMfa.generateRecoveryCodes);
+    vi.spyOn(mfa, "hashRecoveryCode").mockImplementation(actualMfa.hashRecoveryCode);
     vi.stubEnv("GOOGLE_CLIENT_ID", "test-google-client-id");
     vi.stubEnv("GOOGLE_CLIENT_SECRET", "test-google-client-secret");
     vi.stubEnv("MICROSOFT_CLIENT_ID", "test-microsoft-client-id");
@@ -1614,6 +1601,7 @@ describe("removed Master staff OAuth access", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
     await stopServer(server);
@@ -1639,7 +1627,17 @@ describe("removed Master staff OAuth access", () => {
         membershipRole: "owner", companyStatus: "active", companySetupComplete: true,
       });
       const [master] = await db.select().from(platformCompaniesTable).where(eq(platformCompaniesTable.slug, "admin"));
+      await db.update(platformUsersTable).set({ emailVerified: true }).where(eq(platformUsersTable.id, ownerId));
+      await actualMfa.saveMfaState(`user:${ownerId}`, {
+        secret: actualMfa.generateTotpSecret(), enabled: true, recoveryHashes: [],
+      });
       const ownerSid = await createPlatformSession("admin", null, ownerId, master!.id);
+      await actualMfa.recordMfaSession(ownerSid, `user:${ownerId}`, await actualMfa.getMfaGeneration(`user:${ownerId}`));
+      // Approval is an explicit fixture grant, never inferred from the domain.
+      const targetId = await ensurePlatformUser({
+        email, companyUsername: "admin", companyRole: "admin",
+        membershipRole: "viewer", companyStatus: "active",
+      });
       const state = provider === "google" ? "revoked-staff-state" : "login:revoked-staff-state";
       const stateCookie = provider === "google" ? "aio_oauth_state" : "aio_ms_state";
       vi.stubGlobal("fetch", provider === "google"
@@ -1653,13 +1651,29 @@ describe("removed Master staff OAuth access", () => {
         },
         body: new URLSearchParams({ code: "disposable-provider-code", state }).toString(),
       });
+      const finishChallenge = async (response: globalThis.Response, mode: "enroll" | "verify") => {
+        expect(response.headers.get("location")).toContain(`oauth_status=mfa&mfa_mode=${mode}`);
+        expect(parseCookies(response.headers).aio_sid).toBeUndefined();
+        const token = decodeURIComponent(parseCookies(response.headers).aio_oauth_mfa_token!);
+        expect((await actualMfa.validateMfaPendingToken(token))?.uid).toBe(targetId);
+        const postMfa = (path: string, body: unknown) => realFetch(`${baseUrl}/api/platform/mfa/${path}`, {
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+        });
+        const secret = mode === "enroll"
+          ? (await (await postMfa("setup", { mfaToken: token })).json() as { secret: string }).secret
+          : (await actualMfa.getMfaState(`user:${targetId}`))!.secret;
+        const completed = await postMfa(mode === "enroll" ? "enable" : "verify", {
+          mfaToken: token, code: actualMfa.totpCode(secret),
+        });
+        expect(completed.status).toBe(200);
+        const sid = parseCookies(completed.headers).aio_sid!;
+        expect(sid).toBeTruthy();
+        return sid;
+      };
 
-      // First use proves this exact identity is eligible under the existing
-      // staff policy; revocation, not a different roster rule, blocks later use.
+      // An approved Viewer must enroll personally before the initial session.
       const first = await callback();
-      expect(first.headers.get("location")).toContain("oauth_status=ok");
-      const firstSid = parseCookies(first.headers).aio_sid!;
-      expect(firstSid).toBeTruthy();
+      const firstSid = await finishChallenge(first, "enroll");
       const [target] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.email, email));
       expect(await getPlatformSessionAccount(firstSid)).toMatchObject({
         userId: target!.id, activeCompanyId: master!.id, membershipRole: "viewer",
@@ -1693,6 +1707,7 @@ describe("removed Master staff OAuth access", () => {
       expect(await db.select().from(platformSessionsTable).where(eq(platformSessionsTable.sid, forcedSid))).toHaveLength(0);
 
       const otherSid = await createPlatformSession(otherSlug, null, target!.id, other!.id);
+      await actualMfa.recordMfaSession(otherSid, `user:${targetId}`, await actualMfa.getMfaGeneration(`user:${targetId}`));
       expect(await getPlatformSessionAccount(otherSid)).toMatchObject({
         userId: target!.id, username: otherSlug, membershipRole: "viewer",
       });
@@ -1701,7 +1716,6 @@ describe("removed Master staff OAuth access", () => {
       const denied = await callback();
       expect(denied.status).toBe(302);
       expect(denied.headers.get("location")).toContain("oauth_status=error");
-      expect(denied.headers.get("location")).toContain("oauth_msg=master_access_removed");
       expect(parseCookies(denied.headers).aio_sid).toBeUndefined();
       expect(parseCookies(denied.headers).aio_oauth_mfa_token).toBeUndefined();
       expect(createMfaPendingToken).not.toHaveBeenCalled();
@@ -1729,8 +1743,8 @@ describe("removed Master staff OAuth access", () => {
       expect(invited.status).toBe(201);
       const invitation = await invited.json() as { token: string };
       const restored = await callback(invitation.token);
-      expect(restored.headers.get("location")).toContain("oauth_status=ok");
-      expect(await getPlatformSessionAccount(parseCookies(restored.headers).aio_sid!)).toMatchObject({
+      const restoredSid = await finishChallenge(restored, "verify");
+      expect(await getPlatformSessionAccount(restoredSid)).toMatchObject({
         activeCompanyId: master!.id, userId: target!.id, membershipRole: "viewer",
       });
       const [usedInvite] = await db.select().from(platformInvitationsTable)
@@ -1741,8 +1755,7 @@ describe("removed Master staff OAuth access", () => {
       // Ordinary subsequent staff login must use the restored membership, not
       // deny on the marker or silently promote it back to Owner.
       const returning = await callback();
-      expect(returning.headers.get("location")).toContain("oauth_status=ok");
-      const returningSid = parseCookies(returning.headers).aio_sid!;
+      const returningSid = await finishChallenge(returning, "verify");
       expect(await getPlatformSessionAccount(returningSid)).toMatchObject({
         activeCompanyId: master!.id, membershipRole: "viewer",
       });

@@ -177,6 +177,7 @@ export async function sendVerificationEmail(opts: {
 export async function sendMfaAdminResetEmail(opts: {
   toEmail: string;
   toName: string;
+  requiresReenrollment?: boolean;
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
@@ -189,9 +190,10 @@ export async function sendMfaAdminResetEmail(opts: {
   const text = [
     `Hi ${opts.toName},`,
     ``,
-    `An administrator has reset the two-factor login on your AIO Fusion account.`,
-    `Two-factor authentication is now turned off, which means your account is`,
-    `protected by your password alone until you set it up again.`,
+    `An administrator has reset the personal two-factor login for ${opts.toEmail}.`,
+    ...(opts.requiresReenrollment
+      ? [`Your sessions and trusted devices have been revoked. Sign in again with your usual sign-in method, then enrol your own authenticator before accessing Master. Other members' security and shared workspace data are unchanged.`]
+      : [`Two-factor authentication is now turned off. Set it up again in your personal security settings.`]),
     ``,
     `We recommend re-enabling two-factor login from your security settings as`,
     `soon as possible.`,
@@ -207,13 +209,12 @@ export async function sendMfaAdminResetEmail(opts: {
     bodyHtml: `
       <p style="margin: 0 0 12px 0;">Hi ${escHtml(opts.toName)},</p>
       <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
-        An administrator has reset the two-factor login on your AIO Fusion account.
+        An administrator has reset the personal two-factor login for ${escHtml(opts.toEmail)}.
       </p>
       <p style="margin: 0 0 16px 0;">
-        Two-factor authentication is now <strong>turned off</strong>, which means your
-        account is protected by your password alone until you set it up again.
-        We recommend re-enabling two-factor login from your security settings as
-        soon as possible.
+        ${opts.requiresReenrollment
+          ? "Your sessions and trusted devices have been revoked. Sign in again with your usual sign-in method, then enrol your own authenticator before accessing Master. Other members' security and shared workspace data are unchanged."
+          : "Two-factor authentication is now turned off. Set it up again in your personal security settings."}
       </p>
       <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
         If you did not request this reset, contact your administrator or the

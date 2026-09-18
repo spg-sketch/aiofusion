@@ -17,8 +17,6 @@ import { requirePlatformAuth } from "../middleware/platform-auth";
 import {
   normUsername,
   hashPassword,
-  createSignedInSession,
-  setPlatformCookie,
   canManageTeam,
   normalizeMembershipRole,
   parseProjectAccess,
@@ -31,6 +29,8 @@ import {
   getVisibleUsernames,
   type MembershipRole,
   DEFAULT_ADMIN_USERNAME,
+  isImpersonatedRequest,
+  isRestrictedMaster,
 } from "../lib/platform-auth";
 import {
   INVITE_TTL_MS,
@@ -49,7 +49,9 @@ import {
   INVITE_INVALID_MESSAGES,
   consumeInvite,
 } from "../lib/team-invites";
-import { sendTeamInviteEmail, sendTeamRoleDowngradedEmail, getAppBaseUrl } from "../lib/notify-email";
+import { sendTeamInviteEmail, sendTeamRoleDowngradedEmail, sendMfaAdminResetEmail, getAppBaseUrl } from "../lib/notify-email";
+import { getPersonalMfaStatus, resetPersonalMfa, TRUSTED_DEVICE_COOKIE } from "../lib/mfa";
+import { finishPersonalLogin } from "../lib/login-mfa";
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
 import { logger } from "../lib/logger";
@@ -281,6 +283,7 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
         createdAt: platformMembershipsTable.createdAt,
         email: platformUsersTable.email,
         name: platformUsersTable.name,
+        emailVerified: platformUsersTable.emailVerified,
       })
       .from(platformMembershipsTable)
       .leftJoin(platformUsersTable, eq(platformMembershipsTable.userId, platformUsersTable.id))
@@ -310,6 +313,26 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
     // This capability is derived from the canonical membership row, rather
     // than the session role. A stale session must not expose owner promotion.
     const actorMembership = memberRows.find((m) => m.userId === req.account!.userId);
+    const [canonicalAccount] = company.slug === DEFAULT_ADMIN_USERNAME
+      ? await db.select({ status: platformAccountsTable.status, role: platformAccountsTable.role })
+        .from(platformAccountsTable).where(eq(platformAccountsTable.username, DEFAULT_ADMIN_USERNAME)).limit(1)
+      : [];
+    const canResetMemberMfa = company.slug === DEFAULT_ADMIN_USERNAME
+      && company.role === "admin"
+      && company.status === "active"
+      && req.account!.username === DEFAULT_ADMIN_USERNAME
+      && req.account!.role === "admin"
+      && canonicalAccount?.status === "active"
+      && canonicalAccount.role === "admin"
+      && actorMembership?.role === "owner"
+      && actorMembership.emailVerified === true
+      && !!actorMembership.email
+      && !isRestrictedMaster(req.account!)
+      && !(await isImpersonatedRequest(req));
+    const personalMfa = new Map(await Promise.all(memberRows.map(async (member) => {
+      const status = await getPersonalMfaStatus(member.userId);
+      return [member.userId, status] as const;
+    })));
     let canPromoteOwners =
       isCanonicalMaster(company) &&
       actorMembership !== undefined &&
@@ -354,6 +377,13 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
         position: m.position ?? null,
         createdAt: m.createdAt,
         isSelf: m.userId === req.account!.userId,
+        mfaEnabled: personalMfa.get(m.userId)?.enabled === true,
+        mfaStatus: personalMfa.get(m.userId)?.enabled
+          ? "enabled"
+          : personalMfa.get(m.userId)?.migrationRequired ? "legacy_transition"
+          : personalMfa.get(m.userId)?.recoveryRequired ? "recovery_required" : "not_enrolled",
+        canResetMfa: canResetMemberMfa && m.userId !== req.account!.userId
+          && m.emailVerified === true && !!m.email,
         ...(() => {
           const protectionReason = memberProtection(
             m.userId === req.account!.userId, m.role, canManageMembers, canManageOwners, ownerCount,
@@ -377,6 +407,7 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
       seatLimit,
       seatsUsed,
       canPromoteOwners,
+      canResetMemberMfa,
       canManageOwners,
     });
   } catch (err) {
@@ -384,6 +415,97 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
     res.status(500).json({ error: "Failed to load team." });
   }
 });
+
+router.post("/platform/team/members/:userId/reset-mfa", requirePlatformAuth, loginLimiter, async (req: Request, res: Response) => {
+  try {
+    const actor = req.account!;
+    if (!actor?.userId || actor.username !== DEFAULT_ADMIN_USERNAME || actor.role !== "admin"
+      || isRestrictedMaster(actor) || await isImpersonatedRequest(req)) {
+      res.status(403).json({ error: "Only a signed-in, named Master Owner can reset a member's two-factor authentication." });
+      return;
+    }
+    const targetUserId = String(req.params.userId);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetUserId)) {
+      res.status(400).json({ error: "A valid member identity is required." });
+      return;
+    }
+    if (targetUserId === actor.userId) {
+      res.status(400).json({ error: "You cannot reset your own two-factor authentication here. Ask another verified Master Owner." });
+      return;
+    }
+    const confirmationEmail = typeof req.body?.confirmationEmail === "string"
+      ? req.body.confirmationEmail.trim().toLowerCase() : "";
+    if (req.body?.identityVerified !== true || !confirmationEmail) {
+      res.status(400).json({ error: "Verify this person's identity and confirm their exact email address before resetting two-factor authentication." });
+      return;
+    }
+
+    const result = await db.transaction(async (tx) => {
+      // All team membership changes take the company lock. Lock the actor and
+      // target memberships/users as well so a concurrent revocation, promotion,
+      // email change or verification change cannot race this authorization.
+      await tx.execute(sql`SELECT 1 FROM platform_companies WHERE slug = ${DEFAULT_ADMIN_USERNAME} FOR UPDATE`);
+      await tx.execute(sql`SELECT 1 FROM platform_accounts WHERE username = ${DEFAULT_ADMIN_USERNAME} FOR UPDATE`);
+      const [company] = await tx.select().from(platformCompaniesTable)
+        .where(eq(platformCompaniesTable.slug, DEFAULT_ADMIN_USERNAME)).limit(1);
+      const [canonical] = await tx.select().from(platformAccountsTable)
+        .where(eq(platformAccountsTable.username, DEFAULT_ADMIN_USERNAME)).limit(1);
+      if (!company || company.role !== "admin" || company.status !== "active"
+        || canonical?.role !== "admin" || canonical.status !== "active"
+        || (actor.activeCompanyId && actor.activeCompanyId !== company.id)) {
+        return { ok: false as const, status: 403, error: "The active Master workspace could not be verified." };
+      }
+      await tx.execute(sql`SELECT 1 FROM platform_memberships WHERE company_id = ${company.id} AND user_id IN (${actor.userId}, ${targetUserId}) ORDER BY user_id FOR UPDATE`);
+      await tx.execute(sql`SELECT 1 FROM platform_users WHERE id IN (${actor.userId}, ${targetUserId}) ORDER BY id FOR UPDATE`);
+      const members = await tx.select({
+        id: platformUsersTable.id,
+        email: platformUsersTable.email,
+        name: platformUsersTable.name,
+        emailVerified: platformUsersTable.emailVerified,
+        role: platformMembershipsTable.role,
+      }).from(platformMembershipsTable)
+        .innerJoin(platformUsersTable, eq(platformMembershipsTable.userId, platformUsersTable.id))
+        .where(eq(platformMembershipsTable.companyId, company.id));
+      const owner = members.find((m) => m.id === actor.userId);
+      if (owner?.role !== "owner" || owner.emailVerified !== true || !owner.email) {
+        return { ok: false as const, status: 403, error: "A current, verified Master Owner is required." };
+      }
+      const target = members.find((m) => m.id === targetUserId);
+      if (!target) return { ok: false as const, status: 404, error: "This person is no longer a member of the Master workspace." };
+      if (target.emailVerified !== true || !target.email) {
+        return { ok: false as const, status: 409, error: "The member must have a verified personal email address before recovery can proceed." };
+      }
+      if (target.email.trim().toLowerCase() !== confirmationEmail) {
+        return { ok: false as const, status: 400, error: "The confirmation email does not match this member. Refresh the team list and verify their identity again." };
+      }
+      await resetPersonalMfa(targetUserId, tx);
+      // Audit inside the same transaction: failure must roll back the reset.
+      await tx.insert(adminEventsTable).values({
+        actorId: actor.userId,
+        actorUsername: actor.username,
+        action: "mfa_admin_reset",
+        targetId: targetUserId,
+        targetType: "user",
+        metadata: { companyId: company.id, identityVerified: true, requiresReenrollment: true },
+      });
+      return { ok: true as const, email: target.email, name: target.name };
+    });
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+    await sendMfaAdminResetEmail({
+      toEmail: result.email,
+      toName: result.name || result.email,
+      requiresReenrollment: true,
+    });
+    res.json({ ok: true, requiresReenrollment: true });
+  } catch (err) {
+    logger.error({ err }, "team: failed to reset personal MFA");
+    res.status(500).json({ error: "Could not complete the personal two-factor reset. Refresh the team list before trying again." });
+  }
+});
+
 
 // --- Invite a team member -----------------------------------------------------
 
@@ -1633,27 +1755,21 @@ router.post("/platform/invite/accept", loginLimiter, async (req: Request, res: R
       return;
     }
 
-    // Issue the session directly into the inviting workspace. Invited users
-    // skip account-type selection - the workspace is already set up.
+    // The invitation establishes membership, not MFA assurance. Complete the
+    // same personal challenge as normal login before issuing a session.
     const rawIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
       ?? req.socket.remoteAddress;
-    const sid = await createSignedInSession(invite.companySlug, rawIp, userId, invite.companyId);
-    setPlatformCookie(res, sid);
-
     const [company] = await db
       .select({ role: platformCompaniesTable.role })
       .from(platformCompaniesTable)
       .where(eq(platformCompaniesTable.id, invite.companyId))
       .limit(1);
 
-    res.json({
-      ok: true,
-      account: {
-        username: invite.companySlug,
-        role: company?.role ?? "agency",
-        membershipRole: normalizeMembershipRole(invite.role),
-      },
-    });
+    await finishPersonalLogin(res, {
+      username: invite.companySlug, role: company?.role ?? "agency",
+      userId, activeCompanyId: invite.companyId, needsSetup: false,
+    }, rawIp, (req.cookies as Record<string, string> | undefined)?.[TRUSTED_DEVICE_COOKIE],
+    normalizeMembershipRole(invite.role));
   } catch (err) {
     logger.error({ err }, "team: failed to accept invite");
     res.status(500).json({ error: "Failed to accept invitation." });

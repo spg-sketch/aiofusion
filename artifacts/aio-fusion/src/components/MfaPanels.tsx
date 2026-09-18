@@ -11,7 +11,7 @@ const QRCode = QRCodeImport as unknown as (props: {
   level?: string;
   style?: CSSProperties;
 }) => ReactElement;
-import { Loader2, ShieldCheck, KeyRound, Copy, Check, AlertTriangle } from "lucide-react";
+import { Loader2, ShieldCheck, KeyRound, Copy, Check, Download, AlertTriangle } from "lucide-react";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "./ui/input-otp";
 import {
   type Session,
@@ -62,8 +62,10 @@ function OtpBoxes({ value, onChange, onComplete, disabled }: {
   );
 }
 
-function RecoveryCodesBlock({ codes, onDone, doneLabel }: { codes: string[]; onDone: () => void; doneLabel: string }) {
+export function RecoveryCodesBlock({ codes, onDone, doneLabel }: { codes: string[]; onDone: () => void; doneLabel: string }) {
   const [copied, setCopied] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   return (
     <div>
       <div className="flex items-center gap-2 mb-2">
@@ -71,28 +73,49 @@ function RecoveryCodesBlock({ codes, onDone, doneLabel }: { codes: string[]; onD
         <p className="aio-type-eyebrow" style={{ color: "#0a1628" }}>Your recovery codes</p>
       </div>
       <p className="aio-type-body mb-3" style={{ color: vars.g500 }}>
-        Save these somewhere safe - each works once if you lose access to your authenticator app. They will not be shown again.
+        Save these personal codes somewhere safe, such as your password manager - each works once if you lose access to your authenticator app. They will not be shown again. Never share them with a colleague or support agent.
       </p>
       <div className="grid grid-cols-2 gap-2 rounded-xl border p-4 mb-3 font-mono text-[13px]" style={{ borderColor: vars.g200, background: vars.g50, color: "#0a1628" }}>
         {codes.map((c) => <span key={c}>{c}</span>)}
       </div>
-      <div className="flex items-center gap-3">
+      <label className="aio-type-body flex items-start gap-2 mb-3" style={{ color: vars.g500 }}>
+        <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} />
+        I have saved my recovery codes somewhere safe.
+      </label>
+      {saveError && <p role="alert" className="aio-type-supporting mb-3" style={{ color: vars.red }}>{saveError}</p>}
+      <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={() => {
-            void navigator.clipboard?.writeText(codes.join("\n")).then(() => {
+            setSaveError(null);
+            if (!navigator.clipboard) { setSaveError("Copy is unavailable. Download the codes or save them manually."); return; }
+            void navigator.clipboard.writeText(codes.join("\n")).then(() => {
               setCopied(true);
               setTimeout(() => setCopied(false), 2000);
-            });
+            }).catch(() => setSaveError("Could not copy. Download the codes or save them manually."));
           }}
           className="aio-button aio-button--outline aio-button--compact"
           style={{ borderColor: vars.g300, color: vars.g500 }}
         >
           {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy all"}
         </button>
+        <button type="button" className="aio-button aio-button--outline aio-button--compact" onClick={() => {
+          setSaveError(null);
+          try {
+            const url = URL.createObjectURL(new Blob([`AIO Fusion personal recovery codes\nKeep private. Each code works once.\n\n${codes.join("\n")}\n`], { type: "text/plain" }));
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = "aio-fusion-recovery-codes.txt";
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+          } catch { setSaveError("Could not download. Copy the codes or save them manually."); }
+        }}>
+          <Download size={13} /> Download
+        </button>
         <button
           type="button"
           onClick={onDone}
+          disabled={!saved}
           className="aio-button aio-button--primary aio-button--compact"
           style={{ background: "#C8497A" }}
         >
@@ -105,11 +128,17 @@ function RecoveryCodesBlock({ codes, onDone, doneLabel }: { codes: string[]; onD
 
 // --- Login-time challenge ----------------------------------------------------
 
-export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
+type MfaLoginStepProps = {
   challenge: MfaChallenge;
   onSuccess: (session: Session, needsSetup: boolean) => void;
   onCancel: () => void;
-}) {
+};
+
+export function MfaLoginStep(props: MfaLoginStepProps) {
+  return <PersonalMfaLoginStep key={props.challenge.mfaToken} {...props} />;
+}
+
+function PersonalMfaLoginStep({ challenge, onSuccess, onCancel }: MfaLoginStepProps) {
   const [code, setCode] = useState("");
   const [recoveryInput, setRecoveryInput] = useState("");
   const [useRecovery, setUseRecovery] = useState(false);
@@ -119,6 +148,7 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
   // Enrolment state
   const [otpauthUrl, setOtpauthUrl] = useState<string | null>(null);
   const [secret, setSecret] = useState<string | null>(null);
+  const [personalEmail, setPersonalEmail] = useState<string | null>(challenge.email ?? null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const [pendingLogin, setPendingLogin] = useState<{ session: Session; needsSetup: boolean } | null>(null);
   // Set (to the remaining count) after a successful recovery-code login.
@@ -126,11 +156,14 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
 
   useEffect(() => {
     if (!challenge.enroll) return;
+    let cancelled = false;
     void serverMfaSetup(challenge.mfaToken).then((r) => {
-      if (r.ok) { setOtpauthUrl(r.otpauthUrl); setSecret(r.secret); }
+      if (cancelled) return;
+      if (r.ok) { setOtpauthUrl(r.otpauthUrl); setSecret(r.secret); setPersonalEmail(r.email ?? null); }
       else setError(r.error);
     });
-  }, [challenge]);
+    return () => { cancelled = true; };
+  }, [challenge.mfaToken, challenge.enroll]);
 
   const submit = () => {
     if (busy) return;
@@ -141,6 +174,8 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
       ? serverMfaEnable(entered, challenge.mfaToken).then((r) => {
           if (!r.ok) { setError(r.error); return; }
           if (r.session) {
+            setSecret(null);
+            setOtpauthUrl(null);
             // Hold the completed login until they've saved the recovery codes.
             setRecoveryCodes(r.recoveryCodes);
             setPendingLogin({ session: r.session, needsSetup: r.needsSetup === true });
@@ -225,7 +260,8 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
       {challenge.enroll ? (
         <>
           <p className="aio-type-body mb-4" style={{ color: vars.g500 }}>
-            Master accounts require two-factor authentication. Scan this QR code with an authenticator app
+            Every Master workspace member needs their own two-factor authentication, including Viewers.
+            {personalEmail && <> Setting up for <strong>{personalEmail}</strong>.</>} Scan your personal QR code with an authenticator app
             (Google Authenticator, 1Password, Authy…), then enter the 6-digit code it shows.
           </p>
           {otpauthUrl ? (
@@ -246,7 +282,8 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
         </>
       ) : (
         <p className="aio-type-body mb-4" style={{ color: vars.g500 }}>
-          Enter the 6-digit code from your authenticator app to finish signing in.
+          Enter the 6-digit code from your personal authenticator app to finish signing in
+          {personalEmail ? <> as <strong>{personalEmail}</strong></> : ""}.
         </p>
       )}
 
@@ -322,6 +359,10 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
 // --- Signed-in management section ---------------------------------------------
 
 export function MfaSecuritySection({ session, light = false }: { session: Session; light?: boolean }) {
+  return <PersonalMfaSecuritySection key={`${session.userEmail ?? "legacy"}:${session.username}`} session={session} light={light} />;
+}
+
+function PersonalMfaSecuritySection({ session, light = false }: { session: Session; light?: boolean }) {
   // Palette: the section renders on a teal card by default (white text) or on
   // a white card when `light` is set (dark text, matching the account page).
   const fg = light ? "#0a1628" : "white";
@@ -339,7 +380,7 @@ export function MfaSecuritySection({ session, light = false }: { session: Sessio
   const warnColor = light ? vars.red : "#ff8a8a";
   const panelClass = light ? "mt-4 rounded-xl p-5 border" : "mt-4 rounded-xl p-5 bg-white";
   const panelStyle = light ? { background: vars.g50, borderColor: vars.g200 } : undefined;
-  const [status, setStatus] = useState<{ enabled: boolean; required: boolean; recoveryCodesRemaining: number } | null>(null);
+  const [status, setStatus] = useState<{ enabled: boolean; required: boolean; recoveryCodesRemaining: number; email?: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Enrolment
@@ -359,17 +400,26 @@ export function MfaSecuritySection({ session, light = false }: { session: Sessio
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    setStatus(null);
+    setSecret(null);
+    setOtpauthUrl(null);
+    setRecoveryCodes(null);
+    setEnrolling(false);
+    setTrustedDevices([]);
     void serverMfaStatus().then((r) => {
+      if (cancelled) return;
       if (r.ok) {
-        setStatus({ enabled: r.enabled, required: r.required, recoveryCodesRemaining: r.recoveryCodesRemaining });
+        setStatus({ enabled: r.enabled, required: r.required, recoveryCodesRemaining: r.recoveryCodesRemaining, email: r.email });
         if (r.enabled) {
           void serverMfaTrustedDevices().then((t) => {
-            if (t.ok) setTrustedDevices(t.devices);
+            if (!cancelled && t.ok) setTrustedDevices(t.devices);
           });
         }
-      }
+      } else setError(r.error);
     });
-  }, [session.username]);
+    return () => { cancelled = true; };
+  }, [session.username, session.userEmail]);
 
   const revokeDevice = (id: string) => {
     if (revokingId) return;
@@ -398,6 +448,8 @@ export function MfaSecuritySection({ session, light = false }: { session: Sessio
     void serverMfaEnable(code).then((r) => {
       if (!r.ok) { setError(r.error); return; }
       setRecoveryCodes(r.recoveryCodes);
+      setSecret(null);
+      setOtpauthUrl(null);
       setEnrolling(false);
       setCode("");
       setStatus((s) => s ? { ...s, enabled: true, recoveryCodesRemaining: r.recoveryCodes.length } : s);
@@ -430,10 +482,14 @@ export function MfaSecuritySection({ session, light = false }: { session: Sessio
     }).finally(() => setBusy(false));
   };
 
-  if (!status) return null;
+  if (!status) return error ? <p role="alert" style={{ color: warnColor }}>{error}</p> : null;
 
   return (
     <div className="mt-4 pt-5" style={{ borderTop: `1px solid ${dividerColor}` }}>
+      <p className="aio-type-body mb-3" style={{ color: fgSoft }}>
+        Your personal sign-in security{status.email ? <> for <strong>{status.email}</strong></> : ""}.
+        {" "}Your authenticator, recovery codes and trusted devices are not shared with workspace members.
+      </p>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2" style={{ color: fg }}>
           <ShieldCheck size={15} />
@@ -446,7 +502,7 @@ export function MfaSecuritySection({ session, light = false }: { session: Sessio
           </span>
           {status.required && (
             <span className="aio-type-meta px-2 py-0.5 rounded-md font-bold uppercase tracking-[0.12em]" style={chipOffStyle}>
-              Required for master accounts
+              Required for every Master member
             </span>
           )}
         </div>

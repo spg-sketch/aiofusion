@@ -348,13 +348,14 @@ import {
 import { and, eq, sql } from "drizzle-orm";
 import {
   hashPassword,
-  createPlatformSession,
+  createPlatformSession as createUnassuredPlatformSession,
   PLATFORM_COOKIE,
   PLATFORM_IMPERSONATION_STASH_COOKIE,
   ensurePlatformUser,
   ensureAutoApprovedAdmins,
 } from "../lib/platform-auth";
 import { PROJECT_TEAM_SEATS, consumeInvite, getValidInvite } from "../lib/team-invites";
+import { getMfaGeneration, recordMfaSession, saveMfaState } from "../lib/mfa";
 import { resolvePlatformAccount } from "../middleware/platform-auth";
 import platformRouter from "./platform";
 import teamRouter from "./team";
@@ -365,6 +366,19 @@ import storeAuditsRouter from "./store-audits";
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// Named Master fixtures represent people who completed their own MFA. Shared
+// userless fixtures deliberately remain unassured to exercise their rejection.
+async function createPlatformSession(...args: Parameters<typeof createUnassuredPlatformSession>) {
+  const sid = await createUnassuredPlatformSession(...args);
+  const [slug, , userId] = args;
+  if (slug === "admin" && userId) {
+    const subject = `user:${userId}`;
+    await saveMfaState(subject, { secret: "JBSWY3DPEHPK3PXP", enabled: true, recoveryHashes: [] });
+    await recordMfaSession(sid, subject, await getMfaGeneration(subject));
+  }
+  return sid;
+}
 
 function buildApp() {
   const app = express();
@@ -667,8 +681,9 @@ describe("master workspace owner promotion", () => {
     expect(stillPresent?.userId).toBe(target.id);
   });
 
-  it("allows a legitimate legacy owner session to remove a non-owner member", async () => {
-    const { company } = await seedAgency("legacy-remove-owner", "owner@legacy-remove-owner.test");
+  it("rejects a mixed-workspace legacy session while allowing the named owner to remove a non-owner", async () => {
+    const { company, sid: ownerSid } = await seedAgency("legacy-remove-owner", "owner@legacy-remove-owner.test");
+    await db.update(platformAccountsTable).set({ email: null }).where(eq(platformAccountsTable.username, company.slug));
     const target = await addMember(company, "target@legacy-remove-owner.test");
     const legacySid = await createPlatformSession(company.slug, null, null, null);
 
@@ -676,7 +691,7 @@ describe("master workspace owner promotion", () => {
       method: "POST",
       sid: legacySid,
     });
-    expect(removed.status).toBe(200);
+    expect(removed.status).toBe(401);
     const [stillPresent] = await db
       .select({ userId: platformMembershipsTable.userId })
       .from(platformMembershipsTable)
@@ -686,10 +701,17 @@ describe("master workspace owner promotion", () => {
           eq(platformMembershipsTable.companyId, company.id),
         ),
       );
-    expect(stillPresent).toBeUndefined();
+    expect(stillPresent?.userId).toBe(target.id);
+    const namedRemoval = await api(`/api/platform/team/members/${target.id}/remove`, {
+      method: "POST", sid: ownerSid,
+    });
+    expect(namedRemoval.status).toBe(200);
+    expect(await db.select().from(platformMembershipsTable).where(
+      and(eq(platformMembershipsTable.userId, target.id), eq(platformMembershipsTable.companyId, company.id)),
+    )).toHaveLength(0);
   });
 
-  it("allows the canonical legacy admin session to bootstrap Natalie as an owner", async () => {
+  it("requires a verified MFA-assured named Master owner, never the retired legacy bootstrap", async () => {
     await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, "admin"));
     await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, "admin"));
     await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, "admin"));
@@ -705,13 +727,24 @@ describe("master workspace owner promotion", () => {
       .returning();
     const legacyAdminSid = await createPlatformSession("admin", null, null, null);
     const natalie = await addMember(company!, "natalie-bootstrap@test.test");
-
-    const team = await api("/api/platform/team", { sid: legacyAdminSid });
+    const [owner] = await db.insert(platformUsersTable).values({
+      email: "verified-master-owner@bootstrap.test", emailVerified: true,
+      passwordHash: hashPassword("named-owner-password-1"),
+    }).returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: owner!.id, companyId: company!.id, companySlug: "admin", role: "owner",
+    });
+    const namedSid = await createPlatformSession("admin", null, owner!.id, company!.id);
+    expect((await api("/api/platform/team", { sid: legacyAdminSid })).status).toBe(401);
+    expect((await api(`/api/platform/team/members/${natalie.id}`, {
+      method: "PATCH", sid: legacyAdminSid, body: { role: "owner" },
+    })).status).toBe(401);
+    const team = await api("/api/platform/team", { sid: namedSid });
     expect(team.status).toBe(200);
     expect(team.json.canPromoteOwners).toBe(true);
     const promoted = await api(`/api/platform/team/members/${natalie.id}`, {
       method: "PATCH",
-      sid: legacyAdminSid,
+      sid: namedSid,
       body: { role: "owner" },
     });
     expect(promoted.status).toBe(200);
@@ -732,14 +765,17 @@ describe("master workspace owner promotion", () => {
     const natalie = await addMember(company!, "natalie-other-admin@test.test");
 
     const team = await api("/api/platform/team", { sid: legacySid });
-    expect(team.status).toBe(200);
-    expect(team.json.canPromoteOwners).toBe(false);
+    expect(team.status).toBe(401);
     const promoted = await api(`/api/platform/team/members/${natalie.id}`, {
       method: "PATCH",
       sid: legacySid,
       body: { role: "owner" },
     });
-    expect(promoted.status).toBe(403);
+    expect(promoted.status).toBe(401);
+    const [unchanged] = await db.select().from(platformMembershipsTable).where(
+      and(eq(platformMembershipsTable.userId, natalie.id), eq(platformMembershipsTable.companyId, company!.id)),
+    );
+    expect(unchanged?.role).toBe("viewer");
   });
 });
 
@@ -942,12 +978,14 @@ describe("canonical Master Owner management", () => {
     const master = await seedMaster("admin", "owner@legacy-manage.test");
     const legacySid = await createPlatformSession("admin", null, null, null);
     const team = await api("/api/platform/team", { sid: legacySid });
-    expect(team.json.canPromoteOwners).toBe(true);
-    expect(team.json.canManageOwners).toBe(false);
+    expect(team.status).toBe(401);
+    expect(team.json.canPromoteOwners).toBeUndefined();
+    expect(team.json.canManageOwners).toBeUndefined();
     expect((await api(`/api/platform/team/members/${master.user.id}`, {
       sid: legacySid, method: "PATCH", body: { role: "admin" },
-    })).status).toBe(403);
-    expect((await api(`/api/platform/team/members/${master.user.id}/remove`, { sid: legacySid, method: "POST" })).status).toBe(403);
+    })).status).toBe(401);
+    expect((await api(`/api/platform/team/members/${master.user.id}/remove`, { sid: legacySid, method: "POST" })).status).toBe(401);
+    expect((await membership(master.company.id, master.user.id))?.role).toBe("owner");
   });
 
   it("keeps an Owner's access unrestricted on project-only edits", async () => {
@@ -2054,28 +2092,18 @@ describe("GET /platform/me - accountProfile carries displayName and website", ()
       passwordHash: hashPassword("pw-legacy-1"),
       role: "client",
       status: "active",
-      email: "owner@legacy-brand.test",
+      email: null,
       website: "https://legacy-brand.example",
     });
-    const [legacyCompany] = await db
+    await db
       .insert(platformCompaniesTable)
-      .values({ slug: "legacy-brand", role: "client", status: "active", setupComplete: true })
-      .returning();
-    const [legacyUser] = await db
-      .insert(platformUsersTable)
-      .values({ email: "owner@legacy-brand.test", passwordHash: hashPassword("pw-legacy-1"), emailVerified: true })
-      .returning();
-    await db.insert(platformMembershipsTable).values({
-      userId: legacyUser!.id,
-      companyId: legacyCompany!.id,
-      companySlug: "legacy-brand",
-      role: "owner",
-    });
-    // Legacy session: no userId or activeCompanyId in session record.
+      .values({ slug: "legacy-brand", role: "client", status: "active", setupComplete: true });
+    // Genuinely isolated legacy-only account: no email or named memberships.
     const sid = await createPlatformSession("legacy-brand", null, null, null);
 
     const me = await api("/api/platform/me", { sid });
     expect(me.status).toBe(200);
+    expect(me.json.account?.username).toBe("legacy-brand");
     expect(me.json.accountProfile.website).toBe("https://legacy-brand.example");
   });
 
@@ -2224,7 +2252,7 @@ describe("cross-member session isolation", () => {
 });
 
 describe("cross-member session isolation: legacy userId-less sessions", () => {
-  it("a legacy owner session never sees or revokes userId-backed member sessions", async () => {
+  it("rejects mixed-workspace legacy sessions without disclosing or revoking named member sessions", async () => {
     const { sid: ownerSid } = await seedAgency("legacy-iso-agency", "owner@legacy-iso.test");
 
     // Invite a viewer (userId-backed session).
@@ -2235,14 +2263,13 @@ describe("cross-member session isolation: legacy userId-less sessions", () => {
     expect(viewerSid).toBeTruthy();
 
     // Legacy session for the same workspace: no userId on the session row.
+    await db.update(platformAccountsTable).set({ email: null }).where(eq(platformAccountsTable.username, "legacy-iso-agency"));
     const legacySid = await createPlatformSession("legacy-iso-agency", null, null, null);
 
     // Legacy session list must not disclose any userId-backed sessions.
     const lList = await api("/api/platform/sessions", { sid: legacySid });
-    expect(lList.status).toBe(200);
-    expect(lList.json.sessions.every((s: any) => s.userId === null)).toBe(true);
-    expect(lList.json.sessions.some((s: any) => s.userEmail === "viewer@legacy-iso.test")).toBe(false);
-    expect(lList.json.sessions.some((s: any) => s.userEmail === "owner@legacy-iso.test")).toBe(false);
+    expect(lList.status).toBe(401);
+    expect(lList.json.sessions).toBeUndefined();
 
     // Legacy session cannot revoke the viewer's userId-backed session.
     const viewerMasked = "*".repeat(viewerSid!.length - 8) + viewerSid!.slice(-8);
@@ -2250,8 +2277,13 @@ describe("cross-member session isolation: legacy userId-less sessions", () => {
       sid: legacySid,
       method: "DELETE",
     });
-    expect([403, 404]).toContain(revoke.status);
-    expect((await api("/api/platform/me", { sid: viewerSid })).status).toBe(200);
+    expect(revoke.status).toBe(401);
+    const viewerMe = await api("/api/platform/me", { sid: viewerSid });
+    expect(viewerMe.status).toBe(200);
+    expect(viewerMe.json.account?.username).toBe("legacy-iso-agency");
+    const ownerMe = await api("/api/platform/me", { sid: ownerSid });
+    expect(ownerMe.status).toBe(200);
+    expect(ownerMe.json.account?.username).toBe("legacy-iso-agency");
 
     // And the viewer cannot see or revoke the legacy (userId-less) session.
     const vList = await api("/api/platform/sessions", { sid: viewerSid });
@@ -2262,7 +2294,9 @@ describe("cross-member session isolation: legacy userId-less sessions", () => {
       method: "DELETE",
     });
     expect([403, 404]).toContain(revoke2.status);
-    expect((await api("/api/platform/me", { sid: legacySid })).status).toBe(200);
+    const legacyMe = await api("/api/platform/me", { sid: legacySid });
+    expect(legacyMe.status).toBe(200);
+    expect(legacyMe.json.account).toBeNull();
   });
 });
 

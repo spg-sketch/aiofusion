@@ -1,20 +1,20 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
-  TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
+  TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot,
   MessagesSquare, Download, AlertTriangle, CheckCircle2, XCircle, Info, Globe, Tag, User, ChevronDown,
   Plus, Minus, MessageSquare, BookOpen, Scroll, Award, Radio, Mic2, PenLine, ClipboardList, ArrowUpRight,
   Lightbulb, ClipboardPaste, Upload, Calendar, Check, Save, Circle, Zap, Mail, Shield, Eye, Building2,
   ArrowLeft, LogOut, Trash2, KeyRound, Users, Activity, Play, ChevronUp, Menu, X, LogIn,
   Link as LinkIcon, Image as ImageIcon, Repeat, TrendingDown, FolderOpen, List as ListIcon, Clock,
-  Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone, MoreVertical, ShieldOff,
+  Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone, MoreVertical,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { TokenUsageSection } from "./TokenUsageSection";
 import { BetaParticipantsSection } from "./BetaParticipantsSection";
 import { UsersAdminDemoSection } from "./UsersAdminDemoSection";
 
-import { type Session as LocalSession, type SessionInfo, type User as LocalUser, type Role as LocalRole, type PendingAccount, getUsers as getLocalUsers, serverAddUser, serverDeleteUser, serverChangePassword, serverResetMfa, serverResetStagingTestAccount, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverChangeRole, serverSetSeatCap, serverGetAccountSessions, serverRevokeSession, serverImpersonate, serverGetPendingAccounts, serverApproveAccount, serverRejectAccount, refreshAccountsCache, canCreateSubAccounts, serverSetMasterOwner, serverGetMasterOwners } from "../lib/auth";
+import { type Session as LocalSession, type SessionInfo, type User as LocalUser, type Role as LocalRole, type PendingAccount, getUsers as getLocalUsers, serverAddUser, serverDeleteUser, serverChangePassword, serverResetStagingTestAccount, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverChangeRole, serverSetSeatCap, serverGetAccountSessions, serverRevokeSession, serverImpersonate, serverGetPendingAccounts, serverApproveAccount, serverRejectAccount, refreshAccountsCache, canCreateSubAccounts, serverSetMasterOwner, serverGetMasterOwners } from "../lib/auth";
 import { roleLabel, accountLabel } from "../lib/accountLabels";
 import { loadStoredProjects } from "../lib/projectStore";
 import { apiBase } from "../lib/contentAi";
@@ -258,63 +258,8 @@ export function UsersAdminPage({
     return out;
   }, [users, knownUsernames]);
 
-  // ── 2FA filter + active/archived section split ────────────────────────────
-  const [only2FAOff, setOnly2FAOff] = useState(false);
+  // Workspace lists deliberately do not infer personal MFA from workspace metadata.
   const [accountSearch, setAccountSearch] = useState("");
-
-  // Two section-scoped mfa filter sets - propagation never crosses the
-  // archived/active boundary, so an archived parent is not surfaced because
-  // of an active descendant that won't actually be rendered under it.
-  //
-  // mfaFilterPassingActive: non-archived accounts that pass (no mfaEnabled)
-  //   or have a non-archived descendant that passes.
-  const mfaFilterPassingActive = useMemo<Set<string> | null>(() => {
-    if (!only2FAOff) return null;
-    const passing = new Set<string>();
-    for (const u of users) {
-      if (!u.archived && !u.mfaEnabled) passing.add(u.username.toLowerCase());
-    }
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const u of users) {
-        if (u.archived) continue;
-        const key = u.username.toLowerCase();
-        if (passing.has(key)) continue;
-        const kids = childrenByParent.get(key) ?? [];
-        if (kids.some((c) => !c.archived && passing.has(c.username.toLowerCase()))) {
-          passing.add(key);
-          changed = true;
-        }
-      }
-    }
-    return passing;
-  }, [only2FAOff, users, childrenByParent]);
-
-  // mfaFilterPassingArchived: archived accounts that pass or have an archived
-  //   descendant that passes.
-  const mfaFilterPassingArchived = useMemo<Set<string> | null>(() => {
-    if (!only2FAOff) return null;
-    const passing = new Set<string>();
-    for (const u of users) {
-      if (u.archived && !u.mfaEnabled) passing.add(u.username.toLowerCase());
-    }
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const u of users) {
-        if (!u.archived) continue;
-        const key = u.username.toLowerCase();
-        if (passing.has(key)) continue;
-        const kids = childrenByParent.get(key) ?? [];
-        if (kids.some((c) => c.archived && passing.has(c.username.toLowerCase()))) {
-          passing.add(key);
-          changed = true;
-        }
-      }
-    }
-    return passing;
-  }, [only2FAOff, users, childrenByParent]);
 
   // Active section roots: non-archived top-level users PLUS non-archived users
   // whose direct parent is archived (they'd otherwise be invisible - the
@@ -347,18 +292,8 @@ export function UsersAdminPage({
     return [...topArchived, ...orphans.filter((u) => !seen.has(u.username.toLowerCase()))];
   }, [topLevelUsers, users, knownUsernames]);
 
-  const visibleActiveTopLevel = useMemo(
-    () => (mfaFilterPassingActive !== null
-      ? activeTopLevel.filter((u) => mfaFilterPassingActive.has(u.username.toLowerCase()))
-      : activeTopLevel),
-    [activeTopLevel, mfaFilterPassingActive],
-  );
-  const visibleArchivedTopLevel = useMemo(
-    () => (mfaFilterPassingArchived !== null
-      ? archivedTopLevel.filter((u) => mfaFilterPassingArchived.has(u.username.toLowerCase()))
-      : archivedTopLevel),
-    [archivedTopLevel, mfaFilterPassingArchived],
-  );
+  const visibleActiveTopLevel = activeTopLevel;
+  const visibleArchivedTopLevel = archivedTopLevel;
 
   // Which accounts have their sub-account tree collapsed. Starts empty (every
   // account expanded), since admins usually need to see the whole hierarchy.
@@ -986,24 +921,6 @@ export function UsersAdminPage({
     })();
   };
 
-  // Clear a locked-out user's two-factor setup so they can sign in with just
-  // their password and re-enrol. Destructive for their MFA state, so confirm.
-  const handleResetMfa = (username: string) => {
-    if (!confirm(`Reset two-factor login for '${username}'? They will be able to sign in with just their password and will need to set up two-factor again.`)) return;
-    void (async () => {
-      const result = await serverResetMfa(username);
-      if (!result.ok) {
-        alert(result.error);
-        return;
-      }
-      alert(`Two-factor login has been reset for '${username}'.`);
-      // Re-pull accounts from the server so the "2FA on" badge and the
-      // reset menu item disappear immediately rather than on next page load.
-      await refreshAccountsCache();
-      refresh();
-    })();
-  };
-
   const handleResetStagingTestAccount = (username: string) => {
     if (!confirm(
       `Reset '${username}' to a brand-new account?\n\nThis permanently removes its projects, onboarding, billing, media and workspace data, and signs it out everywhere. Its email and password are preserved. This action only works on staging.`,
@@ -1088,12 +1005,9 @@ export function UsersAdminPage({
     const isMasterOwner = masterOwnerSet.has(u.username.toLowerCase());
     const isTogglingMasterOwner = masterOwnerTogglingFor === u.username;
     const hasDisplayName = !!(u.displayName && u.displayName.trim());
-    // Filter children: only those whose own archived status matches the current
-    // section, and only those that pass the section-scoped mfa filter.
-    const sectionFilter = sectionIsArchived ? mfaFilterPassingArchived : mfaFilterPassingActive;
+    // Filter children by the current active/archived section.
     const children = (childrenByParent.get(u.username.toLowerCase()) ?? []).filter((c) => {
       if (!!c.archived !== sectionIsArchived) return false;
-      if (sectionFilter !== null && !sectionFilter.has(c.username.toLowerCase())) return false;
       return true;
     });
     const hasChildren = children.length > 0;
@@ -1135,15 +1049,6 @@ export function UsersAdminPage({
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: u.role === "admin" ? ink : accentSoft, color: u.role === "admin" ? paper : accent }}>
                     {roleLabel(u.role)}
                   </span>
-                  {u.mfaEnabled && (
-                    <span
-                      title="Two-factor login is enabled on this account"
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]"
-                      style={{ background: "#e6f4ea", color: "#1e7e46" }}
-                    >
-                      <ShieldCheck size={10} /> 2FA on
-                    </span>
-                  )}
                   <span className="aio-type-meta truncate" style={{ color: vars.g500 }}>
                     {[
                       hasDisplayName ? u.username : null,
@@ -1224,16 +1129,6 @@ export function UsersAdminPage({
                     >
                       <KeyRound size={13} /> Reset password
                     </button>
-                    {!isMe && u.mfaEnabled && (
-                      <button
-                        onClick={() => { setManageMenuUser(null); handleResetMfa(u.username); }}
-                        title="Clear this account's two-factor login so they can sign in with just their password"
-                        className="aio-type-supporting w-full flex items-center gap-2.5 px-3.5 py-2 text-left hover:bg-black/5"
-                        style={{ color: ink }}
-                      >
-                        <ShieldOff size={13} /> Reset two-factor
-                      </button>
-                    )}
                     {!isMe && (
                       <button
                         onClick={() => { setManageMenuUser(null); setRoleUser(u.username); setRoleValue((u.role as LocalRole) || "agency"); setRoleError(null); }}
@@ -1704,18 +1599,9 @@ export function UsersAdminPage({
           style={{ borderColor: vars.g200, ["--tw-ring-color" as string]: accent }}
         />
       </label>
-      <button
-        type="button"
-        onClick={() => setOnly2FAOff((value) => !value)}
-         className="aio-button aio-button--compact rounded-xl"
-        style={{
-          borderColor: only2FAOff ? accent : vars.g200,
-          background: only2FAOff ? accentSoft : "white",
-          color: only2FAOff ? accent : vars.g600,
-        }}
-      >
-        {only2FAOff ? "Without 2FA (on)" : "Only without 2FA"}
-      </button>
+      <p className="aio-type-supporting self-center" style={{ color: vars.g600 }}>
+        Two-factor authentication belongs to each person. Manage individual status and verified recovery in Team members.
+      </p>
     </div>
   );
 

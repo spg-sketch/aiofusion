@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { logger } from "../lib/logger";
+import { finishPersonalLogin, personalMfaPolicy, type LoginIdentity } from "../lib/login-mfa";
 import {
   getDeployedAppOrigin,
   isStagingDeployment,
@@ -123,6 +124,16 @@ import {
   revokeTrustedDevice,
   clearTrustedDevices,
   verifyTrustedDeviceToken,
+  mfaSubject,
+  getMfaGeneration,
+  validateMfaIdentity,
+  personalMfaMigrationRequired,
+  validateMfaPendingToken,
+  consumeMfaPending,
+  beginMfaEnrollment,
+  replaceMfaState,
+  hasMfaSession,
+  recordMfaSession,
 } from "../lib/mfa";
 import { lockoutRemainingMs, recordLoginFailure, clearLoginFailures, lockoutMessage } from "../lib/login-lockout";
 import { loginLimiter } from "../middleware/rate-limit";
@@ -509,18 +520,16 @@ async function provisionAioFusionStaffMembership(opts: {
     throw new Error("The Master workspace is unavailable.");
   }
 
-  const userId = await ensurePlatformUser({
-    email: opts.email,
-    name: opts.name,
-    googleId: opts.googleId ?? null,
-    companyUsername: masterAccount.username,
-    companyRole: "admin",
-    companyStatus: "active",
-    // New AIO Fusion staff start in the restricted Master support tier. An
-    // existing higher-privilege membership is preserved by the idempotent
-    // membership insert.
-    membershipRole: "viewer",
-  });
+  // A domain is not an access grant. Only the retained, explicitly authorized
+  // roster may sign in; OAuth must never reinsert a revoked staff membership.
+  const user = await getUserByEmail(opts.email);
+  if (!user) throw new Error("Your personal Master access has not been approved.");
+  const [membership] = await db.select().from(platformMembershipsTable).where(and(
+    eq(platformMembershipsTable.userId, user.id), eq(platformMembershipsTable.companySlug, DEFAULT_ADMIN_USERNAME),
+  )).limit(1);
+  if (!membership) throw new Error("Your personal Master access has not been approved.");
+  const userId = user.id;
+  if (opts.googleId) await linkGoogleId(userId, opts.googleId);
   if (opts.microsoftId) await linkMicrosoftId(userId, opts.microsoftId);
   await db
     .update(platformUsersTable)
@@ -533,13 +542,13 @@ async function provisionAioFusionStaffMembership(opts: {
   // The human identity alone never authorizes Master sign-in or an MFA token.
   // Check the actual membership, not just its revocation marker: an explicit
   // later invitation may legitimately have restored access.
-  const [membership] = await db.select({ userId: platformMembershipsTable.userId })
+  const [currentMembership] = await db.select({ userId: platformMembershipsTable.userId })
     .from(platformMembershipsTable)
     .where(and(
       eq(platformMembershipsTable.userId, userId),
       eq(platformMembershipsTable.companyId, masterCompany.id),
     )).limit(1);
-  if (!membership) return null;
+  if (!currentMembership) return null;
 
   return {
     username: masterAccount.username,
@@ -971,33 +980,6 @@ router.get("/platform/status", async (_req: Request, res: Response) => {
 // /platform/mfa/verify (or /enable, during enrolment) endpoint exchanges it for
 // a real session once the code checks out.
 
-interface LoginIdentity {
-  username: string;
-  role: string;
-  userId?: string;
-  activeCompanyId?: string;
-  needsSetup: boolean;
-}
-
-// MFA is still stored against a workspace for backward compatibility, so only
-// the workspace owner may use that enrolment. Team members must never inherit
-// another person's authenticator merely because they share the same workspace.
-// Legacy userless accounts retain the original behaviour.
-async function workspaceMfaAppliesToIdentity(identity: LoginIdentity): Promise<boolean> {
-  if (!identity.userId) return true;
-  const [membership] = await db
-    .select({ role: platformMembershipsTable.role })
-    .from(platformMembershipsTable)
-    .where(
-      and(
-        eq(platformMembershipsTable.userId, identity.userId),
-        eq(platformMembershipsTable.companySlug, normUsername(identity.username)),
-      ),
-    )
-    .limit(1);
-  return normalizeMembershipRole(membership?.role) === "owner";
-}
-
 // Decide whether to issue a session immediately or return an MFA challenge.
 async function finishLoginOrChallenge(
   res: Response,
@@ -1005,6 +987,7 @@ async function finishLoginOrChallenge(
   rawIp: string | undefined,
   trustedDeviceCookie?: string,
 ): Promise<void> {
+  res.setHeader("Cache-Control", "no-store");
   // Managed (access-disabled) and agency/partner client accounts cannot be
   // signed into at all - the agency works on the client's behalf via "View
   // account" instead.
@@ -1015,77 +998,16 @@ async function finishLoginOrChallenge(
     });
     return;
   }
-  const workspaceMfaApplies = await workspaceMfaAppliesToIdentity(identity);
-  const isMaster = normalizeRole(identity.role) === "admin" && workspaceMfaApplies;
-  let mfa: Awaited<ReturnType<typeof getMfaState>> = null;
-  if (workspaceMfaApplies) {
-    try {
-      mfa = await getMfaState(identity.username);
-    } catch { /* non-fatal: fall through to challenge rules below */ }
-  }
-
-  if (mfa?.enabled) {
-    // "Remember this device": a validly signed, unrevoked trusted-device cookie
-    // lets this browser skip the code until it expires or is revoked.
-    if (await isTrustedDevice(identity.username, trustedDeviceCookie)) {
-      const sid = await createSignedInSession(
-        identity.username,
-        rawIp,
-        identity.userId,
-        identity.activeCompanyId,
-      );
-      setPlatformCookie(res, sid);
-      res.json({
-        account: { username: identity.username, role: identity.role },
-        ...(identity.needsSetup ? { needsSetup: true } : {}),
-      });
-      return;
-    }
-    const mfaToken = createMfaPendingToken({
-      u: identity.username,
-      uid: identity.userId,
-      cid: identity.activeCompanyId,
-      role: identity.role,
-      needsSetup: identity.needsSetup || undefined,
-      mode: "verify",
-    });
-    res.json({ mfaRequired: true, mfaToken });
-    return;
-  }
-
-  if (isMaster) {
-    // Mandatory enrolment: no session until a TOTP secret is confirmed.
-    const mfaToken = createMfaPendingToken({
-      u: identity.username,
-      uid: identity.userId,
-      cid: identity.activeCompanyId,
-      role: identity.role,
-      needsSetup: identity.needsSetup || undefined,
-      mode: "enroll",
-    });
-    res.json({ mfaEnrollRequired: true, mfaToken });
-    return;
-  }
-
-  const sid = await createSignedInSession(
-    identity.username,
-    rawIp,
-    identity.userId,
-    identity.activeCompanyId,
-  );
-  setPlatformCookie(res, sid);
-  res.json({
-    account: { username: identity.username, role: identity.role },
-    ...(identity.needsSetup ? { needsSetup: true } : {}),
-  });
+  await finishPersonalLogin(res, identity, rawIp, trustedDeviceCookie);
 }
 
 // Issue the real session after a successful MFA code check during login.
 async function completeMfaLogin(
   res: Response,
-  payload: { u: string; uid?: string; cid?: string; role: string; needsSetup?: boolean },
+  payload: NonNullable<ReturnType<typeof verifyMfaPendingToken>>,
   rawIp: string | undefined,
   extra?: Record<string, unknown>,
+  onAuthenticated?: () => Promise<void>,
 ): Promise<void> {
   // Access may have been revoked between the password check and the MFA code.
   const agencyPartnerClient = await isAgencyPartnerClient(payload.u);
@@ -1095,17 +1017,23 @@ async function completeMfaLogin(
     });
     return;
   }
+  const policy = await personalMfaPolicy({ username: payload.u, userId: payload.uid, activeCompanyId: payload.cid });
+  if (policy.generation !== payload.g || policy.migrationRequired || !await consumeMfaPending(payload)) {
+    res.status(401).json({ error: "Your sign-in session expired. Please sign in again." });
+    return;
+  }
   // The MFA token is only a transport hint. Recompute eligibility after the
   // code so a role/workspace change during MFA cannot open the setup gate.
   const needsSetup = await isEligibleForOnboarding({
     username: payload.u, role: payload.role, userId: payload.uid,
   });
   // Full authentication complete: clear the MFA-stage lockout counter.
-  try { await clearLoginFailures("mfa:" + payload.u); } catch { /* non-fatal */ }
-  const sid = await createSignedInSession(payload.u, rawIp, payload.uid, payload.cid);
+  await clearLoginFailures("mfa:" + policy.subject);
+  const sid = await createSignedInSession(payload.u, rawIp, payload.uid, payload.cid, payload.g);
+  if (onAuthenticated) await onAuthenticated();
   setPlatformCookie(res, sid);
   res.json({
-    account: { username: payload.u, role: payload.role },
+    account: { username: payload.u, role: policy.role },
     ...(needsSetup ? { needsSetup: true } : {}),
     ...(extra ?? {}),
   });
@@ -1129,6 +1057,7 @@ async function finishOauthLoginOrChallenge(
   origin: string,
   identity: LoginIdentity,
 ): Promise<void> {
+  res.setHeader("Cache-Control", "no-store");
   // Managed (access-disabled) and agency/partner client accounts cannot be
   // signed into via SSO either - use the managed redirect so the frontend
   // shows a clear error.
@@ -1136,21 +1065,20 @@ async function finishOauthLoginOrChallenge(
     res.redirect(`${origin}/?oauth_status=managed`);
     return;
   }
-  const workspaceMfaApplies = await workspaceMfaAppliesToIdentity(identity);
-  const isMaster = normalizeRole(identity.role) === "admin" && workspaceMfaApplies;
-  let mfa: Awaited<ReturnType<typeof getMfaState>> = null;
-  if (workspaceMfaApplies) {
-    try {
-      mfa = await getMfaState(identity.username);
-    } catch { /* non-fatal: fall through to challenge rules below */ }
+  const policy = await personalMfaPolicy(identity);
+  if (policy.migrationRequired) {
+    res.redirect(`${origin}/?oauth_status=mfa_recovery_required`);
+    return;
   }
+  const isMaster = policy.required;
+  const mfa = await getMfaState(policy.subject);
 
   if (mfa?.enabled || isMaster) {
     const mode: "enroll" | "verify" = mfa?.enabled ? "verify" : "enroll";
     // Trusted device: skip the code for verify-mode challenges only (mandatory
     // enrolment can never be skipped).
     if (mode === "verify" && await isTrustedDevice(
-      identity.username,
+      policy.subject,
       (req.cookies as Record<string, string> | undefined)?.[TRUSTED_DEVICE_COOKIE],
     )) {
       const sid = await createSignedInSession(
@@ -1158,6 +1086,7 @@ async function finishOauthLoginOrChallenge(
         req.ip,
         identity.userId,
         identity.activeCompanyId,
+        policy.generation,
       );
       setPlatformCookie(res, sid);
       res.redirect(`${origin}/?oauth_status=ok${identity.needsSetup ? "&needs_setup=true" : ""}`);
@@ -1170,6 +1099,7 @@ async function finishOauthLoginOrChallenge(
       role: identity.role,
       needsSetup: identity.needsSetup || undefined,
       mode,
+      g: policy.generation,
     });
     res.cookie(OAUTH_MFA_TOKEN_COOKIE, mfaToken, {
       httpOnly: false, // frontend must read it once, then clear it
@@ -1231,7 +1161,9 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
     // Progressive lockout: after 5 failed attempts the identifier is locked
     // for a doubling delay. Checked before any credential work; the message
     // never reveals whether the account exists.
-    const lockedMs = await lockoutRemainingMs(identifier);
+    const loginUser = identifier.includes("@") ? await getUserByEmail(identifier) : null;
+    const loginKey = loginUser ? mfaSubject({ userId: loginUser.id, username: identifier }) : `legacy-login:${normUsername(identifier)}`;
+    const lockedMs = await lockoutRemainingMs(loginKey);
     if (lockedMs > 0) {
       res.setHeader("Retry-After", Math.ceil(lockedMs / 1000));
       res.status(429).json({ error: lockoutMessage(lockedMs) });
@@ -1248,6 +1180,10 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
     const newUser = isEmail
       ? await getUserByEmail(identifier)
       : await getUserByCompanySlug(identifier);
+    if (!isEmail && newUser) {
+      res.status(400).json({ error: "Sign in with your personal email address, not the workspace name." });
+      return;
+    }
     if (newUser && newUser.passwordHash && verifyPassword(password, newUser.passwordHash)) {
       // NULL remains the legacy/SSO value. Only an explicit false from the
       // password-signup flow blocks authentication.
@@ -1286,11 +1222,12 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
         const loginNeedsSetup = await isEligibleForOnboarding({
           username: acct.username, role: acct.role, userId: newUser.id, membershipRole: membership?.role,
         });
-        await clearLoginFailures(identifier);
+        await clearLoginFailures(loginKey);
         await finishLoginOrChallenge(res, {
           username: acct.username,
           role: acct.role,
           userId: newUser.id,
+          securityGeneration: newUser.sessionVersion,
           activeCompanyId,
           needsSetup: loginNeedsSetup,
         }, rawIp ?? undefined, (req.cookies as Record<string, string> | undefined)?.[TRUSTED_DEVICE_COOKIE]);
@@ -1299,12 +1236,21 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
     }
 
     // --- Legacy fallback: platform_accounts ----------------------------------
+    if (newUser) {
+      await recordLoginFailure(loginKey);
+      res.status(401).json({ error: "Incorrect username or password." });
+      return;
+    }
     // Covers accounts not yet backfilled into platform_users (e.g. username-only
     // accounts without an email address set).
     const account = await getAccountByIdentifier(identifier);
     if (!account || !verifyPassword(password, account.passwordHash)) {
-      await recordLoginFailure(identifier);
+      await recordLoginFailure(loginKey);
       res.status(401).json({ error: "Incorrect username or password." });
+      return;
+    }
+    if (account.username === DEFAULT_ADMIN_USERNAME) {
+      res.status(403).json({ error: "This legacy sign-in requires verified personal account recovery." });
       return;
     }
     // A legacy account may have been backfilled into platform_users after the
@@ -1339,36 +1285,15 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
       res.status(403).json({ error: AGENCY_PARTNER_CLIENT_MESSAGE });
       return;
     }
-    // Ensure a platform_users row exists and is linked to this account, then
-    // store the userId in the session so downstream can identify the human user.
-    let userId: string | undefined;
-    let activeCompanyId: string | undefined;
-    if (account.email) {
-      try {
-        userId = await ensurePlatformUser({
-          email: account.email,
-          passwordHash: account.passwordHash,
-          companyUsername: account.username,
-          membershipRole: account.role === "admin" ? "admin" : "owner",
-          companyRole: account.role,
-          companyStatus: account.status,
-        });
-        // Resolve the company UUID so the session carries the active workspace id.
-        const company = await getCompanyBySlug(account.username);
-        activeCompanyId = company?.id;
-      } catch {
-        // Non-fatal: session still works, userId/activeCompanyId just won't be set.
-      }
-    }
+    // Keep genuine userless credentials isolated. The personal policy rejects
+    // named rosters/retained identities; login never creates a membership here.
     const legacyNeedsSetup = await isEligibleForOnboarding({
-      username: account.username, role: account.role, userId, membershipRole: account.role === "admin" ? "admin" : "owner",
+      username: account.username, role: account.role, membershipRole: "owner",
     });
-    await clearLoginFailures(identifier);
+    await clearLoginFailures(loginKey);
     await finishLoginOrChallenge(res, {
       username: account.username,
       role: account.role,
-      userId,
-      activeCompanyId,
       needsSetup: legacyNeedsSetup,
     }, rawIp ?? undefined, (req.cookies as Record<string, string> | undefined)?.[TRUSTED_DEVICE_COOKIE]);
   } catch {
@@ -1377,6 +1302,47 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
 });
 
 // --- MFA endpoints ------------------------------------------------------------
+router.use("/platform/mfa", async (req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    if (await isImpersonatedRequest(req)) {
+      res.status(403).json({ error: IMPERSONATION_BLOCKED_MESSAGE });
+      return;
+    }
+    if (req.account && !req.body?.mfaToken) {
+      const policy = await personalMfaPolicy(req.account);
+      if (policy.migrationRequired) {
+        res.status(403).json({ error: "Verified individual recovery is required.", code: "MFA_MIGRATION_REQUIRED" });
+        return;
+      }
+    }
+    next();
+  } catch {
+    res.status(401).json({ error: "Your security session is unavailable. Please sign in again." });
+  }
+});
+
+async function verifiedMfaRecipient(userId?: string) {
+  if (!userId) return null;
+  const [user] = await db.select({ email: platformUsersTable.email, name: platformUsersTable.name })
+    .from(platformUsersTable).where(and(eq(platformUsersTable.id, userId), eq(platformUsersTable.emailVerified, true))).limit(1);
+  return user?.email ? { toEmail: user.email, toName: user.name || user.email } : null;
+}
+
+async function notifyPersonalMfa(userId: string | undefined, enabled: boolean) {
+  try {
+    const recipient = await verifiedMfaRecipient(userId);
+    if (recipient) await sendMfaChangedEmail({ ...recipient, enabled });
+  } catch (err) { logger.warn({ err, userId }, "Personal MFA security notification failed"); }
+}
+
+async function checkPersonalMfaLockout(res: Response, subject: string): Promise<boolean> {
+  const remaining = await lockoutRemainingMs(`mfa:${subject}`);
+  if (!remaining) return false;
+  res.setHeader("Retry-After", Math.ceil(remaining / 1000));
+  res.status(429).json({ error: lockoutMessage(remaining) });
+  return true;
+}
 
 // Begin (or restart) TOTP enrolment. Accepts EITHER a pending login token in
 // `mfaToken` (mandatory enrolment for masters during login) OR an authenticated
@@ -1385,16 +1351,21 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
 router.post("/platform/mfa/setup", loginLimiter, async (req: Request, res: Response) => {
   try {
     let username: string | null = null;
+    let userId: string | undefined;
+    let generation: number | undefined;
     const token = typeof req.body?.mfaToken === "string" ? req.body.mfaToken : "";
     if (token) {
-      const payload = verifyMfaPendingToken(token);
+      const payload = await validateMfaPendingToken(token);
       if (!payload || payload.mode !== "enroll") {
         res.status(401).json({ error: "Your sign-in session expired. Please sign in again." });
         return;
       }
       username = payload.u;
+      userId = payload.uid;
+      generation = payload.g;
     } else if (req.account) {
       username = req.account.username;
+      userId = req.account.userId;
     }
     if (!username) {
       res.status(401).json({ error: "Sign in first to set up two-factor authentication." });
@@ -1404,17 +1375,17 @@ router.post("/platform/mfa/setup", loginLimiter, async (req: Request, res: Respo
         res.status(403).json({ error: AGENCY_PARTNER_CLIENT_MESSAGE });
         return;
       }
-    const existing = await getMfaState(username);
+    const subject = mfaSubject({ username, userId });
+    const existing = await getMfaState(subject);
     if (existing?.enabled) {
       res.status(409).json({ error: "Two-factor authentication is already enabled on this account." });
       return;
     }
-    const secret = generateTotpSecret();
-    await saveMfaState(username, { secret, enabled: false, recoveryHashes: [] });
-    const acc = await getAccount(normUsername(username));
-    const label = acc?.email || username;
+    const { secret } = await beginMfaEnrollment(subject, generation ?? await getMfaGeneration(subject));
+    const recipient = await verifiedMfaRecipient(userId);
+    const label = recipient?.toEmail || subject;
     res.setHeader("Cache-Control", "no-store");
-    res.json({ secret, otpauthUrl: buildOtpauthUrl(secret, label) });
+    res.json({ secret, otpauthUrl: buildOtpauthUrl(secret, label), email: recipient?.toEmail });
   } catch {
     res.status(500).json({ error: "Could not start two-factor setup" });
   }
@@ -1432,22 +1403,27 @@ router.post("/platform/mfa/enable", loginLimiter, async (req: Request, res: Resp
     const code = typeof req.body?.code === "string" ? req.body.code : "";
     const token = typeof req.body?.mfaToken === "string" ? req.body.mfaToken : "";
     let username: string | null = null;
+    let userId: string | undefined;
     let pending: ReturnType<typeof verifyMfaPendingToken> = null;
     if (token) {
-      pending = verifyMfaPendingToken(token);
+      pending = await validateMfaPendingToken(token);
       if (!pending || pending.mode !== "enroll") {
         res.status(401).json({ error: "Your sign-in session expired. Please sign in again." });
         return;
       }
       username = pending.u;
+      userId = pending.uid;
     } else if (req.account) {
       username = req.account.username;
+      userId = req.account.userId;
     }
     if (!username) {
       res.status(401).json({ error: "Sign in first to set up two-factor authentication." });
       return;
     }
-    const state = await getMfaState(username);
+    const subject = mfaSubject({ username, userId });
+    const state = await getMfaState(subject);
+    if (await checkPersonalMfaLockout(res, subject)) return;
     if (!state) {
       res.status(400).json({ error: "Two-factor setup has not been started. Scan the QR code first." });
       return;
@@ -1457,41 +1433,29 @@ router.post("/platform/mfa/enable", loginLimiter, async (req: Request, res: Resp
       return;
     }
     if (!verifyTotp(state.secret, code)) {
+      await recordLoginFailure(`mfa:${subject}`);
       res.status(401).json({ error: "That code is not valid. Check your authenticator app and try again." });
       return;
     }
     const recoveryCodes = generateRecoveryCodes();
-    await saveMfaState(username, {
+    const generation = pending?.g ?? await getMfaGeneration(subject);
+    if (!await replaceMfaState(subject, state, {
       secret: state.secret,
       enabled: true,
       recoveryHashes: recoveryCodes.map(hashRecoveryCode),
-    });
-    await logAdminEvent({ username }, "mfa_enabled", username, "account");
-    // Fire-and-forget security alert to the account holder (fail-soft).
-    void (async () => {
-      try {
-        const [ownerRow] = await db
-          .select({ email: platformUsersTable.email, name: platformUsersTable.name })
-          .from(platformMembershipsTable)
-          .innerJoin(platformUsersTable, eq(platformMembershipsTable.userId, platformUsersTable.id))
-          .where(and(
-            eq(platformMembershipsTable.companySlug, normUsername(username)),
-            eq(platformMembershipsTable.role, "owner"),
-          ))
-          .orderBy(platformMembershipsTable.createdAt)
-          .limit(1);
-        const accRow = ownerRow?.email ? null : await getAccount(normUsername(username));
-        const toEmail = ownerRow?.email || accRow?.email;
-        if (!toEmail) return;
-        await sendMfaChangedEmail({ toEmail, toName: ownerRow?.name || username, enabled: true });
-      } catch (err) {
-        logger.warn({ err, username }, "mfa/enable: failed to send security alert (non-fatal)");
-      }
-    })();
+    }, generation)) {
+      res.status(409).json({ error: "Two-factor setup changed. Start again." });
+      return;
+    }
+    await logAdminEvent({ username, id: userId }, "mfa_enabled", userId ?? subject, userId ? "user" : "legacy-account");
+    void notifyPersonalMfa(userId, true);
+    await clearLoginFailures(`mfa:${subject}`);
     if (pending) {
       await completeMfaLogin(res, pending, clientIp(req), { recoveryCodes });
       return;
     }
+    const sid = getPlatformSessionId(req);
+    if (sid) await recordMfaSession(sid, subject, generation);
     res.setHeader("Cache-Control", "no-store");
     res.json({ ok: true, recoveryCodes });
   } catch {
@@ -1508,7 +1472,7 @@ router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Resp
     res.clearCookie(OAUTH_MFA_TOKEN_COOKIE, { path: "/" });
     const token = typeof req.body?.mfaToken === "string" ? req.body.mfaToken : "";
     const code = typeof req.body?.code === "string" ? req.body.code.trim() : "";
-    const pending = verifyMfaPendingToken(token);
+    const pending = await validateMfaPendingToken(token);
     if (!pending || pending.mode !== "verify") {
       res.status(401).json({ error: "Your sign-in session expired. Please sign in again." });
       return;
@@ -1517,16 +1481,16 @@ router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Resp
       res.status(400).json({ error: "Enter the 6-digit code from your authenticator app." });
       return;
     }
-    const mfaLockedMs = await lockoutRemainingMs("mfa:" + pending.u);
+    const subject = mfaSubject({ username: pending.u, userId: pending.uid });
+    const mfaLockedMs = await lockoutRemainingMs("mfa:" + subject);
     if (mfaLockedMs > 0) {
       res.setHeader("Retry-After", Math.ceil(mfaLockedMs / 1000));
       res.status(429).json({ error: lockoutMessage(mfaLockedMs) });
       return;
     }
-    const state = await getMfaState(pending.u);
+    const state = await getMfaState(subject);
     if (!state?.enabled) {
-      // MFA was disabled between password check and this call - let them in.
-      await completeMfaLogin(res, pending, clientIp(req));
+      res.status(401).json({ error: "Two-factor protection changed. Please sign in again." });
       return;
     }
     // "Trust this device for 30 days": on success, register the device and set
@@ -1535,7 +1499,7 @@ router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Resp
       if (req.body?.trustDevice !== true) return;
       try {
         const label = (req.headers["user-agent"] as string | undefined)?.slice(0, 160) || "Unknown device";
-        const { cookieValue, device } = await addTrustedDevice(pending.u, label);
+        const { cookieValue, device } = await addTrustedDevice(subject, label, pending.g);
         res.cookie(TRUSTED_DEVICE_COOKIE, cookieValue, {
           httpOnly: true,
           secure: true,
@@ -1543,33 +1507,17 @@ router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Resp
           path: "/",
           maxAge: TRUSTED_DEVICE_TTL_MS,
         });
-        await logAdminEvent({ username: pending.u }, "mfa_device_trusted", pending.u, "account");
+        await logAdminEvent({ username: pending.u, id: pending.uid }, "mfa_device_trusted", pending.uid ?? subject, pending.uid ? "user" : "legacy-account");
         // Security alert: fire-and-forget, never blocks login.
         // Recipient = earliest OWNER membership email, falling back to the
         // account's canonical email - same rule as reset-mfa alert.
         void (async () => {
           try {
-            const [ownerRow] = await db
-              .select({ email: platformUsersTable.email, name: platformUsersTable.name })
-              .from(platformMembershipsTable)
-              .innerJoin(platformUsersTable, eq(platformMembershipsTable.userId, platformUsersTable.id))
-              .where(and(
-                eq(platformMembershipsTable.companySlug, pending.u),
-                eq(platformMembershipsTable.role, "owner"),
-              ))
-              .orderBy(platformMembershipsTable.createdAt)
-              .limit(1);
-            const [accRow] = await db
-              .select({ email: platformAccountsTable.email })
-              .from(platformAccountsTable)
-              .where(eq(platformAccountsTable.username, pending.u))
-              .limit(1);
-            const toEmail = ownerRow?.email || accRow?.email;
-            if (!toEmail) return;
+            const recipient = await verifiedMfaRecipient(pending.uid);
+            if (!recipient) return;
             const securitySettingsUrl = `${getAppBaseUrl()}/?account_section=security`;
             await sendNewTrustedDeviceEmail({
-              toEmail,
-              toName: ownerRow?.name || pending.u,
+              ...recipient,
               deviceLabel: device.label,
               securitySettingsUrl,
             });
@@ -1580,24 +1528,21 @@ router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Resp
       } catch { /* non-fatal: login still completes without the trusted cookie */ }
     };
     if (verifyTotp(state.secret, code)) {
-      await trustThisDevice();
-      await completeMfaLogin(res, pending, clientIp(req));
+      await completeMfaLogin(res, pending, clientIp(req), undefined, trustThisDevice);
       return;
     }
     // Fall back to recovery codes (single-use).
     const remaining = consumeRecoveryCode(state, code);
-    if (remaining !== null) {
-      await saveMfaState(pending.u, { ...state, recoveryHashes: remaining });
-      await logAdminEvent({ username: pending.u }, "mfa_recovery_code_used", pending.u, "account");
-      await trustThisDevice();
-      await completeMfaLogin(res, pending, clientIp(req), { recoveryCodesRemaining: remaining.length });
+    if (remaining !== null && await replaceMfaState(subject, state, { ...state, recoveryHashes: remaining }, pending.g)) {
+      await logAdminEvent({ username: pending.u, id: pending.uid }, "mfa_recovery_code_used", pending.uid ?? subject, pending.uid ? "user" : "legacy-account");
+      await completeMfaLogin(res, pending, clientIp(req), { recoveryCodesRemaining: remaining.length }, trustThisDevice);
       return;
     }
     // Wrong TOTP + not a recovery code: count towards the progressive lockout
     // for this account so an attacker with a stolen password cannot brute-force
     // the 6-digit code either. Scoped under "mfa:" so a fresh password login
     // (which clears the plain login counter) cannot reset the MFA lockout.
-    await recordLoginFailure("mfa:" + pending.u);
+    await recordLoginFailure("mfa:" + subject);
     res.status(401).json({ error: "That code is not valid. Try again, or use a recovery code." });
   } catch {
     res.status(500).json({ error: "Could not verify the code" });
@@ -1608,11 +1553,13 @@ router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Resp
 router.get("/platform/mfa/status", requirePlatformAuth, async (req: Request, res: Response) => {
   try {
     const account = req.account!;
-    const state = await getMfaState(account.username);
+    const policy = await personalMfaPolicy(account);
+    const state = await getMfaState(policy.subject);
     res.setHeader("Cache-Control", "no-store");
     res.json({
       enabled: state?.enabled === true,
-      required: normalizeRole(account.role) === "admin",
+      required: policy.required,
+      email: policy.email,
       recoveryCodesRemaining: state?.enabled ? state.recoveryHashes.length : 0,
     });
   } catch {
@@ -1622,49 +1569,33 @@ router.get("/platform/mfa/status", requirePlatformAuth, async (req: Request, res
 
 // Turn MFA off. Requires a currently-valid TOTP code, and is refused for master
 // (admin) accounts - MFA is mandatory for them.
-router.post("/platform/mfa/disable", requirePlatformAuth, async (req: Request, res: Response) => {
+router.post("/platform/mfa/disable", requirePlatformAuth, loginLimiter, async (req: Request, res: Response) => {
   try {
     const account = req.account!;
-    if (normalizeRole(account.role) === "admin") {
+    const policy = await personalMfaPolicy(account);
+    if (policy.required) {
       res.status(403).json({ error: "Two-factor authentication is mandatory for master accounts and cannot be disabled." });
       return;
     }
-    const state = await getMfaState(account.username);
+    const state = await getMfaState(policy.subject);
+    if (await checkPersonalMfaLockout(res, policy.subject)) return;
     if (!state?.enabled) {
       res.status(400).json({ error: "Two-factor authentication is not enabled." });
       return;
     }
     const code = typeof req.body?.code === "string" ? req.body.code : "";
     if (!verifyTotp(state.secret, code) && consumeRecoveryCode(state, code) === null) {
+      await recordLoginFailure(`mfa:${policy.subject}`);
       res.status(401).json({ error: "Enter a valid code from your authenticator app to turn this off." });
       return;
     }
-    await clearMfaState(account.username);
-    try { await clearTrustedDevices(account.username); } catch { /* non-fatal */ }
+    if (!await replaceMfaState(policy.subject, state, null, policy.generation)) {
+      res.status(409).json({ error: "Two-factor protection changed. Try again." });
+      return;
+    }
     res.clearCookie(TRUSTED_DEVICE_COOKIE, { path: "/" });
-    await logAdminEvent({ username: account.username }, "mfa_disabled", account.username, "account");
-    // Fire-and-forget security alert to the account holder (fail-soft).
-    void (async () => {
-      try {
-        const slug = normUsername(account.username);
-        const [ownerRow] = await db
-          .select({ email: platformUsersTable.email, name: platformUsersTable.name })
-          .from(platformMembershipsTable)
-          .innerJoin(platformUsersTable, eq(platformMembershipsTable.userId, platformUsersTable.id))
-          .where(and(
-            eq(platformMembershipsTable.companySlug, slug),
-            eq(platformMembershipsTable.role, "owner"),
-          ))
-          .orderBy(platformMembershipsTable.createdAt)
-          .limit(1);
-        const accRow = ownerRow?.email ? null : await getAccount(slug);
-        const toEmail = ownerRow?.email || accRow?.email;
-        if (!toEmail) return;
-        await sendMfaChangedEmail({ toEmail, toName: ownerRow?.name || account.username, enabled: false });
-      } catch (err) {
-        logger.warn({ err, username: account.username }, "mfa/disable: failed to send security alert (non-fatal)");
-      }
-    })();
+    await logAdminEvent({ username: account.username, id: account.userId }, "mfa_disabled", account.userId ?? policy.subject, account.userId ? "user" : "legacy-account");
+    void notifyPersonalMfa(account.userId, false);
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: "Could not disable two-factor authentication" });
@@ -1675,25 +1606,31 @@ router.post("/platform/mfa/disable", requirePlatformAuth, async (req: Request, r
 // currently-valid TOTP code (recovery codes are NOT accepted here - a stolen
 // recovery code must not be able to mint fresh ones). Returns the new codes
 // exactly once; all previously-issued codes stop working immediately.
-router.post("/platform/mfa/recovery-codes", requirePlatformAuth, async (req: Request, res: Response) => {
+router.post("/platform/mfa/recovery-codes", requirePlatformAuth, loginLimiter, async (req: Request, res: Response) => {
   try {
     const account = req.account!;
-    const state = await getMfaState(account.username);
+    const subject = mfaSubject(account);
+    const state = await getMfaState(subject);
+    if (await checkPersonalMfaLockout(res, subject)) return;
     if (!state?.enabled) {
       res.status(400).json({ error: "Two-factor authentication is not enabled." });
       return;
     }
     const code = typeof req.body?.code === "string" ? req.body.code : "";
     if (!verifyTotp(state.secret, code)) {
+      await recordLoginFailure(`mfa:${subject}`);
       res.status(401).json({ error: "Enter a valid code from your authenticator app to regenerate recovery codes." });
       return;
     }
     const recoveryCodes = generateRecoveryCodes();
-    await saveMfaState(account.username, {
+    if (!await replaceMfaState(subject, state, {
       ...state,
       recoveryHashes: recoveryCodes.map(hashRecoveryCode),
-    });
-    await logAdminEvent({ username: account.username }, "mfa_recovery_codes_regenerated", account.username, "account");
+    })) {
+      res.status(409).json({ error: "Recovery codes changed. Try again." });
+      return;
+    }
+    await logAdminEvent({ username: account.username, id: account.userId }, "mfa_recovery_codes_regenerated", account.userId ?? subject, account.userId ? "user" : "legacy-account");
     res.setHeader("Cache-Control", "no-store");
     res.json({ ok: true, recoveryCodes });
   } catch {
@@ -1708,10 +1645,11 @@ router.post("/platform/mfa/recovery-codes", requirePlatformAuth, async (req: Req
 router.get("/platform/mfa/trusted-devices", requirePlatformAuth, async (req: Request, res: Response) => {
   try {
     const account = req.account!;
-    const devices = await listTrustedDevices(account.username);
+    const subject = mfaSubject(account);
+    const devices = await listTrustedDevices(subject);
     const cookie = (req.cookies as Record<string, string> | undefined)?.[TRUSTED_DEVICE_COOKIE];
     const payload = cookie ? verifyTrustedDeviceToken(cookie) : null;
-    const currentId = payload && payload.u === normUsername(account.username) ? payload.d : null;
+    const currentId = payload && payload.u === subject ? payload.d : null;
     res.setHeader("Cache-Control", "no-store");
     res.json({
       devices: devices.map((d) => ({
@@ -1733,7 +1671,7 @@ router.delete("/platform/mfa/trusted-devices/:id", requirePlatformAuth, async (r
   try {
     const account = req.account!;
     const id = typeof req.params.id === "string" ? req.params.id : "";
-    const removed = await revokeTrustedDevice(account.username, id);
+    const removed = await revokeTrustedDevice(mfaSubject(account), id);
     if (!removed) {
       res.status(404).json({ error: "That device is no longer on your trusted list." });
       return;
@@ -1742,7 +1680,7 @@ router.delete("/platform/mfa/trusted-devices/:id", requirePlatformAuth, async (r
     const cookie = (req.cookies as Record<string, string> | undefined)?.[TRUSTED_DEVICE_COOKIE];
     const payload = cookie ? verifyTrustedDeviceToken(cookie) : null;
     if (payload && payload.d === id) res.clearCookie(TRUSTED_DEVICE_COOKIE, { path: "/" });
-    await logAdminEvent({ username: account.username }, "mfa_device_revoked", account.username, "account");
+    await logAdminEvent({ username: account.username, id: account.userId }, "mfa_device_revoked", account.userId ?? mfaSubject(account), account.userId ? "user" : "legacy-account");
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: "Could not remove the trusted device" });
@@ -2258,7 +2196,7 @@ router.post("/platform/reset-password", loginLimiter, async (req: Request, res: 
     // Keep the legacy platform_accounts credential store in sync so slug-based
     // logins keep working with the new password.
     for (const mem of memberships) {
-      if ((mem.role === "owner" || mem.role === "admin") && !partnerClientSlugs.has(mem.companySlug)) {
+      if ((mem.role === "owner" || mem.role === "admin") && mem.companySlug !== DEFAULT_ADMIN_USERNAME && !partnerClientSlugs.has(mem.companySlug)) {
         await db
           .update(platformAccountsTable)
           .set({ passwordHash: ph })
@@ -2277,14 +2215,12 @@ router.post("/platform/reset-password", loginLimiter, async (req: Request, res: 
     for (const mem of memberships) {
       await db
         .delete(platformSessionsTable)
-        .where(eq(platformSessionsTable.username, normUsername(mem.companySlug)));
+        .where(and(eq(platformSessionsTable.username, normUsername(mem.companySlug)), isNull(platformSessionsTable.userId)));
     }
 
     // Clear MFA trusted devices for every associated account so all devices
     // must re-enter a TOTP code on next login after a password reset.
-    for (const mem of memberships) {
-      await clearTrustedDevices(normUsername(mem.companySlug));
-    }
+    await clearTrustedDevices(mfaSubject({ userId: row.userId, username: "" }));
 
     // Security alert - non-fatal: never blocks the response.
     void (async () => {
@@ -2380,7 +2316,7 @@ router.post("/platform/change-password", requirePlatformAuth, loginLimiter, asyn
         .from(platformMembershipsTable)
         .where(eq(platformMembershipsTable.userId, userRow.id));
       for (const mem of memberships) {
-        if (mem.role === "owner" || mem.role === "admin") {
+        if ((mem.role === "owner" || mem.role === "admin") && mem.companySlug !== DEFAULT_ADMIN_USERNAME) {
           await db
             .update(platformAccountsTable)
             .set({ passwordHash: ph })
@@ -2411,16 +2347,17 @@ router.post("/platform/change-password", requirePlatformAuth, loginLimiter, asyn
           .delete(platformSessionsTable)
           .where(and(
             eq(platformSessionsTable.username, normUsername(mem.companySlug)),
+            isNull(platformSessionsTable.userId),
             currentSid ? ne(platformSessionsTable.sid, currentSid) : sql`true`,
           ));
       }
 
       // Clear MFA trusted devices for every associated account so all devices
       // must re-enter a TOTP code on next login after a password change.
-      for (const mem of memberships) {
-        await clearTrustedDevices(normUsername(mem.companySlug));
+      await clearTrustedDevices(mfaSubject({ userId: userRow.id, username }));
+      if (currentSid && (await getMfaState(mfaSubject({ userId: userRow.id, username })))?.enabled) {
+        await recordMfaSession(currentSid, mfaSubject({ userId: userRow.id, username }), newVersion);
       }
-      await clearTrustedDevices(username);
     } else {
       // Legacy session without a linked platform_users row: update the legacy
       // account store, and sync any platform_users row that shares its email
@@ -3221,14 +3158,13 @@ function setInviteCookie(res: Response, token: string): void {
 }
 
 // If the SSO round-trip carried a team-invite token, consume it for this
-// email + SSO identity. Returns a redirect path when the invite flow handled
-// the sign-in (success or a terminal invite error), or null to fall through to
-// the normal SSO resolution.
+// email + SSO identity. A true result means the response was completed, a
+// string is a terminal error redirect, and null falls through to normal SSO.
 async function handleSsoInvite(
   req: Request,
   res: Response,
   profile: { email: string; name: string; googleId?: string; microsoftId?: string },
-): Promise<string | null> {
+): Promise<string | true | null> {
   const token = (req.cookies as Record<string, string>)?.[INVITE_COOKIE] ?? "";
   if (!token) return null;
   res.clearCookie(INVITE_COOKIE, { path: "/" });
@@ -3269,11 +3205,14 @@ async function handleSsoInvite(
   const ok = await consumeInvite(invite, user.id);
   if (!ok) return `/?oauth_status=error&oauth_msg=invite_invalid`;
 
-  // Invited users skip account-type selection: session goes straight into the
-  // inviting workspace.
-  const sid = await createSignedInSession(invite.companySlug, req.ip, user.id, invite.companyId);
-  setPlatformCookie(res, sid);
-  return `/?oauth_status=ok`;
+  // Invited users skip account-type selection, not their personal MFA.
+  const account = await getAccount(invite.companySlug);
+  if (!account) return `/?oauth_status=error&oauth_msg=invite_invalid`;
+  await finishOauthLoginOrChallenge(req, res, getFrontendOrigin(req), {
+    username: invite.companySlug, role: account.role, userId: user.id,
+    activeCompanyId: invite.companyId, needsSetup: false,
+  });
+  return true;
 }
 
 // Returns the canonical host for this deployment.
@@ -3569,6 +3508,10 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       return;
     }
     const googleId = userInfo.id ?? "";
+    if (!googleId || (userInfo.verified_email !== true && !await getUserByGoogleId(googleId))) {
+      res.redirect(`${origin}/?oauth_status=error&oauth_msg=unverified_identity`);
+      return;
+    }
 
     if (state.startsWith("delete:")) {
       const actor = req.account;
@@ -3643,7 +3586,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
         googleId: googleId || undefined,
       });
       if (inviteRedirect) {
-        res.redirect(`${origin}${inviteRedirect}`);
+        if (inviteRedirect !== true) res.redirect(`${origin}${inviteRedirect}`);
         return;
       }
     }
@@ -3654,6 +3597,9 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
     let existingUser = googleId ? await getUserByGoogleId(googleId) : null;
     if (!existingUser) {
       existingUser = await getUserByEmail(userInfo.email);
+    }
+    if (existingUser && userInfo.verified_email === true && existingUser.email?.toLowerCase() === userInfo.email.toLowerCase()) {
+      await db.update(platformUsersTable).set({ emailVerified: true }).where(eq(platformUsersTable.id, existingUser.id));
     }
 
     // AIO Fusion staff use the existing Master workspace rather than creating
@@ -3701,15 +3647,8 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
           let activeCompanyId: string | undefined;
           let oauthCo: Awaited<ReturnType<typeof getCompanyBySlug>> = null;
           try {
-            userId = await ensurePlatformUser({
-              email: userInfo.email,
-              name: displayName,
-              googleId: googleId || null,
-              companyUsername: account.username,
-              membershipRole: membership.role,
-              companyRole: account.role,
-              companyStatus: account.status,
-            });
+            userId = existingUser.id;
+            if (googleId) await linkGoogleId(userId, googleId);
             oauthCo = await getCompanyBySlug(account.username);
             activeCompanyId = oauthCo?.id;
           } catch {
@@ -3736,6 +3675,12 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       }
     }
 
+    // A retained identity without a current membership was revoked. Never
+    // bootstrap its old account email back into a membership.
+    if (existingUser) {
+      res.redirect(`${origin}/?oauth_status=error&oauth_msg=membership_required`);
+      return;
+    }
     // Step 3: no existing user or no membership - look up by email in
     // platform_accounts as fallback (covers legacy accounts not yet backfilled).
     const [existing] = await db
@@ -3744,6 +3689,10 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       .where(ilike(platformAccountsTable.email, userInfo.email))
       .limit(1);
     if (existing) {
+      if (existing.username === DEFAULT_ADMIN_USERNAME) {
+        res.redirect(`${origin}/?oauth_status=error&oauth_msg=membership_required`);
+        return;
+      }
       if (existing.status === "suspended") {
         res.redirect(`${origin}/?oauth_status=suspended`);
         return;
@@ -4103,7 +4052,7 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
         microsoftId,
       });
       if (inviteRedirect) {
-        res.redirect(`${origin}${inviteRedirect}`);
+        if (inviteRedirect !== true) res.redirect(`${origin}${inviteRedirect}`);
         return;
       }
     }
@@ -4138,7 +4087,7 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
           let userId: string | undefined; let activeCompanyId: string | undefined;
           let co: Awaited<ReturnType<typeof getCompanyBySlug>> = null;
           try {
-            userId = await ensurePlatformUser({ email: msEmail, name: displayName, companyUsername: account.username, membershipRole: membership.role, companyRole: account.role, companyStatus: account.status });
+            userId = byMsId.id;
             await linkMicrosoftId(userId, microsoftId);
             co = await getCompanyBySlug(account.username); activeCompanyId = co?.id;
           } catch { userId = byMsId.id; }
@@ -4155,6 +4104,10 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
     }
 
     // Step 2: look up by email in platform_users (link Microsoft to existing account)
+    if (byMsId) {
+      res.redirect(`${origin}/?oauth_status=error&oauth_msg=membership_required`);
+      return;
+    }
     const byEmail = msEmail ? await getUserByEmail(msEmail) : null;
     if (byEmail) {
       await linkMicrosoftId(byEmail.id, microsoftId);
@@ -4167,7 +4120,7 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
           let userId: string | undefined; let activeCompanyId: string | undefined;
           let co: Awaited<ReturnType<typeof getCompanyBySlug>> = null;
           try {
-            userId = await ensurePlatformUser({ email: msEmail, name: displayName, companyUsername: account.username, membershipRole: membership.role, companyRole: account.role, companyStatus: account.status });
+            userId = byEmail.id;
             co = await getCompanyBySlug(account.username); activeCompanyId = co?.id;
           } catch { userId = byEmail.id; }
           await finishOauthLoginOrChallenge(req, res, origin, {
@@ -4183,8 +4136,16 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
     }
 
     // Step 3: look up by email in platform_accounts (legacy accounts)
+    if (byEmail) {
+      res.redirect(`${origin}/?oauth_status=error&oauth_msg=membership_required`);
+      return;
+    }
     const [legacyMs] = await db.select().from(platformAccountsTable).where(ilike(platformAccountsTable.email, msEmail)).limit(1);
     if (legacyMs) {
+      if (legacyMs.username === DEFAULT_ADMIN_USERNAME) {
+        res.redirect(`${origin}/?oauth_status=error&oauth_msg=membership_required`);
+        return;
+      }
       if (legacyMs.status === "suspended") { res.redirect(`${origin}/?oauth_status=suspended`); return; }
       if (await isAgencyPartnerClient(legacyMs.username)) { res.redirect(`${origin}/?oauth_status=managed`); return; }
       let userId: string | undefined; let activeCompanyId: string | undefined;
@@ -4487,7 +4448,7 @@ router.post(
       const adminRows = await db
         .select()
         .from(platformAccountsTable)
-        .where(eq(platformAccountsTable.role, "admin"))
+        .where(eq(platformAccountsTable.username, DEFAULT_ADMIN_USERNAME))
         .limit(1);
       if (adminRows.length === 0) {
         res.status(500).json({ error: "No admin account found." });
@@ -4502,7 +4463,17 @@ router.post(
       const rawIp =
         (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
         ?? req.socket.remoteAddress;
-      const adminSid = await createPlatformSession(adminRow.username, makeIpHint(rawIp));
+      if (!actor.userId) {
+        res.status(403).json({ error: "Use an approved personal Master identity." });
+        return;
+      }
+      const masterPolicy = await personalMfaPolicy({ username: DEFAULT_ADMIN_USERNAME, userId: actor.userId });
+      if (masterPolicy.migrationRequired || !await hasMfaSession(agencySid, masterPolicy.subject)) {
+        res.status(403).json({ error: "Sign in again and complete your personal two-factor authentication.", code: "MFA_REQUIRED" });
+        return;
+      }
+      const adminSid = await createPlatformSession(adminRow.username, makeIpHint(rawIp), actor.userId, masterPolicy.companyId);
+      await recordMfaSession(adminSid, masterPolicy.subject, masterPolicy.generation);
       // Stash the agency session so the impersonation banner's "Exit" can restore it.
       setImpersonationStashCookie(res, agencySid);
       setPlatformCookie(res, adminSid);
@@ -4865,7 +4836,16 @@ router.post(
       // Side-effect: any other tabs open in the old workspace will get a 401 on
       // their next request. This matches login/invite-accept behaviour and is
       // consistent with the single-session-per-user model already in use.
+      const subject = mfaSubject({ userId, username: mem.companySlug });
+      const policy = await personalMfaPolicy({ userId, username: mem.companySlug, activeCompanyId: companyId });
+      const sourceSid = getPlatformSessionId(req);
+      const assured = !!sourceSid && await hasMfaSession(sourceSid, subject);
+      if (policy.migrationRequired || ((policy.required || (await getMfaState(subject))?.enabled) && !assured)) {
+        res.status(403).json({ error: "Sign in again and complete your personal two-factor authentication.", code: "MFA_REQUIRED" });
+        return;
+      }
       const sid = await createPlatformSession(mem.companySlug, makeIpHint(rawIp), userId, companyId);
+      if (assured) await recordMfaSession(sid, subject, policy.generation);
       setPlatformCookie(res, sid);
       res.json({
         ok: true,
@@ -5337,6 +5317,14 @@ router.post(
         return;
       }
       const passwordHash = hashPassword(newPassword);
+      const credentialMembers = await db.select({ userId: platformMembershipsTable.userId })
+        .from(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, target));
+      const credentialUser = existing.email ? await getUserByEmail(existing.email) : null;
+      if (target === DEFAULT_ADMIN_USERNAME || credentialMembers.length > 1
+        || (credentialMembers.length === 1 && credentialMembers[0].userId !== credentialUser?.id)) {
+        res.status(409).json({ error: "This workspace has personal identities. Use the person's verified password recovery flow." });
+        return;
+      }
       await db
         .update(platformAccountsTable)
         .set({ passwordHash })
@@ -5375,6 +5363,7 @@ router.post(
         for (const membership of memberships) {
           if (
             (membership.role === "owner" || membership.role === "admin")
+            && membership.companySlug !== DEFAULT_ADMIN_USERNAME
             && !(await isAgencyPartnerClient(normUsername(membership.companySlug)))
           ) {
             await db
@@ -5408,13 +5397,17 @@ router.post(
           .delete(platformSessionsTable)
           .where(and(
             eq(platformSessionsTable.username, username),
+            isNull(platformSessionsTable.userId),
             preserveCurrentSession ? ne(platformSessionsTable.sid, currentSid!) : sql`true`,
           ));
       }
       // Clear MFA trusted devices so all devices must re-enter a TOTP code
       // after an admin-set password change. This must happen after all password
       // writes succeed, so a rejected password never logs devices out.
-      await clearTrustedDevices(target);
+      await clearTrustedDevices(mfaSubject({ username: target, userId: targetUser?.id }));
+      if (preserveCurrentSession && currentSid && targetUser && (await getMfaState(mfaSubject({ username: target, userId: targetUser.id })))?.enabled) {
+        await recordMfaSession(currentSid, mfaSubject({ username: target, userId: targetUser.id }), await getMfaGeneration(mfaSubject({ username: target, userId: targetUser.id })));
+      }
 
       // Security alert to the target account - non-fatal, fire-and-forget.
       // Recipient is the target's email, resolved from platform_users (for the
@@ -5989,7 +5982,13 @@ router.post(
         res.status(403).json({ error: MASTER_OWNER_REQUIRED_MESSAGE });
         return;
       }
-      const state = await getMfaState(target);
+      const [namedMember] = await db.select().from(platformMembershipsTable)
+        .where(eq(platformMembershipsTable.companySlug, target)).limit(1);
+      if (target === DEFAULT_ADMIN_USERNAME || existing.email || namedMember) {
+        res.status(409).json({ error: "MFA belongs to people, not workspaces. Use verified personal recovery in the team roster.", code: "PERSONAL_MFA_REQUIRED" });
+        return;
+      }
+      const state = await getMfaState(`legacy:${target}`);
       if (!state) {
         res.status(400).json({ error: "This account does not have two-factor login set up." });
         return;

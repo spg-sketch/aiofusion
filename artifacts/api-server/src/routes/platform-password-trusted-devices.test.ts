@@ -260,12 +260,13 @@ import {
   platformPasswordResetsTable,
 } from "@workspace/db";
 import { eq, inArray, like } from "drizzle-orm";
-import { hashPassword, ensurePlatformUser, verifyPassword } from "../lib/platform-auth";
+import { hashPassword, ensurePlatformUser, verifyPassword, getUserByCompanySlug } from "../lib/platform-auth";
 import {
   generateTotpSecret,
   saveMfaState,
-  listTrustedDevices,
+  listTrustedDevices as listSubjectTrustedDevices,
   addTrustedDevice,
+  mfaSubject,
 } from "../lib/mfa";
 import platformRouter from "./platform";
 
@@ -324,10 +325,19 @@ async function seedUser(email: string, username: string, password: string): Prom
 }
 
 // Insert a trusted-device row for username and return the device id.
+async function trustedSubject(username: string): Promise<string> {
+  if (username.startsWith("legacy:")) return username;
+  const user = await getUserByCompanySlug(username);
+  return mfaSubject({ username, userId: user?.id });
+}
+async function listTrustedDevices(username: string) {
+  return listSubjectTrustedDevices(await trustedSubject(username));
+}
 async function seedTrustedDevice(username: string): Promise<string> {
+  const subject = await trustedSubject(username);
   const secret = generateTotpSecret();
-  await saveMfaState(username, { secret, enabled: true, recoveryHashes: [] });
-  const { device } = await addTrustedDevice(username, "Test Browser");
+  await saveMfaState(subject, { secret, enabled: true, recoveryHashes: [] });
+  const { device } = await addTrustedDevice(subject, "Test Browser");
   return device.id;
 }
 
@@ -411,7 +421,7 @@ describe("change-password clears trusted devices", () => {
   });
 
   it("clears trusted devices on the legacy (no userId) path", async () => {
-    const deviceId = await seedTrustedDevice(CHANGE_USER);
+    const deviceId = await seedTrustedDevice(`legacy:${CHANGE_USER}`);
     // Simulate legacy session: no userId attached to actor.
     actorOverride = { username: CHANGE_USER, role: "agency" };
 
@@ -420,7 +430,7 @@ describe("change-password clears trusted devices", () => {
       newPassword: NEW_PASSWORD,
     });
     expect(r.status).toBe(200);
-    expect(await listTrustedDevices(CHANGE_USER)).toEqual([]);
+    expect(await listTrustedDevices(`legacy:${CHANGE_USER}`)).toEqual([]);
     // Suppress unused-variable lint: deviceId used for the before-assertion.
     void deviceId;
   });

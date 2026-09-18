@@ -14,6 +14,7 @@ import {
   serverResendTeamInvite,
   serverUpdateTeamMember,
   serverRemoveTeamMember,
+  serverResetMemberMfa,
   serverGetMyInvites,
   serverAcceptMyInvite,
   serverDeclineMyInvite,
@@ -58,6 +59,12 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [resetTarget, setResetTarget] = useState<string | null>(null);
+  const [resetEmail, setResetEmail] = useState("");
+  const [identityVerified, setIdentityVerified] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetNotice, setResetNotice] = useState<string | null>(null);
   const [roleViolations, setRoleViolations] = useState<TeamRoleViolation[]>([]);
   const [fixingRoleViolations, setFixingRoleViolations] = useState(false);
   const [roleViolationError, setRoleViolationError] = useState<string | null>(null);
@@ -487,6 +494,7 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
       {actionError && <p className="mb-4 text-[12px] font-semibold" role="alert" aria-live="assertive" style={{ color: "#B3261E" }}>{actionError}</p>}
 
       {/* Invite form */}
+      {resetNotice && <p role="status" className="text-[13px] mb-4" style={{ color: ink }}>{resetNotice}</p>}
       <form onSubmit={handleInvite} className="mb-6">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3">
           <div className="md:col-span-6">
@@ -667,9 +675,28 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
                     {m.projectAccess.length} assigned project{m.projectAccess.length === 1 ? "" : "s"}
                   </p>
                 )}
+                {m.mfaStatus && (
+                  <p className="text-[11px] mt-1" style={{ color: vars.g600 }}>
+                    Personal 2FA: {({
+                      enabled: "Enabled",
+                      not_enrolled: "Not enrolled",
+                      recovery_required: "Recovery required",
+                      legacy_transition: "Legacy transition - verified recovery needed",
+                    })[m.mfaStatus]}
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
+              {team.canResetMemberMfa && m.canResetMfa && !m.isSelf && m.email && (
+                <button type="button" className="aio-button aio-button--outline aio-button--compact"
+                  disabled={resetBusy}
+                  onClick={() => {
+                    setResetTarget(m.userId); setResetEmail(""); setIdentityVerified(false); setResetError(null); setResetNotice(null);
+                  }}
+                  aria-label={`Reset two-factor for ${m.email}`}
+                >Reset personal 2FA</button>
+              )}
               {!canEditRole ? (
                 <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.14em]" style={{ background: accentSoft, color: accent }}>
                   {roleLabel(m.role)}
@@ -729,6 +756,46 @@ export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onW
             <p className="mt-2 ml-11 text-[11px]" data-testid={`member-protection-${m.userId}`} style={{ color: vars.g600 }}>
               {protectionText}
             </p>
+          )}
+          {resetTarget === m.userId && team.canResetMemberMfa && m.canResetMfa && !m.isSelf && (
+            <form className="mt-3 rounded-xl border p-4" style={{ borderColor: vars.g200 }}
+              onSubmit={async (event) => {
+                event.preventDefault();
+                if (resetBusy || !identityVerified || !m.email || resetEmail.trim().toLowerCase() !== m.email.toLowerCase()) return;
+                setResetBusy(true); setResetError(null);
+                try {
+                  const result = await serverResetMemberMfa(m.userId, resetEmail.trim());
+                  if (!result.ok) { setResetError(result.error ?? "Could not reset personal two-factor authentication."); return; }
+                  setResetTarget(null);
+                  setResetNotice(`Two-factor authentication reset for ${m.email}. Only this person's factors, recovery codes, trusted devices, sessions and pending challenges were cleared. They must sign in again and enrol a new authenticator. Other members and shared workspace data are unchanged.`);
+                  reload();
+                } catch { setResetError("Could not reset personal two-factor authentication. Please try again."); }
+                finally { setResetBusy(false); }
+              }}
+            >
+              <h3 className="aio-type-card-title">Reset personal two-factor for {m.name || m.email}?</h3>
+              <p className="text-[13px] my-2">
+                This affects only {m.email}. It signs them out everywhere and invalidates their authenticator, recovery codes and trusted devices.
+                They must complete fresh sign-in and personal enrolment. Their identity, role and shared workspace data will not be deleted.
+              </p>
+              <label className="block text-[13px] mb-3">
+                Type {m.email} to confirm
+                <input type="email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} disabled={resetBusy}
+                  className="block w-full rounded-lg border p-2 mt-1" autoComplete="off" />
+              </label>
+              <label className="flex items-start gap-2 text-[13px] mb-3">
+                <input type="checkbox" checked={identityVerified} disabled={resetBusy} onChange={(e) => setIdentityVerified(e.target.checked)} />
+                I have independently verified this person's identity and arranged their recovery with them.
+              </label>
+              {resetError && <p role="alert" className="text-[13px] mb-3" style={{ color: "#B3261E" }}>{resetError}</p>}
+              <div className="flex flex-wrap gap-2">
+                <button type="submit" className="aio-button aio-button--primary aio-button--compact"
+                  disabled={resetBusy || !identityVerified || resetEmail.trim().toLowerCase() !== m.email?.toLowerCase()}>
+                  {resetBusy ? "Resetting…" : `Confirm reset for ${m.email}`}
+                </button>
+                <button type="button" className="aio-button aio-button--text aio-button--compact" disabled={resetBusy} onClick={() => setResetTarget(null)}>Cancel</button>
+              </div>
+            </form>
           )}
           {accessEditor?.userId === m.userId && (
             <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${vars.g200}` }}>

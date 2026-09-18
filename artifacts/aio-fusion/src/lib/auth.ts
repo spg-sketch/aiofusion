@@ -406,7 +406,7 @@ async function runMigrationIfNeeded(role: Role, signal?: AbortSignal): Promise<v
   }
 }
 
-export type MfaChallenge = { mfaToken: string; enroll: boolean };
+export type MfaChallenge = { mfaToken: string; enroll: boolean; email?: string };
 export async function serverLogin(
   username: string,
   password: string,
@@ -415,7 +415,7 @@ export async function serverLogin(
   if (!u || !password) return { ok: false, error: "Enter a username and password." };
   const { ok, json } = await postJson("/api/platform/login", { username: u, password });
   if (ok && typeof json?.mfaToken === "string" && (json.mfaRequired || json.mfaEnrollRequired)) {
-    return { ok: false, mfa: { mfaToken: json.mfaToken, enroll: json.mfaEnrollRequired === true } };
+    return { ok: false, mfa: { mfaToken: json.mfaToken, enroll: json.mfaEnrollRequired === true, ...(typeof json.email === "string" ? { email: json.email } : {}) } };
   }
   if (!ok || !json?.account) {
     return { ok: false, error: json?.error || "Incorrect username or password." };
@@ -1001,6 +1001,9 @@ export type TeamMember = {
   canRemove?: boolean;
   /** Server explanation shown when this member is protected from management actions. */
   protectionReason?: string | null;
+  mfaStatus?: "enabled" | "not_enrolled" | "recovery_required" | "legacy_transition";
+  mfaEnabled?: boolean;
+  canResetMfa?: boolean;
 };
 export async function serverSelfDeleteAccount(
   confirmation: { password: string } | { sso: true },
@@ -1262,7 +1265,7 @@ export async function serverMfaEnable(
 }
 
 export async function serverMfaStatus(): Promise<
-  { ok: true; enabled: boolean; required: boolean; recoveryCodesRemaining: number } | { ok: false; error: string }
+  { ok: true; enabled: boolean; required: boolean; recoveryCodesRemaining: number; email?: string | null } | { ok: false; error: string }
 > {
   try {
     const resp = await fetch(`${apiBase()}/api/platform/mfa/status`, { credentials: "include" });
@@ -1272,6 +1275,7 @@ export async function serverMfaStatus(): Promise<
       ok: true,
       enabled: json?.enabled === true,
       required: json?.required === true,
+      email: typeof json?.email === "string" ? json.email : null,
       recoveryCodesRemaining: typeof json?.recoveryCodesRemaining === "number" ? json.recoveryCodesRemaining : 0,
     };
   } catch {
@@ -1310,10 +1314,10 @@ export type TrustedDevice = {
 };
 export async function serverMfaSetup(
   mfaToken?: string,
-): Promise<{ ok: true; secret: string; otpauthUrl: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; secret: string; otpauthUrl: string; email?: string | null } | { ok: false; error: string }> {
   const { ok, json } = await postJson("/api/platform/mfa/setup", mfaToken ? { mfaToken } : {});
   if (!ok || !json?.secret) return { ok: false, error: json?.error || "Could not start two-factor setup." };
-  return { ok: true, secret: json.secret, otpauthUrl: json.otpauthUrl };
+  return { ok: true, secret: json.secret, otpauthUrl: json.otpauthUrl, email: typeof json.email === "string" ? json.email : null };
 }
 
 export async function serverMfaRegenerateRecoveryCodes(
@@ -1365,8 +1369,19 @@ export type TeamOverview = {
   canPromoteOwners?: boolean;
   /** Server-authoritative capability for managing existing Owner memberships. */
   canManageOwners?: boolean;
+  canResetMemberMfa?: boolean;
 };
 
+export async function serverResetMemberMfa(
+  userId: string,
+  confirmationEmail: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { ok, json } = await postJson(`/api/platform/team/members/${encodeURIComponent(userId)}/reset-mfa`, {
+    confirmationEmail,
+    identityVerified: true,
+  });
+  return ok ? { ok: true } : { ok: false, error: json?.error || "Could not reset this person's two-factor authentication." };
+}
 export type TeamRoleViolation = {
   kind: "member" | "invite";
   userId?: string | null;
@@ -1391,16 +1406,33 @@ export async function serverAcceptInvite(data: {
   token: string;
   name?: string;
   password?: string;
-}): Promise<{ ok: boolean; session?: Session; error?: string; reason?: string }> {
+}): Promise<
+  | { ok: true; session: Session }
+  | { ok: false; mfa: MfaChallenge }
+  | { ok: false; error: string; reason?: string }
+> {
   const { ok, json } = await postJson("/api/platform/invite/accept", data);
   if (!ok) return { ok: false, error: json?.error ?? "Failed to accept invitation.", reason: json?.reason };
-  let session: Session = {
-    username: json?.account?.username ?? "",
-    role: (json?.account?.role ?? "agency") as Role,
+  if (json?.mfaRequired || json?.mfaEnrollRequired) {
+    if (typeof json.mfaToken !== "string" || !json.mfaToken) {
+      return { ok: false, error: "The invitation requires two-factor authentication, but its challenge is missing. Please sign in to continue." };
+    }
+    return { ok: false, mfa: {
+      mfaToken: json.mfaToken,
+      enroll: json.mfaEnrollRequired === true,
+      ...(typeof json.email === "string" ? { email: json.email } : {}),
+    } };
+  }
+  if (!json?.account?.username || !json?.account?.role) {
+    return { ok: false, error: "The invitation response could not be verified. Please sign in to continue." };
+  }
+  // Like primary sign-in, this response is provisional. InviteAcceptPage owns
+  // the authoritative /me handoff; never cache a challenge or fallback identity.
+  const session: Session = {
+    username: json.account.username,
+    role: json.account.role as Role,
     membershipRole: json?.account?.membershipRole ?? null,
   };
-  session = await hydrateSessionIdentity(session);
-  setSession(session);
   return { ok: true, session };
 }
 

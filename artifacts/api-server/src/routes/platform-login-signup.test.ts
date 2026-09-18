@@ -317,8 +317,7 @@ describe("POST /api/platform/login - new user-table auth path", () => {
   const USERNAME = "login-test-agency";
 
   beforeEach(async () => {
-    // Seed a platform_accounts row that has an email set (triggers the
-    // ensurePlatformUser path inside the legacy login branch).
+    // Named identities must already have their stable user and membership.
     const ph = hashPassword(PASSWORD);
     await db.insert(platformAccountsTable).values({
       username: USERNAME,
@@ -327,6 +326,15 @@ describe("POST /api/platform/login - new user-table auth path", () => {
       status: "active",
       email: EMAIL,
     });
+    const [company] = await db.insert(platformCompaniesTable).values({
+      slug: USERNAME, role: "agency", status: "active",
+    }).returning();
+    const [user] = await db.insert(platformUsersTable).values({
+      email: EMAIL, name: "Login Test User", passwordHash: ph, emailVerified: true,
+    }).returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: user!.id, companyId: company!.id, companySlug: USERNAME, role: "owner",
+    });
     ({ server, baseUrl } = await startServer());
   });
 
@@ -334,7 +342,9 @@ describe("POST /api/platform/login - new user-table auth path", () => {
     await stopServer(server);
     // Clean up rows inserted by this test suite so tests are isolated.
     await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, USERNAME));
+    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, USERNAME));
     await db.delete(platformUsersTable).where(eq(platformUsersTable.email, EMAIL));
+    await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, USERNAME));
     await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, USERNAME));
   });
 
@@ -342,7 +352,7 @@ describe("POST /api/platform/login - new user-table auth path", () => {
     const res = await fetch(`${baseUrl}/api/platform/login`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: USERNAME, password: PASSWORD }),
+      body: JSON.stringify({ username: EMAIL, password: PASSWORD }),
     });
     expect(res.status).toBe(200);
     const body = await res.json() as { account?: { username: string; role: string } };
@@ -354,7 +364,7 @@ describe("POST /api/platform/login - new user-table auth path", () => {
     const res = await fetch(`${baseUrl}/api/platform/login`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: USERNAME, password: PASSWORD }),
+      body: JSON.stringify({ username: EMAIL, password: PASSWORD }),
     });
     expect(res.status).toBe(200);
     const setCookie = res.headers.get("set-cookie");
@@ -362,11 +372,11 @@ describe("POST /api/platform/login - new user-table auth path", () => {
   });
 
   it("only returns needsSetup for the incomplete workspace owner, not an invited viewer", async () => {
-    // Establish the legacy owner's user/company records, then make this a
-    // genuinely incomplete organic workspace.
+    // Sign in as the named owner, then make this a genuinely incomplete
+    // organic workspace.
     await fetch(`${baseUrl}/api/platform/login`, {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: USERNAME, password: PASSWORD }),
+      body: JSON.stringify({ username: EMAIL, password: PASSWORD }),
     });
     await db.update(platformCompaniesTable).set({ setupComplete: false })
       .where(eq(platformCompaniesTable.slug, USERNAME));
@@ -382,7 +392,7 @@ describe("POST /api/platform/login - new user-table auth path", () => {
 
     const owner = await fetch(`${baseUrl}/api/platform/login`, {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: USERNAME, password: PASSWORD }),
+      body: JSON.stringify({ username: EMAIL, password: PASSWORD }),
     });
     expect((await owner.json() as { needsSetup?: boolean }).needsSetup).toBe(true);
     const invited = await fetch(`${baseUrl}/api/platform/login`, {
@@ -395,15 +405,16 @@ describe("POST /api/platform/login - new user-table auth path", () => {
     await db.delete(platformUsersTable).where(eq(platformUsersTable.id, viewer!.id));
   });
 
-  it("creates a platform_sessions row with userId set after legacy login with email", async () => {
+  it("creates a platform_sessions row bound to the stable personal user ID", async () => {
     const res = await fetch(`${baseUrl}/api/platform/login`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: USERNAME, password: PASSWORD }),
+      body: JSON.stringify({ username: EMAIL, password: PASSWORD }),
     });
     expect(res.status).toBe(200);
 
-    // The session row should exist and carry the userId that ensurePlatformUser created.
+    const [user] = await db.select().from(platformUsersTable)
+      .where(eq(platformUsersTable.email, EMAIL));
     const sessions = await db
       .select()
       .from(platformSessionsTable)
@@ -411,14 +422,14 @@ describe("POST /api/platform/login - new user-table auth path", () => {
 
     expect(sessions.length).toBe(1);
     expect(sessions[0]!.userId).not.toBeNull();
-    expect(typeof sessions[0]!.userId).toBe("string");
+    expect(sessions[0]!.userId).toBe(user!.id);
   });
 
-  it("creates a platform_users row via ensurePlatformUser on first login", async () => {
+  it("retains the existing named user and membership on login", async () => {
     await fetch(`${baseUrl}/api/platform/login`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: USERNAME, password: PASSWORD }),
+      body: JSON.stringify({ username: EMAIL, password: PASSWORD }),
     });
 
     const users = await db
@@ -428,13 +439,17 @@ describe("POST /api/platform/login - new user-table auth path", () => {
 
     expect(users.length).toBe(1);
     expect(users[0]!.email).toBe(EMAIL);
+    const memberships = await db.select().from(platformMembershipsTable)
+      .where(eq(platformMembershipsTable.userId, users[0]!.id));
+    expect(memberships).toHaveLength(1);
+    expect(memberships[0]!.companySlug).toBe(USERNAME);
   });
 
   it("returns 401 on wrong password", async () => {
     const res = await fetch(`${baseUrl}/api/platform/login`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: USERNAME, password: "wrong-password" }),
+      body: JSON.stringify({ username: EMAIL, password: "wrong-password" }),
     });
     expect(res.status).toBe(401);
   });
@@ -475,14 +490,24 @@ describe("POST /api/platform/login - platform_users primary path", () => {
       name: "Primary Login User",
       passwordHash: ph,
     }).onConflictDoNothing();
+    const [user] = await db.select().from(platformUsersTable)
+      .where(eq(platformUsersTable.email, EMAIL));
+    const [company] = await db.insert(platformCompaniesTable).values({
+      slug: USERNAME, role: "agency", status: "active",
+    }).returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: user!.id, companyId: company!.id, companySlug: USERNAME, role: "owner",
+    });
     ({ server, baseUrl } = await startServer());
   });
 
   afterEach(async () => {
     await stopServer(server);
     await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, USERNAME));
+    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, USERNAME));
     await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, USERNAME));
     await db.delete(platformUsersTable).where(eq(platformUsersTable.email, EMAIL));
+    await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, USERNAME));
   });
 
   it("authenticates via platform_users when it already has a password hash", async () => {
@@ -768,6 +793,18 @@ describe("POST /api/platform/signup", () => {
       passwordHash: legacyHash,
       emailVerified: null,
     }).returning();
+    const [legacyCompany] = await db.insert(platformCompaniesTable).values({
+      slug: legacyUsername,
+      role: "agency",
+      status: "active",
+      setupComplete: null,
+    }).returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: legacyUser!.id,
+      companyId: legacyCompany!.id,
+      companySlug: legacyUsername,
+      role: "owner",
+    });
     const legacyLogin = await fetch(`${baseUrl}/api/platform/login`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -785,9 +822,9 @@ describe("POST /api/platform/signup", () => {
       .from(platformEmailVerificationsTable)
       .where(eq(platformEmailVerificationsTable.userId, legacyUser!.id));
     expect(legacyVerifications).toHaveLength(0);
-    const [legacyCompany] = await db.select().from(platformCompaniesTable)
+    const [unchangedLegacyCompany] = await db.select().from(platformCompaniesTable)
       .where(eq(platformCompaniesTable.slug, legacyUsername));
-    expect(legacyCompany!.setupComplete).toBeNull();
+    expect(unchangedLegacyCompany!.setupComplete).toBeNull();
 
     await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, username));
     await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, legacyUsername));
@@ -1007,6 +1044,22 @@ describe("GET /api/platform/auth/google/callback", () => {
     return res;
   }
 
+  async function seedReturningGoogleIdentity() {
+    const ph = hashPassword("unused-pw");
+    await db.insert(platformAccountsTable).values({
+      username: ACCOUNT_SLUG, passwordHash: ph, role: "agency", status: "active", email: GOOGLE_EMAIL,
+    });
+    const [company] = await db.insert(platformCompaniesTable).values({
+      slug: ACCOUNT_SLUG, role: "agency", status: "active",
+    }).returning();
+    const [user] = await db.insert(platformUsersTable).values({
+      email: GOOGLE_EMAIL, name: GOOGLE_NAME, googleId: GOOGLE_ID, emailVerified: true,
+    }).returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: user!.id, companyId: company!.id, companySlug: ACCOUNT_SLUG, role: "owner",
+    });
+  }
+
   beforeEach(async () => {
     process.env.GOOGLE_CLIENT_ID = "test-google-client-id";
     process.env.GOOGLE_CLIENT_SECRET = "test-google-client-secret";
@@ -1027,27 +1080,13 @@ describe("GET /api/platform/auth/google/callback", () => {
   });
 
   it("redirects to /?oauth_status=ok for a returning user with an active account", async () => {
-    // Seed an existing user + account so the callback finds a returning user.
-    const ph = hashPassword("unused-pw");
-    await db.insert(platformAccountsTable).values({
-      username: ACCOUNT_SLUG,
-      passwordHash: ph,
-      role: "agency",
-      status: "active",
-      email: GOOGLE_EMAIL,
-    });
-    // Pre-create the platform_users row (simulates a backfilled account).
-    await db.insert(platformUsersTable).values({
-      email: GOOGLE_EMAIL,
-      name: GOOGLE_NAME,
-      googleId: GOOGLE_ID,
-    }).onConflictDoNothing();
+    await seedReturningGoogleIdentity();
 
     vi.stubGlobal(
       "fetch",
       makeFetchStub(
         { access_token: "mock-access-token" },
-        { email: GOOGLE_EMAIL, name: GOOGLE_NAME, id: GOOGLE_ID },
+        { email: GOOGLE_EMAIL, name: GOOGLE_NAME, id: GOOGLE_ID, verified_email: true },
       ),
     );
 
@@ -1058,20 +1097,13 @@ describe("GET /api/platform/auth/google/callback", () => {
   });
 
   it("creates a platform_sessions row with userId after successful OAuth login", async () => {
-    const ph = hashPassword("unused-pw");
-    await db.insert(platformAccountsTable).values({
-      username: ACCOUNT_SLUG,
-      passwordHash: ph,
-      role: "agency",
-      status: "active",
-      email: GOOGLE_EMAIL,
-    });
+    await seedReturningGoogleIdentity();
 
     vi.stubGlobal(
       "fetch",
       makeFetchStub(
         { access_token: "mock-access-token" },
-        { email: GOOGLE_EMAIL, name: GOOGLE_NAME, id: GOOGLE_ID },
+        { email: GOOGLE_EMAIL, name: GOOGLE_NAME, id: GOOGLE_ID, verified_email: true },
       ),
     );
 
@@ -1101,7 +1133,7 @@ describe("GET /api/platform/auth/google/callback", () => {
       "fetch",
       makeFetchStub(
         { access_token: "mock-access-token" },
-        { email: GOOGLE_EMAIL, name: GOOGLE_NAME, id: GOOGLE_ID },
+        { email: GOOGLE_EMAIL, name: GOOGLE_NAME, id: GOOGLE_ID, verified_email: true },
       ),
     );
 
@@ -1124,7 +1156,7 @@ describe("GET /api/platform/auth/google/callback", () => {
       "fetch",
       makeFetchStub(
         { access_token: "mock-access-token" },
-        { email: "brand-new@example.com", name: "Brand New", id: "google-brand-new" },
+        { email: "brand-new@example.com", name: "Brand New", id: "google-brand-new", verified_email: true },
       ),
     );
 
@@ -1208,7 +1240,7 @@ describe("GET /api/platform/auth/google/callback", () => {
       "fetch",
       makeFetchStub(
         { access_token: "mock-access-token" },
-        { email: NEW_EMAIL, name: "Email Change User", id: EMAIL_CHANGE_GOOGLE_ID },
+        { email: NEW_EMAIL, name: "Email Change User", id: EMAIL_CHANGE_GOOGLE_ID, verified_email: true },
       ),
     );
 
@@ -1336,7 +1368,7 @@ describe("GET /api/platform/auth/google/callback", () => {
       "fetch",
       makeFetchStub(
         { access_token: "mock-access-token" },
-        { email: GOOGLE_EMAIL, name: GOOGLE_NAME, id: GOOGLE_ID },
+        { email: GOOGLE_EMAIL, name: GOOGLE_NAME, id: GOOGLE_ID, verified_email: true },
       ),
     );
 
@@ -1472,7 +1504,7 @@ describe("POST /api/platform/forgot-password + reset-password", () => {
       .where(eq(platformUsersTable.id, userId));
     expect(user.sessionVersion).toBe(1);
 
-    // Old password no longer works; new one does (email + legacy slug login).
+    // Old password no longer works; the new one works only through the named identity.
     const oldLogin = await fetch(`${baseUrl}/api/platform/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1490,7 +1522,8 @@ describe("POST /api/platform/forgot-password + reset-password", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: USERNAME, password: NEW_PASSWORD }),
     });
-    expect(slugLogin.status).toBe(200);
+    expect(slugLogin.status).toBe(400);
+    expect(((await slugLogin.json()) as { error?: string }).error).toMatch(/personal email/i);
 
     // Single use: the same token is rejected the second time.
     const reuse = await fetch(`${baseUrl}/api/platform/reset-password`, {
@@ -1700,7 +1733,7 @@ describe("POST /api/platform/change-password", () => {
     });
     expect(stillAuthed.status).toBe(200);
 
-    // Old password no longer works; latest one does (email + legacy slug login).
+    // Old password no longer works; the latest one works only by personal email.
     const oldLogin = await fetch(`${baseUrl}/api/platform/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1718,7 +1751,8 @@ describe("POST /api/platform/change-password", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: USERNAME, password: "yetanotherpass789!" }),
     });
-    expect(slugLogin.status).toBe(200);
+    expect(slugLogin.status).toBe(400);
+    expect(((await slugLogin.json()) as { error?: string }).error).toMatch(/personal email/i);
   });
 
   it("rejects a wrong current password and leaves credentials untouched", async () => {
@@ -1955,13 +1989,14 @@ describe("POST /api/platform/request-set-password", () => {
     });
     expect(loginRes.status).toBe(200);
 
-    // Step 7: slug login also works.
+    // Step 7: a named identity cannot fall back to shared workspace credentials.
     const slugLogin = await fetch(`${baseUrl}/api/platform/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: USERNAME, password: NEW_PASSWORD }),
     });
-    expect(slugLogin.status).toBe(200);
+    expect(slugLogin.status).toBe(400);
+    expect(((await slugLogin.json()) as { error?: string }).error).toMatch(/personal email/i);
   });
 });
 

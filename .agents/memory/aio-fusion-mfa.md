@@ -1,17 +1,32 @@
 ---
-name: AIO Fusion MFA (TOTP)
-description: How two-factor login works — mandatory for master (admin) accounts, opt-in for others.
+name: Personal MFA transition
+description: Safety constraints for moving historical shared workspace MFA to individual protection.
 ---
 
-- TOTP (RFC 6238) in `api-server/src/lib/mfa.ts` — no external dependency. QR rendered client-side with `react-qr-code`.
-- MFA state lives in **platform_meta** (`account:mfa:<username>`, JSON {secret, enabled, recoveryHashes}) — NOT platform_users columns. Works uniformly for legacy accounts (incl. seeded master admin with no platform_users row) and needs no schema/PGlite fixture changes.
-- Login two-step: correct password → stateless HMAC pending-token (`mfaToken`, 10-min TTL, signed with SESSION_SECRET) instead of session; `/platform/mfa/verify` or `/mfa/enable` exchanges for cookie. Both platform_users and legacy login branches go through `finishLoginOrChallenge`.
-- Master (`role === "admin"`) = forced enrolment on first login, cannot disable. Others: opt-in.
-- Workspace-keyed MFA applies only to the workspace owner (plus legacy userless accounts). Team members, including Master viewers, must never inherit another person's authenticator.
-- Recovery codes: 10 single-use, sha256-hashed; shown exactly once at enrolment.
-- SSO logins also challenged via `finishOauthLoginOrChallenge`: OAuth callback redirects `/?oauth_status=mfa&mfa_mode=verify|enroll`; pending token delivered via short-lived non-httpOnly cookie `aio_oauth_mfa_token` (10 min) — keeps token out of address bar/proxy logs.
-- SSO→MFA redirect hits the App.tsx URL-param-wipe race: params captured in App state (`oauthRedirectParams` prop → PlatformHomePage) before history-sync strips them. Any NEW redirect query param needs the same App-level capture treatment.
-- Trusted devices: opt-in at verify, `aio_mfa_trust` HMAC cookie + server-side device record in platform_meta. Cookie alone is not enough — server checks device id still on stored list, enabling server-side revocation. Disable + admin reset clear the list.
-- Admin MFA reset: `POST /platform/accounts/reset-mfa` (canManage-guarded, no self-reset).
-- react-qr-code's class typings break under React 19 JSX types — cast import to function-component signature at use site.
-- platform-mfa.test.ts was scrambled by a prior bad merge; if MFA tests fail with ReferenceErrors, suspect merge damage and restore from last good git version.
+Historical workspace factors are not evidence of personal ownership, even for
+the earliest Owner. Never clone a shared secret or trusted-device list into
+multiple people. Individually attributable moves require existing-factor proof;
+ambiguous cases require independently verified, explicit individual recovery.
+
+**Why:** Multiple Owners previously inherited one factor while other Master
+members bypassed it. Assigning that shared factor to people would preserve the
+security flaw, and silently discarding it would remove existing protection.
+
+**How to apply:** Preserve the shared workspace, identities, roles and deliberate
+revocations. Require personal MFA for Master members regardless of role or
+sign-in provider. Keep legitimate non-Master userless compatibility isolated;
+never revive shared Master bootstrap credentials as a recovery workaround.
+
+Rollout is separate from implementation. Keep at least one independently
+verified named Owner recovery/access path throughout an attended transition.
+Do not publish or perform real-person resets without explicit environment and
+action approval. A reset/transition must not be retried blindly after a lost
+response because the person may already have re-enrolled.
+
+**Why:** Security generations and revoked access cannot safely be rolled back
+like ordinary application code. Fixtures prove code behavior, not live provider
+configuration or a real person's ability to recover.
+
+**How to apply:** Follow the rollout handoff in the repository, inspect the
+selected database before writes, migrate one person at a time, and distinguish
+fixture/development verification from target-domain publication.

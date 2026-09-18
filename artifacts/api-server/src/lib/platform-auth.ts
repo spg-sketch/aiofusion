@@ -12,6 +12,7 @@ import {
 } from "@workspace/db";
 import { and, eq, ne, desc, sql, isNull, inArray } from "drizzle-orm";
 import { logger } from "./logger";
+import { mfaSubject, getMfaState, validateMfaIdentity, personalMfaMigrationRequired, hasMfaSession, recordMfaSession } from "./mfa";
 
 // Platform auth: the AIO Fusion application logins (an agency and the client
 // sub-accounts it creates). Passwords are hashed with scrypt and sessions are
@@ -167,8 +168,6 @@ export function makeIpHint(rawIp: string | undefined): string | null {
 // --- Default admin seed -----------------------------------------------------
 
 export const DEFAULT_ADMIN_USERNAME = "admin";
-const DEV_FALLBACK_ADMIN_PASSWORD = "K9mt-4Rxq-7NzPv2";
-
 /**
  * Only the canonical AIO Fusion workspace may carry the platform-level admin
  * role. Older data and tooling could mark an ordinary customer workspace as
@@ -184,69 +183,15 @@ export function normalizeWorkspaceRole(username: unknown, role: unknown): Role {
 }
 
 export async function ensureDefaultAdmin(): Promise<void> {
-  const isProd = process.env.NODE_ENV === "production";
-  const envPassword = process.env.PLATFORM_ADMIN_PASSWORD;
-  const password = isProd ? envPassword : envPassword || DEV_FALLBACK_ADMIN_PASSWORD;
-  if (!password) {
-    console.warn(
-      "[platform-auth] PLATFORM_ADMIN_PASSWORD is not set; " +
-        "skipping admin seed/sync. Set PLATFORM_ADMIN_PASSWORD to bootstrap the first admin.",
-    );
-    return;
-  }
-
-  // Insert the admin account if it does not exist yet.
-  await db
-    .insert(platformAccountsTable)
-    .values({
-      username: DEFAULT_ADMIN_USERNAME,
-      passwordHash: hashPassword(password),
-      role: "admin",
-    })
-    .onConflictDoNothing({ target: platformAccountsTable.username });
-
-  // Always sync the password hash to the current env var so that rotating
-  // PLATFORM_ADMIN_PASSWORD takes effect on the next server restart without
-  // needing a manual DB update.
-  await db
-    .update(platformAccountsTable)
-    .set({ passwordHash: hashPassword(password) })
-    .where(eq(platformAccountsTable.username, DEFAULT_ADMIN_USERNAME));
-
-  await ensureAutoApprovedAdmins();
+  // Retained for startup/import compatibility. The canonical Master workspace
+  // and its approved roster are provisioned explicitly; environment passwords
+  // must never recreate a retired shared identity or change its credentials.
 }
 
-// Google-verified users listed in PLATFORM_AUTO_APPROVE_ADMIN_EMAILS receive a
-// restricted membership in the one canonical Master workspace. This legacy
-// allowlist must never promote the user's own company to an admin workspace.
+// Historic startup hook, intentionally inert after personal-MFA rollout.
 export async function ensureAutoApprovedAdmins(): Promise<void> {
-  const raw = process.env.PLATFORM_AUTO_APPROVE_ADMIN_EMAILS;
-  if (!raw) return;
-  const masterCompany = await getCompanyBySlug(DEFAULT_ADMIN_USERNAME);
-  if (!masterCompany) {
-    console.warn("[platform-auth] canonical Master company is unavailable; skipping staff allowlist");
-    return;
-  }
-  const emails = raw
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
-  for (const email of emails) {
-    // Require a Google-verified identity for this email.
-    const [user] = await db
-      .select({ id: platformUsersTable.id })
-      .from(platformUsersTable)
-      .where(sql`lower(${platformUsersTable.email}) = ${email} and ${platformUsersTable.googleId} is not null`)
-      .limit(1);
-    if (!user) continue;
-
-    await ensureProvisionedMembership({
-        userId: user.id,
-        companyId: masterCompany.id,
-        companySlug: DEFAULT_ADMIN_USERNAME,
-        role: "viewer",
-    });
-  }
+  // Retained for import compatibility only. Environment allowlists must not
+  // silently restore deliberately revoked Master memberships.
 }
 
 // --- Platform companies (workspace layer) -----------------------------------
@@ -877,16 +822,13 @@ export async function createPlatformSession(
   // Stamp the user's current session_version so stale sessions can be detected.
   let sessionVersion: number | null = null;
   if (userId) {
-    try {
       const [userRow] = await db
         .select({ sessionVersion: platformUsersTable.sessionVersion })
         .from(platformUsersTable)
         .where(eq(platformUsersTable.id, userId))
         .limit(1);
-      sessionVersion = userRow?.sessionVersion ?? null;
-    } catch {
-      // Non-fatal - version stamping fails gracefully; session behaves as legacy.
-    }
+      if (!userRow) throw new Error("Identity no longer exists");
+      sessionVersion = userRow.sessionVersion;
   }
 
   const sid = crypto.randomBytes(32).toString("hex");
@@ -954,6 +896,7 @@ export async function createSignedInSession(
   rawIp: string | undefined,
   userId?: string,
   activeCompanyId?: string,
+  mfaGeneration?: number,
 ): Promise<string> {
   const sid = await createPlatformSession(
     username,
@@ -961,6 +904,9 @@ export async function createSignedInSession(
     userId,
     activeCompanyId,
   );
+  if (mfaGeneration !== undefined) {
+    await recordMfaSession(sid, mfaSubject({ username, userId }), mfaGeneration);
+  }
   try {
     await recordLastSignIn(username);
   } catch (err) {
@@ -973,8 +919,8 @@ export async function createSignedInSession(
 
 // Resolve a session id to its account. Uses platform_users + platform_companies
 // + platform_memberships as the primary source of truth when the session
-// carries userId/activeCompanyId; falls back to platform_accounts for legacy
-// sessions or when the new tables have no data for the account.
+// carries userId/activeCompanyId; only genuinely userless sessions may fall
+// back to platform_accounts. Named identities never regain legacy authority.
 // Expired or unknown sessions return null and are cleaned up. Agency/partner
 // client sessions are also invalidated here unless the request-aware
 // impersonation middleware explicitly authorizes a view-as resolution.
@@ -993,24 +939,42 @@ export async function getPlatformSessionAccount(
     await deletePlatformSession(sid);
     return null;
   }
+  // All security decisions are made from the stable human identity. Old
+  // sessions without personal assurance cannot bypass enrollment by switching
+  // workspaces. Lookup failures reject the request rather than becoming legacy.
+  try {
+    if (!(options?.allowAgencyPartnerClient && !row.userId && row.username !== DEFAULT_ADMIN_USERNAME)) {
+      const policy = await validateMfaIdentity({
+        username: row.username, userId: row.userId ?? undefined, activeCompanyId: row.activeCompanyId ?? undefined,
+      });
+      const subject = mfaSubject({ username: row.username, userId: row.userId });
+      if (row.userId && await personalMfaMigrationRequired(row.userId)) return null;
+      const state = await getMfaState(subject);
+      if ((policy.required || state?.enabled) && (!state?.enabled || !await hasMfaSession(sid, subject))) return null;
+    }
+  } catch {
+    try { await deletePlatformSession(sid); } catch { /* still reject */ }
+    return null;
+  }
 
   // Fast-path revocation: if session_version is set on the session, verify it
   // matches the user's current version. A mismatch means something revoked
   // access (password change, removal, suspension) after this session was issued.
-  // NULL session_version = legacy session (pre-revocation mechanism) - skip check.
-  if (row.userId != null && row.sessionVersion != null) {
+  // Named sessions with no generation must reauthenticate; only genuinely
+  // userless legacy sessions are outside this personal generation boundary.
+  if (row.userId != null) {
     try {
       const [userRow] = await db
         .select({ sessionVersion: platformUsersTable.sessionVersion })
         .from(platformUsersTable)
         .where(eq(platformUsersTable.id, row.userId))
         .limit(1);
-      if (userRow != null && userRow.sessionVersion !== row.sessionVersion) {
+      if (!userRow || userRow.sessionVersion !== row.sessionVersion) {
         await deletePlatformSession(row.sid);
         return null;
       }
     } catch {
-      // Non-fatal - skip version check on error; other guards still apply.
+      return null;
     }
   }
 
@@ -1044,11 +1008,12 @@ export async function getPlatformSessionAccount(
   // When the session was created by the new auth path, resolve company role
   // from platform_companies (the new source of truth). This propagates any
   // role/status changes made in the new tables without requiring a re-login.
-  if (row.activeCompanyId) {
+  const resolvedCompanyId = row.activeCompanyId ?? (row.userId ? (await getCompanyBySlug(row.username))?.id : undefined);
+  if (resolvedCompanyId) {
     const [company] = await db
       .select()
       .from(platformCompaniesTable)
-      .where(eq(platformCompaniesTable.id, row.activeCompanyId))
+      .where(eq(platformCompaniesTable.id, resolvedCompanyId))
       .limit(1);
     if (company) {
       // Mirror the same status guard as the legacy path: suspended companies
@@ -1121,8 +1086,7 @@ export async function getPlatformSessionAccount(
     }
   }
 
-  // Only genuinely userless sessions may use legacy account authority. A
-  // user-bound session without a valid workspace cannot bypass membership.
+  // Only genuinely userless sessions may use legacy account authority.
   if (row.userId) {
     await deletePlatformSession(sid);
     return null;

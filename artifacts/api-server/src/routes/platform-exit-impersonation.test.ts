@@ -225,9 +225,13 @@ vi.mock("../middleware/platform-auth", () => ({
   requirePlatformAuth: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
-import { db, platformAccountsTable, platformSessionsTable } from "@workspace/db";
+import {
+  db, platformAccountsTable, platformSessionsTable, platformUsersTable,
+  platformCompaniesTable, platformMembershipsTable, platformMetaTable,
+} from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../lib/platform-auth";
+import { getMfaGeneration, recordMfaSession, saveMfaState } from "../lib/mfa";
 import platformRouter from "./platform";
 
 // ---------------------------------------------------------------------------
@@ -280,6 +284,10 @@ describe("POST /api/platform/exit-impersonation", () => {
     await db.delete(platformSessionsTable).where(eq(platformSessionsTable.sid, EXPIRED_STASH_SID));
     await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, ADMIN_USERNAME));
     await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, CLIENT_USERNAME));
+    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, ADMIN_USERNAME));
+    await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, ADMIN_USERNAME));
+    await db.delete(platformUsersTable).where(eq(platformUsersTable.email, "exit-owner@example.test"));
+    await db.delete(platformMetaTable);
 
     const ph = hashPassword("test-password");
     const future = new Date(Date.now() + 86_400_000);
@@ -297,12 +305,28 @@ describe("POST /api/platform/exit-impersonation", () => {
       status: "active",
     });
 
-    // Admin's stashed session (the one exit-impersonation should restore)
+    // The stashed Master session belongs to a verified human with personal MFA,
+    // not the permanently retired shared bootstrap identity.
+    const [company] = await db.insert(platformCompaniesTable).values({
+      slug: ADMIN_USERNAME, role: "admin", status: "active",
+    }).returning();
+    const [owner] = await db.insert(platformUsersTable).values({
+      email: "exit-owner@example.test", emailVerified: true, passwordHash: ph,
+    }).returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: owner!.id, companyId: company!.id, companySlug: ADMIN_USERNAME, role: "owner",
+    });
+    const subject = `user:${owner!.id}`;
+    await saveMfaState(subject, { secret: "JBSWY3DPEHPK3PXP", enabled: true, recoveryHashes: [] });
     await db.insert(platformSessionsTable).values({
       sid: ADMIN_SID,
       username: ADMIN_USERNAME,
+      userId: owner!.id,
+      activeCompanyId: company!.id,
+      sessionVersion: await getMfaGeneration(subject),
       expiresAt: future,
     });
+    await recordMfaSession(ADMIN_SID, subject, await getMfaGeneration(subject));
 
     // Client's view-as session (should be deleted on successful exit)
     await db.insert(platformSessionsTable).values({

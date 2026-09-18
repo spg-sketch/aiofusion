@@ -76,7 +76,13 @@ export async function resolvePlatformAccount(
         allowAgencyPartnerClient = false;
       }
     }
-    const account = (await getPlatformSessionAccount(sid, { allowAgencyPartnerClient })) ?? undefined;
+    let account: PlatformAccount | undefined;
+    try {
+      account = (await getPlatformSessionAccount(sid, { allowAgencyPartnerClient })) ?? undefined;
+    } catch {
+      // An unavailable security store is not evidence of authorization.
+      account = undefined;
+    }
     req.account = account;
 
     if (account) {

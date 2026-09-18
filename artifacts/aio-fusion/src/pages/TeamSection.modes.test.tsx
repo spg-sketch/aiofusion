@@ -9,6 +9,7 @@ import type { TeamOverview } from "../lib/auth";
 const getTeamMock = vi.hoisted(() => vi.fn());
 const updateMemberMock = vi.hoisted(() => vi.fn(() => Promise.resolve({ ok: true })));
 const removeMemberMock = vi.hoisted(() => vi.fn(() => Promise.resolve({ ok: true })));
+const resetMfaMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../lib/auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/auth")>();
@@ -19,6 +20,7 @@ vi.mock("../lib/auth", async (importOriginal) => {
   mock.serverGetTeam = getTeamMock;
   mock.serverUpdateTeamMember = updateMemberMock;
   mock.serverRemoveTeamMember = removeMemberMock;
+  mock.serverResetMemberMfa = resetMfaMock;
   mock.serverGetMyInvites = vi.fn(() => Promise.resolve({ ok: true, invites: [] }));
   return mock;
 });
@@ -55,6 +57,64 @@ beforeEach(() => {
   getTeamMock.mockReset();
   updateMemberMock.mockClear();
   removeMemberMock.mockClear();
+  resetMfaMock.mockReset();
+});
+
+describe("TeamSection personal MFA recovery", () => {
+  function personalTeam(canResetMemberMfa = true): TeamOverview {
+    return baseTeam({
+      teamMode: "standard", seatLimit: null, canResetMemberMfa,
+      members: [
+        { userId: "self", name: "Current Owner", email: "owner@example.test", role: "owner", projectAccess: null, position: null, createdAt: "", isSelf: true, mfaStatus: "enabled", mfaEnabled: true, canResetMfa: true },
+        { userId: "colleague", name: "Test Colleague", email: "colleague@example.test", role: "viewer", projectAccess: null, position: null, createdAt: "", isSelf: false, mfaStatus: "legacy_transition", mfaEnabled: false, canResetMfa: true },
+      ],
+    });
+  }
+
+  it("shows authoritative individual status but never a self-reset action", async () => {
+    getTeamMock.mockResolvedValue({ ok: true, team: personalTeam() });
+    render(<TeamSection />);
+    expect(await screen.findByText("Personal 2FA: Enabled")).toBeTruthy();
+    expect(screen.getByText(/Personal 2FA: Legacy transition/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Reset two-factor for owner@example.test" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Reset two-factor for colleague@example.test" })).toBeTruthy();
+  });
+
+  it("requires both the named email and verified-identity acknowledgement before target-only reset", async () => {
+    getTeamMock.mockResolvedValue({ ok: true, team: personalTeam() });
+    resetMfaMock.mockResolvedValue({ ok: true });
+    render(<TeamSection />);
+    fireEvent.click(await screen.findByRole("button", { name: "Reset two-factor for colleague@example.test" }));
+    const confirm = screen.getByRole("button", { name: "Confirm reset for colleague@example.test" }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Type colleague@example.test to confirm"), { target: { value: "owner@example.test" } });
+    fireEvent.click(screen.getByLabelText(/independently verified this person's identity/));
+    expect(confirm.disabled).toBe(true);
+    expect(resetMfaMock).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Type colleague@example.test to confirm"), { target: { value: "colleague@example.test" } });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(resetMfaMock).toHaveBeenCalledWith("colleague", "colleague@example.test"));
+    expect(await screen.findByText(/Only this person's factors/)).toBeTruthy();
+  });
+
+  it("hides reset controls when the server does not grant the capability", async () => {
+    getTeamMock.mockResolvedValue({ ok: true, team: personalTeam(false) });
+    render(<TeamSection />);
+    await screen.findByText("Test Colleague");
+    expect(screen.queryByRole("button", { name: /Reset two-factor/ })).toBeNull();
+  });
+
+  it("keeps reset failures explicit and does not claim success", async () => {
+    getTeamMock.mockResolvedValue({ ok: true, team: personalTeam() });
+    resetMfaMock.mockResolvedValue({ ok: false, error: "Membership changed. Refresh and try again." });
+    render(<TeamSection />);
+    fireEvent.click(await screen.findByRole("button", { name: "Reset two-factor for colleague@example.test" }));
+    fireEvent.change(screen.getByLabelText("Type colleague@example.test to confirm"), { target: { value: "colleague@example.test" } });
+    fireEvent.click(screen.getByLabelText(/independently verified this person's identity/));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm reset for colleague@example.test" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Membership changed");
+    expect(screen.queryByText(/Only this person's factors/)).toBeNull();
+  });
 });
 
 describe("TeamSection team modes", () => {

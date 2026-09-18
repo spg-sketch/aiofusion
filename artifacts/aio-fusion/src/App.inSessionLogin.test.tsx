@@ -1,14 +1,14 @@
-// Isolated tests for the in-session login accountProfile wiring.
+// Isolated tests for the authoritative in-session login/profile handoff.
 //
 // We mock PlatformHomePage here so we can control exactly when onLoginSuccess
 // fires without depending on the full form-submission async chain.  This lets
 // us verify the App.tsx wiring directly:
-//   onLoginSuccess(s) → setSessionState(s) + fetchAccountProfile() → setAccountProfile(ap)
+//   onLoginSuccess(provisional) → bootstrapAuth(/me) → confirmed session + profile.
 //
 // Three phases are tested:
 //   Phase 1 - App starts signed-out (bootstrapAuth returns null session).
 //   Phase 2 - onLoginSuccess fires with a brand session.
-//             fetchAccountProfile() is called; returns brand profile.
+//             bootstrapAuth() is called; returns confirmed brand identity/profile.
 //             accountProfile state is set.
 //   Phase 3 - Navigate to platform view → create project → intake shows brand note.
 import React from "react";
@@ -24,8 +24,7 @@ configure({ asyncUtilTimeout: 5000 });
 // ─── PlatformHomePage mock ────────────────────────────────────────────────────
 // Simplified stand-in: renders a "Sign in" button when signed-out, nothing
 // when signed-in, and exposes a "Project Hub" button to navigate to the
-// platform.  Immediately calls onContinueToProjects once a session exists so
-// the test flow can proceed to ClientSelectorPage without extra clicks.
+// platform. The test explicitly clicks it only after authority is established.
 vi.mock("./pages/PlatformHomePage", async () => ({
   // PlatformHomePage is a named export (not default) - see App.tsx lazy import.
   PlatformHomePage: ({
@@ -128,6 +127,7 @@ beforeEach(() => {
   }));
 
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 afterEach(() => {
@@ -139,21 +139,24 @@ afterEach(() => {
 
 // ─── tests ────────────────────────────────────────────────────────────────────
 
-describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () => {
+describe("App in-session login - authoritative session and profile handoff", () => {
   beforeAll(async () => {
     await import("./App");
   });
 
-  it("clicking 'Mock sign in' triggers fetchAccountProfile; brand note appears on intake", async () => {
-    // After "Mock sign in" fires, onLoginSuccess sets a brand session.
-    // fetchAccountProfile then fetches /api/platform/me → brand profile.
-    // setAccountProfile is called with the result.
+  it("restoring a signed-in cookie bootstraps the brand profile into project intake", async () => {
+    // This is the existing-session baseline: the initial /me establishes both
+    // the confirmed identity and the profile, without an in-session login.
+    let meRequests = 0;
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       const urlStr = String(url);
-      // This case starts with an already-authoritative session; the separate
-      // signed-out test below covers the post-credential authority hand-off.
-      if (urlStr.includes("/api/platform/me")) return brandMeResponse();
-      if (urlStr.includes("/api/store/projects")) return makeResponse({ projects: [], deletedIds: [] });
+      if (urlStr.includes("/api/platform/me")) {
+        meRequests += 1;
+        return brandMeResponse();
+      }
+      if (urlStr.includes("/api/store/projects")) {
+        return makeResponse({ projects: [], deletedIds: [] });
+      }
       return unauth();
     }));
 
@@ -163,9 +166,10 @@ describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () =
 
     await act(async () => { await new Promise((r) => setTimeout(r, 150)); });
 
-    // Mock PlatformHomePage immediately shows "Project Hub" (session set by
+    // Mock PlatformHomePage shows "Project Hub" (session confirmed by
     // bootstrapAuth). Navigate into the platform.
     const projectHubBtn = await screen.findByRole("button", { name: /Project Hub/i }, { timeout: 8000 });
+    expect(meRequests).toBe(1);
     await act(async () => {
       fireEvent.click(projectHubBtn);
       await new Promise((r) => setTimeout(r, 50));
@@ -188,27 +192,21 @@ describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () =
     });
 
     // IntakePage should show the brand prefill note (accountProfile was set
-    // from the brand session → fetchAccountProfile returned brand profile).
+    // from the authoritative /me response).
     await waitFor(() =>
       expect(screen.getByText(/We've pre-filled your company name and website/i))
         .toBeInTheDocument(),
     { timeout: 8000 });
   }, 35000);
 
-  it("'Mock sign in' → onLoginSuccess fires → fetchAccountProfile called → brand profile propagated; signed-out start then sign-in path", async () => {
-    // This test exercises the SPECIFIC BUG FIX: when a user starts signed-out
-    // and then logs in, fetchAccountProfile() must be called from onLoginSuccess.
-    //
-    // Phase 1: bootstrapAuth returns null (signed out).
-    // Phase 2: "Mock sign in" fires onLoginSuccess(brandSession).
-    //          fetchAccountProfile() is called → returns brand profile.
-    //          setAccountProfile(brandProfile) is called.
-    // Phase 3: user creates a project → intake shows brand note.
+  it("password success from a signed-out start confirms /me and propagates its brand profile to intake", async () => {
     let loggedIn = false;
+    let meRequests = 0;
 
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       const urlStr = String(url);
       if (urlStr.includes("/api/platform/me")) {
+        meRequests += 1;
         return loggedIn ? brandMeResponse() : unauth();
       }
       if (urlStr.includes("/api/store/projects")) {
@@ -221,24 +219,20 @@ describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () =
     const { default: App } = await import("./App");
     render(<App />);
 
-    await act(async () => { await new Promise((r) => setTimeout(r, 150)); });
-
-    // Phase 1: signed out - Mock PlatformHomePage shows "Mock sign in" button.
     const signInBtn = await screen.findByRole("button", { name: /Mock sign in/i }, { timeout: 8000 });
 
-    // Switch /me to return brand profile BEFORE clicking sign in, so
-    // fetchAccountProfile (fired from onLoginSuccess) picks up the brand profile.
+    // A successful primary sign-in has established the cookie; the callback
+    // remains provisional until the next /me confirms it.
     loggedIn = true;
 
     await act(async () => {
       fireEvent.click(signInBtn);
-      // onLoginSuccess(brandSession) fires synchronously inside the click handler.
-      // fetchAccountProfile() starts (async) - give it time.
       await new Promise((r) => setTimeout(r, 100));
     });
 
     // Phase 2: session is now set. Mock PlatformHomePage renders "Project Hub".
     const projectHubBtn = await screen.findByRole("button", { name: /Project Hub/i }, { timeout: 8000 });
+    expect(meRequests).toBe(2);
     await act(async () => {
       fireEvent.click(projectHubBtn);
       await new Promise((r) => setTimeout(r, 50));
@@ -260,8 +254,8 @@ describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () =
       await new Promise((r) => setTimeout(r, 100));
     });
 
-    // The brand note must appear - accountProfile was set by fetchAccountProfile
-    // called from onLoginSuccess (the bug fix).
+    // Profile must be taken from /me, not the provisional callback (which
+    // contains no company name or website).
     await waitFor(() =>
       expect(screen.getByText(/We've pre-filled your company name and website/i))
         .toBeInTheDocument(),
@@ -269,28 +263,39 @@ describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () =
   }, 40000);
 
   it("MFA success is provisional until one authoritative /me check, then reaches the project destination", async () => {
+    let resolveMe!: (response: Response) => void;
     let meCalls = 0;
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    let projectCalls = 0;
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
       if (String(url).includes("/api/platform/me")) {
         meCalls += 1;
-        return meCalls === 1 ? unauth() : brandMeResponse();
+        if (meCalls === 1) return Promise.resolve(unauth());
+        return new Promise<Response>((resolve) => { resolveMe = resolve; });
       }
-      if (String(url).includes("/api/store/projects")) return makeResponse({ projects: [], deletedIds: [] });
-      if (String(url).includes("/api/platform/accounts")) return makeResponse({ accounts: [] });
-      return unauth();
+      if (String(url).includes("/api/store/projects")) {
+        projectCalls += 1;
+        return Promise.resolve(makeResponse({ projects: [], deletedIds: [] }));
+      }
+      return Promise.resolve(unauth());
     }));
     window.history.replaceState({}, "", "/?oauth_status=ok");
     const { default: App } = await import("./App");
     render(<App />);
 
-    await screen.findByText("Mock MFA success");
-    fireEvent.click(screen.getByText("Mock MFA success"));
-
-    await screen.findByText("Project Hub");
+    fireEvent.click(await screen.findByText("Mock MFA success"));
     expect(meCalls).toBe(2);
+    expect(projectCalls).toBe(0);
+    expect(screen.queryByText("Project Hub")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Create your first project/i })).not.toBeInTheDocument();
+    await act(async () => { resolveMe(brandMeResponse()); });
+
+    fireEvent.click(await screen.findByText("Project Hub"));
+    expect(await screen.findByRole("button", { name: /Create your first project/i })).toBeInTheDocument();
+    expect(meCalls).toBe(2);
+    expect(projectCalls).toBeGreaterThan(0);
   });
 
-  it("does not revive an identity when sign-out wins a delayed authority hand-off", async () => {
+  it("sign-out invalidates an in-flight login check so a late /me cannot revive the session", async () => {
     let resolveMe!: (response: Response) => void;
     let meCalls = 0;
     vi.stubGlobal("fetch", vi.fn((url: string) => {

@@ -10,6 +10,7 @@ import {
   setSession,
   getSession,
   serverLogin,
+  serverAcceptInvite,
   serverSignUp,
   serverAddUser,
   AUTHORITY_TIMEOUT_MS,
@@ -17,6 +18,54 @@ import {
 } from "./auth";
 
 const adminSession: Session = { username: "admin", role: "admin" };
+
+describe("invitation acceptance provisional authentication", () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  function inviteResponse(body: unknown, status = 200) {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status }));
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it.each(["mfaRequired", "mfaEnrollRequired"])("returns %s without hydrating or caching a session", async (flag) => {
+    const fetchMock = inviteResponse({ [flag]: true, mfaToken: "personal-token", email: "person@example.test" });
+    expect(await serverAcceptInvite({ token: "invite-token" })).toEqual({
+      ok: false,
+      mfa: { mfaToken: "personal-token", enroll: flag === "mfaEnrollRequired", email: "person@example.test" },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(getSession()).toBeNull();
+  });
+
+  it("returns an ordinary response as provisional without a second /me or a cached session", async () => {
+    const fetchMock = inviteResponse({ account: { username: "master", role: "admin", membershipRole: "viewer" } });
+    expect(await serverAcceptInvite({ token: "invite-token", password: "personal-password" })).toEqual({
+      ok: true, session: { username: "master", role: "admin", membershipRole: "viewer" },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/platform/invite/accept"), expect.objectContaining({
+      method: "POST", credentials: "include", body: JSON.stringify({ token: "invite-token", password: "personal-password" }),
+    }));
+    expect(getSession()).toBeNull();
+  });
+
+  it.each([{}, { mfaRequired: true }, { mfaEnrollRequired: true, mfaToken: "" }])("rejects malformed success without fabricating a session: %j", async (payload) => {
+    inviteResponse(payload);
+    expect(await serverAcceptInvite({ token: "invite-token" })).toEqual({ ok: false, error: expect.stringContaining("sign in to continue") });
+    expect(getSession()).toBeNull();
+  });
+
+  it("retains identity-conflict errors", async () => {
+    inviteResponse({ error: "Sign out first.", reason: "signed_in_as_different_user" }, 409);
+    expect(await serverAcceptInvite({ token: "invite-token" })).toEqual({ ok: false, error: "Sign out first.", reason: "signed_in_as_different_user" });
+    expect(getSession()).toBeNull();
+  });
+});
 
 function seed() {
   saveUsers([

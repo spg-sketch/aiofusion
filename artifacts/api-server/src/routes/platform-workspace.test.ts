@@ -238,7 +238,8 @@ vi.mock("../lib/notify-email", () => ({
   sendMfaAdminResetEmail: () => Promise.resolve(),
 }));
 
-vi.mock("../lib/mfa", () => ({
+vi.mock("../lib/mfa", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../lib/mfa")>(),
   getMfaState: () => Promise.resolve(null),
   getMfaEnabledSet: () => Promise.resolve(new Set()),
   saveMfaState: () => Promise.resolve(),
@@ -485,14 +486,14 @@ describe("GET /platform/my-invites", () => {
     expect(res.json.error).toMatch(/sign out.*sign in/i);
   });
 
-  it("returns no personal invitations for the canonical legacy Master login", async () => {
+  it("rejects the retired canonical legacy Master login before invitation lookup", async () => {
     await db.insert(platformAccountsTable).values({
       username: "admin", passwordHash: hashPassword("pw1"), role: "admin", status: "active",
     });
     const legacySid = await createPlatformSession("admin", null, null, null);
     const res = await api("/api/platform/my-invites", { sid: legacySid });
-    expect(res.status).toBe(200);
-    expect(res.json.invites).toEqual([]);
+    expect(res.status).toBe(401);
+    expect(res.json.invites).toBeUndefined();
   });
 
   it("requires auth", async () => {
