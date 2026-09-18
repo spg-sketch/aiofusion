@@ -169,7 +169,12 @@ vi.mock("../lib/notify-email", async (importOriginal) => {
 // Stripe client mock - checkout, portal, invoices, and subscription updates.
 const stripeCalls = vi.hoisted(() => ({
   sessions: [] as unknown[],
-  subscriptionUpdates: [] as Array<{ id: string; params: any }>,
+  subscriptionUpdates: [] as Array<{ id: string; params: any; options?: any }>,
+  invoicePreviews: [] as any[],
+  previewAmountDue: 50000,
+  subscriptionLatestInvoiceId: "in_previous",
+  updateLatestInvoiceId: "in_tier_change",
+  updateError: null as (Error & { type?: string; statusCode?: number }) | null,
   portalSessions: [] as unknown[],
   customerCreates: [] as any[],
   customerUpdates: [] as Array<{ id: string; params: any }>,
@@ -227,8 +232,17 @@ vi.mock("../lib/stripe-client", () => ({
   getUncachableStripeClient: () =>
     Promise.resolve({
       prices: {
-        list: () => Promise.resolve({ data: [{ id: "price_mock_1" }] }),
+        list: (params: { lookup_keys?: string[] }) =>
+          Promise.resolve({ data: [{ id: `price_${params.lookup_keys?.[0] ?? "mock"}` }] }),
         create: () => Promise.resolve({ id: "price_mock_created" }),
+        retrieve: (id: string) =>
+          Promise.resolve({
+            id,
+            type: "recurring",
+            recurring: { interval: "year", interval_count: 1 },
+            unit_amount: 80000,
+            currency: "gbp",
+          }),
       },
       products: {
         search: () => Promise.resolve({ data: [{ id: "prod_mock" }] }),
@@ -311,12 +325,40 @@ vi.mock("../lib/stripe-client", () => ({
         retrieve: (id: string) =>
           Promise.resolve({
             id,
-            items: { data: [{ id: "si_mock_1" }] },
+            status: "active",
+            cancel_at_period_end: false,
+            current_period_end: 2_000_000_000,
+            latest_invoice: stripeCalls.subscriptionLatestInvoiceId,
+            items: {
+              data: [
+                {
+                  id: "si_mock_1",
+                  price: { id: "price_aio-project-standard" },
+                  quantity: 1,
+                  current_period_end: 2_000_000_000,
+                },
+              ],
+            },
             metadata: { kind: "project-addon" },
           }),
-        update: (id: string, params: any) => {
-          stripeCalls.subscriptionUpdates.push({ id, params });
-          return Promise.resolve({ id });
+        update: (id: string, params: any, options?: any) => {
+          stripeCalls.subscriptionUpdates.push({ id, params, options });
+          if (stripeCalls.updateError) {
+            const error = stripeCalls.updateError;
+            stripeCalls.updateError = null;
+            return Promise.reject(error);
+          }
+          return Promise.resolve({
+            id,
+            latest_invoice: {
+              id: stripeCalls.updateLatestInvoiceId,
+              status: "paid",
+              amount_due: stripeCalls.previewAmountDue,
+              amount_paid: stripeCalls.previewAmountDue,
+              currency: "gbp",
+              parent: { subscription_details: { subscription: id } },
+            },
+          });
         },
         deleteDiscount: (id: string) => {
           stripeCalls.discountDeletes.push(id);
@@ -340,6 +382,13 @@ vi.mock("../lib/stripe-client", () => ({
         },
       },
       invoices: {
+        createPreview: (params: any) => {
+          stripeCalls.invoicePreviews.push(params);
+          return Promise.resolve({
+            amount_due: stripeCalls.previewAmountDue,
+            currency: "gbp",
+          });
+        },
         list: () =>
           Promise.resolve({
             data: [
@@ -348,6 +397,8 @@ vi.mock("../lib/stripe-client", () => ({
                 number: "AIO-0001",
                 created: 1_700_000_000,
                 amount_due: 50000,
+                amount_paid: 50000,
+                currency: "gbp",
                 status: "paid",
                 hosted_invoice_url: "https://invoice.stripe.com/i/hosted",
                 invoice_pdf: "https://invoice.stripe.com/i/pdf",
@@ -1789,12 +1840,148 @@ describe("project add-ons", () => {
       }),
     );
 
-    const res = await api("/api/platform/billing/project-tier", { sid, body: { projectId: "up-proj", tier: "max" } });
+    const preview = await api("/api/platform/billing/project-tier/preview", {
+      sid,
+      body: { projectId: "up-proj", tier: "max" },
+    });
+    expect(preview.status).toBe(200);
+    expect(preview.json).toMatchObject({
+      amountDue: 50000,
+      currency: "gbp",
+      annualRenewalAmount: 80000,
+      applied: "now",
+    });
+    expect(typeof preview.json.quoteId).toBe("string");
+    const res = await api("/api/platform/billing/project-tier", {
+      sid,
+      body: { projectId: "up-proj", tier: "max", quoteId: preview.json.quoteId },
+    });
     expect(res.status).toBe(200);
     expect(res.json.applied).toBe("now");
+    expect(res.json.reconciliation).toMatchObject({ matched: true, expectedAmount: 50000 });
     const update = stripeCalls.subscriptionUpdates.find((u) => u.id === "sub_addon_3");
     expect(update?.params.proration_behavior).toBe("always_invoice");
+    expect(update?.params.payment_behavior).toBe("error_if_incomplete");
+    expect(update?.params.proration_date).toBe(preview.json.prorationDate);
+    expect(update?.params.items[0].quantity).toBe(1);
+    expect(update?.options.idempotencyKey).toBe(`project-tier-quote-${preview.json.quoteId}`);
+    expect(stripeCalls.invoicePreviews.at(-1)?.subscription_details.proration_date).toBe(
+      preview.json.prorationDate,
+    );
     expect(await getProjectActionLimit("addon-up", "up-proj")).toBe(150);
+  });
+
+  it("requires a server quote for upgrades and rejects a reused quote", async () => {
+    const { sid } = await seedSubscribed("addon-quote", "owner@addonquote.test");
+    await db.insert(projectsTable).values({
+      id: "quote-proj",
+      name: "Quote",
+      data: {},
+      owner: "addon-quote",
+      tier: "standard",
+    });
+    await handleStripeEvent(
+      fakeEvent("evt_addon_quote", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_addon-quote",
+        subscription: "sub_addon_quote",
+        metadata: {
+          slug: "addon-quote",
+          kind: "project-addon",
+          tier: "standard",
+          projectId: "quote-proj",
+        },
+      }),
+    );
+
+    const missing = await api("/api/platform/billing/project-tier", {
+      sid,
+      body: { projectId: "quote-proj", tier: "max" },
+    });
+    expect(missing.status).toBe(409);
+    expect(missing.json.code).toBe("QUOTE_REQUIRED");
+
+    const preview = await api("/api/platform/billing/project-tier/preview", {
+      sid,
+      body: { projectId: "quote-proj", tier: "max" },
+    });
+    const confirmed = await api("/api/platform/billing/project-tier", {
+      sid,
+      body: { projectId: "quote-proj", tier: "max", quoteId: preview.json.quoteId },
+    });
+    expect(confirmed.status).toBe(200);
+
+    // Recreate the old effective state to prove the persistent quote claim,
+    // rather than the same-tier route guard, blocks a second confirmation.
+    const addons = await getProjectAddons("addon-quote");
+    addons[0]!.tier = "standard";
+    await db
+      .update(platformMetaTable)
+      .set({ value: JSON.stringify(addons) })
+      .where(eq(platformMetaTable.key, "projectAddons:addon-quote"));
+    const reused = await api("/api/platform/billing/project-tier", {
+      sid,
+      body: { projectId: "quote-proj", tier: "max", quoteId: preview.json.quoteId },
+    });
+    expect(reused.status).toBe(409);
+    expect(reused.json.code).toBe("QUOTE_INVALID");
+
+    const oldInvoicePreview = await api("/api/platform/billing/project-tier/preview", {
+      sid,
+      body: { projectId: "quote-proj", tier: "max" },
+    });
+    stripeCalls.updateLatestInvoiceId = stripeCalls.subscriptionLatestInvoiceId;
+    const oldInvoice = await api("/api/platform/billing/project-tier", {
+      sid,
+      body: {
+        projectId: "quote-proj",
+        tier: "max",
+        quoteId: oldInvoicePreview.json.quoteId,
+      },
+    });
+    stripeCalls.updateLatestInvoiceId = "in_tier_change";
+    expect(oldInvoice.status).toBe(409);
+    expect(oldInvoice.json).toMatchObject({
+      code: "INVOICE_RECONCILIATION_FAILED",
+      changed: true,
+      reconciliation: { matched: false },
+    });
+
+    const ambiguousPreview = await api("/api/platform/billing/project-tier/preview", {
+      sid,
+      body: { projectId: "quote-proj", tier: "max" },
+    });
+    stripeCalls.updateError = new Error("socket timed out");
+    const ambiguous = await api("/api/platform/billing/project-tier", {
+      sid,
+      body: {
+        projectId: "quote-proj",
+        tier: "max",
+        quoteId: ambiguousPreview.json.quoteId,
+      },
+    });
+    expect(ambiguous.status).toBe(409);
+    expect(ambiguous.json).toMatchObject({ code: "UPDATE_OUTCOME_UNKNOWN", changed: true });
+
+    const rejectedPreview = await api("/api/platform/billing/project-tier/preview", {
+      sid,
+      body: { projectId: "quote-proj", tier: "max" },
+    });
+    stripeCalls.updateError = Object.assign(new Error("card declined"), {
+      type: "StripeCardError",
+      statusCode: 402,
+    });
+    const rejected = await api("/api/platform/billing/project-tier", {
+      sid,
+      body: {
+        projectId: "quote-proj",
+        tier: "max",
+        quoteId: rejectedPreview.json.quoteId,
+      },
+    });
+    expect(rejected.status).toBe(409);
+    expect(rejected.json.code).toBe("PAYMENT_FAILED");
+    expect(rejected.json.changed).toBeUndefined();
   });
 
   it("downgrading an add-on queues to renewal and applies on the renewal invoice", async () => {

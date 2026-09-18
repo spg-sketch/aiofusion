@@ -3,6 +3,7 @@ import { vars } from "../marketing/vars";
 import { apiBase } from "../lib/apiHelpers";
 import { CheckoutReturnLoading } from "./CheckoutReturnLoading";
 import { BillingInformationPrompt, focusBillingSection } from "./BillingInformationPrompt";
+import { billingMoney, useTierProration } from "../hooks/useTierProration";
 
 const ink = vars.navy;
 const accent = vars.accent;
@@ -669,7 +670,7 @@ export function SubscriptionCard({
           <ChangeTierCard info={info} onChanged={() => setRefreshTick((t) => t + 1)} />
         </>
       )}
-      {subscribed && <InvoicesCard />}
+      {subscribed && <InvoicesCard key={refreshTick} />}
     </>
   );
 }
@@ -851,9 +852,19 @@ function ChangeTierCard({ info, onChanged }: { info: SubscriptionInfo; onChanged
   const selectedIsAddon = !!selected?.isAddon;
   const currentTier: ProjectTier = (selected?.tier ?? "premium") as ProjectTier;
   const isUpgrade = tier !== "" && TIER_ORDER.indexOf(tier) > TIER_ORDER.indexOf(currentTier);
+  const needsPreview = selectedIsAddon && isUpgrade && pricesReady;
+  const preview = useTierProration(
+    projectId, tier,
+    JSON.stringify([selected?.addonSubscriptionId, currentTier, selected?.pendingTier]),
+    needsPreview,
+  );
 
   async function submit() {
-    if (!selected || tier === "" || !pricesReady) return;
+    if (busy || !selected || tier === "" || !pricesReady) return;
+    if (needsPreview && (!preview.quote || preview.quote.expiresAt <= Date.now())) {
+      preview.refresh();
+      return;
+    }
     setBusy(true);
     setMessage(null);
     try {
@@ -862,14 +873,30 @@ function ChangeTierCard({ info, onChanged }: { info: SubscriptionInfo; onChanged
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ projectId: selected.id, tier }),
+          body: JSON.stringify({ projectId: selected.id, tier, ...(needsPreview ? { quoteId: preview.quote!.quoteId } : {}) }),
         });
         const json = await res.json();
         if (!res.ok) {
           setMessage({ kind: "error", text: json.error ?? "Could not change the tier." });
+          // A changed-but-unreconciled invoice must never invite another charge.
+          if (json.changed) {
+            setProjectId("");
+            setTier("");
+            onChanged();
+          } else if (needsPreview) {
+            preview.refresh();
+          }
           return;
         }
-        setMessage({ kind: "ok", text: json.message ?? "Tier updated." });
+        const reconciliation = json.reconciliation;
+        setMessage({
+          kind: needsPreview && reconciliation?.matched !== true ? "error" : "ok",
+          text: reconciliation?.matched
+            ? `${json.message ?? "Tier upgraded."} Final paid invoice: ${billingMoney(reconciliation.amountPaid, reconciliation.currency)}. This matches your approved preview.`
+            : needsPreview
+              ? "The tier-change result could not be reconciled with your approved preview. Check Billing and your invoices before making another change."
+              : json.message ?? "Tier updated.",
+        });
         // The server is authoritative for the current tier and any pending
         // renewal change. Clear the controls before reloading it so a second
         // click cannot submit the previous project against refreshed data.
@@ -892,7 +919,14 @@ function ChangeTierCard({ info, onChanged }: { info: SubscriptionInfo; onChanged
         window.location.href = json.url;
       }
     } catch {
-      setMessage({ kind: "error", text: "Network error. Please try again." });
+      setMessage({ kind: "error", text: selectedIsAddon
+        ? "The tier-change result could not be confirmed. Refresh Billing and check your invoices before trying again."
+        : "Network error. Please try again." });
+      if (selectedIsAddon) {
+        setProjectId("");
+        setTier("");
+        onChanged();
+      }
     } finally {
       setBusy(false);
     }
@@ -947,6 +981,7 @@ function ChangeTierCard({ info, onChanged }: { info: SubscriptionInfo; onChanged
               id="client-project-select"
               aria-label="Client project"
               value={projectId}
+              disabled={busy}
               onChange={(e) => { setProjectId(e.target.value); setTier(""); setMessage(null); }}
               className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2"
               style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent, background: "white" }}
@@ -967,7 +1002,7 @@ function ChangeTierCard({ info, onChanged }: { info: SubscriptionInfo; onChanged
               aria-label="New tier"
               value={tier}
               onChange={(e) => { setTier(e.target.value as ProjectTier | ""); setMessage(null); }}
-              disabled={!selected || !pricesReady}
+              disabled={busy || !selected || !pricesReady}
               className="aio-type-body w-full px-3 py-2.5 rounded-lg border focus:outline-none focus:ring-2 disabled:opacity-50"
               style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent, background: "white" }}
             >
@@ -995,21 +1030,40 @@ function ChangeTierCard({ info, onChanged }: { info: SubscriptionInfo; onChanged
       )}
       {selected && selectedIsAddon && tier !== "" && !isUpgrade && (
         <p className="aio-type-meta mt-2" style={{ color: vars.g500 }}>
-          This is a downgrade - the lower price and allowance apply from your next renewal.
+          No immediate charge. {TIER_LABELS[tier]} and its lower allowance take effect at your next renewal
+          {pricesReady ? ` at ${pounds(info.tierPrices[tier].yearlyTotal)}/year` : ""}. Your current allowance stays in place until then.
         </p>
+      )}
+      {needsPreview && (
+        <div className="rounded-xl p-4 mt-4 max-w-2xl" style={{ background: vars.g50, border: `1px solid ${vars.g200}` }} aria-live="polite">
+          {preview.loading && <p className="aio-type-supporting" role="status">Calculating your exact charge with Stripe...</p>}
+          {preview.error && (
+            <>
+              <p className="aio-type-supporting" role="alert" style={{ color: "#991B1B" }}>{preview.error} No tier change has been submitted by this preview.</p>
+              <button type="button" disabled={busy} onClick={preview.refresh} className="aio-button aio-button--text aio-button--compact mt-2">Retry charge preview</button>
+            </>
+          )}
+          {preview.quote && (
+            <div data-testid="tier-charge-preview">
+              <p className="aio-type-label" style={{ color: ink }}>Due now: {billingMoney(preview.quote.amountDue, preview.quote.currency)}</p>
+              <p className="aio-type-supporting mt-1" style={{ color: vars.g600 }}>Annual renewal price: {billingMoney(preview.quote.annualRenewalAmount, preview.quote.currency)}/year for {TIER_LABELS[tier as ProjectTier]}.</p>
+              <p className="aio-type-meta mt-2" style={{ color: vars.g500 }}>The immediate amount is calculated by Stripe, including applicable tax and credits. The annual tier price is before any applicable renewal tax or discounts. Confirming authorises the charge shown above and applies the higher allowance immediately.</p>
+            </div>
+          )}
+        </div>
       )}
       <div className="flex items-center gap-3 mt-4">
         <button
           type="button"
           onClick={submit}
-           disabled={busy || !pricesReady || !selected || tier === "" || (!selectedIsAddon && (!info.checkoutAvailable || !info.companyRecordComplete))}
+           disabled={busy || !pricesReady || !selected || tier === "" || (needsPreview && !preview.quote) || (!selectedIsAddon && (!info.checkoutAvailable || !info.companyRecordComplete))}
           className="aio-button aio-button--primary rounded-full uppercase tracking-[0.12em]"
           style={{ background: accent }}
         >
-          {busy ? "Working..." : selectedIsAddon ? "Change tier" : "Continue to payment"}
+          {busy ? "Working..." : needsPreview ? (preview.quote ? `Confirm upgrade - ${billingMoney(preview.quote.amountDue, preview.quote.currency)} now` : "Confirm upgrade") : selectedIsAddon ? "Change tier" : "Continue to payment"}
         </button>
         {message && (
-          <span className="aio-type-supporting" style={{ color: message.kind === "ok" ? "#166534" : "#991B1B" }}>{message.text}</span>
+          <span role={message.kind === "error" ? "alert" : "status"} className="aio-type-supporting" style={{ color: message.kind === "ok" ? "#166534" : "#991B1B" }}>{message.text}</span>
         )}
       </div>
     </div>

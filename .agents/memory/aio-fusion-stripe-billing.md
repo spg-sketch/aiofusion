@@ -5,6 +5,14 @@ description: Stripe connection quirks, webhook secret location, entitlement/tier
 
 # Stripe billing foundation (subscriptions + per-project action tiers)
 
+## Tier-change payment evidence
+
+An upgrade's payment evidence must identify the invoice created by that specific Stripe update, not simply the newest paid invoice on the subscription. An uncertain payment response must not encourage an automatic retry with a fresh charge.
+
+**Why:** the newest paid invoice can still be the previous renewal when the new payment is incomplete. A transport failure can also occur after Stripe has already applied the change. Either case can produce a false success or a duplicate-charge risk.
+
+**How to apply:** reconcile the update's returned invoice against the approved amount and currency, and separate uncertain post-update outcomes from safe pre-charge preview failures.
+
 ## Staging verification resource safety
 
 Do not assume a legacy beta connection, workspace database, and published staging database are the same. Prove the target independently before seeding, and preflight its complete required schema before creating Stripe test resources.

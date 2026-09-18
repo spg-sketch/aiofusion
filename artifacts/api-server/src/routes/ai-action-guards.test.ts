@@ -712,6 +712,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /platform/billing/portal",
   "POST /platform/billing/project-checkout",
   "POST /platform/billing/project-tier",
+  "POST /platform/billing/project-tier/preview",
   "POST /platform/profile/image",
   "GET /platform/profile/image/:kind",
   "DELETE /platform/profile/image/:kind",

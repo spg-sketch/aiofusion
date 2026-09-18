@@ -16,6 +16,8 @@ import {
   getProjectAddons,
   listBillingProjects,
   changeAddonTier,
+  previewAddonTierChange,
+  ProjectTierChangeError,
   isEntitled,
   hasPaidSubscription,
   withBillingLock,
@@ -734,6 +736,52 @@ router.post("/platform/billing/project-checkout", requirePlatformAuth, async (re
 
 // --- Change an add-on project's tier -------------------------------------------
 
+router.post("/platform/billing/project-tier/preview", requirePlatformAuth, async (req, res) => {
+  try {
+    const ctx = await resolveBillingContext(req, res);
+    if (!ctx) return;
+
+    const tier = req.body?.tier;
+    const projectId = typeof req.body?.projectId === "string" ? req.body.projectId.trim() : "";
+    if (!isProjectTier(tier) || !projectId) {
+      res.status(400).json({ error: "Choose a project and a tier." });
+      return;
+    }
+    const addons = await getProjectAddons(ctx.slug);
+    const addon = addons.find((candidate) => candidate.projectId === projectId);
+    if (!addon) {
+      res.status(400).json({
+        error: "Only projects with a purchased tier can be changed here. To upgrade an included project, add a new project tier to it instead.",
+      });
+      return;
+    }
+    if (addon.tier === tier && !addon.pendingTier) {
+      res.status(409).json({ error: "That project is already on this tier.", code: "TIER_UNCHANGED" });
+      return;
+    }
+
+    const quote = await previewAddonTierChange({
+      slug: ctx.slug,
+      projectId,
+      subscriptionId: addon.subscriptionId,
+      newTier: tier,
+    });
+    res.json(quote);
+  } catch (err) {
+    logger.error({ err }, "billing: failed to preview project tier change");
+    if (err instanceof ProjectTierChangeError) {
+      res.status(409).json({
+        error: err.message,
+        code: err.code,
+        ...(err.changed ? { changed: true } : {}),
+        ...(err.reconciliation ? { reconciliation: err.reconciliation } : {}),
+      });
+      return;
+    }
+    res.status(500).json({ error: "Could not calculate the project tier price. Please try again." });
+  }
+});
+
 router.post("/platform/billing/project-tier", requirePlatformAuth, async (req, res) => {
   try {
     const ctx = await resolveBillingContext(req, res);
@@ -757,10 +805,18 @@ router.post("/platform/billing/project-tier", requirePlatformAuth, async (req, r
       res.status(409).json({ error: "That project is already on this tier." });
       return;
     }
-    const result = await changeAddonTier({ slug: ctx.slug, subscriptionId: addon.subscriptionId, newTier: tier });
+    const quoteId = typeof req.body?.quoteId === "string" ? req.body.quoteId.trim() : undefined;
+    const result = await changeAddonTier({
+      slug: ctx.slug,
+      projectId,
+      subscriptionId: addon.subscriptionId,
+      newTier: tier,
+      quoteId,
+    });
     res.json({
       ok: true,
       applied: result.applied,
+      reconciliation: result.reconciliation,
       message:
         result.applied === "now"
           ? "Tier upgraded - the higher monthly action allowance applies immediately. The prorated difference has been charged to your card."
@@ -768,6 +824,15 @@ router.post("/platform/billing/project-tier", requirePlatformAuth, async (req, r
     });
   } catch (err) {
     logger.error({ err }, "billing: failed to change project tier");
+    if (err instanceof ProjectTierChangeError) {
+      res.status(409).json({
+        error: err.message,
+        code: err.code,
+        ...(err.changed ? { changed: true } : {}),
+        ...(err.reconciliation ? { reconciliation: err.reconciliation } : {}),
+      });
+      return;
+    }
     res.status(500).json({ error: "Could not change the project tier. Please try again." });
   }
 });

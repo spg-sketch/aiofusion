@@ -485,15 +485,14 @@ describe("agency project tier controls", () => {
     expect(subscriptionCalls).toBe(2);
   });
 
-  it.each([
-    ["max", "Tier upgraded by the billing service."],
-    ["standard", "Tier downgraded by the billing service."],
-  ] as const)("sends a paid add-on %s to project-tier and surfaces its message", async (newTier, message) => {
+  it("schedules a paid add-on downgrade without requesting a charge preview", async () => {
+    const newTier = "standard";
+    const message = "Tier downgraded by the billing service.";
     const fetchMock = stubBilling(agencyInfo([
       {
         id: "paid-project",
         name: "Paid client project",
-        tier: newTier === "max" ? "premium" : "max",
+        tier: "max",
         isAddon: true,
         addonSubscriptionId: "addon-subscription",
         pendingTier: null,
@@ -508,6 +507,9 @@ describe("agency project tier controls", () => {
     const card = await screen.findByTestId("change-tier-card");
     fireEvent.change(within(card).getByLabelText("Client project"), { target: { value: "paid-project" } });
     fireEvent.change(within(card).getByLabelText("New tier"), { target: { value: newTier } });
+    expect(card).toHaveTextContent("No immediate charge.");
+    expect(card).toHaveTextContent("Standard and its lower allowance take effect at your next renewal at £100/year.");
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith("/project-tier/preview"))).toBe(false);
     fireEvent.click(within(card).getByRole("button", { name: "Change tier" }));
 
     await waitFor(() => expect(screen.getByText(message)).toBeInTheDocument());
@@ -517,6 +519,265 @@ describe("agency project tier controls", () => {
       credentials: "include",
       body: JSON.stringify({ projectId: "paid-project", tier: newTier }),
     });
+  });
+
+  it("automatically previews a paid add-on upgrade, blocks confirmation while loading, and reconciles the exact charge", async () => {
+    let resolvePreview!: (response: Response) => void;
+    const previewResponse = new Promise<Response>((resolve) => { resolvePreview = resolve; });
+    const info = agencyInfo([{
+      id: "paid-project",
+      name: "Paid client project",
+      tier: "premium",
+      isAddon: true,
+      addonSubscriptionId: "addon-subscription",
+      pendingTier: null,
+    }]);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/billing/subscription")) {
+        return { ok: true, json: async () => info } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/invoices")) {
+        return { ok: true, json: async () => ({ invoices: [] }) } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/project-tier/preview")) return previewResponse;
+      if (url.endsWith("/api/platform/billing/project-tier")) {
+        return {
+          ok: true,
+          json: async () => ({
+            message: "Tier upgraded.",
+            reconciliation: { matched: true, amountPaid: 12345, currency: "gbp" },
+          }),
+        } as Response;
+      }
+      throw new Error(`Unexpected request: ${url} ${init?.method ?? ""}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<SubscriptionCard />);
+
+    const card = await screen.findByTestId("change-tier-card");
+    fireEvent.change(within(card).getByLabelText("Client project"), { target: { value: "paid-project" } });
+    fireEvent.change(within(card).getByLabelText("New tier"), { target: { value: "max" } });
+
+    expect(await within(card).findByText("Calculating your exact charge with Stripe...")).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "Confirm upgrade" })).toBeDisabled();
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) =>
+      String(input).endsWith("/api/platform/billing/project-tier/preview"),
+    )).toBe(true));
+    resolvePreview({
+      ok: true,
+      json: async () => ({
+        quoteId: "quote-exact-123",
+        amountDue: 12345,
+        currency: "gbp",
+        annualRenewalAmount: 30000,
+        prorationDate: 1_800_000_000,
+        expiresAt: Date.now() + 60_000,
+        applied: "now",
+      }),
+    } as Response);
+
+    const preview = await within(card).findByTestId("tier-charge-preview");
+    expect(preview).toHaveTextContent("Due now: GBP 123.45");
+    expect(preview).toHaveTextContent("Annual renewal price: GBP 300.00/year for Max.");
+    const confirm = within(card).getByRole("button", { name: /Confirm upgrade - GBP.123\.45 now/ });
+    expect(confirm).toBeEnabled();
+    fireEvent.click(confirm);
+
+    expect(await within(card).findByRole("status")).toHaveTextContent(
+      "Tier upgraded. Final paid invoice: GBP 123.45. This matches your approved preview.",
+    );
+    const changeCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).endsWith("/api/platform/billing/project-tier"),
+    );
+    expect(changeCall?.[1]).toMatchObject({
+      method: "POST",
+      credentials: "include",
+      body: JSON.stringify({ projectId: "paid-project", tier: "max", quoteId: "quote-exact-123" }),
+    });
+  });
+
+  it.each([
+    ["server failure", { ok: false, json: async () => ({ error: "Stripe preview is unavailable." }) }],
+    ["invalid response", {
+      ok: true,
+      json: async () => ({
+        quoteId: "",
+        amountDue: 12345,
+        currency: "gbp",
+        annualRenewalAmount: 30000,
+        prorationDate: 1_800_000_000,
+        expiresAt: Date.now() + 60_000,
+        applied: "now",
+      }),
+    }],
+  ] as const)("blocks confirmation and retries after a %s", async (_label, failedResponse) => {
+    let previewCalls = 0;
+    const info = agencyInfo([{
+      id: "paid-project", name: "Paid client project", tier: "premium",
+      isAddon: true, addonSubscriptionId: "addon-subscription", pendingTier: null,
+    }]);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/billing/subscription")) return { ok: true, json: async () => info } as Response;
+      if (url.endsWith("/api/platform/billing/invoices")) return { ok: true, json: async () => ({ invoices: [] }) } as Response;
+      if (url.endsWith("/api/platform/billing/project-tier/preview")) {
+        previewCalls += 1;
+        if (previewCalls === 1) return failedResponse as Response;
+        return {
+          ok: true,
+          json: async () => ({
+            quoteId: "retry-quote", amountDue: 1000, currency: "gbp",
+            annualRenewalAmount: 30000, prorationDate: 1_800_000_000,
+            expiresAt: Date.now() + 60_000, applied: "now",
+          }),
+        } as Response;
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<SubscriptionCard />);
+
+    const card = await screen.findByTestId("change-tier-card");
+    fireEvent.change(within(card).getByLabelText("Client project"), { target: { value: "paid-project" } });
+    fireEvent.change(within(card).getByLabelText("New tier"), { target: { value: "max" } });
+
+    const retry = await within(card).findByRole("button", { name: "Retry charge preview" });
+    expect(within(card).getByRole("button", { name: "Confirm upgrade" })).toBeDisabled();
+    expect(within(card).getByRole("alert")).toHaveTextContent(
+      _label === "server failure" ? "Stripe preview is unavailable." : "The charge preview was invalid.",
+    );
+    fireEvent.click(retry);
+    expect(await within(card).findByRole("button", { name: /Confirm upgrade - GBP.10\.00 now/ })).toBeEnabled();
+    expect(previewCalls).toBe(2);
+  });
+
+  it("expires a quote, blocks confirmation, and allows a fresh preview", async () => {
+    let previewCalls = 0;
+    const info = agencyInfo([{
+      id: "paid-project", name: "Paid client project", tier: "premium",
+      isAddon: true, addonSubscriptionId: "addon-subscription", pendingTier: null,
+    }]);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/billing/subscription")) return { ok: true, json: async () => info } as Response;
+      if (url.endsWith("/api/platform/billing/invoices")) return { ok: true, json: async () => ({ invoices: [] }) } as Response;
+      if (url.endsWith("/api/platform/billing/project-tier/preview")) {
+        previewCalls += 1;
+        return {
+          ok: true,
+          json: async () => ({
+            quoteId: `quote-${previewCalls}`, amountDue: 2500, currency: "gbp",
+            annualRenewalAmount: 30000, prorationDate: 1_800_000_000,
+            expiresAt: Date.now() + (previewCalls === 1 ? 30 : 60_000), applied: "now",
+          }),
+        } as Response;
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<SubscriptionCard />);
+
+    const card = await screen.findByTestId("change-tier-card");
+    fireEvent.change(within(card).getByLabelText("Client project"), { target: { value: "paid-project" } });
+    fireEvent.change(within(card).getByLabelText("New tier"), { target: { value: "max" } });
+    expect(await within(card).findByRole("button", { name: /Confirm upgrade - GBP.25\.00 now/ })).toBeEnabled();
+
+    const retry = await within(card).findByRole("button", { name: "Retry charge preview" }, { timeout: 1000 });
+    expect(within(card).getByText(/This charge preview has expired/)).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "Confirm upgrade" })).toBeDisabled();
+    fireEvent.click(retry);
+    expect(await within(card).findByRole("button", { name: /Confirm upgrade - GBP.25\.00 now/ })).toBeEnabled();
+    expect(previewCalls).toBe(2);
+  });
+
+  it("ignores a stale out-of-order preview after the tier selection changes", async () => {
+    let resolvePremium!: (response: Response) => void;
+    let resolveMax!: (response: Response) => void;
+    const premiumResponse = new Promise<Response>((resolve) => { resolvePremium = resolve; });
+    const maxResponse = new Promise<Response>((resolve) => { resolveMax = resolve; });
+    const info = agencyInfo([{
+      id: "paid-project", name: "Paid client project", tier: "standard",
+      isAddon: true, addonSubscriptionId: "addon-subscription", pendingTier: null,
+    }]);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/billing/subscription")) return { ok: true, json: async () => info } as Response;
+      if (url.endsWith("/api/platform/billing/invoices")) return { ok: true, json: async () => ({ invoices: [] }) } as Response;
+      if (url.endsWith("/api/platform/billing/project-tier/preview")) {
+        const body = JSON.parse(String(init?.body));
+        return body.tier === "premium" ? premiumResponse : maxResponse;
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<SubscriptionCard />);
+
+    const card = await screen.findByTestId("change-tier-card");
+    fireEvent.change(within(card).getByLabelText("Client project"), { target: { value: "paid-project" } });
+    fireEvent.change(within(card).getByLabelText("New tier"), { target: { value: "premium" } });
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([input]) =>
+      String(input).endsWith("/project-tier/preview"),
+    )).toHaveLength(1));
+    fireEvent.change(within(card).getByLabelText("New tier"), { target: { value: "max" } });
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([input]) =>
+      String(input).endsWith("/project-tier/preview"),
+    )).toHaveLength(2));
+
+    resolveMax({ ok: true, json: async () => ({
+      quoteId: "max-quote", amountDue: 3000, currency: "gbp", annualRenewalAmount: 30000,
+      prorationDate: 1_800_000_000, expiresAt: Date.now() + 60_000, applied: "now",
+    }) } as Response);
+    expect(await within(card).findByText("Due now: GBP 30.00")).toBeInTheDocument();
+    resolvePremium({ ok: true, json: async () => ({
+      quoteId: "stale-premium-quote", amountDue: 2000, currency: "gbp", annualRenewalAmount: 20000,
+      prorationDate: 1_800_000_000, expiresAt: Date.now() + 60_000, applied: "now",
+    }) } as Response);
+    await waitFor(() => expect(within(card).queryByText("Due now: GBP 20.00")).toBeNull());
+    expect(within(card).getByText("Annual renewal price: GBP 300.00/year for Max.")).toBeInTheDocument();
+  });
+
+  it("keeps a changed:true error visible, clears controls, and refreshes billing state", async () => {
+    let subscriptionCalls = 0;
+    const info = agencyInfo([{
+      id: "paid-project", name: "Paid client project", tier: "premium",
+      isAddon: true, addonSubscriptionId: "addon-subscription", pendingTier: null,
+    }]);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/billing/subscription")) {
+        subscriptionCalls += 1;
+        return { ok: true, json: async () => info } as Response;
+      }
+      if (url.endsWith("/api/platform/billing/invoices")) return { ok: true, json: async () => ({ invoices: [] }) } as Response;
+      if (url.endsWith("/api/platform/billing/project-tier/preview")) return {
+        ok: true,
+        json: async () => ({
+          quoteId: "changed-quote", amountDue: 1234, currency: "gbp", annualRenewalAmount: 30000,
+          prorationDate: 1_800_000_000, expiresAt: Date.now() + 60_000, applied: "now",
+        }),
+      } as Response;
+      if (url.endsWith("/api/platform/billing/project-tier")) return {
+        ok: false,
+        json: async () => ({ changed: true, error: "The tier changed, but invoice reconciliation failed." }),
+      } as Response;
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<SubscriptionCard />);
+
+    const card = await screen.findByTestId("change-tier-card");
+    const project = within(card).getByLabelText("Client project") as HTMLSelectElement;
+    const tier = within(card).getByLabelText("New tier") as HTMLSelectElement;
+    fireEvent.change(project, { target: { value: "paid-project" } });
+    fireEvent.change(tier, { target: { value: "max" } });
+    fireEvent.click(await within(card).findByRole("button", { name: /Confirm upgrade - GBP.12\.34 now/ }));
+
+    expect(await within(card).findByRole("alert")).toHaveTextContent("The tier changed, but invoice reconciliation failed.");
+    expect(project.value).toBe("");
+    expect(tier.value).toBe("");
+    expect(tier).toBeDisabled();
+    await waitFor(() => expect(subscriptionCalls).toBe(2));
   });
 
   it("offers only Max for an included Premium project and uses attached project checkout", async () => {
@@ -580,7 +841,7 @@ describe("agency project tier controls", () => {
       {
         id: "paid-project",
         name: "Paid client project",
-        tier: "premium",
+        tier: "max",
         isAddon: true,
         addonSubscriptionId: "addon-subscription",
         pendingTier: null,
@@ -595,7 +856,7 @@ describe("agency project tier controls", () => {
 
     const card = await screen.findByTestId("change-tier-card");
     fireEvent.change(within(card).getByLabelText("Client project"), { target: { value: "paid-project" } });
-    fireEvent.change(within(card).getByLabelText("New tier"), { target: { value: "max" } });
+    fireEvent.change(within(card).getByLabelText("New tier"), { target: { value: "standard" } });
     fireEvent.click(within(card).getByRole("button", { name: "Change tier" }));
 
     expect(await screen.findByText("Billing service is unavailable right now.")).toBeInTheDocument();

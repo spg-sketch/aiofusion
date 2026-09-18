@@ -2053,6 +2053,221 @@ export async function getLatestInvoiceLink(slug: string): Promise<string | null>
 // ---------------------------------------------------------------------------
 
 const TIER_RANK: Record<ProjectTier, number> = { standard: 0, premium: 1, max: 2 };
+export const PROJECT_TIER_QUOTE_TTL_MS = 5 * 60 * 1000;
+
+export interface ProjectTierQuote {
+  quoteId: string;
+  amountDue: number;
+  currency: string;
+  annualRenewalAmount: number;
+  prorationDate: number;
+  expiresAt: number;
+  applied: "now" | "at_renewal";
+}
+
+export interface TierChangeReconciliation {
+  matched: boolean;
+  amountPaid: number;
+  currency: string;
+  expectedAmount: number;
+}
+
+type StoredProjectTierQuote = ProjectTierQuote & {
+  slug: string;
+  projectId: string;
+  subscriptionId: string;
+  tier: ProjectTier;
+  itemId: string;
+  priceId: string;
+  quantity: number;
+  subscriptionState: string;
+  status: "pending" | "processing";
+};
+
+export class ProjectTierChangeError extends Error {
+  constructor(
+    message: string,
+    readonly code: string,
+    readonly changed = false,
+    readonly reconciliation?: TierChangeReconciliation,
+  ) {
+    super(message);
+    this.name = "ProjectTierChangeError";
+  }
+}
+
+const tierQuoteKey = (quoteId: string) => `projectTierQuote:${quoteId}`;
+
+function subscriptionItemPriceId(item: Stripe.SubscriptionItem): string {
+  return typeof item.price === "string" ? item.price : item.price.id;
+}
+
+function subscriptionStateFingerprint(subscription: Stripe.Subscription, item: Stripe.SubscriptionItem): string {
+  const periodEnd =
+    (item as Stripe.SubscriptionItem & { current_period_end?: number }).current_period_end ??
+    (subscription as Stripe.Subscription & { current_period_end?: number }).current_period_end ??
+    null;
+  return JSON.stringify({
+    status: subscription.status,
+    cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    periodEnd,
+    itemId: item.id,
+    priceId: subscriptionItemPriceId(item),
+    quantity: item.quantity ?? 1,
+  });
+}
+
+function expandableId(value: string | { id: string } | null | undefined): string | null {
+  if (!value) return null;
+  return typeof value === "string" ? value : value.id;
+}
+
+function isDefinitiveStripeRejection(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const stripeError = err as { type?: unknown; statusCode?: unknown };
+  if (stripeError.type === "StripeCardError") return true;
+  return (
+    typeof stripeError.statusCode === "number" &&
+    stripeError.statusCode >= 400 &&
+    stripeError.statusCode < 500
+  );
+}
+
+async function getRecurringPriceAmount(
+  stripe: Stripe,
+  priceId: string,
+  quantity: number,
+): Promise<{ amount: number; currency: string }> {
+  const price = await stripe.prices.retrieve(priceId);
+  if (
+    price.type !== "recurring" ||
+    price.recurring?.interval !== "year" ||
+    price.recurring.interval_count !== 1 ||
+    price.unit_amount == null
+  ) {
+    throw new Error("The selected project tier does not have a yearly recurring Stripe price.");
+  }
+  return { amount: price.unit_amount * quantity, currency: price.currency.toLowerCase() };
+}
+
+function previewParams(
+  subscriptionId: string,
+  itemId: string,
+  priceId: string,
+  quantity: number,
+  prorationDate: number,
+): Stripe.InvoiceCreatePreviewParams {
+  return {
+    subscription: subscriptionId,
+    subscription_details: {
+      items: [{ id: itemId, price: priceId, quantity }],
+      proration_behavior: "always_invoice",
+      proration_date: prorationDate,
+    },
+  };
+}
+
+export async function previewAddonTierChange(opts: {
+  slug: string;
+  projectId: string;
+  subscriptionId: string;
+  newTier: ProjectTier;
+}): Promise<ProjectTierQuote> {
+  const slug = normUsername(opts.slug);
+  return withSlugLock(slug, async () => {
+    const addons = await getProjectAddons(slug);
+    const addon = addons.find(
+      (candidate) =>
+        candidate.subscriptionId === opts.subscriptionId && candidate.projectId === opts.projectId,
+    );
+    if (!addon) throw new ProjectTierChangeError("Add-on not found.", "ADDON_NOT_FOUND");
+    if (addon.tier === opts.newTier && !addon.pendingTier) {
+      throw new ProjectTierChangeError("That project is already on this tier.", "TIER_UNCHANGED");
+    }
+
+    const stripe = await getUncachableStripeClient();
+    const priceId = await ensurePriceId(stripe, PROJECT_TIER_PRICES[opts.newTier]);
+    const subscription = await stripe.subscriptions.retrieve(opts.subscriptionId);
+    const item = subscription.items.data[0];
+    if (!item) throw new Error("Add-on subscription has no item to update");
+    const isUpgrade = TIER_RANK[opts.newTier] > TIER_RANK[addon.tier];
+    if (isUpgrade && subscriptionItemPriceId(item) === priceId) {
+      throw new ProjectTierChangeError(
+        "Stripe already has this tier, but local billing is still reconciling. Refresh billing and do not retry this charge.",
+        "STRIPE_TIER_ALREADY_CHANGED",
+        true,
+      );
+    }
+    const quantity = item.quantity ?? 1;
+    const recurring = await getRecurringPriceAmount(stripe, priceId, quantity);
+    const prorationDate = Math.floor(Date.now() / 1000);
+    let amountDue = 0;
+    let currency = recurring.currency;
+
+    if (isUpgrade) {
+      const invoice = await stripe.invoices.createPreview(
+        previewParams(opts.subscriptionId, item.id, priceId, quantity, prorationDate),
+      );
+      amountDue = invoice.amount_due;
+      currency = invoice.currency.toLowerCase();
+    }
+
+    const quoteId = randomUUID();
+    const quote: ProjectTierQuote = {
+      quoteId,
+      amountDue,
+      currency,
+      annualRenewalAmount: recurring.amount,
+      prorationDate,
+      expiresAt: Date.now() + PROJECT_TIER_QUOTE_TTL_MS,
+      applied: isUpgrade ? "now" : "at_renewal",
+    };
+    const stored: StoredProjectTierQuote = {
+      ...quote,
+      slug,
+      projectId: opts.projectId,
+      subscriptionId: opts.subscriptionId,
+      tier: opts.newTier,
+      itemId: item.id,
+      priceId,
+      quantity,
+      subscriptionState: subscriptionStateFingerprint(subscription, item),
+      status: "pending",
+    };
+    await db.insert(platformMetaTable).values({
+      key: tierQuoteKey(quoteId),
+      value: JSON.stringify(stored),
+    });
+    return quote;
+  });
+}
+
+async function claimProjectTierQuote(
+  quoteId: string,
+  target: Pick<StoredProjectTierQuote, "slug" | "projectId" | "subscriptionId" | "tier">,
+): Promise<StoredProjectTierQuote> {
+  const result = await db.execute(sql`
+    UPDATE platform_meta
+    SET value = jsonb_set(value::jsonb, '{status}', '"processing"'::jsonb)::text
+    WHERE key = ${tierQuoteKey(quoteId)}
+      AND (value::json->>'status') = 'pending'
+      AND (value::json->>'slug') = ${target.slug}
+      AND (value::json->>'projectId') = ${target.projectId}
+      AND (value::json->>'subscriptionId') = ${target.subscriptionId}
+      AND (value::json->>'tier') = ${target.tier}
+      AND ((value::json->>'expiresAt')::bigint) > ${Date.now()}
+    RETURNING value
+  `);
+  const row = (result.rows[0] as { value?: string } | undefined)?.value;
+  if (!row) {
+    throw new ProjectTierChangeError(
+      "This tier quote is no longer available. Request a new quote.",
+      "QUOTE_INVALID",
+    );
+  }
+  const quote = JSON.parse(row) as StoredProjectTierQuote;
+  return quote;
+}
 
 // Changes an add-on subscription's tier.
 //  - Upgrade: the price is swapped with an immediate prorated charge and the
@@ -2061,13 +2276,18 @@ const TIER_RANK: Record<ProjectTier, number> = { standard: 0, premium: 1, max: 2
 //    from the next renewal) and the lower limit is queued via pendingTier.
 export async function changeAddonTier(opts: {
   slug: string;
+  projectId: string;
   subscriptionId: string;
   newTier: ProjectTier;
-}): Promise<{ applied: "now" | "at_renewal" }> {
+  quoteId?: string;
+}): Promise<{ applied: "now" | "at_renewal"; reconciliation?: TierChangeReconciliation }> {
   const slug = normUsername(opts.slug);
   return withSlugLock(slug, async () => {
     const addons = await getProjectAddons(slug);
-    const addon = addons.find((a) => a.subscriptionId === opts.subscriptionId);
+    const addon = addons.find(
+      (candidate) =>
+        candidate.subscriptionId === opts.subscriptionId && candidate.projectId === opts.projectId,
+    );
     if (!addon) throw new Error("Add-on not found");
     if (addon.tier === opts.newTier && !addon.pendingTier) {
       return { applied: "now" as const };
@@ -2077,25 +2297,156 @@ export async function changeAddonTier(opts: {
     const stripe = await getUncachableStripeClient();
     const priceId = await ensurePriceId(stripe, PROJECT_TIER_PRICES[opts.newTier]);
     const subscription = await stripe.subscriptions.retrieve(opts.subscriptionId);
-    const itemId = subscription.items.data[0]?.id;
-    if (!itemId) throw new Error("Add-on subscription has no item to update");
-
-    await stripe.subscriptions.update(opts.subscriptionId, {
-      items: [{ id: itemId, price: priceId }],
-      proration_behavior: isUpgrade ? "always_invoice" : "none",
-      metadata: { ...subscription.metadata, tier: opts.newTier },
-    });
+    const item = subscription.items.data[0];
+    if (!item) throw new Error("Add-on subscription has no item to update");
+    const itemId = item.id;
+    const quantity = item.quantity ?? 1;
+    if (isUpgrade && subscriptionItemPriceId(item) === priceId) {
+      throw new ProjectTierChangeError(
+        "Stripe already has this tier, but local billing is still reconciling. Refresh billing and do not retry this charge.",
+        "STRIPE_TIER_ALREADY_CHANGED",
+        true,
+      );
+    }
 
     if (isUpgrade) {
-      addon.tier = opts.newTier;
-      delete addon.pendingTier;
-      await saveProjectAddons(slug, addons);
-      if (addon.projectId) {
-        await setProjectTierScoped(slug, addon.projectId, opts.newTier);
+      if (!opts.quoteId) {
+        throw new ProjectTierChangeError(
+          "Confirm this upgrade from a current price quote.",
+          "QUOTE_REQUIRED",
+        );
+      }
+      const quote = await claimProjectTierQuote(opts.quoteId, {
+        slug,
+        projectId: opts.projectId,
+        subscriptionId: opts.subscriptionId,
+        tier: opts.newTier,
+      });
+      if (
+        quote.priceId !== priceId ||
+        quote.itemId !== itemId ||
+        quote.quantity !== quantity ||
+        quote.subscriptionState !== subscriptionStateFingerprint(subscription, item)
+      ) {
+        throw new ProjectTierChangeError(
+          "The subscription changed after this quote was created. Request a new quote.",
+          "QUOTE_STALE",
+        );
+      }
+
+      const revalidated = await stripe.invoices.createPreview(
+        previewParams(opts.subscriptionId, itemId, priceId, quantity, quote.prorationDate),
+      );
+      if (
+        revalidated.amount_due !== quote.amountDue ||
+        revalidated.currency.toLowerCase() !== quote.currency
+      ) {
+        throw new ProjectTierChangeError(
+          "The amount due has changed. Request a new quote before upgrading.",
+          "QUOTE_MISMATCH",
+        );
+      }
+
+      let updatedSubscription: Stripe.Subscription;
+      try {
+        updatedSubscription = await stripe.subscriptions.update(
+          opts.subscriptionId,
+          {
+            items: [{ id: itemId, price: priceId, quantity }],
+            proration_behavior: "always_invoice",
+            proration_date: quote.prorationDate,
+            payment_behavior: "error_if_incomplete",
+            metadata: { ...subscription.metadata, tier: opts.newTier },
+            expand: ["latest_invoice"],
+          },
+          { idempotencyKey: `project-tier-quote-${quote.quoteId}` },
+        );
+      } catch (err) {
+        if (isDefinitiveStripeRejection(err)) {
+          throw new ProjectTierChangeError(
+            "The upgrade payment was not completed. Request a fresh quote before trying again.",
+            "PAYMENT_FAILED",
+          );
+        }
+        logger.error({ err, slug, subscriptionId: opts.subscriptionId }, "billing: ambiguous project tier update error");
+        throw new ProjectTierChangeError(
+          "Stripe may have applied this change, but confirmation was interrupted. Refresh billing and do not retry.",
+          "UPDATE_OUTCOME_UNKNOWN",
+          true,
+        );
+      }
+
+      let reconciliation: TierChangeReconciliation;
+      try {
+        const latest = updatedSubscription.latest_invoice;
+        const oldLatestInvoiceId = expandableId(subscription.latest_invoice);
+        const updatedLatestInvoiceId = expandableId(latest);
+        const invoice =
+          typeof latest === "string"
+            ? await stripe.invoices.retrieve(latest)
+            : latest;
+        const amountPaid = invoice?.amount_paid ?? 0;
+        const invoiceCurrency = invoice?.currency?.toLowerCase() ?? quote.currency;
+        reconciliation = {
+          matched:
+            Boolean(invoice) &&
+            Boolean(updatedLatestInvoiceId) &&
+            (!oldLatestInvoiceId || updatedLatestInvoiceId !== oldLatestInvoiceId) &&
+            invoice!.status === "paid" &&
+            invoiceSubscriptionId(invoice!) === opts.subscriptionId &&
+            invoice!.amount_due === quote.amountDue &&
+            amountPaid === quote.amountDue &&
+            invoiceCurrency === quote.currency,
+          amountPaid,
+          currency: invoiceCurrency,
+          expectedAmount: quote.amountDue,
+        };
+      } catch (err) {
+        logger.error({ err, slug, subscriptionId: opts.subscriptionId }, "billing: could not reconcile tier upgrade invoice");
+        reconciliation = {
+          matched: false,
+          amountPaid: 0,
+          currency: quote.currency,
+          expectedAmount: quote.amountDue,
+        };
+      }
+      if (!reconciliation.matched) {
+        throw new ProjectTierChangeError(
+          "The Stripe change was applied, but its paid invoice could not be verified. Refresh billing before taking any further action.",
+          "INVOICE_RECONCILIATION_FAILED",
+          true,
+          reconciliation,
+        );
+      }
+
+      try {
+        addon.tier = opts.newTier;
+        delete addon.pendingTier;
+        await saveProjectAddons(slug, addons);
+        if (addon.projectId) {
+          const projectUpdated = await setProjectTierScoped(slug, addon.projectId, opts.newTier);
+          if (!projectUpdated) {
+            throw new Error("The add-on project is no longer available to this billing account.");
+          }
+        }
+      } catch (err) {
+        logger.error({ err, slug, subscriptionId: opts.subscriptionId }, "billing: paid tier upgrade persistence failed");
+        throw new ProjectTierChangeError(
+          "The paid Stripe change was verified, but local billing could not be updated. Refresh billing and do not retry.",
+          "LOCAL_RECONCILIATION_FAILED",
+          true,
+          reconciliation,
+        );
       }
       logger.info({ slug, subscriptionId: opts.subscriptionId, tier: opts.newTier }, "billing: add-on upgraded");
-      return { applied: "now" as const };
+      return { applied: "now" as const, reconciliation };
     }
+
+    await stripe.subscriptions.update(opts.subscriptionId, {
+      items: [{ id: itemId, price: priceId, quantity }],
+      proration_behavior: "none",
+      metadata: { ...subscription.metadata, tier: opts.newTier },
+    });
     addon.pendingTier = opts.newTier;
     await saveProjectAddons(slug, addons);
     logger.info({ slug, subscriptionId: opts.subscriptionId, pendingTier: opts.newTier }, "billing: add-on downgrade queued to renewal");
