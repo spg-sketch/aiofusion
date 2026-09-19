@@ -215,6 +215,36 @@ export async function ensureMediaSchema(): Promise<void> {
     )
   `);
   await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS media_import_jobs (
+      id varchar(80) PRIMARY KEY,
+      account_id varchar NOT NULL,
+      idempotency_key varchar(160) NOT NULL,
+      source_filename text NOT NULL DEFAULT '',
+      source_hash varchar(64) NOT NULL,
+      source_type varchar(20) NOT NULL DEFAULT 'csv',
+      collection_scope varchar(20) NOT NULL,
+      category text NOT NULL DEFAULT '',
+      status varchar(24) NOT NULL DEFAULT 'parsing',
+      input jsonb NOT NULL DEFAULT '{}'::jsonb,
+      summary jsonb NOT NULL DEFAULT '{}'::jsonb,
+      error text NOT NULL DEFAULT '',
+      batch_id integer REFERENCES media_import_batches(id) ON DELETE SET NULL,
+      claimed_at timestamptz,
+      attempts integer NOT NULL DEFAULT 0,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      completed_at timestamptz
+    )
+  `);
+  await db.execute(sql`
+    ALTER TABLE media_import_jobs
+      ADD COLUMN IF NOT EXISTS input jsonb NOT NULL DEFAULT '{}'::jsonb,
+      ADD COLUMN IF NOT EXISTS claimed_at timestamptz,
+      ADD COLUMN IF NOT EXISTS attempts integer NOT NULL DEFAULT 0
+  `);
+  await db.execute(sql`DROP INDEX IF EXISTS media_import_jobs_source`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS media_import_jobs_idempotency ON media_import_jobs (account_id, idempotency_key)`);
+  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS media_contact_field_overrides (
       id serial PRIMARY KEY,
       contact_id integer NOT NULL,

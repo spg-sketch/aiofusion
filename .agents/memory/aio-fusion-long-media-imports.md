@@ -1,10 +1,10 @@
 ---
 name: Long media imports
-description: How to interpret browser failures during large shared media workbook imports.
+description: Durable execution and retry rules for large shared media workbook imports.
 ---
 
-For large media workbooks, a browser or proxy timeout does not prove the import failed. The server transaction can continue and commit after the client disconnects. Always check the import batch, exact source hash, summary, and aggregate counts before asking for a retry.
+Large media imports run as durable jobs. Persist the immutable parsed input before acknowledging the commit, claim work with a stale lease, and recover queued or abandoned work after server startup. Keep the committed batch as the long-term ledger, while the job stores resumable state and the user-facing row outcomes.
 
-**Why:** A reviewed V33 import exceeded the five-minute request window. The browser showed an error, but the server completed the transaction several minutes later. Retrying without reconciliation could create confusion or an unnecessary second request.
+**Why:** A reviewed V33 import exceeded the five-minute request window. Request-local background work fixed browser timeouts but could still be stranded by a process restart, and failed jobs could block a legitimate retry.
 
-**How to apply:** After any timeout, 404, aborted request, or lost response during a media import, query the persisted batch first. Match the source hash and reconcile shared/private counts. Only retry when no matching committed batch exists.
+**How to apply:** Reconcile retries by account plus idempotency key, and verify the exact source hash before replaying. Never make source hash alone globally unique because the same workbook may need a later reviewed re-import. Clear transient input after completion or terminal failure.

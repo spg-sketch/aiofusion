@@ -1,6 +1,7 @@
-import { Router, type IRouter, type Request, type Response } from "express";
-import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaDiscoveriesTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaContactStatusEventsTable, mediaContactCorrectionReportsTable, mediaImportBatchesTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, mediaOutreachTable, mediaOutreachActivitiesTable, mediaPlacementsTable, projectsTable, archiveItemsTable, platformMetaTable, platformUsersTable, tokenUsageTable, type MediaOutreachStatus } from "@workspace/db";
-import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaDiscoveriesTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaContactStatusEventsTable, mediaContactCorrectionReportsTable, mediaImportBatchesTable, mediaImportJobsTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, mediaOutreachTable, mediaOutreachActivitiesTable, mediaPlacementsTable, projectsTable, archiveItemsTable, platformMetaTable, platformUsersTable, tokenUsageTable, type MediaOutreachStatus } from "@workspace/db";
+import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { inAssignedScope, memberProjectGate } from "../lib/member-guards";
 import {
@@ -45,8 +46,102 @@ import { assessEditorialFit, type EditorialAssessment, type TargetingBrief } fro
 import { checkFairUsage, checkMonthlySpendLimit } from "../lib/fair-usage";
 import { collectJournalistCoverage } from "../lib/journalist-coverage-evidence";
 import { acquirePrivacyIdentityLock, filterSuppressedContacts, isContactSuppressed, isSuppressed, isSuppressedWithDb, privacyHash } from "../lib/journalist-privacy";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
+const IMPORT_JOB_STALE_MS = 10 * 60 * 1000;
+
+function importWorkerSignature(jobId: string): string {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) throw new Error("SESSION_SECRET is required for media import workers");
+  return createHmac("sha256", secret).update(`media-import:${jobId}`).digest("hex");
+}
+
+function validImportWorkerSignature(jobId: string, supplied: string): boolean {
+  const expected = importWorkerSignature(jobId);
+  const left = Buffer.from(expected);
+  const right = Buffer.from(supplied);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
+async function dispatchMediaImportJob(jobId: string, origin?: string): Promise<void> {
+  const target = origin ?? `http://127.0.0.1:${process.env.PORT || "8080"}`;
+  try {
+    const response = await fetch(`${target}/api/store/media-db/import`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-media-import-worker": importWorkerSignature(jobId),
+      },
+      body: JSON.stringify({ workerJobId: jobId }),
+    });
+    if (!response.ok && response.status !== 202) {
+      logger.warn({ jobId, status: response.status }, "Media import worker dispatch was rejected");
+    }
+  } catch (error) {
+    logger.warn({ err: error, jobId }, "Media import worker dispatch failed; the recovery scan will retry");
+  }
+}
+
+async function hydrateImportWorkerRequest(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const supplied = req.header("x-media-import-worker");
+  if (!supplied) {
+    next();
+    return;
+  }
+  const requestedJobId = typeof req.body?.workerJobId === "string" ? req.body.workerJobId : "";
+  if (!requestedJobId || !validImportWorkerSignature(requestedJobId, supplied)) {
+    res.status(403).json({ error: "Invalid import worker request." });
+    return;
+  }
+  const [job] = await db.select().from(mediaImportJobsTable).where(eq(mediaImportJobsTable.id, requestedJobId)).limit(1);
+  if (!job) {
+    res.status(404).json({ error: "Import job not found." });
+    return;
+  }
+  const staleBefore = new Date(Date.now() - IMPORT_JOB_STALE_MS);
+  const claimed = await db.update(mediaImportJobsTable).set({
+    status: "committing",
+    claimedAt: new Date(),
+    attempts: sql`${mediaImportJobsTable.attempts} + 1`,
+    updatedAt: new Date(),
+  }).where(and(
+    eq(mediaImportJobsTable.id, requestedJobId),
+    or(
+      eq(mediaImportJobsTable.status, "reconciliation"),
+      and(eq(mediaImportJobsTable.status, "committing"), lt(mediaImportJobsTable.claimedAt, staleBefore)),
+    ),
+  )).returning({ id: mediaImportJobsTable.id });
+  if (!claimed.length) {
+    res.status(202).json({ ok: true, jobId: job.id, status: job.status });
+    return;
+  }
+  const input = job.input as Record<string, unknown>;
+  req.body = { ...input, workerJobId: job.id };
+  req.account = {
+    username: String(input.workspaceId ?? ""),
+    role: job.collectionScope === "shared" ? "admin" : "agency",
+    membershipRole: "owner",
+    projectAccess: null,
+  } as NonNullable<Request["account"]>;
+  next();
+}
+
+async function recoverMediaImportJobs(): Promise<void> {
+  const staleBefore = new Date(Date.now() - IMPORT_JOB_STALE_MS);
+  const jobs = await db.select({ id: mediaImportJobsTable.id }).from(mediaImportJobsTable).where(or(
+    eq(mediaImportJobsTable.status, "reconciliation"),
+    and(eq(mediaImportJobsTable.status, "committing"), lt(mediaImportJobsTable.claimedAt, staleBefore)),
+  )).limit(10);
+  await Promise.all(jobs.map(({ id }) => dispatchMediaImportJob(id)));
+}
+
+if (process.env.NODE_ENV !== "test") {
+  const initialRecovery = setTimeout(() => void recoverMediaImportJobs().catch((error) => logger.error({ err: error }, "Media import recovery scan failed")), 2_000);
+  initialRecovery.unref();
+  const recoveryTimer = setInterval(() => void recoverMediaImportJobs().catch((error) => logger.error({ err: error }, "Media import recovery scan failed")), 30_000);
+  recoveryTimer.unref();
+}
 
 const OUTREACH_TRANSITIONS: Record<MediaOutreachStatus, MediaOutreachStatus[]> = {
   planned: ["pitched", "declined"],
@@ -307,11 +402,43 @@ router.get(
   },
 );
 
+router.get(
+  "/store/media-db/import-jobs/:jobId",
+  requirePlatformAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    const [job] = await db.select({
+      id: mediaImportJobsTable.id,
+      accountId: mediaImportJobsTable.accountId,
+      sourceFilename: mediaImportJobsTable.sourceFilename,
+      sourceHash: mediaImportJobsTable.sourceHash,
+      collectionScope: mediaImportJobsTable.collectionScope,
+      status: mediaImportJobsTable.status,
+      summary: mediaImportJobsTable.summary,
+      error: mediaImportJobsTable.error,
+      createdAt: mediaImportJobsTable.createdAt,
+      updatedAt: mediaImportJobsTable.updatedAt,
+      completedAt: mediaImportJobsTable.completedAt,
+    }).from(mediaImportJobsTable).where(eq(mediaImportJobsTable.id, String(req.params.jobId))).limit(1);
+    const workspaceId = normUsername(req.account!.username);
+    const canRead = job && (job.accountId === workspaceId || (job.collectionScope === "shared" && isWritableMaster(req)));
+    if (!canRead) {
+      res.status(404).json({ error: "Import job not found." });
+      return;
+    }
+    if (job.status === "reconciliation" || (job.status === "committing" && job.updatedAt.getTime() < Date.now() - IMPORT_JOB_STALE_MS)) {
+      void dispatchMediaImportJob(job.id, `${req.protocol}://${req.get("host")}`);
+    }
+    res.json({ ok: true, job: { ...job, summary: job.summary ?? {} } });
+  },
+);
+
 router.post(
   "/store/media-db/import",
+  hydrateImportWorkerRequest,
   requirePlatformAuth,
   async (req: Request, res: Response): Promise<void> => {
     const body = (req.body ?? {}) as Record<string, unknown>;
+    const workerJobId = typeof body.workerJobId === "string" ? body.workerJobId : "";
     const { csv, xlsxBase64, rows, category, commit, filename, idempotencyKey, collectionScope: requestedScope } = body;
     const collectionScope = parseCollectionScope(requestedScope);
     if (!collectionScope) {
@@ -340,7 +467,13 @@ router.post(
       // Hash the bytes that were actually uploaded, before parsing.  This
       // prevents a retry from changing the workbook while retaining its name
       // or idempotency key, and lets the commit route reject a stale preview.
-      const source = sourceHashForImport({ csv, xlsxBase64, rows });
+      const persistedSourceHash = workerJobId && typeof body.persistedSourceHash === "string" ? body.persistedSourceHash : "";
+      const persistedSourceType = workerJobId && (body.persistedSourceType === "csv" || body.persistedSourceType === "xlsx" || body.persistedSourceType === "parsed")
+        ? body.persistedSourceType
+        : null;
+      const source = persistedSourceHash && persistedSourceType
+        ? { sourceHash: persistedSourceHash, sourceType: persistedSourceType, byteLength: Number(body.persistedByteLength) || 1 }
+        : sourceHashForImport({ csv, xlsxBase64, rows });
       const maxBytes = source.sourceType === "csv" ? 2 * 1024 * 1024 : 12 * 1024 * 1024;
       if (source.byteLength < 1 || source.byteLength > maxBytes) {
         res.status(413).json({ error: `Import files must be between 1 byte and ${Math.round(maxBytes / (1024 * 1024))} MB.` });
@@ -388,6 +521,9 @@ router.post(
             errors: [],
             headers: [],
           };
+      if (workerJobId && Array.isArray(body.parsedErrors)) {
+        parsed.errors = body.parsedErrors.filter((item): item is typeof parsed.errors[number] => Boolean(item && typeof item === "object"));
+      }
       // Reviewed suppression decisions are checked again at write preparation
       // time, so a preview created before a privacy decision cannot recreate
       // an unavailable journalist.
@@ -484,6 +620,9 @@ router.post(
         overrideFingerprint,
         authorizedReconciliation,
       );
+      if (workerJobId && typeof body.reviewedFingerprint === "string" && body.reviewedFingerprint !== fingerprint) {
+        throw new Error("This import preview is stale because the collection or manual overrides changed. Preview the file again.");
+      }
       const previewToken = issueMediaImportPreviewToken({
         owner,
         scope: collectionScope,
@@ -559,9 +698,40 @@ router.post(
       }
 
       const safeKey = typeof idempotencyKey === "string" ? idempotencyKey.trim().slice(0, 160) : "";
+      let resumableJobId = workerJobId;
       // A successful commit may have changed the reconciliation fingerprint.
-      // Resolve an exact idempotent retry before validating the old preview
-      // token so network retries remain safe after that state change.
+      // Resolve durable jobs before old batch-only records so every new retry
+      // keeps returning the same pollable job identifier.
+      const [existingJob] = await db.select({
+        id: mediaImportJobsTable.id,
+        sourceHash: mediaImportJobsTable.sourceHash,
+        category: mediaImportJobsTable.category,
+        collectionScope: mediaImportJobsTable.collectionScope,
+        status: mediaImportJobsTable.status,
+      }).from(mediaImportJobsTable).where(and(
+        eq(mediaImportJobsTable.accountId, owner),
+        workerJobId ? sql`false` : undefined,
+        safeKey ? eq(mediaImportJobsTable.idempotencyKey, safeKey) : sql`false`,
+      )).limit(1);
+      if (existingJob) {
+        if (existingJob.sourceHash !== source.sourceHash) {
+          res.status(409).json({ error: "This idempotency key was already used for a different source file." });
+          return;
+        }
+        if (existingJob.category !== selectedCategory) {
+          res.status(409).json({ error: "This idempotency key was already used for a different import category." });
+          return;
+        }
+        if (existingJob.collectionScope !== collectionScope) {
+          res.status(409).json({ error: "This idempotency key was already used for a different import scope." });
+          return;
+        }
+      }
+      if (existingJob?.status === "failed") resumableJobId = existingJob.id;
+      if (existingJob && existingJob.status !== "failed") {
+        res.status(202).json({ ok: true, jobId: existingJob.id, status: existingJob.status, replayed: true, preview });
+        return;
+      }
       if (safeKey) {
         const prior = await db.select({
           summary: mediaImportBatchesTable.summary,
@@ -580,6 +750,19 @@ router.post(
             res.status(409).json({ error: "This idempotency key was already used for a different import category." });
             return;
           }
+          if (workerJobId) {
+            await db.update(mediaImportJobsTable).set({
+              status: "completed",
+              summary: priorSummary,
+              input: {},
+              error: "",
+              completedAt: new Date(),
+              claimedAt: null,
+              updatedAt: new Date(),
+            }).where(eq(mediaImportJobsTable.id, workerJobId));
+            res.json({ ok: true, jobId: workerJobId, status: "completed" });
+            return;
+          }
           res.json({
             ok: true,
             preview,
@@ -594,14 +777,14 @@ router.post(
           ? body.previewToken
           : typeof body.reviewToken === "string" ? body.reviewToken : "";
       const requestedHash = typeof body.sourceHash === "string" ? body.sourceHash : "";
-      if (!requestedHash || requestedHash !== source.sourceHash || !reviewedToken
+      if (!workerJobId && (!requestedHash || requestedHash !== source.sourceHash || !reviewedToken
         || !verifyMediaImportPreviewToken(reviewedToken, {
           owner,
           scope: collectionScope,
           category: selectedCategory,
           sourceHash: source.sourceHash,
           fingerprint,
-        })) {
+        }))) {
         res.status(409).json({
           error: "This import preview is stale or has not been reviewed. Preview the exact file again before committing.",
           sourceHash: source.sourceHash,
@@ -609,7 +792,7 @@ router.post(
         });
         return;
       }
-      if (body.acknowledgeTarget !== true || (authorizedReconciliation.counts.conflicted > 0 && body.acknowledgeConflicts !== true)) {
+      if (!workerJobId && (body.acknowledgeTarget !== true || (authorizedReconciliation.counts.conflicted > 0 && body.acknowledgeConflicts !== true))) {
         res.status(409).json({
           error: "Acknowledge the import target and review all conflicts before committing.",
           previewRequired: true,
@@ -623,7 +806,89 @@ router.post(
         return;
       }
 
-      const result = await db.transaction(async (tx) => {
+      const priorJobs = await db.select({
+        id: mediaImportJobsTable.id,
+        sourceHash: mediaImportJobsTable.sourceHash,
+        category: mediaImportJobsTable.category,
+        collectionScope: mediaImportJobsTable.collectionScope,
+        status: mediaImportJobsTable.status,
+      }).from(mediaImportJobsTable).where(and(
+        eq(mediaImportJobsTable.accountId, owner),
+        workerJobId ? sql`false` : undefined,
+        safeKey ? eq(mediaImportJobsTable.idempotencyKey, safeKey) : sql`false`,
+      )).limit(1);
+      if (priorJobs[0]) {
+        if (priorJobs[0].sourceHash !== source.sourceHash) {
+          res.status(409).json({ error: "This idempotency key was already used for a different source file." });
+          return;
+        }
+        if (priorJobs[0].category !== selectedCategory) {
+          res.status(409).json({ error: "This idempotency key was already used for a different import category." });
+          return;
+        }
+        if (priorJobs[0].collectionScope !== collectionScope) {
+          res.status(409).json({ error: "This idempotency key was already used for a different import scope." });
+          return;
+        }
+      }
+      if (priorJobs[0]?.status === "failed") resumableJobId = priorJobs[0].id;
+      if (priorJobs[0] && priorJobs[0].status !== "failed") {
+        res.status(202).json({ ok: true, jobId: priorJobs[0].id, status: priorJobs[0].status, replayed: true, preview });
+        return;
+      }
+
+      const jobId = resumableJobId || randomUUID();
+      const durableInput = {
+        rows: parsed.rows,
+        parsedErrors: parsed.errors,
+        category: selectedCategory,
+        filename: typeof filename === "string" ? filename.slice(0, 500) : "",
+        idempotencyKey: safeKey,
+        collectionScope,
+        commit: true,
+        acknowledgeTarget: true,
+        acknowledgeConflicts: true,
+        workspaceId,
+        persistedSourceHash: source.sourceHash,
+        persistedSourceType: source.sourceType,
+        persistedByteLength: source.byteLength,
+        reviewedFingerprint: fingerprint,
+      };
+      if (!workerJobId) {
+        if (resumableJobId) {
+          await db.update(mediaImportJobsTable).set({
+            idempotencyKey: safeKey || jobId,
+            sourceFilename: typeof filename === "string" ? filename.slice(0, 500) : "",
+            status: "reconciliation",
+            input: durableInput,
+            summary: {},
+            error: "",
+            batchId: null,
+            claimedAt: null,
+            completedAt: null,
+            updatedAt: new Date(),
+          }).where(eq(mediaImportJobsTable.id, jobId));
+        } else {
+          await db.insert(mediaImportJobsTable).values({
+            id: jobId,
+            accountId: owner,
+            idempotencyKey: safeKey || jobId,
+            sourceFilename: typeof filename === "string" ? filename.slice(0, 500) : "",
+            sourceHash: source.sourceHash,
+            sourceType: source.sourceType,
+            collectionScope,
+            category: selectedCategory,
+            status: "reconciliation",
+            input: durableInput,
+          });
+        }
+        res.status(202).json({ ok: true, jobId, status: "reconciliation", preview });
+        void dispatchMediaImportJob(jobId, `${req.protocol}://${req.get("host")}`);
+        return;
+      }
+
+      try {
+        const result = await db.transaction(async (tx) => {
         await acquirePrivacyIdentityLock(tx, `${owner}:${source.sourceHash}`);
         if (process.env.NODE_ENV !== "test") {
           await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`media-import:${owner}`}))`);
@@ -641,7 +906,7 @@ router.post(
             if (String(priorSummary.category ?? "") !== selectedCategory) {
               throw new Error("This idempotency key was already used for a different import category.");
             }
-            return { ...priorSummary, replayed: true };
+            return { summary: { ...priorSummary, replayed: true }, batchId: null };
           }
         }
 
@@ -876,38 +1141,72 @@ router.post(
           conflicted: commitPlan.counts.conflicted,
           invalid: commitPlan.counts.invalid + parsed.errors.length,
           sourceHash: source.sourceHash,
+          rowOutcomes: preview.rowOutcomes,
         };
-        await tx.insert(mediaImportBatchesTable).values({
+        const { rowOutcomes: _rowOutcomes, ...batchSummary } = summary;
+        const [batch] = await tx.insert(mediaImportBatchesTable).values({
           accountId: owner,
           idempotencyKey: safeKey || null,
           sourceFilename: typeof filename === "string" ? filename.slice(0, 500) : "",
           sourceHash: source.sourceHash,
           sourceType: source.sourceType,
-          summary,
+          summary: batchSummary,
           committedAt: new Date(),
-        });
-        return summary;
+        }).returning({ id: mediaImportBatchesTable.id });
+        return { summary, batchId: batch.id };
       });
 
-      const aggregateResult = result as Record<string, unknown>;
-      req.log.info({
-        accountId: owner,
-        validRows: parsed.rows.length,
-        invalidRows: parsed.errors.length,
-        outletsCreated: aggregateResult.outletsCreated,
-        contactsCreated: aggregateResult.contactsCreated,
-        duplicatesSkipped: aggregateResult.duplicatesSkipped,
-        publicationsProcessed: aggregateResult.publicationsProcessed,
-        new: aggregateResult.new,
-        refreshed: aggregateResult.refreshed,
-        unchanged: aggregateResult.unchanged,
-        conflicted: aggregateResult.conflicted,
-        invalid: aggregateResult.invalid,
-        sourceHash: aggregateResult.sourceHash,
-      }, "Media database import completed");
-      res.json({ ok: true, preview, result });
+        const aggregateResult = result.summary as Record<string, unknown>;
+        await db.update(mediaImportJobsTable).set({
+          status: "completed",
+          summary: aggregateResult,
+          input: {},
+          batchId: result.batchId,
+          error: "",
+          claimedAt: null,
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        }).where(eq(mediaImportJobsTable.id, jobId));
+        req.log.info({
+          jobId,
+          accountId: owner,
+          validRows: parsed.rows.length,
+          invalidRows: parsed.errors.length,
+          outletsCreated: aggregateResult.outletsCreated,
+          contactsCreated: aggregateResult.contactsCreated,
+          duplicatesSkipped: aggregateResult.duplicatesSkipped,
+          publicationsProcessed: aggregateResult.publicationsProcessed,
+          sourceHash: aggregateResult.sourceHash,
+        }, "Media database import completed");
+        res.json({ ok: true, jobId, status: "completed" });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to import the media file.";
+        await db.update(mediaImportJobsTable).set({
+          status: "failed",
+          input: {},
+          error: message === "SUPPRESSED_IMPORT"
+            ? "One or more contacts are unavailable for processing. Preview the file again."
+            : message,
+          claimedAt: null,
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        }).where(eq(mediaImportJobsTable.id, jobId));
+        req.log.warn({ err: error, jobId }, "Media database import job failed");
+        res.status(500).json({ error: message, jobId, status: "failed" });
+      }
+      return;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to import the media file.";
+      if (workerJobId) {
+        await db.update(mediaImportJobsTable).set({
+          status: "failed",
+          input: {},
+          error: message,
+          claimedAt: null,
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        }).where(eq(mediaImportJobsTable.id, workerJobId));
+      }
       req.log.warn({ err: error }, "Media database import rejected");
       if (message === "SUPPRESSED_IMPORT") {
         res.status(409).json({ error: "One or more contacts are unavailable for processing. Preview the file again." });

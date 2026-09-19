@@ -172,6 +172,25 @@ export type ImportRowOutcome = {
   fields?: string[];
 };
 
+type ImportResult = {
+  outletsCreated: number;
+  contactsCreated: number;
+  duplicatesSkipped: number;
+  publicationsProcessed?: number;
+  refreshed?: number;
+  unchanged?: number;
+  rowOutcomes?: ImportRowOutcome[];
+};
+
+type ImportJob = {
+  id: string;
+  status: "parsing" | "reconciliation" | "committing" | "completed" | "failed";
+  sourceFilename?: string;
+  sourceHash?: string;
+  summary?: Partial<ImportResult>;
+  error?: string;
+};
+
 type ImportInventoryValue = string | number | boolean | null | { [key: string]: ImportInventoryValue };
 
 export function importOutcomesWithErrors(
@@ -361,12 +380,14 @@ function MediaDatabasePage() {
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [importError, setImportError] = useState("");
   const [importBusy, setImportBusy] = useState(false);
-  const [importResult, setImportResult] = useState<{ outletsCreated: number; contactsCreated: number; duplicatesSkipped: number; publicationsProcessed?: number; refreshed?: number; unchanged?: number; rowOutcomes?: ImportRowOutcome[] } | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importJob, setImportJob] = useState<ImportJob | null>(null);
   const [importTargetAcknowledged, setImportTargetAcknowledged] = useState(false);
   const [importConflictsAcknowledged, setImportConflictsAcknowledged] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState("");
   const importPreviewSequence = useRef(0);
+  const importJobStorageKey = `aio.media-import-job:${session?.username || "anonymous"}`;
   const projectCategories = getProjectMediaCategories();
   const profileProvenance = showContactProfile?.provenance && typeof showContactProfile.provenance === "object"
     ? showContactProfile.provenance
@@ -400,6 +421,58 @@ function MediaDatabasePage() {
   };
 
   useEffect(() => { void loadData(); }, []);
+
+  useEffect(() => {
+    const savedJobId = localStorage.getItem(importJobStorageKey);
+    if (!savedJobId) return;
+    setImportJob({ id: savedJobId, status: "parsing" });
+    setShowImportModal(true);
+  }, [importJobStorageKey]);
+
+  useEffect(() => {
+    if (!importJob || importJob.status === "completed" || importJob.status === "failed") return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const poll = async () => {
+      try {
+        const response = await fetch(`${apiBase()}/api/store/media-db/import-jobs/${encodeURIComponent(importJob.id)}`, { credentials: "include" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not load the import status.");
+        if (cancelled) return;
+        const job = data.job as ImportJob;
+        setImportJob(job);
+        setImportFileName(job.sourceFilename || "");
+        if (job.status === "completed") {
+          const summary = job.summary ?? {};
+          setImportResult({
+            outletsCreated: Number(summary.outletsCreated ?? 0),
+            contactsCreated: Number(summary.contactsCreated ?? 0),
+            duplicatesSkipped: Number(summary.duplicatesSkipped ?? 0),
+            publicationsProcessed: Number(summary.publicationsProcessed ?? 0),
+            refreshed: Number(summary.refreshed ?? 0),
+            unchanged: Number(summary.unchanged ?? 0),
+            rowOutcomes: Array.isArray(summary.rowOutcomes) ? summary.rowOutcomes : undefined,
+          });
+          setImportBusy(false);
+          await loadData();
+          return;
+        }
+        if (job.status === "failed") {
+          setImportError(job.error || "The import failed.");
+          setImportBusy(false);
+          return;
+        }
+        timer = window.setTimeout(poll, 1500);
+      } catch (error) {
+        if (!cancelled) timer = window.setTimeout(poll, 3000);
+      }
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [importJob?.id, importJob?.status]);
 
   const loadCorrectionQueue = async () => {
     if (!isMaster || !canWriteMediaDatabase) return;
@@ -471,6 +544,8 @@ function MediaDatabasePage() {
     setImportPreview(null);
     setImportError("");
     setImportResult(null);
+    setImportJob(null);
+    localStorage.removeItem(importJobStorageKey);
     setImportTargetAcknowledged(false);
     setImportConflictsAcknowledged(false);
   };
@@ -562,22 +637,14 @@ function MediaDatabasePage() {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || "Could not import these contacts.");
-      setImportResult({
-        ...data.result,
-        rowOutcomes: importOutcomesWithErrors(
-          Array.isArray(data.rowOutcomes)
-            ? data.rowOutcomes
-            : Array.isArray(data.result?.rowOutcomes)
-              ? data.result.rowOutcomes
-              : importPreview?.rowOutcomes,
-          importPreview?.errors,
-        ),
-      });
-      await loadData();
+      if (!data.jobId) throw new Error("The import did not return a job identifier.");
+      const job: ImportJob = { id: data.jobId, status: data.status || "parsing", sourceFilename: importFileName };
+      localStorage.setItem(importJobStorageKey, job.id);
+      setImportJob(job);
     } catch (error) {
       setImportError(error instanceof Error ? error.message : "Could not import these contacts.");
+      setImportBusy(false);
     }
-    setImportBusy(false);
   };
 
   const downloadRowOutcomes = (outcomes: ImportRowOutcome[] | undefined) => {
@@ -1340,7 +1407,7 @@ function MediaDatabasePage() {
               <button onClick={() => setShowImportModal(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
             </div>
             <div className="p-6 space-y-5">
-              {!importResult && (
+              {!importResult && !importJob && (
                 <>
                   <label className="block rounded-xl border-2 border-dashed p-6 text-center cursor-pointer" style={{ borderColor: vars.g200, background: vars.g50 }}>
                     <Upload size={24} className="mx-auto mb-2" color={vars.accent} />
@@ -1436,11 +1503,38 @@ function MediaDatabasePage() {
                 </>
               )}
 
-              {importBusy && <div className="flex items-center gap-2 text-[13px]" style={{ color: vars.g500 }}><Loader2 size={16} className="animate-spin" /> Checking your file...</div>}
+              {importBusy && !importJob && <div className="flex items-center gap-2 text-[13px]" style={{ color: vars.g500 }}><Loader2 size={16} className="animate-spin" /> {importPreview ? "Starting the import job..." : "Parsing workbook..."}</div>}
               {importError && <div className="rounded-lg px-4 py-3 text-[12px] flex gap-2" style={{ background: "rgba(180,50,50,0.08)", color: vars.red }}><AlertTriangle size={15} className="shrink-0" />{importError}</div>}
 
-              {importPreview && !importResult && (
+              {importJob && !importResult && importJob.status !== "failed" && (
+                <div className="rounded-xl border p-5" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                  <div className="flex items-center gap-3">
+                    <Loader2 size={20} className="animate-spin" color={vars.accent} />
+                    <div>
+                      <p className="text-[14px] font-semibold" style={{ color: vars.navy }}>
+                        {importJob.status === "parsing" ? "Parsing workbook"
+                          : importJob.status === "reconciliation" ? "Reconciling contacts and publications"
+                            : "Committing import"}
+                      </p>
+                      <p className="text-[11px] mt-1" style={{ color: vars.g500 }}>You can close this window or reload the page. This import will continue and its saved result will appear here.</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid grid-cols-3 gap-2" aria-label="Import progress">
+                    {(["parsing", "reconciliation", "committing"] as const).map((stage, index) => {
+                      const currentIndex = ["parsing", "reconciliation", "committing"].indexOf(importJob.status);
+                      return <div key={stage} className="rounded-lg px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wide" style={{ background: index <= currentIndex ? "rgba(31,116,143,0.12)" : "white", color: index <= currentIndex ? vars.accent : vars.g400 }}>{stage}</div>;
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {importJob?.status === "failed" && (
+                <button onClick={resetImport} className="rounded-lg border px-4 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Start a new import</button>
+              )}
+
+              {importPreview && !importResult && !importJob && (
                 <div className="space-y-4">
+                   <div className="flex items-center gap-2 text-[12px] font-semibold" style={{ color: vars.accent }}><CheckCircle2 size={15} /> Reconciliation complete</div>
                    <div className="rounded-xl border px-4 py-3" style={{ borderColor: importPreview.collectionScope === "shared" ? vars.accent : vars.g200, background: importPreview.collectionScope === "shared" ? "rgba(31,116,143,0.06)" : vars.g50 }}>
                      <div className="flex items-start gap-2">
                        <ShieldCheck size={16} className="mt-0.5 shrink-0" color={vars.accent} />
@@ -1548,8 +1642,8 @@ function MediaDatabasePage() {
               )}
             </div>
             <div className="px-6 py-4 border-t flex justify-end gap-2" style={{ borderColor: vars.g200 }}>
-              <button onClick={() => setShowImportModal(false)} className="px-4 py-2 rounded-lg text-[13px] font-semibold border" style={{ borderColor: vars.g200, color: vars.g500 }}>{importResult ? "Close" : "Cancel"}</button>
-              {importPreview && !importResult && (
+              <button onClick={() => setShowImportModal(false)} className="px-4 py-2 rounded-lg text-[13px] font-semibold border" style={{ borderColor: vars.g200, color: vars.g500 }}>{importResult || importJob ? "Close" : "Cancel"}</button>
+              {importPreview && !importResult && !importJob && (
                   <button onClick={() => void importContacts()} disabled={importBusy || !importPlanHasWork(importPreview) || Boolean(importPreview.reviewToken && (!importTargetAcknowledged || (Number(importPreview.conflicted ?? importPreview.conflicts ?? 0) > 0 && !importConflictsAcknowledged)))} className="px-5 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent, opacity: importBusy || !importPlanHasWork(importPreview) || Boolean(importPreview.reviewToken && (!importTargetAcknowledged || (Number(importPreview.conflicted ?? importPreview.conflicts ?? 0) > 0 && !importConflictsAcknowledged))) ? 0.5 : 1 }}>
                    {importBusy ? "Importing..." : importPreview.importableRows > 0 ? `Import ${importPreview.importableRows} contacts` : importPreview.publicationRows ? `Import ${importPreview.publicationRows} publications` : "Apply refresh plan"}
                 </button>

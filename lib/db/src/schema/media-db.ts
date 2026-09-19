@@ -104,6 +104,31 @@ export const mediaImportBatchesTable = pgTable("media_import_batches", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [uniqueIndex("media_import_batches_idempotency").on(table.accountId, table.idempotencyKey)]);
 
+export type MediaImportJobStatus = "parsing" | "reconciliation" | "committing" | "completed" | "failed";
+
+export const mediaImportJobsTable = pgTable("media_import_jobs", {
+  id: varchar("id", { length: 80 }).primaryKey(),
+  accountId: varchar("account_id").notNull(),
+  idempotencyKey: varchar("idempotency_key", { length: 160 }).notNull(),
+  sourceFilename: text("source_filename").notNull().default(""),
+  sourceHash: varchar("source_hash", { length: 64 }).notNull(),
+  sourceType: varchar("source_type", { length: 20 }).notNull().default("csv"),
+  collectionScope: varchar("collection_scope", { length: 20 }).notNull(),
+  category: text("category").notNull().default(""),
+  status: varchar("status", { length: 24 }).$type<MediaImportJobStatus>().notNull().default("parsing"),
+  input: jsonb("input").$type<Record<string, unknown>>().notNull().default({}),
+  summary: jsonb("summary").$type<Record<string, unknown>>().notNull().default({}),
+  error: text("error").notNull().default(""),
+  batchId: integer("batch_id").references(() => mediaImportBatchesTable.id, { onDelete: "set null" }),
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  attempts: integer("attempts").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+}, (table) => [
+  uniqueIndex("media_import_jobs_idempotency").on(table.accountId, table.idempotencyKey),
+]);
+
 export const mediaContactFieldOverridesTable = pgTable("media_contact_field_overrides", {
   id: serial("id").primaryKey(),
   contactId: integer("contact_id").notNull().references(() => mediaContactsTable.id, { onDelete: "cascade" }),
@@ -272,6 +297,7 @@ export const insertMediaContactSchema = createInsertSchema(mediaContactsTable).o
 export type InsertMediaContact = z.infer<typeof insertMediaContactSchema>;
 export const insertMediaImportBatchSchema = createInsertSchema(mediaImportBatchesTable).omit({ id: true, createdAt: true });
 export type InsertMediaImportBatch = z.infer<typeof insertMediaImportBatchSchema>;
+export type MediaImportJobRow = typeof mediaImportJobsTable.$inferSelect;
 
 export type MediaContactCorrectionReportRow = typeof mediaContactCorrectionReportsTable.$inferSelect;
 

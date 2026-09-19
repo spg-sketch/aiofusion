@@ -838,6 +838,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "PUT /store/media-db/contacts/:id",
   "DELETE /store/media-db/contacts/:id",
   "POST /store/media-db/import",
+  "GET /store/media-db/import-jobs/:jobId",
   // Media routes use memberProjectGate and per-route authentication/visibility.
   "POST /store/media-db/discoveries",
   "GET /store/media-db/discoveries",

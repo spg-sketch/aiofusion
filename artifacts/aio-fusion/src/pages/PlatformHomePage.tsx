@@ -979,7 +979,7 @@ function PlatformHomePage({
               
               {/* Controls Section */}
               <div className="flex flex-col gap-5 lg:flex-1 lg:items-end">
-                <div data-testid="platform-home-project-controls" className="flex flex-wrap items-center gap-3 lg:justify-end">
+                <div data-testid="platform-home-project-controls" className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-center lg:justify-end">
                   {session.insightsCmsAccess && onInsightsAdmin && (
                     <button
                       onClick={onInsightsAdmin}

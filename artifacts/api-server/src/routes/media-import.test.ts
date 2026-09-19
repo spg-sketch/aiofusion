@@ -68,6 +68,17 @@ vi.mock("@workspace/db", async () => {
       committed_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(),
       UNIQUE(account_id, idempotency_key)
     );
+    CREATE TABLE media_import_jobs (
+      id varchar(80) PRIMARY KEY, account_id varchar NOT NULL, idempotency_key varchar(160) NOT NULL,
+      source_filename text NOT NULL DEFAULT '', source_hash varchar(64) NOT NULL,
+      source_type varchar(20) NOT NULL DEFAULT 'csv', collection_scope varchar(20) NOT NULL,
+      category text NOT NULL DEFAULT '', status varchar(24) NOT NULL DEFAULT 'parsing',
+      input jsonb NOT NULL DEFAULT '{}', summary jsonb NOT NULL DEFAULT '{}', error text NOT NULL DEFAULT '',
+      batch_id integer REFERENCES media_import_batches(id), created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(), completed_at timestamptz, claimed_at timestamptz,
+      attempts integer NOT NULL DEFAULT 0,
+      UNIQUE(account_id, idempotency_key)
+    );
     CREATE TABLE media_suppressions (
       id serial PRIMARY KEY, request_id integer, email_hash text, name_hash text, outlet_hash text, linkedin_hash text,
       scope text NOT NULL DEFAULT 'shared', account_id varchar, reason text NOT NULL DEFAULT '',
@@ -148,6 +159,7 @@ import {
   mediaContactsTable,
   mediaContactFieldOverridesTable,
   mediaImportBatchesTable,
+  mediaImportJobsTable,
   mediaOutletsTable,
   mediaRecommendationSetsTable,
   mediaRecommendationItemsTable,
@@ -196,7 +208,24 @@ async function api(workspace: string, body: Record<string, unknown>, role = "own
     },
     body: JSON.stringify(body),
   });
-  return { status: response.status, json: await response.json() as any };
+  const json = await response.json() as any;
+  if (response.status !== 202 || !json.jobId) return { status: response.status, json };
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const statusResponse = await fetch(`${baseUrl}/api/store/media-db/import-jobs/${json.jobId}`, {
+      headers: {
+        "x-test-workspace": workspace,
+        "x-test-member-role": role,
+        "x-test-platform-role": platformRole,
+      },
+    });
+    const statusJson = await statusResponse.json() as any;
+    if (statusJson.job?.status === "completed") {
+      return { status: 200, json: { ok: true, jobId: json.jobId, preview: json.preview, result: { ...statusJson.job.summary, ...(json.replayed ? { replayed: true } : {}) } } };
+    }
+    if (statusJson.job?.status === "failed") return { status: 400, json: { error: statusJson.job.error } };
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(`Import job ${json.jobId} did not finish in the test timeout`);
 }
 
 async function mediaRequest(
@@ -288,6 +317,208 @@ afterAll(async () => {
 });
 
 describe("media import route regressions", () => {
+  it("returns a durable job immediately and reconciles exact-source retries to its persisted summary", async () => {
+    const previewResponse = await api("durable-job-workspace", {
+      csv,
+      filename: "durable.csv",
+      collectionScope: "workspace",
+      commit: false,
+    });
+    const commitBody = {
+      csv,
+      filename: "durable.csv",
+      collectionScope: "workspace",
+      commit: true,
+      idempotencyKey: "durable-job-first",
+      sourceHash: previewResponse.json.preview.sourceHash,
+      reviewToken: previewResponse.json.preview.reviewToken,
+      acknowledgeTarget: true,
+    };
+    const firstResponse = await fetch(`${baseUrl}/api/store/media-db/import`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-test-workspace": "durable-job-workspace" },
+      body: JSON.stringify(commitBody),
+    });
+    const first = await firstResponse.json() as any;
+    expect(firstResponse.status).toBe(202);
+    expect(first.jobId).toMatch(/^[0-9a-f-]{36}$/);
+
+    const retryResponse = await fetch(`${baseUrl}/api/store/media-db/import`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-test-workspace": "durable-job-workspace" },
+      body: JSON.stringify(commitBody),
+    });
+    const retry = await retryResponse.json() as any;
+    expect(retryResponse.status).toBe(202);
+    expect(retry).toMatchObject({ jobId: first.jobId, replayed: true });
+
+    let completed: any;
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      const status = await mediaRequest("GET", `/api/store/media-db/import-jobs/${first.jobId}`, "durable-job-workspace");
+      if (status.json.job?.status === "completed") {
+        completed = status.json.job;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(completed).toMatchObject({
+      id: first.jobId,
+      status: "completed",
+      sourceHash: previewResponse.json.preview.sourceHash,
+      summary: { contactsCreated: 1, duplicatesSkipped: 1 },
+    });
+  });
+
+  it("reclaims a persisted queued job after an interrupted worker", async () => {
+    const workspace = "recovered-job-workspace";
+    const rows = [{
+      sourceRow: 2,
+      firstName: "Recovery",
+      lastName: "Reporter",
+      outletName: "Recovery News",
+      email: "recovery@example.test",
+    }];
+    const previewResponse = await api(workspace, { rows, filename: "recovery.csv" });
+    const preview = previewResponse.json.preview;
+    const [payload] = String(preview.reviewToken).split(".");
+    const claim = JSON.parse(Buffer.from(payload!, "base64url").toString("utf8")) as { fingerprint: string };
+    const jobId = "restart-recovery-job";
+    await db.insert(mediaImportJobsTable).values({
+      id: jobId,
+      accountId: workspace,
+      idempotencyKey: "restart-recovery-key",
+      sourceFilename: "recovery.csv",
+      sourceHash: preview.sourceHash,
+      sourceType: "parsed",
+      collectionScope: "workspace",
+      category: "",
+      status: "reconciliation",
+      input: {
+        rows,
+        parsedErrors: [],
+        category: "",
+        filename: "recovery.csv",
+        idempotencyKey: "restart-recovery-key",
+        collectionScope: "workspace",
+        commit: true,
+        acknowledgeTarget: true,
+        acknowledgeConflicts: true,
+        workspaceId: workspace,
+        persistedSourceHash: preview.sourceHash,
+        persistedSourceType: "parsed",
+        persistedByteLength: 1,
+        reviewedFingerprint: claim.fingerprint,
+      },
+    });
+
+    let completed: any;
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      const status = await mediaRequest("GET", `/api/store/media-db/import-jobs/${jobId}`, workspace);
+      if (status.json.job?.status === "completed") {
+        completed = status.json.job;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(completed).toMatchObject({
+      id: jobId,
+      status: "completed",
+      summary: { contactsCreated: 1, sourceHash: preview.sourceHash },
+    });
+  });
+
+  it("retries failed jobs only when the immutable import identity still matches", async () => {
+    const workspace = "failed-retry-workspace";
+    const originalRows = [{
+      sourceRow: 2,
+      firstName: "Retry",
+      lastName: "Reporter",
+      outletName: "Retry News",
+      email: "retry@example.test",
+    }];
+    const originalPreviewResponse = await api(workspace, {
+      rows: originalRows,
+      filename: "retry.csv",
+      category: "Technology",
+    });
+    const originalPreview = originalPreviewResponse.json.preview;
+    await db.insert(mediaImportJobsTable).values([
+      {
+        id: "failed-same-source-job",
+        accountId: workspace,
+        idempotencyKey: "failed-same-source-key",
+        sourceFilename: "retry.csv",
+        sourceHash: originalPreview.sourceHash,
+        sourceType: "parsed",
+        collectionScope: "workspace",
+        category: "Technology",
+        status: "failed",
+        error: "Transient database error",
+      },
+      {
+        id: "failed-different-source-job",
+        accountId: workspace,
+        idempotencyKey: "failed-different-source-key",
+        sourceFilename: "retry.csv",
+        sourceHash: originalPreview.sourceHash,
+        sourceType: "parsed",
+        collectionScope: "workspace",
+        category: "Technology",
+        status: "failed",
+        error: "Transient database error",
+      },
+    ]);
+
+    const retried = await api(workspace, {
+      rows: originalRows,
+      filename: "retry.csv",
+      category: "Technology",
+      commit: true,
+      idempotencyKey: "failed-same-source-key",
+      sourceHash: originalPreview.sourceHash,
+      reviewToken: originalPreview.reviewToken,
+      acknowledgeTarget: true,
+    });
+    expect(retried.status).toBe(200);
+    expect(retried.json.jobId).toBe("failed-same-source-job");
+    const [completedRetry] = await db.select().from(mediaImportJobsTable)
+      .where(eq(mediaImportJobsTable.id, "failed-same-source-job"));
+    expect(completedRetry).toMatchObject({
+      sourceHash: originalPreview.sourceHash,
+      category: "Technology",
+      collectionScope: "workspace",
+      status: "completed",
+    });
+
+    const changedRows = [{ ...originalRows[0], email: "different@example.test" }];
+    const changedPreviewResponse = await api(workspace, {
+      rows: changedRows,
+      filename: "different.csv",
+      category: "Technology",
+    });
+    const changedPreview = changedPreviewResponse.json.preview;
+    const changedSourceRetry = await api(workspace, {
+      rows: changedRows,
+      filename: "different.csv",
+      category: "Technology",
+      commit: true,
+      idempotencyKey: "failed-different-source-key",
+      sourceHash: changedPreview.sourceHash,
+      reviewToken: changedPreview.reviewToken,
+      acknowledgeTarget: true,
+    });
+    expect(changedSourceRetry.status).toBe(409);
+    expect(changedSourceRetry.json.error).toMatch(/different source file/i);
+    const [unchangedFailedJob] = await db.select().from(mediaImportJobsTable)
+      .where(eq(mediaImportJobsTable.id, "failed-different-source-job"));
+    expect(unchangedFailedJob).toMatchObject({
+      sourceHash: originalPreview.sourceHash,
+      category: "Technology",
+      collectionScope: "workspace",
+      status: "failed",
+    });
+  });
+
   it("returns populated category labels from visible, live, unsuppressed contacts", async () => {
     const [workspaceOutlet] = await db.insert(mediaOutletsTable).values({
       name: "Category Workspace Outlet",
@@ -965,7 +1196,7 @@ describe("media import route regressions", () => {
     expect(commit.json.result.contactsCreated).toBeGreaterThan(0);
     expect(commit.json.result.outletsCreated).toBeGreaterThan(0);
     expect(commit.json.result.expectedMutations).toEqual(preview.expectedMutations);
-    expect(commit.json.result.rowOutcomes).toBeUndefined();
+    expect(commit.json.result.rowOutcomes).toHaveLength(preview.rowOutcomes.length);
     expect(await db.select().from(mediaImportBatchesTable)
       .where(eq(mediaImportBatchesTable.accountId, "v33-workspace")))
       .toEqual(expect.arrayContaining([

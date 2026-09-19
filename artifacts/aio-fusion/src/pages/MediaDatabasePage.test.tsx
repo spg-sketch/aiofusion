@@ -38,11 +38,22 @@ describe("MediaDatabasePage source health", () => {
     localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "account-a", role: "agency", membershipRole: "owner" }));
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.includes("/media-db/import-jobs/")) {
+        return new Response(JSON.stringify({
+          ok: true,
+          job: {
+            id: "test-job",
+            status: "completed",
+            sourceFilename: "contacts.csv",
+            summary: { outletsCreated: 1, contactsCreated: importPreviewMode === "publication" ? 0 : 1, duplicatesSkipped: 0, publicationsProcessed: importPreviewMode === "publication" ? 1 : 0, refreshed: importPreviewMode === "refresh" ? 1 : 0, unchanged: 0 },
+          },
+        }), { status: 200 });
+      }
       if (url.includes("/media-db/import")) {
         const request = JSON.parse(String(init?.body ?? "{}")) as { commit?: boolean; collectionScope?: string };
         expect(request.collectionScope).toBeTruthy();
         return new Response(JSON.stringify(request.commit
-          ? { ok: true, result: { outletsCreated: 1, contactsCreated: importPreviewMode === "publication" ? 0 : 1, duplicatesSkipped: 0, publicationsProcessed: importPreviewMode === "publication" ? 1 : 0, rowOutcomes: [{ sourceRow: 2, sheetName: "Contacts", status: importPreviewMode === "refresh" ? "refreshed" : "new", outcome: importPreviewMode === "refresh" ? "refreshed" : "new" }] } }
+          ? { ok: true, jobId: "test-job", status: "reconciliation" }
           : {
             ok: true,
             preview: {
@@ -52,7 +63,7 @@ describe("MediaDatabasePage source health", () => {
               collectionScope: request.collectionScope, owner: request.collectionScope === "shared" ? "Master" : "agency-a",
               ...(importPreviewMode === "legacy" ? {} : { reviewToken: "review-token", sourceHash: "source-hash", rowOutcomes: [{ sourceRow: 2, sheetName: "Contacts", status: importPreviewMode === "refresh" ? "refreshed" : importPreviewMode === "publication" ? "publication" : "conflicted", outcome: importPreviewMode === "refresh" ? "refreshed" : importPreviewMode === "publication" ? "publication" : "conflicted", reason: importPreviewMode === "review" ? "Conflict review required." : "" }] }),
             },
-          }), { status: 200 });
+          }), { status: request.commit ? 202 : 200 });
       }
       if (url.includes("/source-checks/44/approve")) {
         expect(JSON.parse(String(init?.body))).toEqual({ fields: ["role"] });
@@ -230,6 +241,17 @@ describe("MediaDatabasePage source health", () => {
       expect(commitCall).toBeTruthy();
       expect(JSON.parse(String(commitCall?.[1]?.body))).toMatchObject({ collectionScope: "shared", commit: true });
     });
+  });
+
+  it("resumes a saved import job after reload and shows its persisted summary", async () => {
+    localStorage.setItem("aio.media-import-job:account-a", "test-job");
+    render(<MediaDatabasePage />);
+    expect(await screen.findByText("Import complete")).toBeTruthy();
+    expect(screen.getByText(/Added 1 contacts and 1 outlets/)).toBeTruthy();
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/media-db/import-jobs/test-job"),
+      expect.objectContaining({ credentials: "include" }),
+    );
   });
 
   it("requires reviewed token acknowledgements and sends the exact source hash", async () => {
