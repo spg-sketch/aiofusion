@@ -9,6 +9,7 @@ import { setAiRunIdentity } from "./lib/aiRunLifecycle";
 import InfoTip from "./InfoTip";
 import {
   type Session as LocalSession,
+  type AuthBootstrap,
   type User as LocalUser,
   type Role as LocalRole,
   type AccountProfile,
@@ -149,6 +150,7 @@ import type { UnsavedEditorRegistration } from "./lib/unsavedChanges";
 import { AuthPageLoading } from "./components/AuthPageLoading";
 import { CheckoutReturnLoading } from "./components/CheckoutReturnLoading";
 import { preloadRoute, scheduleIdlePreloads, type RoutePreloader } from "./lib/routePreloading";
+import NotFound from "./pages/not-found";
 
 const routePreloadingEnabled = import.meta.env.MODE !== "test";
 
@@ -404,12 +406,14 @@ function publicViewFromLocation(): PublicView | null {
   return SLUG_TO_VIEW[slugFromLocation()] ?? null;
 }
 
-function directViewFromLocation(): PublicView | "insights-admin" | "platform-home" | "platform" | null {
+function directViewFromLocation(): PublicView | "insights-admin" | "platform-home" | "platform" | "not-found" {
   const protectedDestination = protectedDestinationFromLocation();
   if (protectedDestination === "project-hub") return "platform";
   if (protectedDestination === "platform") return "platform-home";
   if (isInsightsAdminPath(window.location.pathname, appBase())) return "insights-admin";
-  return publicViewFromLocation();
+  const publicView = publicViewFromLocation();
+  if (publicView) return publicView;
+  return slugFromLocation() ? "not-found" : "landing";
 }
 
 // Authenticated reloads use a non-public destination so prerendered marketing
@@ -472,8 +476,8 @@ function viewToUrl(v: string, insightsArticleId?: string | null): string {
 
 
 function App() {
-  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "insights-admin" | "privacy-admin" | "sub-accounts" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security" | "privacy-policy" | "journalist-privacy" | "terms-conditions">(() =>
-    isAuthenticationLanding() ? "platform-home" : (directViewFromLocation() ?? "landing"),
+  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "insights-admin" | "privacy-admin" | "sub-accounts" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security" | "privacy-policy" | "journalist-privacy" | "terms-conditions" | "not-found">(() =>
+    isAuthenticationLanding() ? "platform-home" : directViewFromLocation(),
   );
   // One owner for every in-flight authority/cache request. Identity changes
   // abort this scope before any new session can begin.
@@ -570,12 +574,19 @@ function App() {
   // splitting and yielding between downloads.
   useEffect(() => {
     if (!routePreloadingEnabled || authLoading) return;
+    const connection = (navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    }).connection;
+    if (
+      document.visibilityState !== "visible"
+      || connection?.saveData
+      || connection?.effectiveType === "slow-2g"
+      || connection?.effectiveType === "2g"
+    ) return;
     if (view === "platform-home") {
       return scheduleIdlePreloads([
         loadDashboardPage,
         loadSubAccountsPage,
-        loadGuidancePage,
-        loadArchivedProjectsPage,
       ]);
     }
     if (view === "platform") {
@@ -623,7 +634,10 @@ function App() {
   // Pull the shared project list and refresh the hub. Used on first load and
   // again whenever the tab regains focus, so a project a colleague created on
   // another device shows up without a manual page reload.
-  const resyncProjects = useCallback(async (options: { background?: boolean } = {}) => {
+  const resyncProjects = useCallback(async (options: {
+    background?: boolean;
+    authority?: AuthBootstrap;
+  } = {}) => {
     // Background focus/visibility timers must never probe project/account
     // endpoints while the cookie authority check is unresolved or signed out.
     if (authLoadingRef.current || !confirmedSessionRef.current) return;
@@ -641,7 +655,7 @@ function App() {
       // The session cookie can change in another tab without producing a 401.
       // Verify the active workspace identity before accepting any project list
       // returned under that cookie.
-      const authority = await bootstrapAuth({ signal });
+      const authority = options.authority ?? await bootstrapAuth({ signal });
       if (signal.aborted || generation !== authRequestGeneration.current) return;
       const expected = confirmedSessionRef.current;
       if (!authority.session || !expected
@@ -709,6 +723,7 @@ function App() {
       const generation = ++authRequestGeneration.current;
       const signal = authRequestAbort.current.signal;
       setAuthError(null);
+      const bootstrap = await bootstrapAuth({ signal });
       const {
         session: s,
         needsSetup: bootNeedsSetup,
@@ -717,7 +732,7 @@ function App() {
         accountProfile: ap,
         impersonating,
         error,
-      } = await bootstrapAuth({ signal });
+      } = bootstrap;
       // A logout, a newer sign-in, or a workspace change may have happened
       // while /me was in flight. Never let that older authority reply revive
       // an identity or its setup destination.
@@ -745,7 +760,7 @@ function App() {
       if (generation !== authRequestGeneration.current) return;
       // Project discovery does not depend on archive/planner/scoring reads.
       // Keep legacy migration ordered but remove the subsequent read waterfall.
-      await Promise.all([initContentStore({ signal }), resyncProjects()]);
+      await Promise.all([initContentStore({ signal }), resyncProjects({ authority: bootstrap })]);
     })();
   }, [resyncProjects]);
 
@@ -1597,7 +1612,7 @@ function App() {
           ? "platform"
           : protectedDestination === "platform"
             ? "platform-home"
-          : (s && s.__aioNav && s.view ? s.view : (directViewFromLocation() ?? "landing"))
+          : (s && s.__aioNav && s.view ? s.view : directViewFromLocation())
       ) as typeof view;
       const targetPage = s && s.__aioNav && s.currentPage ? s.currentPage : pageRef.current;
       const targetArticleId = s && s.__aioNav
@@ -1907,6 +1922,9 @@ function App() {
   }
   if (view === "terms-conditions") {
     return <TermsConditionsPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;
+  }
+  if (view === "not-found") {
+    return <NotFound />;
   }
   if (view === "platform-home") {
     return (

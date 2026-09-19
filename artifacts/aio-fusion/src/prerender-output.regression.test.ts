@@ -74,6 +74,9 @@ describe("controlled prerender output", () => {
 
     expect(result.articleSlugs).toEqual(ARTICLE_SLUGS);
     expect(result.errors).toBe(0);
+    for (const shellPath of ["admin/index.html", "platform/index.html", "project-hub/index.html", "404.html"]) {
+      expect(fs.existsSync(path.join(directory, shellPath))).toBe(true);
+    }
     const battleHtml = readRoute(directory, "insights/battle-b2b-ai-authority");
     const changingHtml = readRoute(directory, "insights/ai-changing-b2b-visibility");
 
