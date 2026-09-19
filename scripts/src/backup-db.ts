@@ -20,7 +20,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createGzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
-import { getBackupBucket, getBackupLocation } from "./lib/object-storage.js";
+import {
+  getBackupBucket,
+  getBackupLocation,
+  verifyBackupDestination,
+  type BackupDestination,
+} from "./lib/object-storage.js";
 import { notifyFailure, notifySuccess } from "./lib/notify.js";
 
 // Keep the last N verified daily backups. One bad run can never overwrite all
@@ -116,6 +121,20 @@ async function sha256File(file: string): Promise<string> {
 }
 
 async function main(): Promise<void> {
+  const destination = getBackupLocation();
+  if (!destination.enabled) {
+    console.log(
+      `[backup] Backup job intentionally disabled (${destination.identifier}).`,
+    );
+    return;
+  }
+
+  console.log(`[backup] Destination: ${destination.identifier}`);
+  await verifyBackupDestination(destination);
+  console.log(
+    `[backup] Storage create/read/delete probe passed (${destination.identifier}).`,
+  );
+
   const databaseUrl = requireDatabaseUrl();
   const stamp = isoStamp();
   const baseName = `aio-fusion-db-${stamp}`;
@@ -177,7 +196,8 @@ async function main(): Promise<void> {
         `Existing good backups were NOT pruned. No good backup was produced.`,
     );
     await notifyFailure(
-      `AIO Fusion backup VERIFICATION FAILED for ${baseName}\n` +
+      `AIO Fusion ${destination.environment} backup VERIFICATION FAILED for ${baseName}\n` +
+        `Destination: ${destination.identifier}\n` +
         `Reason: ${verifyMsg}\n` +
         `Quarantined at ${failedPath}. Existing good backups were NOT pruned.`,
       { label: "backup notify" },
@@ -206,8 +226,8 @@ async function main(): Promise<void> {
 
   // 4. Upload verified backup + manifest to durable object storage so it
   //    survives restarts/redeploys (the local backups/ folder is ephemeral).
-  const bucket = getBackupBucket();
-  const { prefix } = getBackupLocation();
+  const bucket = getBackupBucket(destination);
+  const { prefix } = destination;
   await bucket.upload(gzPath, {
     destination: `${prefix}/${baseName}.sql.gz`,
     metadata: { metadata: { verified: "true", projectsCount: String(dumpCount) } },
@@ -221,7 +241,8 @@ async function main(): Promise<void> {
     contentType: "application/json",
   });
   const successSummary =
-    `AIO Fusion backup succeeded: ${baseName}.sql.gz\n` +
+    `AIO Fusion ${destination.environment} backup succeeded: ${baseName}.sql.gz\n` +
+    `  destination: ${destination.identifier}\n` +
     `  projects: ${dumpCount} row(s) | gzipped: ${(bytesGzipped / 1024).toFixed(1)} KB | plain: ${(bytesPlain / 1024).toFixed(1)} KB\n` +
     `  sha256: ${sha256}`;
   console.log(
@@ -232,7 +253,7 @@ async function main(): Promise<void> {
 
   // 5. Retention: prune verified backups beyond the rolling window. This only
   //    runs after a successful verify, so a bad run never deletes good backups.
-  await pruneOldBackups();
+  await pruneOldBackups(destination);
 
   // Tidy local temp files.
   await Promise.all([
@@ -242,9 +263,9 @@ async function main(): Promise<void> {
   ]);
 }
 
-async function pruneOldBackups(): Promise<void> {
-  const bucket = getBackupBucket();
-  const { prefix } = getBackupLocation();
+async function pruneOldBackups(destination: BackupDestination): Promise<void> {
+  const bucket = getBackupBucket(destination);
+  const { prefix } = destination;
   const [files] = await bucket.getFiles({ prefix: `${prefix}/` });
   const dumps = files
     .filter((f) => f.name.endsWith(".sql.gz"))
@@ -267,9 +288,19 @@ async function pruneOldBackups(): Promise<void> {
 
 main().catch(async (err) => {
   const detail = err?.message || String(err);
+  let context = "environment/destination: unavailable (configuration invalid)";
+  try {
+    const destination = getBackupLocation();
+    context =
+      `environment: ${destination.environment}\n` +
+      `Destination: ${destination.identifier}`;
+  } catch {
+    const environment = process.env.DEPLOYMENT_ENV?.trim() || "unset";
+    context = `environment: ${environment}\nDestination: unavailable`;
+  }
   console.error(`[backup] ❌ Backup job failed: ${err?.stack || err}`);
   await notifyFailure(
-    `AIO Fusion backup job FAILED with an unexpected error\nError: ${detail}`,
+    `AIO Fusion backup job FAILED\n${context}\nError: ${detail}`,
     { label: "backup notify" },
   );
   process.exit(1);

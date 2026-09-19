@@ -21,17 +21,21 @@ empty dump silently masquerading as a backup is the exact failure this prevents.
 Keep only aggregate verification metadata as evidence, never database contents.
 
 ## Durable storage, not the local folder
-Verified dumps + JSON manifests go to **object storage** under
-`<PRIVATE_OBJECT_DIR>/db-backups/` (GCS via the Replit sidecar — same auth block
-the api-server uses). The local `backups/` folder is ephemeral; new local
-downloads are gitignored. `latest.json` points at the newest good backup.
-Retention = last `BACKUP_RETENTION` (default 14), pruned only after a successful verify.
+Verified dumps + JSON manifests go to an environment-specific object-storage
+destination declared with `BACKUP_BUCKET_ID` and `BACKUP_PREFIX` (GCS via the
+Replit sidecar). Enabled jobs must pass a create/read/delete probe before
+touching the database. `DEPLOYMENT_ENV` and `BACKUP_ENABLED` are mandatory;
+staging may be intentionally disabled rather than inheriting production storage.
+The local `backups/` folder is ephemeral; new local downloads are gitignored.
+`latest.json` points at the newest good backup. Retention = last
+`BACKUP_RETENTION` (default 14), pruned only after a successful verify.
 
 ## Scheduling
 Runs as a Replit **Scheduled Deployment** (cron, daily), command
 `pnpm --filter @workspace/scripts run backup`. Must be created from the main
-project's Publishing UI — a task agent cannot publish. Production deployment must
-carry the same DATABASE_URL + object-storage env vars.
+project's Publishing UI — a task agent cannot publish. Each deployment must
+carry its own explicit database and backup-destination configuration. Never let
+staging infer or reuse the production destination.
 
 ## Restore test guard
 `restore:verify` restores `latest` into a scratch `TARGET_DATABASE_URL` and

@@ -7,6 +7,9 @@ backup before the proposed V33 import. No media import was performed.
 - SHA-256: `2a11715d24836d17a328e215feb87ad821e3e622863654b302a8f433f8623229`
 - Durable bucket: `replit-objstore-802dbaf4-ecde-4956-b539-7205f1d4aed4`
 - Object: `.private/db-backups/aio-fusion-db-20260918-140833.sql.gz`
+- Environment: `production`
+- Destination identifier:
+  `production:gs://replit-objstore-802dbaf4-ecde-4956-b539-7205f1d4aed4/.private/db-backups`
 
 The approved backup command reported 38 live projects and 38 projects in the
 dump, uploaded the gzip and manifest, and made it the latest verified backup.
@@ -31,3 +34,15 @@ The local downloaded copy was accidentally tracked during verification and has
 since been removed from the current source tree/index and local Git history.
 Remote/checkpoint exposure assessment remains unresolved; see
 `backup-containment-status.md`.
+
+## Scheduled deployment configuration
+
+Production backup storage is explicit: its scheduled deployment uses
+`DEPLOYMENT_ENV=production`, `BACKUP_ENABLED=true`, the durable bucket above as
+`BACKUP_BUCKET_ID`, and `.private/db-backups` as `BACKUP_PREFIX`.
+
+Staging must not reuse this production destination. Until a staging bucket has
+been provisioned and its scheduled deployment identity can pass the startup
+create/read/delete probe, configure staging with `DEPLOYMENT_ENV=staging` and
+`BACKUP_ENABLED=false`. Enabling staging later requires an explicit staging
+`BACKUP_BUCKET_ID` and `BACKUP_PREFIX`.

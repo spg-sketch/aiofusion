@@ -13,21 +13,24 @@ backup — every dump is checked against the live database before it is kept.
 
 `scripts/src/backup-db.ts` (`pnpm --filter @workspace/scripts run backup`):
 
-1. **Dumps** the full database (schema + data) with `pg_dump` using the app's
+1. **Checks its destination before touching the database.** Enabled jobs create,
+   read, and delete a harmless unique probe under their configured backup prefix.
+   A failed probe stops the run before `pg_dump`.
+2. **Dumps** the full database (schema + data) with `pg_dump` using the app's
    `DATABASE_URL` (no hardcoded credentials).
-2. **Verifies** the dump before trusting it:
+3. **Verifies** the dump before trusting it:
    - the dump contains the schema and the `projects` table, and
    - the number of `projects` rows in the dump **equals** the live count, and
    - the live `projects` table is **non-empty**.
    If any check fails, the dump is renamed `*.failed`, a loud error is logged,
    the job exits non-zero, and **existing good backups are left untouched** (no
    pruning). A project-less dump is never kept as the "latest good" backup.
-3. **Uploads** the verified, gzipped dump plus a JSON manifest (row count,
-   sha256, sizes, timestamp) to **object storage** under
-   `<PRIVATE_OBJECT_DIR>/db-backups/`. Object storage is durable and survives
+4. **Uploads** the verified, gzipped dump plus a JSON manifest (row count,
+   sha256, sizes, timestamp) to **object storage** under the explicit
+   `BACKUP_BUCKET_ID` and `BACKUP_PREFIX`. Object storage is durable and survives
    container restarts / redeploys — unlike the local `backups/` folder. A
    `latest.json` pointer always names the most recent good backup.
-4. **Prunes** old backups beyond the rolling retention window
+5. **Prunes** old backups beyond the rolling retention window
    (`BACKUP_RETENTION`, default **14**). Pruning runs **only after a successful
    verify**, so one bad run can never delete all known-good backups.
 
@@ -53,15 +56,43 @@ warning and continue — the backup job is never interrupted by a missing key.
 A delivery failure (Resend API error or network issue) also prints a `⚠️`
 console warning but **never** crashes the backup or restore job.
 
+Every backup notification names the deployment environment and destination
+identifier (`staging:...` or `production:...`). It never includes database or
+object-storage credentials.
+
 ### Required environment variables
 
-Ensure the Scheduled Deployment has these env vars (they are shared with the
-app deployment automatically when published in the same Replit project):
+Backup storage is deployment-specific and must not be inferred from
+`PRIVATE_OBJECT_DIR`. Configure each Scheduled Deployment explicitly:
 
 ```
+DEPLOYMENT_ENV=production
+BACKUP_ENABLED=true
+BACKUP_BUCKET_ID=<production bucket ID>
+BACKUP_PREFIX=.private/db-backups
 RESEND_API_KEY=re_...          # Resend API key (same as the app)
 RESEND_FROM=AIO Fusion Alerts <info@aiofusion.ai>   # optional — this is the default
 ```
+
+Production uses its separately provisioned and verified production bucket.
+Staging must either use its own writable destination:
+
+```
+DEPLOYMENT_ENV=staging
+BACKUP_ENABLED=true
+BACKUP_BUCKET_ID=<staging bucket ID>
+BACKUP_PREFIX=.private/db-backups
+```
+
+or be intentionally disabled:
+
+```
+DEPLOYMENT_ENV=staging
+BACKUP_ENABLED=false
+```
+
+Do not point staging at the production bucket. A disabled job exits successfully
+without reading the database, sending an alert, or producing a dump.
 
 You can smoke-test the backup alert from the admin panel: **Admin →
 Test email alerts** sends one of each alert type including a backup failure
@@ -77,9 +108,8 @@ a long-lived in-process timer):
 2. **Schedule:** daily (e.g. `0 3 * * *` — 03:00 UTC).
 3. **Build command:** `pnpm install --frozen-lockfile`
 4. **Run command:** `pnpm --filter @workspace/scripts run backup`
-5. Ensure the deployment has the same `DATABASE_URL` and object-storage env vars
-   (`PRIVATE_OBJECT_DIR`, `DEFAULT_OBJECT_STORAGE_BUCKET_ID`) as the app — these
-   are colocated automatically when published in the same project.
+5. Set `DATABASE_URL`, `DEPLOYMENT_ENV`, `BACKUP_ENABLED`, and, when enabled,
+   `BACKUP_BUCKET_ID` plus `BACKUP_PREFIX` explicitly for that deployment.
 
 > Scheduling must be created from the **main** project (the Publishing UI), not
 > from a task agent. After this change is merged, set up the scheduled
