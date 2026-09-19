@@ -85,11 +85,14 @@ vi.mock("./shared", () => ({
   countWords: (value: string) => value.trim() ? value.trim().split(/\s+/).length : 0,
 }));
 vi.mock("../InfoTip", () => ({ default: () => null }));
-vi.mock("../components/CountdownBanner", () => ({ default: () => null }));
+vi.mock("../components/CountdownBanner", () => ({
+  default: ({ startedAt }: { startedAt?: number }) => <div data-testid="countdown">{startedAt ? "started" : "missing"}</div>,
+}));
 
 import { OptimiserPage } from "./OptimiserPage";
 import { streamContent } from "../lib/contentAi";
 import { assessArticleOptimisation } from "../lib/articleScoring";
+import { clearAiRuns } from "../lib/aiRunLifecycle";
 
 describe("OptimiserPage target phrase round trips", () => {
   beforeEach(() => {
@@ -109,6 +112,7 @@ describe("OptimiserPage target phrase round trips", () => {
   });
   afterEach(() => {
     cleanup();
+    clearAiRuns();
     window.localStorage.clear();
     vi.unstubAllGlobals();
   });
@@ -247,6 +251,7 @@ describe("OptimiserPage article assessment", () => {
   });
   afterEach(() => {
     cleanup();
+    clearAiRuns();
     window.localStorage.clear();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
@@ -259,6 +264,10 @@ describe("OptimiserPage article assessment", () => {
     fireEvent.click(screen.getByRole("button", { name: /Run optimisation/i }));
     expect(await screen.findAllByText("Article quality score", {}, { timeout: 3000 })).toHaveLength(2);
     expect(screen.getByText(/percentage-point improvement/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not measure live AI visibility or external authority/i)).toBeInTheDocument();
+    expect(screen.queryByText("Authority Signal Score")).not.toBeInTheDocument();
+    expect(screen.queryByText("42")).not.toBeInTheDocument();
+    expect(screen.queryByText("78")).not.toBeInTheDocument();
     expect(screen.getByText("Structure and completeness")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Save to Content Library/i }));
     await waitFor(() => expect(fixtures.savedArchive).toHaveLength(1));
@@ -279,5 +288,58 @@ describe("OptimiserPage article assessment", () => {
     expect(await screen.findByText("Structure and completeness")).toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText(/Headline of the piece/i), { target: { value: "Edited headline" } });
     expect(await screen.findByText("Article quality score not available")).toBeInTheDocument();
+  });
+
+  it("shows a fixed lifecycle countdown and prevents duplicate optimisation starts", async () => {
+    let resolveRun: ((value: unknown) => void) | undefined;
+    let registration: Parameters<NonNullable<React.ComponentProps<typeof OptimiserPage>["registerUnsavedEditor"]>>[0] = null;
+    vi.mocked(streamContent).mockImplementationOnce(() => new Promise((resolve) => { resolveRun = resolve; }));
+    window.localStorage.setItem("aio.optimiser.preload", "archive-source");
+    render(
+      <OptimiserPage
+        onNavigate={vi.fn()}
+        registerUnsavedEditor={(next) => { registration = next; }}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /^Optimise$/i }));
+    const runButton = screen.getByRole("button", { name: /Run optimisation/i });
+    fireEvent.click(runButton);
+    fireEvent.click(runButton);
+    await waitFor(() => expect(streamContent).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId("countdown")).toHaveTextContent("started");
+    await waitFor(() => {
+      expect(registration?.dirty).toBe(false);
+      expect(registration?.busy).toBe(false);
+    });
+    resolveRun?.({
+      headline: "Recovered headline",
+      standfirst: "Recovered standfirst",
+      bodyCopy: "Recovered body",
+      changeLog: [{ kind: "structure", text: "Recovered" }],
+    });
+    expect(await screen.findByDisplayValue("Recovered headline")).toBeInTheDocument();
+  });
+
+  it("restores a new unsaved optimiser context before and after completion", async () => {
+    let resolveRun: ((value: unknown) => void) | undefined;
+    vi.mocked(streamContent).mockImplementationOnce(() => new Promise((resolve) => { resolveRun = resolve; }));
+    render(<OptimiserPage onNavigate={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText(/Headline of the piece/i), {
+      target: { value: "Unsaved optimiser context" },
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Optimise$/i })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: /^Optimise$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Run optimisation/i }));
+    await waitFor(() => expect(streamContent).toHaveBeenCalled());
+    cleanup();
+    render(<OptimiserPage onNavigate={vi.fn()} />);
+    expect(screen.getByDisplayValue("Unsaved optimiser context")).toBeInTheDocument();
+    resolveRun?.({
+      headline: "Recovered optimiser headline",
+      standfirst: "",
+      bodyCopy: "Recovered body",
+      changeLog: [{ kind: "structure", text: "Recovered" }],
+    });
+    expect(await screen.findByDisplayValue("Recovered optimiser headline")).toBeInTheDocument();
   });
 });

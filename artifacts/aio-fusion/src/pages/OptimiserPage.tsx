@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
-  TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
+  FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
   MessagesSquare, Download, AlertTriangle, CheckCircle2, XCircle, Info, Globe, Tag, User, ChevronDown,
   Plus, Minus, MessageSquare, BookOpen, Scroll, Award, Radio, Mic2, PenLine, ClipboardList, ArrowUpRight,
   Lightbulb, ClipboardPaste, Upload, Calendar, Check, Save, Circle, Zap, Mail, Shield, Eye, Building2, Wand2,
@@ -27,6 +27,8 @@ import {
 } from "../lib/articleScoring";
 import { clearEditorRecovery, loadEditorRecovery, saveEditorRecovery, type EditorRecoverySnapshot, type RegisterUnsavedEditor, type RequestEditorAction } from "../lib/unsavedChanges";
 import { getSession } from "../lib/auth";
+import { aiRunKey, startAiRun, useAiRun } from "../lib/aiRunLifecycle";
+import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount } from "../lib/auditTiming";
 function OptimiserPage({
   onNavigate,
   registerUnsavedEditor,
@@ -214,6 +216,110 @@ function OptimiserPage({
 
   const workspaceId = getSession()?.username || "";
   const projectId = getActiveProjectId() || "default";
+  const runScope = {
+    sessionId: workspaceId || "anonymous",
+    workspaceId: workspaceId || "default",
+    projectId,
+  };
+  const optimiseRunKey = aiRunKey(runScope, "content-optimise", sourceArchiveId || "new-article");
+  type OptimiseRunInput = {
+    editorSnapshot: string;
+    sourceArchiveId: string | null;
+    sourceArchiveCreatedAt: string | null;
+    contentType: string;
+    spokesperson: string;
+    llmTarget: string;
+    projectTitle: string;
+    selectedMessages: string[];
+    mediaCategories: string[];
+    headline: string;
+    standfirst: string;
+    bodyCopy: string;
+    promptBrief: string;
+    projectData: string;
+    projectId: string;
+    scoringContext: typeof scoringContext;
+    context: OptimiserRecoveryData;
+  };
+  const optimiseRun = useAiRun<OptimiseRunInput, {
+    headline?: string;
+    standfirst?: string;
+    bodyCopy?: string;
+    changeLog?: unknown[];
+  }>(optimiseRunKey);
+  const activeOptimiseRun = optimiseRun?.status === "running";
+  const optimisationEstimate = optimiseRun?.estimateSeconds ?? getAuditDurationSeconds("content-optimise");
+  const optimisationStartedAt = optimiseRun?.startedAt;
+  const appliedOptimiseRunRef = useRef<number | null>(null);
+  const restoredOptimiseContextRef = useRef<number | null>(null);
+  useEffect(() => {
+    const context = optimiseRun?.input.context;
+    if (!optimiseRun || !context || restoredOptimiseContextRef.current === optimiseRun.startedAt) return;
+    // A route remount starts from the clean blank editor. Restore only that
+    // clean state; never replace edits made after returning to the page.
+    if (sourceArchiveId !== null || editorSnapshot !== savedBaseline || editorSnapshot === optimiseRun.input.editorSnapshot) return;
+    restoredOptimiseContextRef.current = optimiseRun.startedAt;
+    setProjectTitle(context.projectTitle);
+    setContentType(context.contentType);
+    setSpokesperson(context.spokesperson);
+    setSelectedMessages([...context.selectedMessages]);
+    setMediaCats([...context.mediaCats]);
+    setTargetPhrases(context.targetPhrases.map((phrase) => ({ ...phrase })));
+    setTargetPhraseIds([...context.targetPhraseIds]);
+    setContentStatus(context.contentStatus);
+    setPubDate(context.pubDate);
+    setLlmTarget(context.llmTarget);
+    setArticleHeadline(context.articleHeadline);
+    setStandfirst(context.standfirst);
+    setBodyCopy(context.bodyCopy);
+    setActionNotes(context.actionNotes);
+    setCreatorPitch(context.creatorPitch);
+    setSpokespersonLinkedIn(context.spokespersonLinkedIn);
+    setSourceArchiveCreatedAt(context.sourceArchiveCreatedAt);
+    setSavedBaseline(optimiseRun.input.editorSnapshot);
+  }, [optimiseRun, sourceArchiveId, editorSnapshot, savedBaseline]);
+  useEffect(() => {
+    if (!optimiseRun) {
+      setOptimising(false);
+      return;
+    }
+    setOptimising(optimiseRun.status === "running");
+    if (optimiseRun.status === "failed") {
+      setOptimiseError(optimiseRun.error || "The optimisation could not be generated right now. Please try again.");
+      return;
+    }
+    if (optimiseRun.status !== "succeeded" || !optimiseRun.result || appliedOptimiseRunRef.current === optimiseRun.startedAt) return;
+    // A late result must never overwrite edits made while the request was away.
+    if (optimiseRun.input.editorSnapshot !== editorSnapshot) {
+      setOptimiseError("Optimisation finished, but your copy changed while it was running. Review the result or run it again.");
+      return;
+    }
+    appliedOptimiseRunRef.current = optimiseRun.startedAt;
+    const data = optimiseRun.result;
+    const input = optimiseRun.input;
+    const nextHeadline = typeof data.headline === "string" && data.headline.trim() ? data.headline : input.headline;
+    const nextStandfirst = typeof data.standfirst === "string" && data.standfirst.trim() ? data.standfirst : input.standfirst;
+    const nextBodyCopy = typeof data.bodyCopy === "string" && data.bodyCopy.trim() ? data.bodyCopy : input.bodyCopy;
+    setOptimiseSnapshot({ headline: input.headline, standfirst: input.standfirst, bodyCopy: input.bodyCopy });
+    setArticleHeadline(nextHeadline);
+    setStandfirst(nextStandfirst);
+    setBodyCopy(nextBodyCopy);
+    const rawLog = Array.isArray(data.changeLog) ? data.changeLog : [];
+    const nextLog = rawLog.length > 0
+      ? rawLog as { kind: "embed" | "structure" | "flag"; text: string }[]
+      : [{ kind: "structure" as const, text: "Content reviewed and restructured for LLM readability and authority signaling." }];
+    const assessment = assessArticleOptimisation(
+      { headline: input.headline, standfirst: input.standfirst, bodyCopy: input.bodyCopy },
+      { headline: nextHeadline, standfirst: nextStandfirst, bodyCopy: nextBodyCopy },
+      input.scoringContext,
+      nextLog,
+    );
+    assessmentJustCalculatedRef.current = true;
+    setOptimisationAssessment(assessment);
+    setChangeLog(nextLog);
+    setOptimised(true);
+    setOptimiseError("");
+  }, [optimiseRun, editorSnapshot]);
   const recoveryData = useMemo<OptimiserRecoveryData>(() => ({
     projectTitle, contentType, spokesperson, selectedMessages, mediaCats, targetPhrases, targetPhraseIds,
     contentStatus, pubDate, llmTarget, articleHeadline, standfirst, bodyCopy, actionNotes,
@@ -364,15 +470,18 @@ function OptimiserPage({
   useEffect(() => {
     registerUnsavedEditor?.({
       editor: "optimiser",
-      dirty: editorSnapshot !== savedBaseline,
-      busy: optimising,
+      // The lifecycle run owns an immutable copy of the complete editor state,
+      // so in-app navigation is safe while optimisation is running. Keep the
+      // beforeunload warning below because reload/tab close is not recoverable.
+      dirty: activeOptimiseRun ? false : editorSnapshot !== savedBaseline,
+      busy: false,
       save: async () => {
         const item = await archiveItem(contentStatus === "Final" ? "Final" : "Draft", { silent: true });
         return item ? { ok: true } : { ok: false, error: "Your changes could not be saved. Check your connection, then try again." };
       },
     });
     return () => registerUnsavedEditor?.(null);
-  }, [registerUnsavedEditor, editorSnapshot, savedBaseline, optimising, contentStatus]);
+  }, [registerUnsavedEditor, editorSnapshot, savedBaseline, activeOptimiseRun, contentStatus]);
 
   useEffect(() => {
     if (editorSnapshot === savedBaseline && !optimising) return;
@@ -552,6 +661,7 @@ function OptimiserPage({
   }, [articleHeadline, standfirst, bodyCopy, scoringContext, optimisationAssessment]);
 
   const runOptimise = async () => {
+    if (activeOptimiseRun) return;
     if (categoriesUnavailable) {
       alert(databaseCategories.status === "loading" ? "Media categories are still loading. Please try again." : "Media categories could not be loaded. Retry before optimising.");
       return;
@@ -562,54 +672,65 @@ function OptimiserPage({
     }
     setOptimiseError("");
     setOptimiseChars(0);
-    setOptimising(true);
     setShowOptimiseBriefModal(false);
     const snapshot = { articleHeadline, standfirst, bodyCopy };
-    try {
-      const data = await streamContent(
+    const input: OptimiseRunInput = {
+      editorSnapshot,
+      sourceArchiveId,
+      sourceArchiveCreatedAt,
+      contentType,
+      spokesperson: spokesperson === "NA" ? "" : spokesperson,
+      llmTarget,
+      projectTitle,
+      selectedMessages: [...selectedMessages],
+      mediaCategories: [...validatedMediaCats],
+      headline: snapshot.articleHeadline,
+      standfirst: snapshot.standfirst,
+      bodyCopy: snapshot.bodyCopy,
+      promptBrief: promptBriefShort,
+      projectData: buildProjectDataText(),
+      projectId,
+      scoringContext,
+      context: {
+        projectTitle, contentType, spokesperson, selectedMessages: [...selectedMessages],
+        mediaCats: [...mediaCats], targetPhrases: targetPhrases.map((phrase) => ({ ...phrase })),
+        targetPhraseIds: [...targetPhraseIds], contentStatus, pubDate, llmTarget,
+        articleHeadline, standfirst, bodyCopy, actionNotes, creatorPitch, spokespersonLinkedIn,
+        sourceArchiveCreatedAt,
+      },
+    };
+    startAiRun({
+      key: optimiseRunKey,
+      scope: runScope,
+      operation: "content-optimise",
+      subjectId: sourceArchiveId || "new-article",
+      input,
+      estimateSeconds: getAuditDurationSeconds("content-optimise"),
+      execute: (progress) => streamContent(
         "/api/content/optimise",
         {
-          contentType,
-          spokesperson: spokesperson === "NA" ? "" : spokesperson,
-          llmTarget,
-          projectTitle,
-          selectedMessages,
-          mediaCategories: validatedMediaCats,
-          headline: articleHeadline,
-          standfirst,
-          bodyCopy,
-          promptBrief: promptBriefShort,
-          projectData: buildProjectDataText(),
-          projectId: getActiveProjectId(),
+          contentType: input.contentType,
+          spokesperson: input.spokesperson,
+          llmTarget: input.llmTarget,
+          projectTitle: input.projectTitle,
+          selectedMessages: input.selectedMessages,
+          mediaCategories: input.mediaCategories,
+          headline: input.headline,
+          standfirst: input.standfirst,
+          bodyCopy: input.bodyCopy,
+          promptBrief: input.promptBrief,
+          projectData: input.projectData,
+          projectId: input.projectId,
         },
-        setOptimiseChars,
-      );
-      setOptimiseSnapshot({ headline: snapshot.articleHeadline, standfirst: snapshot.standfirst, bodyCopy: snapshot.bodyCopy });
-      if (typeof data.headline === "string" && data.headline.trim()) setArticleHeadline(data.headline);
-      if (typeof data.standfirst === "string" && data.standfirst.trim()) setStandfirst(data.standfirst);
-      if (typeof data.bodyCopy === "string" && data.bodyCopy.trim()) setBodyCopy(data.bodyCopy);
-      const rawLog = Array.isArray(data.changeLog) ? data.changeLog : [];
-      const nextLog = rawLog.length > 0 ? rawLog : [{ kind: "structure" as const, text: "Content reviewed and restructured for LLM readability and authority signaling." }];
-      const after = {
-        headline: typeof data.headline === "string" && data.headline.trim() ? data.headline : articleHeadline,
-        standfirst: typeof data.standfirst === "string" && data.standfirst.trim() ? data.standfirst : standfirst,
-        bodyCopy: typeof data.bodyCopy === "string" && data.bodyCopy.trim() ? data.bodyCopy : bodyCopy,
-      };
-      const assessment = assessArticleOptimisation(
-        { headline: snapshot.articleHeadline, standfirst: snapshot.standfirst, bodyCopy: snapshot.bodyCopy },
-        after,
-        scoringContext,
-        nextLog,
-      );
-      assessmentJustCalculatedRef.current = true;
-      setOptimisationAssessment(assessment);
-      setChangeLog(nextLog);
-      setOptimised(true);
-    } catch (err) {
-      setOptimiseError(err instanceof Error ? err.message : "The optimisation could not be generated right now. Please try again.");
-    } finally {
-      setOptimising(false);
-    }
+        (chars) => {
+          setOptimiseChars(chars);
+          progress(chars);
+        },
+      ),
+      onSuccess: (_result, run) => {
+        recordAuditDuration("content-optimise", Date.now() - run.startedAt, run.estimateSeconds * 1000);
+      },
+    });
   };
 
   const rejectOptimised = () => {
@@ -1007,18 +1128,27 @@ OUTPUT INSTRUCTIONS:
               </p>
             </Labelled>
 
-            {optimising && (
-              <GenerationProgress
-                stages={[
-                  "Reading your draft",
-                  "Weaving in your key messages",
-                  "Restructuring answer-first for AI engines",
-                  "Sharpening the copy",
-                  "Finalising the optimised version",
-                ]}
-                chars={optimiseChars}
-                accent={vars.coral}
-              />
+            {(optimising || activeOptimiseRun) && (
+              <div className="space-y-2">
+                <CountdownBanner
+                  active={optimising || activeOptimiseRun}
+                  durationSeconds={optimisationEstimate}
+                  startedAt={optimisationStartedAt}
+                  label="Your copy is being optimised"
+                  sampleCount={getAuditSampleCount("content-optimise")}
+                />
+                <GenerationProgress
+                  stages={[
+                    "Reading your draft",
+                    "Weaving in your key messages",
+                    "Restructuring answer-first for AI engines",
+                    "Sharpening the copy",
+                    "Finalising the optimised version",
+                  ]}
+                  chars={optimiseChars}
+                  accent={vars.coral}
+                />
+              </div>
             )}
 
             {optimiseError && (
@@ -1050,6 +1180,10 @@ OUTPUT INSTRUCTIONS:
             </div>
             <p className="mt-3 text-xs" style={{ color: vars.g500 }}>
               {shownAssessment.improvement >= 0 ? "+" : ""}{shownAssessment.improvement} percentage-point improvement
+            </p>
+            <p className="mt-2 text-[11px] leading-relaxed" style={{ color: vars.g500 }}>
+              This deterministic content-quality check scores visible structure, selected-message alignment,
+              grounded project detail and citation-ready wording. It does not measure live AI visibility or external authority.
             </p>
             <div className="mt-4 space-y-2">
               {shownAssessment.before.factors.map((factor, index) => (
@@ -1148,28 +1282,6 @@ OUTPUT INSTRUCTIONS:
         {/* Inline Optimisation Results - only when optimised */}
         {optimised && (
           <div className="mt-6 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="rounded-xl border p-5 text-center" style={{ background: "white", borderColor: vars.g200 }}>
-                <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: vars.g500 }}>Before</p>
-                <div className="flex items-center justify-center gap-2">
-                  <span className="text-3xl font-bold" style={{ color: "#C94A3E" }}>42</span>
-                  <span className="text-xs" style={{ color: vars.g400 }}>/100</span>
-                </div>
-                <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>Authority Signal Score</p>
-              </div>
-              <div className="rounded-xl border p-5 text-center" style={{ background: "white", borderColor: vars.g200 }}>
-                <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: vars.g500 }}>After</p>
-                <div className="flex items-center justify-center gap-2">
-                  <span className="text-3xl font-bold" style={{ color: "#1f748f" }}>78</span>
-                  <span className="text-xs" style={{ color: vars.g400 }}>/100</span>
-                  <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: "#EFF7F2", color: "#3D9B6B" }}>
-                    <TrendingUp size={12} /> +36
-                  </span>
-                </div>
-                <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>Authority Signal Score</p>
-              </div>
-            </div>
-
             {/* Change log */}
             <div className="rounded-xl border overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
               <div className="px-5 py-3 border-b flex items-center gap-2" style={{ background: vars.g50, borderColor: vars.g200 }}>

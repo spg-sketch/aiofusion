@@ -51,10 +51,13 @@ vi.mock("./shared", () => ({
   countWords: (value: string) => value.trim() ? value.trim().split(/\s+/).length : 0,
 }));
 vi.mock("../InfoTip", () => ({ default: () => null }));
-vi.mock("../components/CountdownBanner", () => ({ default: () => null }));
+vi.mock("../components/CountdownBanner", () => ({
+  default: ({ startedAt }: { startedAt?: number }) => <div data-testid="countdown">{startedAt ? "started" : "missing"}</div>,
+}));
 vi.mock("../LlmCheckPage", () => ({ loadSavedAudits: () => [] }));
 
 import { ContentCreatorPage } from "./ContentCreatorPage";
+import { clearAiRuns } from "../lib/aiRunLifecycle";
 
 describe("ContentCreatorPage database category guard", () => {
   beforeEach(() => {
@@ -66,7 +69,7 @@ describe("ContentCreatorPage database category guard", () => {
       ? new Response("offline", { status: 503 })
       : new Response(JSON.stringify({ categories: ["Technology", "Energy"] }), { status: 200 })));
   });
-  afterEach(() => { cleanup(); window.localStorage.clear(); vi.unstubAllGlobals(); });
+  afterEach(() => { cleanup(); clearAiRuns(); window.localStorage.clear(); vi.unstubAllGlobals(); });
 
   it("uses the server label and filters stale restored categories in save and AI payloads", async () => {
     window.localStorage.setItem("aio.creator.preload", "stale");
@@ -92,5 +95,48 @@ describe("ContentCreatorPage database category guard", () => {
     expect(streamContent).not.toHaveBeenCalled();
     expect(window.alert).toHaveBeenCalledWith(expect.stringMatching(/could not be loaded/i));
     expect(state.archive[0].mediaCats).toEqual(["  technology  ", "Retired category"]);
+  });
+
+  it("keeps a draft run and its fixed countdown when the page remounts", async () => {
+    let resolveRun: ((value: unknown) => void) | undefined;
+    let registration: Parameters<NonNullable<React.ComponentProps<typeof ContentCreatorPage>["registerUnsavedEditor"]>>[0] = null;
+    streamContent.mockImplementationOnce(() => new Promise((resolve) => { resolveRun = resolve; }));
+    window.localStorage.setItem("aio.creator.preload", "stale");
+    const first = render(
+      <ContentCreatorPage
+        onNavigate={vi.fn()}
+        registerUnsavedEditor={(next) => { registration = next; }}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /Create Content/i }));
+    await waitFor(() => expect(streamContent).toHaveBeenCalled());
+    expect(screen.getByTestId("countdown")).toHaveTextContent("started");
+    await waitFor(() => {
+      expect(registration?.dirty).toBe(false);
+      expect(registration?.busy).toBe(false);
+    });
+    first.unmount();
+    resolveRun?.({ headline: "Recovered draft", standfirst: "", bodyCopy: "Recovered body" });
+    await waitFor(() => expect(resolveRun).toBeDefined());
+    window.localStorage.setItem("aio.creator.preload", "stale");
+    render(<ContentCreatorPage onNavigate={vi.fn()} />);
+    expect(await screen.findByDisplayValue("Recovered draft")).toBeInTheDocument();
+  });
+
+  it("restores a new unsaved creator context before and after completion", async () => {
+    let resolveRun: ((value: unknown) => void) | undefined;
+    streamContent.mockImplementationOnce(() => new Promise((resolve) => { resolveRun = resolve; }));
+    render(<ContentCreatorPage onNavigate={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText("e.g. AI Authority is the New PR Battleground"), {
+      target: { value: "Unsaved creator context" },
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: /Create Content/i })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: /Create Content/i }));
+    await waitFor(() => expect(streamContent).toHaveBeenCalled());
+    cleanup();
+    render(<ContentCreatorPage onNavigate={vi.fn()} />);
+    expect(screen.getByDisplayValue("Unsaved creator context")).toBeInTheDocument();
+    resolveRun?.({ headline: "Recovered unsaved draft", standfirst: "", bodyCopy: "Recovered body" });
+    expect(await screen.findByDisplayValue("Recovered unsaved draft")).toBeInTheDocument();
   });
 });

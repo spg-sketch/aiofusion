@@ -22,6 +22,7 @@ import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getT
 import { getFreshCategoryDefaults, normaliseCategory, useDatabaseCategories, validDatabaseCategories } from "../lib/databaseCategories";
 import { clearEditorRecovery, loadEditorRecovery, saveEditorRecovery, type EditorRecoverySnapshot, type RegisterUnsavedEditor } from "../lib/unsavedChanges";
 import { getSession } from "../lib/auth";
+import { aiRunKey, startAiRun, useAiRun } from "../lib/aiRunLifecycle";
 type CreatorFieldKey = "headline" | "standfirst" | "pitch" | "transcript" | "actionNotes";
 
 type CreatorRecoveryData = {
@@ -82,8 +83,6 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
   const [creatorError, setCreatorError] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generateChars, setGenerateChars] = useState(0);
-  const generateStartRef = useRef<number | null>(null);
-  const optimiseStartRef = useRef<number | null>(null);
   const [generated, setGenerated] = useState(false);
   const [draftSnapshot, setDraftSnapshot] = useState<{ articleHeadline: string; standfirst: string; transcript: string } | null>(null);
   const [supportingData, setSupportingData] = useState<{ text: string; url: string }[]>([]);
@@ -185,6 +184,187 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
 
   const workspaceId = getSession()?.username || "";
   const projectId = getActiveProjectId() || "default";
+  const runScope = {
+    sessionId: workspaceId || "anonymous",
+    workspaceId: workspaceId || "default",
+    projectId,
+  };
+  type CreatorDraftInput = {
+    editorSnapshot: string;
+    sourceArchiveId: string | null;
+    articleHeadline: string;
+    standfirst: string;
+    transcript: string;
+    request: Record<string, unknown>;
+    context: CreatorRecoveryData;
+  };
+  type CreatorDraftResult = {
+    headline?: string;
+    standfirst?: string;
+    bodyCopy?: string;
+    changeLog?: unknown[];
+    supportingData?: unknown[];
+  };
+  type CreatorFieldInput = {
+    editorSnapshot: string;
+    fieldKey: CreatorFieldKey;
+    value: string;
+    request: Record<string, unknown>;
+    context: CreatorRecoveryData;
+  };
+  type CreatorFieldResult = { next?: string; log?: unknown[] };
+  const draftRunKey = aiRunKey(runScope, "content-draft", sourceArchiveId || "new-article");
+  const draftRun = useAiRun<CreatorDraftInput, CreatorDraftResult>(draftRunKey);
+  const fieldRunKeys = {
+    headline: aiRunKey(runScope, "content-optimise", `${sourceArchiveId || "new-article"}:headline`),
+    standfirst: aiRunKey(runScope, "content-optimise", `${sourceArchiveId || "new-article"}:standfirst`),
+    pitch: aiRunKey(runScope, "content-optimise", `${sourceArchiveId || "new-article"}:pitch`),
+    transcript: aiRunKey(runScope, "content-optimise", `${sourceArchiveId || "new-article"}:transcript`),
+    actionNotes: aiRunKey(runScope, "content-optimise", `${sourceArchiveId || "new-article"}:actionNotes`),
+  } as const;
+  const headlineRun = useAiRun<CreatorFieldInput, CreatorFieldResult>(fieldRunKeys.headline);
+  const standfirstRun = useAiRun<CreatorFieldInput, CreatorFieldResult>(fieldRunKeys.standfirst);
+  const pitchRun = useAiRun<CreatorFieldInput, CreatorFieldResult>(fieldRunKeys.pitch);
+  const transcriptRun = useAiRun<CreatorFieldInput, CreatorFieldResult>(fieldRunKeys.transcript);
+  const actionNotesRun = useAiRun<CreatorFieldInput, CreatorFieldResult>(fieldRunKeys.actionNotes);
+  const fieldRuns: Record<CreatorFieldKey, ReturnType<typeof useAiRun<CreatorFieldInput, CreatorFieldResult>>> = {
+    headline: headlineRun,
+    standfirst: standfirstRun,
+    pitch: pitchRun,
+    transcript: transcriptRun,
+    actionNotes: actionNotesRun,
+  };
+  const activeFieldEntry = (Object.entries(fieldRuns) as [CreatorFieldKey, typeof headlineRun][])
+    .map(([key, run]) => ({ key, run }))
+    .find(({ run }) => run?.status === "running");
+  const activeFieldRun = activeFieldEntry?.run ?? null;
+  const appliedDraftRunRef = useRef<number | null>(null);
+  const restoredDraftContextRef = useRef<number | null>(null);
+  const appliedFieldRunsRef = useRef<Partial<Record<CreatorFieldKey, number>>>({});
+  useEffect(() => {
+    const context = draftRun?.input.context;
+    if (!draftRun || !context || restoredDraftContextRef.current === draftRun.startedAt) return;
+    if (sourceArchiveId !== null || editorSnapshot !== savedBaseline || editorSnapshot === draftRun.input.editorSnapshot) return;
+    restoredDraftContextRef.current = draftRun.startedAt;
+    setProjectName(context.projectName);
+    setContentType(context.contentType);
+    setArticleHeadline(context.articleHeadline);
+    setStandfirst(context.standfirst);
+    setHeadline(context.headline);
+    setTranscript(context.transcript);
+    setActionNotes(context.actionNotes);
+    setSpokesperson(context.spokesperson);
+    setSpokesLi(context.spokesLi);
+    setMediaTarget([...context.mediaTarget]);
+    setContentStatus(context.contentStatus);
+    setPubDate(context.pubDate);
+    setTargetPhrases(context.targetPhrases.map((phrase) => ({ ...phrase })));
+    setSelectedMessagesSnapshot([...context.selectedMessages]);
+    setSourceArchiveCreatedAt(context.sourceArchiveCreatedAt);
+    setSavedBaseline(draftRun.input.editorSnapshot);
+  }, [draftRun, sourceArchiveId, editorSnapshot, savedBaseline]);
+  useEffect(() => {
+    const entry = (Object.entries(fieldRuns) as [CreatorFieldKey, typeof headlineRun][])
+      .map(([key, run]) => ({ key, run }))
+      .find(({ run }) => run && (run.status === "running" || run.status === "succeeded"));
+    const context = entry?.run?.input.context;
+    if (!entry?.run || !context || sourceArchiveId !== null || editorSnapshot !== savedBaseline || editorSnapshot === entry.run.input.editorSnapshot) return;
+    setProjectName(context.projectName);
+    setContentType(context.contentType);
+    setArticleHeadline(context.articleHeadline);
+    setStandfirst(context.standfirst);
+    setHeadline(context.headline);
+    setTranscript(context.transcript);
+    setActionNotes(context.actionNotes);
+    setSpokesperson(context.spokesperson);
+    setSpokesLi(context.spokesLi);
+    setMediaTarget([...context.mediaTarget]);
+    setContentStatus(context.contentStatus);
+    setPubDate(context.pubDate);
+    setTargetPhrases(context.targetPhrases.map((phrase) => ({ ...phrase })));
+    setSelectedMessagesSnapshot([...context.selectedMessages]);
+    setSourceArchiveCreatedAt(context.sourceArchiveCreatedAt);
+    setSavedBaseline(entry.run.input.editorSnapshot);
+  }, [headlineRun, standfirstRun, pitchRun, transcriptRun, actionNotesRun, sourceArchiveId, editorSnapshot, savedBaseline]);
+  useEffect(() => {
+    setGenerating(draftRun?.status === "running");
+    if (draftRun?.status === "failed") {
+      setCreatorError(draftRun.error || "The draft could not be generated right now. Please try again.");
+      return;
+    }
+    if (draftRun?.status !== "succeeded" || !draftRun.result || appliedDraftRunRef.current === draftRun.startedAt) return;
+    if (draftRun.input.editorSnapshot !== editorSnapshot) {
+      setCreatorError("The draft finished, but your creator content changed while it was running. Review your copy or try again.");
+      return;
+    }
+    appliedDraftRunRef.current = draftRun.startedAt;
+    const data = draftRun.result;
+    const snapshot = draftRun.input;
+    setDraftSnapshot({
+      articleHeadline: snapshot.articleHeadline,
+      standfirst: snapshot.standfirst,
+      transcript: snapshot.transcript,
+    });
+    if (typeof data.headline === "string" && data.headline.trim()) setArticleHeadline(data.headline.trim());
+    if (typeof data.standfirst === "string") setStandfirst(data.standfirst);
+    if (typeof data.bodyCopy === "string") setTranscript(data.bodyCopy);
+    const log = Array.isArray(data.changeLog)
+      ? data.changeLog.map((c) => {
+          const item = c as { kind?: string; text?: string };
+          return {
+            kind: (item.kind === "embed" || item.kind === "flag" ? item.kind : "structure") as "embed" | "structure" | "flag",
+            text: String(item.text || ""),
+          };
+        }).filter((item) => item.text.length > 0)
+      : [];
+    setChangeLog(log);
+    setSupportingData(
+      Array.isArray(data.supportingData)
+        ? data.supportingData
+            .map((item) => item as { text?: string; url?: string })
+            .filter((item) => typeof item.text === "string" && item.text.trim().length > 0)
+            .map((item) => ({ text: String(item.text), url: safeHttpUrl(item.url) }))
+        : [],
+    );
+    setOptimisedFields(new Set());
+    setFieldSnapshots({});
+    setGenerated(true);
+    setCreatorError("");
+  }, [draftRun, editorSnapshot]);
+
+  useEffect(() => {
+    const entries = (Object.entries(fieldRuns) as [CreatorFieldKey, typeof headlineRun][]);
+    const running = entries.find(([, run]) => run?.status === "running");
+    setOptimisingField(running?.[0] ?? null);
+    for (const [key, run] of entries) {
+      if (!run || run.status !== "succeeded" || !run.result || appliedFieldRunsRef.current[key] === run.startedAt) continue;
+      if (run.input.editorSnapshot !== editorSnapshot || getFieldValue(key) !== run.input.value) {
+        setCreatorError("The field changed while optimisation was running. Review your copy or try again.");
+        continue;
+      }
+      const nextValue = run.result.next;
+      if (typeof nextValue !== "string") {
+        setCreatorError("The optimisation could not be generated right now. Please try again.");
+        continue;
+      }
+      appliedFieldRunsRef.current[key] = run.startedAt;
+      const log: ChangeLogEntry[] = Array.isArray(run.result.log)
+        ? run.result.log.map((item) => {
+            const value = item as { kind?: string; text?: string };
+            return {
+              kind: (value.kind === "embed" || value.kind === "flag" ? value.kind : "structure") as ChangeLogEntry["kind"],
+              text: String(value.text || ""),
+              field: key,
+            };
+          }).filter((item) => item.text.length > 0)
+        : [];
+      setFieldSnapshots((prev) => ({ ...prev, [key]: run.input.value }));
+      setFieldValue(key, nextValue);
+      setChangeLog((prev) => [...prev, ...log]);
+      setOptimisedFields((prev) => new Set(prev).add(key));
+      setCreatorError("");
+    }
+  }, [headlineRun, standfirstRun, pitchRun, transcriptRun, actionNotesRun, editorSnapshot]);
   const recoveryData = useMemo<CreatorRecoveryData>(() => ({
     projectName, contentType, articleHeadline, standfirst, headline, transcript, actionNotes,
     spokesperson, spokesLi, mediaTarget, contentStatus, pubDate, targetPhrases,
@@ -298,15 +478,19 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
   useEffect(() => {
     registerUnsavedEditor?.({
       editor: "creator",
-      dirty: editorSnapshot !== savedBaseline,
-      busy: generating || optimisingField !== null,
+      // Active AI runs retain an immutable editor snapshot outside the routed
+      // page, so in-app navigation can proceed without forcing a save.
+      dirty: draftRun?.status === "running" || activeFieldRun?.status === "running"
+        ? false
+        : editorSnapshot !== savedBaseline,
+      busy: false,
       save: async () => {
         const item = await archiveItem({ silent: true });
         return item ? { ok: true } : { ok: false, error: "Your changes could not be saved. Check your connection, then try again." };
       },
     });
     return () => registerUnsavedEditor?.(null);
-  }, [registerUnsavedEditor, editorSnapshot, savedBaseline, generating, optimisingField]);
+  }, [registerUnsavedEditor, editorSnapshot, savedBaseline, draftRun?.status, activeFieldRun?.status]);
 
   useEffect(() => {
     const dirty = editorSnapshot !== savedBaseline || generating || optimisingField !== null;
@@ -358,8 +542,8 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
 
   type ChangeLogEntry = { kind: "embed" | "structure" | "flag"; text: string; field: CreatorFieldKey };
 
-  const optimiseField = async (key: CreatorFieldKey) => {
-    if (optimisedFields.has(key) || optimisingField) return;
+  const optimiseField = (key: CreatorFieldKey) => {
+    if (optimisedFields.has(key) || activeFieldRun) return;
     const value = getFieldValue(key);
     if (!value.trim()) {
       alert("Add some copy to this field first, then Optimise will improve it.");
@@ -368,51 +552,45 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
     setCreatorError("");
     setCreatorChars(0);
     setOptimisingField(key);
-    optimiseStartRef.current = Date.now();
-    try {
-      const data = await streamContent(
-        "/api/content/creator-field",
-        {
-          fieldKey: key,
-          value,
-          contentType,
-          projectName,
-          spokesperson: spokesperson === "NA" ? "" : spokesperson,
-          headline: articleHeadline,
-          standfirst,
-          pitch: headline,
-          keyMessages: projectMessages.map((m) => m.long || m.short).filter(Boolean),
-          projectData: buildProjectDataText(),
-          projectId: getActiveProjectId(),
-        },
-        setCreatorChars,
-      );
-      const nextValue = data.next;
-      if (typeof nextValue !== "string") {
-        throw new Error("The optimisation could not be generated right now. Please try again.");
-      }
-      const log: ChangeLogEntry[] = Array.isArray(data.log)
-        ? data.log
-            .map((c: { kind?: string; text?: string }) => ({
-              kind: (c.kind === "embed" || c.kind === "flag" ? c.kind : "structure") as ChangeLogEntry["kind"],
-              text: String(c.text || ""),
-              field: key,
-            }))
-            .filter((c: ChangeLogEntry) => c.text.length > 0)
-        : [];
-      setFieldSnapshots((prev) => ({ ...prev, [key]: value }));
-      setFieldValue(key, nextValue);
-      setChangeLog((prev) => [...prev, ...log]);
-      setOptimisedFields((prev) => new Set(prev).add(key));
-      if (optimiseStartRef.current) {
-        recordAuditDuration("content-optimise", Date.now() - optimiseStartRef.current, getAuditDurationSeconds("content-optimise") * 1000);
-      }
-    } catch (err) {
-      setCreatorError(err instanceof Error ? err.message : "The optimisation could not be generated right now. Please try again.");
-    } finally {
-      setOptimisingField(null);
-      optimiseStartRef.current = null;
-    }
+    const input: CreatorFieldInput = {
+      editorSnapshot,
+      fieldKey: key,
+      value,
+      request: {
+        fieldKey: key,
+        value,
+        contentType,
+        projectName,
+        spokesperson: spokesperson === "NA" ? "" : spokesperson,
+        headline: articleHeadline,
+        standfirst,
+        pitch: headline,
+        keyMessages: projectMessages.map((m) => m.long || m.short).filter(Boolean),
+        projectData: buildProjectDataText(),
+        projectId,
+      },
+      context: {
+        projectName, contentType, articleHeadline, standfirst, headline, transcript, actionNotes,
+        spokesperson, spokesLi, mediaTarget: [...mediaTarget], contentStatus, pubDate,
+        targetPhrases: targetPhrases.map((phrase) => ({ ...phrase })),
+        selectedMessages: [...selectedMessagesSnapshot], sourceArchiveCreatedAt,
+      },
+    };
+    startAiRun({
+      key: fieldRunKeys[key],
+      scope: runScope,
+      operation: "content-optimise",
+      subjectId: `${sourceArchiveId || "new-article"}:${key}`,
+      input,
+      estimateSeconds: getAuditDurationSeconds("content-optimise"),
+      execute: (progress) => streamContent("/api/content/creator-field", input.request, (chars) => {
+        setCreatorChars(chars);
+        progress(chars);
+      }),
+      onSuccess: (_result, run) => {
+        recordAuditDuration("content-optimise", Date.now() - run.startedAt, run.estimateSeconds * 1000);
+      },
+    });
   };
 
   const rejectField = (key: CreatorFieldKey) => {
@@ -430,8 +608,8 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
     : CREATOR_PROMPT_1_TYPES.includes(contentType) ? "Prompt 1.1"
     : "Prompt 2.1";
 
-  const createDraft = async () => {
-    if (generating || optimisingField) return;
+  const createDraft = () => {
+    if (generating || draftRun?.status === "running" || activeFieldRun) return;
     if (categoriesUnavailable) {
       alert(databaseCategories.status === "loading" ? "Media categories are still loading. Please try again." : "Media categories could not be loaded. Retry before generating.");
       return;
@@ -443,8 +621,6 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
     }
     setCreatorError("");
     setGenerateChars(0);
-    setGenerating(true);
-    generateStartRef.current = Date.now();
     const snapshot = { articleHeadline, standfirst, transcript };
     let queryAuditData: { mentionCount: number; totalProbes: number; competitors: string[] } | undefined;
     if (targetQuery) {
@@ -460,10 +636,13 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
         }
       }
     }
-    try {
-      const data = await streamContent(
-        "/api/content/generate",
-        {
+    const input: CreatorDraftInput = {
+      editorSnapshot,
+      sourceArchiveId,
+      articleHeadline,
+      standfirst,
+      transcript,
+      request: {
           contentType,
           projectName,
           spokesperson: spokesperson === "NA" ? "" : spokesperson,
@@ -474,7 +653,7 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
           selectedMessages: projectMessages.map((m) => m.long || m.short).filter(Boolean),
           mediaCategories: validatedMediaTarget,
           projectData: buildProjectDataText(),
-          projectId: getActiveProjectId(),
+          projectId,
            // targetQuery is retained for v1 API consumers. Structured phrases
            // are authoritative and the first phrase is the compatibility value.
            ...buildExactTargetRequest(targetPhrases),
@@ -483,40 +662,28 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
           competitors: projectCompetitors.slice(0, 10),
           geography,
         },
-        setGenerateChars,
-      );
-      setDraftSnapshot(snapshot);
-      if (typeof data.headline === "string" && data.headline.trim()) setArticleHeadline(data.headline.trim());
-      if (typeof data.standfirst === "string") setStandfirst(data.standfirst);
-      if (typeof data.bodyCopy === "string") setTranscript(data.bodyCopy);
-      const log = Array.isArray(data.changeLog)
-        ? (data.changeLog as { kind?: string; text?: string }[])
-            .map((c) => ({
-              kind: (c.kind === "embed" || c.kind === "flag" ? c.kind : "structure") as "embed" | "structure" | "flag",
-              text: String(c.text || ""),
-            }))
-            .filter((c) => c.text.length > 0)
-        : [];
-      setChangeLog(log);
-      setSupportingData(
-        Array.isArray(data.supportingData)
-          ? (data.supportingData as { text?: string; url?: string }[])
-              .filter((d) => d && typeof d.text === "string" && d.text.trim().length > 0)
-              .map((d) => ({ text: String(d.text), url: safeHttpUrl(d.url) }))
-          : [],
-      );
-      setOptimisedFields(new Set());
-      setFieldSnapshots({});
-      setGenerated(true);
-      if (generateStartRef.current) {
-        recordAuditDuration("content-draft", Date.now() - generateStartRef.current, getAuditDurationSeconds("content-draft") * 1000);
-      }
-    } catch (err) {
-      setCreatorError(err instanceof Error ? err.message : "The draft could not be generated right now. Please try again.");
-    } finally {
-      setGenerating(false);
-      generateStartRef.current = null;
-    }
+      context: {
+        projectName, contentType, articleHeadline, standfirst, headline, transcript, actionNotes,
+        spokesperson, spokesLi, mediaTarget: [...mediaTarget], contentStatus, pubDate,
+        targetPhrases: targetPhrases.map((phrase) => ({ ...phrase })),
+        selectedMessages: [...selectedMessagesSnapshot], sourceArchiveCreatedAt,
+      },
+    };
+    startAiRun({
+      key: draftRunKey,
+      scope: runScope,
+      operation: "content-draft",
+      subjectId: sourceArchiveId || "new-article",
+      input,
+      estimateSeconds: getAuditDurationSeconds("content-draft"),
+      execute: (progress) => streamContent("/api/content/generate", input.request, (chars) => {
+        setGenerateChars(chars);
+        progress(chars);
+      }),
+      onSuccess: (_result, run) => {
+        recordAuditDuration("content-draft", Date.now() - run.startedAt, run.estimateSeconds * 1000);
+      },
+    });
   };
 
   const discardDraft = () => {
@@ -941,7 +1108,8 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
         <div className="mt-4 space-y-2">
           <CountdownBanner
             active={generating}
-            durationSeconds={getAuditDurationSeconds("content-draft")}
+            durationSeconds={draftRun?.estimateSeconds ?? getAuditDurationSeconds("content-draft")}
+            startedAt={draftRun?.startedAt}
             label="Your draft is being written"
             sampleCount={getAuditSampleCount("content-draft")}
           />
@@ -963,8 +1131,9 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
       {optimisingField && (
         <div className="mt-4 space-y-2">
           <CountdownBanner
-            active={optimisingField !== null}
-            durationSeconds={getAuditDurationSeconds("content-optimise")}
+            active={activeFieldRun?.status === "running"}
+            durationSeconds={activeFieldRun?.estimateSeconds ?? getAuditDurationSeconds("content-optimise")}
+            startedAt={activeFieldRun?.startedAt}
             label="Your copy is being optimised"
             sampleCount={getAuditSampleCount("content-optimise")}
           />
