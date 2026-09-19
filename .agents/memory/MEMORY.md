@@ -85,3 +85,4 @@
 - [Database-backed media targeting](aio-fusion-database-media-targeting.md) — content targeting uses populated accessible contact industries; Project Set-Up 1.9 only supplies exact-match defaults.
 - [Article quality scoring](aio-fusion-article-quality-scoring.md) — keep it distinct from campaign Authority and invalidate persisted assessments when content or scoring context changes.
 - [Selective migration approvals](selective-migration-approval-boundaries.md) — exact digest approval governs writes; legacy workspace foreign keys require reviewed SSO bridge or workspace omission.
+- [Long media imports](aio-fusion-long-media-imports.md) — browser requests can time out while the server transaction continues; reconcile the batch before retrying.
