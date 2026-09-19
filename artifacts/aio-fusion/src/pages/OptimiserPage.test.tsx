@@ -181,6 +181,20 @@ describe("OptimiserPage target phrase round trips", () => {
     });
   });
 
+  it("retrieves an archived article without navigation while categories are stalled", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    const onNavigate = vi.fn();
+    render(<OptimiserPage onNavigate={onNavigate} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Retrieve content draft/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Archive source/i }));
+
+    expect(screen.getByPlaceholderText("e.g. Q2 product launch announcement")).toHaveValue("Archive source");
+    expect(screen.getByPlaceholderText(/Headline of the piece/i)).toHaveValue("Archive headline");
+    expect(screen.getByText("Archive body")).toBeInTheDocument();
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
+
   it("filters unavailable restored targets before saving or planning", async () => {
     fixtures.archive[0].mediaCats = [" technology ", "Bespoke niche"];
     window.localStorage.setItem("aio.optimiser.preload", "archive-source");

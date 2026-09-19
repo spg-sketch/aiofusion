@@ -911,6 +911,15 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
           <div className="flex flex-wrap gap-2">
             <button onClick={() => setShowCatPicker(true)} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.gold, color: "#7A5E25" }}>+ Choose categories</button>
           </div>
+          {databaseCategories.status === "loading" && (
+            <p className="text-[11px] mt-2" style={{ color: vars.g400 }}>Loading Media Database categories...</p>
+          )}
+          {databaseCategories.status === "error" && (
+            <p className="text-[11px] mt-2" style={{ color: "#B42318" }}>
+              {databaseCategories.error}{" "}
+              <button type="button" onClick={databaseCategories.retry} className="underline font-semibold">Retry</button>
+            </p>
+          )}
         </Labelled>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

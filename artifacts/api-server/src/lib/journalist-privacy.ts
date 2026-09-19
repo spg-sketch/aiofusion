@@ -99,10 +99,17 @@ export async function isSuppressedWithDb(executor: any, identity: PrivacyIdentit
 /** Load applicable suppression hashes once and reuse them across one list request. */
 export async function createSuppressionMatcherWithDb(executor: any, accountId: string | null) {
   const candidates = await loadSuppressionCandidates(executor, accountId);
-  return (identity: PrivacyIdentity): boolean => matchesSuppression(candidates, {
-    ...identity,
-    accountId,
-  });
+  const emailHashes = new Set(candidates.map((row) => row.emailHash).filter(Boolean));
+  const linkedinHashes = new Set(candidates.map((row) => row.linkedinHash).filter(Boolean));
+  const nameOutletHashes = new Set(candidates
+    .filter((row) => row.nameHash && row.outletHash)
+    .map((row) => `${row.nameHash}:${row.outletHash}`));
+  return (identity: PrivacyIdentity): boolean => {
+    const keys = suppressionKeys({ ...identity, accountId });
+    return (!!keys.emailHash && emailHashes.has(keys.emailHash))
+      || (!!keys.linkedinHash && linkedinHashes.has(keys.linkedinHash))
+      || (!!keys.nameHash && !!keys.outletHash && nameOutletHashes.has(`${keys.nameHash}:${keys.outletHash}`));
+  };
 }
 
 export async function createSuppressionMatcher(accountId: string | null) {

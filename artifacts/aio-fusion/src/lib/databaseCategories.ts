@@ -3,6 +3,8 @@ import { apiBase } from "./apiHelpers";
 import { getActiveProjectId, loadIntakeData } from "../IntakeForm";
 import { getSession } from "./auth";
 
+export const DATABASE_CATEGORY_TIMEOUT_MS = 10_000;
+
 export type DatabaseCategoryState = {
   categories: string[];
   status: "loading" | "ready" | "empty" | "error";
@@ -54,6 +56,18 @@ export function useDatabaseCategories(): DatabaseCategoryState {
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
+    let timedOut = false;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      if (active) {
+        setState({
+          categories: [],
+          status: "error",
+          error: "Media categories took too long to load. Retry to try again.",
+        });
+      }
+    }, DATABASE_CATEGORY_TIMEOUT_MS);
     setState({ categories: [], status: "loading", error: "" });
     fetch(`${apiBase()}/api/store/media-db/categories`, { credentials: "include", signal: controller.signal })
       .then(async (response) => {
@@ -62,16 +76,22 @@ export function useDatabaseCategories(): DatabaseCategoryState {
       })
       .then((data) => {
         if (!active) return;
+        window.clearTimeout(timeout);
         const categories = Array.isArray(data?.categories)
           ? data.categories.filter((value: unknown): value is string => typeof value === "string" && Boolean(value.trim()))
           : [];
         setState({ categories: Array.from(new Set(categories)), status: categories.length ? "ready" : "empty", error: "" });
       })
       .catch((error: unknown) => {
-        if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
+        if (!active || timedOut || (error instanceof DOMException && error.name === "AbortError")) return;
+        window.clearTimeout(timeout);
         setState({ categories: [], status: "error", error: error instanceof Error ? error.message : "Could not load media categories." });
       });
-    return () => { active = false; controller.abort(); };
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
   }, [attempt, projectId, workspaceId]);
 
   return { ...state, retry };

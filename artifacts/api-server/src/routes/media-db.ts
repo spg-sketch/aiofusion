@@ -357,12 +357,19 @@ router.get(
   "/store/media-db/categories",
   requirePlatformAuth,
   async (req: Request, res: Response): Promise<void> => {
+    const startedAt = Date.now();
+    let visibleContactCount = 0;
     try {
       const visible = await visibleAccounts(req);
       const workspaceId = normUsername(req.account!.username);
       const rows = await db
         .select({
-          contact: mediaContactsTable,
+          contactAccountId: mediaContactsTable.accountId,
+          firstName: mediaContactsTable.firstName,
+          lastName: mediaContactsTable.lastName,
+          email: mediaContactsTable.email,
+          linkedinUrl: mediaContactsTable.linkedinUrl,
+          sectors: mediaContactsTable.sectors,
           outletName: mediaOutletsTable.name,
           outletCategory: mediaOutletsTable.category,
           outletAccountId: mediaOutletsTable.accountId,
@@ -372,31 +379,56 @@ router.get(
           eq(mediaContactsTable.outletId, mediaOutletsTable.id),
           isNull(mediaOutletsTable.deletedAt),
         ))
-        .where(isNull(mediaContactsTable.deletedAt));
+        .where(and(
+          isNull(mediaContactsTable.deletedAt),
+          visible === null
+            ? undefined
+            : visible.length > 0
+              ? or(isNull(mediaContactsTable.accountId), inArray(mediaContactsTable.accountId, visible))
+              : isNull(mediaContactsTable.accountId),
+        ));
 
       const accessible = rows
-        .filter(({ contact }) => contact.accountId === null || visible === null || visible.includes(contact.accountId))
+        .filter((row) => row.contactAccountId === null || visible === null || visible.includes(row.contactAccountId))
         .map((row) => outletVisible(row.outletAccountId ?? null, visible)
           ? row
           : { ...row, outletName: null, outletCategory: null });
-      const privacyVisible = (await Promise.all(accessible.map(async (row) => ({
-        row,
-        suppressed: await isContactSuppressed({
-          ...row.contact,
-          outlet: row.outletName ?? "",
-          accountId: workspaceId,
-        }),
-      })))).filter(({ suppressed }) => !suppressed);
+      const isSuppressedForWorkspace = await createSuppressionMatcher(workspaceId);
+      const privacyVisible = accessible.filter((row) => !isSuppressedForWorkspace({
+        name: `${row.firstName ?? ""} ${row.lastName ?? ""}`,
+        email: row.email ?? "",
+        linkedinUrl: row.linkedinUrl ?? "",
+        outlet: row.outletName ?? "",
+      }));
+      visibleContactCount = privacyVisible.length;
 
       const labels = new Map<string, string>();
-      for (const { row } of privacyVisible) {
-        for (const value of [...(row.contact.sectors ?? []), row.outletCategory ?? ""]) {
+      for (const row of privacyVisible) {
+        for (const value of [...(row.sectors ?? []), row.outletCategory ?? ""]) {
           const label = value.trim().replace(/\s+/g, " ");
           if (label && !labels.has(label.toLocaleLowerCase())) labels.set(label.toLocaleLowerCase(), label);
         }
       }
+      const durationMs = Date.now() - startedAt;
+      if (durationMs >= 1_000) {
+        req.log.warn({
+          event: "media_category_list_slow",
+          durationMs,
+          visibleContactCount,
+          categoryCount: labels.size,
+        }, "Media category list request was unusually slow");
+      }
       res.json({ categories: [...labels.values()].sort((a, b) => a.localeCompare(b)) });
-    } catch {
+    } catch (error) {
+      req.log.error({
+        event: "media_category_list_failed",
+        durationMs: Date.now() - startedAt,
+        visibleContactCount,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorCode: typeof (error as { code?: unknown })?.code === "string"
+          ? (error as { code: string }).code
+          : undefined,
+      }, "Media category list request failed");
       res.status(500).json({ error: "Failed to load media categories" });
     }
   },

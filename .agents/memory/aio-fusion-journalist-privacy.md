@@ -9,7 +9,7 @@ Privacy requests never prove that a record exists. Disclosures and data changes 
 
 **How to apply:** Preserve case chronology while redacting personal payloads. Enforce the approved scope at every processing boundary, including delayed writes and external-provider work. Treat access as an accounting exercise across all in-scope copies, not a canonical-row export. Route corrections through the existing trusted-data review process.
 
-List endpoints must load the applicable shared/workspace suppression hashes once per request and reuse an in-memory matcher. Never run one suppression query per contact; it turns privacy enforcement into an N+1 latency failure while providing no stronger protection.
+List endpoints must load the applicable shared/workspace suppression hashes once per request and reuse an in-memory matcher. Pre-index email, LinkedIn and name-plus-outlet hashes in sets rather than scanning all suppressions for each contact. Never run one suppression query per contact; it turns privacy enforcement into an N+1 latency failure while providing no stronger protection.
 
 **Why:** The Media Database contacts route reached 25+ seconds because it queried suppressions separately for every contact. One scoped read preserves fail-closed matching semantics without the query amplification.
 

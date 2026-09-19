@@ -589,6 +589,37 @@ describe("media import route regressions", () => {
     ]));
   });
 
+  it("filters a large category contact set against shared and workspace suppressions", async () => {
+    const workspace = "category-scale-workspace";
+    const [outlet] = await db.insert(mediaOutletsTable).values({
+      name: "Scale News",
+      category: "Scale Publication",
+      accountId: workspace,
+    }).returning();
+    const contacts = Array.from({ length: 240 }, (_, index) => ({
+      outletId: outlet!.id,
+      firstName: "Scale",
+      lastName: `Reporter ${index}`,
+      email: `scale-${index}@example.test`,
+      sectors: [index < 120 ? "Suppressed Scale Sector" : "Visible Scale Sector"],
+      accountId: workspace,
+    }));
+    await db.insert(mediaContactsTable).values(contacts);
+    await db.insert(mediaSuppressionsTable).values(
+      contacts.slice(0, 120).map((contact, index) => ({
+        scope: index % 2 === 0 ? "shared" : "workspace",
+        accountId: index % 2 === 0 ? null : workspace,
+        emailHash: privacyHash(contact.email),
+        reason: "scale regression",
+      })),
+    );
+
+    const response = await mediaRequest("GET", "/api/store/media-db/categories", workspace);
+    expect(response.status).toBe(200);
+    expect(response.json.categories).toEqual(expect.arrayContaining(["Scale Publication", "Visible Scale Sector"]));
+    expect(response.json.categories).not.toContain("Suppressed Scale Sector");
+  });
+
   it("scopes preview reconciliation to the active workspace, including platform admins", async () => {
     const [otherOutlet] = await db.insert(mediaOutletsTable).values({
       name: "Workspace Daily", website: "https://workspace.test", accountId: "other-workspace",
