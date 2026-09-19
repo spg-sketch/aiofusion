@@ -45,6 +45,7 @@ vi.mock("@workspace/db", () => {
     owner:     { __col: "owner" },
     lastRunAt: { __col: "lastRunAt" },
   };
+  const savedAuditsTable = {};
   function matches(row: any, pred: any): boolean {
     if (!pred) return true;
     if (pred.kind === "eq") return row[pred.col.__col] === pred.val;
@@ -75,7 +76,7 @@ vi.mock("@workspace/db", () => {
       }),
     }),
   };
-  return { db, auditLocksTable, tokenUsageTable: {}, adminEventsTable: {} };
+  return { db, auditLocksTable, savedAuditsTable, tokenUsageTable: {}, adminEventsTable: {} };
 });
 
 // Pass-through middleware mocks so the route tests exercise handler logic

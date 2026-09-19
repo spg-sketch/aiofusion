@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { features } from "./lib/features";
 import { ensureDefaultAdmin, backfillPlatformUsers } from "./lib/platform-auth";
 import { ensureAuditLocksTable } from "./lib/ensure-audit-locks-table";
+import { ensureAuditRunClaimsTable } from "./lib/audit-run-claims";
 import { ensureSavedAuditTables } from "./lib/ensure-saved-audit-tables";
 import { ensurePlatformCompanyCascade } from "./lib/ensure-platform-company-cascade";
 import { ensurePlannerContentColumns } from "./lib/ensure-planner-content-columns";
@@ -127,6 +128,7 @@ if (Number.isNaN(port) || port <= 0) {
 async function runStartupMigrations(): Promise<void> {
   const steps: Array<[string, () => Promise<unknown>]> = [
     ["audit_locks table", ensureAuditLocksTable],
+    ["audit_runs table", ensureAuditRunClaimsTable],
     ["saved audit tables", ensureSavedAuditTables],
     ["platform_companies cascade FK", ensurePlatformCompanyCascade],
     ["planner content columns", ensurePlannerContentColumns],

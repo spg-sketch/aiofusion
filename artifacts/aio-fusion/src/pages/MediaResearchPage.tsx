@@ -8,6 +8,8 @@ import { getExactTargetPhrases as getCanonicalExactTargetPhrases, normaliseExact
 import { SummaryRow } from "./shared";
 import { RecommendationCard, LiveDiscoveryCard, isSendableContactEmail, type Contact, type Recommendation, type Decision, type LiveDiscovery, type DiscoveryReviewStatus } from "./JournalistComponents";
 import { MediaOutreachPanel } from "./MediaOutreachPanel";
+import { aiRunKey, startAiRun, useAiRun } from "../lib/aiRunLifecycle";
+import { getSession } from "../lib/auth";
 
 export type TargetingBrief = {
   topic: string;
@@ -297,6 +299,12 @@ function MediaResearchPage() {
   const archiveReady = isContentStoreReady();
   const archive = loadArchive().filter((a) => ["Press release", "Article", "Case study", "Whitepaper", "Blog post"].includes(a.contentType));
   const projectId = IntakeForm.getActiveProjectId();
+  const workspaceId = getSession()?.username || "";
+  const discoveryScope = {
+    sessionId: workspaceId || "anonymous",
+    workspaceId: workspaceId || "default",
+    projectId: projectId || "none",
+  };
   const selectionStorageKey = researchSelectionStorageKey(projectId);
   const projectContext = projectResearchContext();
   const projectMessages = projectContext.hasIntakeData
@@ -327,6 +335,12 @@ function MediaResearchPage() {
     : projectContext.keywords;
   const activeTargetPhrases = resolveArticleTargetPhrases(selected, projectContext.exactPhrases);
   const storyKey = selected?.id || "";
+  const discoveryRunKey = aiRunKey(discoveryScope, "media-discover", storyKey || "new-article");
+  type DiscoveryRunResult = { items: LiveDiscovery[]; discoveryToken: string };
+  const discoveryRun = useAiRun<
+    { projectId: string; storyKey: string },
+    DiscoveryRunResult
+  >(discoveryRunKey);
 
   const [brief, setBrief] = useState<TargetingBrief>({ topic: "", angle: "", audience: "", regions: [], publicationTypes: [], whyNow: "" });
   const [, setBriefIsDirty] = useState(false);
@@ -340,7 +354,6 @@ function MediaResearchPage() {
   type RequestHandle = { id: number; key: string; controller: AbortController };
   const requestSequence = useRef(0);
   const recommendationRequest = useRef<RequestHandle | null>(null);
-  const liveRequest = useRef<RequestHandle | null>(null);
   const discoveryRequests = useRef<Record<string, { id: number; key: string }>>({});
   const decisionRequests = useRef<Record<number, { id: number; key: string }>>({});
   const decisionLoadSequence = useRef(0);
@@ -376,9 +389,7 @@ function MediaResearchPage() {
 
   const invalidateRequests = () => {
     recommendationRequest.current?.controller.abort();
-    liveRequest.current?.controller.abort();
     recommendationRequest.current = null;
-    liveRequest.current = null;
     // Decision PUTs are deliberately not aborted: the server mutation may
     // already be authorised and cancelling it could make the UI disagree with
     // persistence. Clearing their identities still prevents stale responses
@@ -654,48 +665,79 @@ function MediaResearchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     return () => { invalidateRequests(); };
   }, [storyKey, projectId]);
+
+  // The lifecycle is app-owned, so a page unmount must not lose a live
+  // discovery. Rehydrate its result when the user navigates back to this page.
+  useEffect(() => {
+    if (!discoveryRun) return;
+    if (discoveryRun.status === "running") {
+      setLiveLoading(true);
+      return;
+    }
+    setLiveLoading(false);
+    if (discoveryRun.status === "failed") {
+      setError(discoveryRun.error || "Could not complete live media research.");
+      return;
+    }
+    if (discoveryRun.status === "succeeded" && discoveryRun.result) {
+      setLiveItems(discoveryRun.result.items);
+      setDiscoveryToken(discoveryRun.result.discoveryToken);
+      setError("");
+    }
+  }, [discoveryRun]);
+
   const discoverLive = async () => {
     if (!selected || !projectId) { setError("Choose a saved article and active project before searching the web."); return; }
     const criteria = generatedCriteria(selected, categories, messages, projectContext, projectKeywords);
     const requestKey = `${projectId}:${storyKey}`;
-    liveRequest.current?.controller.abort();
-    const request: RequestHandle = { id: ++requestSequence.current, key: requestKey, controller: new AbortController() };
-    liveRequest.current = request;
-    setLiveLoading(true); setError(""); setLiveItems([]);
-    try {
-      const response = await fetch(`${apiBase()}/api/content/media-discover`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        signal: request.controller.signal,
-        body: JSON.stringify({
-          projectId,
-          content: {
-            title: selected.title,
-            headline: selected.headline,
-            standfirst: selected.standfirst,
-            bodyCopy: selected.bodyCopy || selected.body,
-          },
-          mediaCategories: categories,
-          keyMessages: messages,
-           query: criteria.query,
-           regions: brief.regions,
-           sectorTopic: brief.topic || criteria.sectorTopic,
-          brief,
-          targetPhrases: activeTargetPhrases,
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Could not complete live media research.");
-      if (!requestIsCurrent(request, liveRequest.current)) return;
-      setLiveItems(Array.isArray(data.items) ? data.items : []);
-      setDiscoveryToken(typeof data.discoveryToken === "string" ? data.discoveryToken : "");
-    } catch (reason) {
-      if (reason instanceof DOMException && reason.name === "AbortError") return;
-      if (requestIsCurrent(request, liveRequest.current)) setError(reason instanceof Error ? reason.message : "Could not complete live media research.");
-    } finally {
-      if (requestIsCurrent(request, liveRequest.current)) {
-        liveRequest.current = null;
-        setLiveLoading(false);
-      }
+    const run = startAiRun<{ projectId: string; storyKey: string }, DiscoveryRunResult>({
+      key: discoveryRunKey,
+      scope: discoveryScope,
+      operation: "media-discover",
+      subjectId: storyKey || "new-article",
+      input: { projectId, storyKey },
+      estimateSeconds: 90,
+      execute: async () => {
+        const response = await fetch(`${apiBase()}/api/content/media-discover`, {
+          method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId,
+            content: {
+              title: selected.title,
+              headline: selected.headline,
+              standfirst: selected.standfirst,
+              bodyCopy: selected.bodyCopy || selected.body,
+            },
+            mediaCategories: categories,
+            keyMessages: messages,
+            query: criteria.query,
+            regions: brief.regions,
+            sectorTopic: brief.topic || criteria.sectorTopic,
+            brief,
+            targetPhrases: activeTargetPhrases,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not complete live media research.");
+        const items = Array.isArray(data.items) ? data.items as LiveDiscovery[] : [];
+        const token = typeof data.discoveryToken === "string" ? data.discoveryToken : "";
+        if (!token && items.length > 0) throw new Error("The live discovery could not be saved because its verification token was missing.");
+        return { items, discoveryToken: token };
+      },
+      onSuccess: async (result) => {
+        // The app-owned lifecycle retains the verified result across in-app
+        // navigation. Do not submit candidates for human review automatically;
+        // each result still requires the explicit "Send for review" action.
+        if (activeStoryRef.current !== requestKey) return;
+        setLiveItems(result.items);
+        setDiscoveryToken(result.discoveryToken);
+        setError("");
+      },
+    });
+    if (run.status === "running") {
+      setLiveLoading(true);
+      setError("");
+      setLiveItems([]);
     }
   };
   const saveDiscovery = async (candidate: LiveDiscovery) => {

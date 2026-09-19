@@ -139,6 +139,8 @@ interface LlmCheckResult {
   detectionVersion?: number;
   phraseMeasurements?: import("./lib/mediaVisibilityImpact").PhraseMeasurement[];
   measurementSettings?: import("./lib/mediaVisibilityImpact").MeasurementSettings;
+  serverSavedId?: string;
+  serverSavedAt?: string;
 }
 
 export type SavedAudit = { id: string; savedAt: string; result: LlmCheckResult };
@@ -1108,8 +1110,8 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         let next = existing;
         if (!existing.some((audit) => audit.result.checkedAt === finalData.checkedAt)) {
           const entry: SavedAudit = {
-            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            savedAt: new Date().toISOString(),
+            id: finalData.serverSavedId || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            savedAt: finalData.serverSavedAt || new Date().toISOString(),
             result: finalData,
           };
           next = [entry, ...existing];

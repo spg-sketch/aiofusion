@@ -75,6 +75,7 @@ vi.mock("../lib/contentAi", () => ({
 
 import { MediaResearchPage, resolveArticleResearchContext, resolveArticleTargetPhrases, SHORTLIST_EXPORT_COLUMNS, sanitizeSpreadsheetCell as sanitizeResearchSpreadsheetCell, shortlistExportRow } from "./MediaResearchPage";
 import { exactTargetPhraseId } from "../lib/exactTargetPhrases";
+import { clearAiRuns } from "../lib/aiRunLifecycle";
 
 const storyOnePhrase = {
   id: exactTargetPhraseId("discovery", "clean energy platform"),
@@ -349,6 +350,7 @@ describe("MediaResearchPage live discovery", () => {
     sessionStorage.clear();
     localStorage.removeItem("aio.research.preload");
     localStorage.removeItem("aio.auth.session.v3");
+    clearAiRuns();
     cleanup();
     vi.unstubAllGlobals();
   });
@@ -648,7 +650,7 @@ describe("MediaResearchPage live discovery", () => {
     expect(screen.queryByText("story-2-response-2 Contact")).toBeNull();
   });
 
-  it("ignores delayed A-to-B-to-A live responses by invocation identity", async () => {
+  it("keeps a delayed live run alive across navigation and ignores other-project results", async () => {
     delayedRequests.live = true;
     render(<MediaResearchPage />);
     const selector = screen.getByTestId("select-research-article");
@@ -664,20 +666,49 @@ describe("MediaResearchPage live discovery", () => {
     fireEvent.change(selector, { target: { value: "story-1" } });
     await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).toBeTruthy());
      fireEvent.click(screen.getByTestId("button-discover-live"));
-    await waitFor(() => expect(delayedRequests.liveCalls).toHaveLength(3));
+    // Returning to story 1 finds the existing app-owned run instead of
+    // starting a duplicate concurrent search.
+    expect(delayedRequests.liveCalls).toHaveLength(2);
 
     const result = (name: string) => new Response(JSON.stringify({
       ok: true,
       items: [{ ...candidate, firstName: name }],
       discoveryToken: "signed-token",
     }), { status: 200 });
-    delayedRequests.liveCalls[2].resolve(result("story-1-live-3"));
     delayedRequests.liveCalls[0].resolve(result("story-1-live-1"));
     delayedRequests.liveCalls[1].resolve(result("story-2-live-2"));
 
-    expect(await screen.findByText("story-1-live-3 Reporter")).toBeTruthy();
-    expect(screen.queryByText("story-1-live-1 Reporter")).toBeNull();
+    expect(await screen.findByText("story-1-live-1 Reporter")).toBeTruthy();
     expect(screen.queryByText("story-2-live-2 Reporter")).toBeNull();
+  });
+
+  it("recovers a live result after the page remounts without auto-submitting it for review", async () => {
+    delayedRequests.live = true;
+    localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "workspace-a", role: "agency" }));
+    const first = render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId("button-recommend-contacts"));
+    await waitFor(() => expect(screen.getByTestId("button-discover-live")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("button-discover-live"));
+    await waitFor(() => expect(delayedRequests.liveCalls).toHaveLength(1));
+    first.unmount();
+
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId("button-recommend-contacts"));
+    await waitFor(() => expect(screen.getByTestId("button-discover-live")).toBeTruthy());
+
+    delayedRequests.liveCalls[0].resolve(new Response(JSON.stringify({
+      ok: true,
+      items: [{ ...candidate, firstName: "Recovered" }],
+      discoveryToken: "signed-token",
+    }), { status: 200 }));
+
+    expect(await screen.findByText("Recovered Reporter")).toBeTruthy();
+    const saves = requests.filter((request) => request.url.includes("/store/media-db/discoveries"));
+    expect(saves).toHaveLength(0);
   });
 
   it("refreshes structured phrase attribution inputs when switching articles", async () => {

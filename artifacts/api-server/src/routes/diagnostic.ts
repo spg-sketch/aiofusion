@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
-import { and, eq } from "drizzle-orm";
-import { db, auditLocksTable } from "@workspace/db";
+import { and, eq, sql } from "drizzle-orm";
+import { db, auditLocksTable, savedDiagnosticsTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { fetchGeoAuditContext, type GeoAuditFacts } from "../lib/safe-fetch";
 import { deepStripEmDashes } from "../lib/text-sanitise";
@@ -10,6 +10,8 @@ import { diagnosticLimiter } from "../middleware/rate-limit";
 import { diagnosticConcurrencyGuard } from "../middleware/concurrency-guard";
 import { logAdminEvent } from "../lib/admin-events";
 import { logTokenUsage } from "../lib/token-usage";
+import { claimAuditRun, failAuditRun } from "../lib/audit-run-claims";
+import { randomUUID } from "node:crypto";
 
 const AUDIT_LOCK_DAYS = 21;
 
@@ -354,6 +356,15 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
     return;
   }
 
+  let auditRunId: string | null | undefined;
+  if (projectId && typeof (db as any).execute === "function") {
+    auditRunId = await claimAuditRun(projectId, "website", req.account.username);
+    if (auditRunId === null) {
+      res.status(409).json({ error: "A website visibility audit is already running for this project.", running: true });
+      return;
+    }
+  }
+
   try {
     // Single deterministic engine (Claude) for repeatable results. OpenAI is a
     // silent fallback only if Claude is unavailable, so a normal run is always
@@ -377,8 +388,7 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
         };
       } catch (openaiErr: any) {
         logger.error({ claudeErr: claudeErr?.message, openaiErr: openaiErr?.message }, "Both AI providers failed");
-        res.status(500).json({ error: "The analysis engine is unavailable right now. Please try again." });
-        return;
+        throw new Error("The analysis engine is unavailable right now. Please try again.");
       }
     }
 
@@ -386,22 +396,30 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
     if (pagesFetched.length) result.pagesFetched = pagesFetched;
     if (pageFacts) result.pageFacts = pageFacts;
 
-    // Record this run so the 21-day lock is enforced on the next attempt.
-    if (projectId) {
-      const owner = typeof req.account?.username === "string" ? req.account.username : "";
-      db.insert(auditLocksTable)
-        .values({ projectId, auditType: "website", owner, lastRunAt: new Date() })
-        .onConflictDoUpdate({
-          target: [auditLocksTable.projectId, auditLocksTable.auditType],
-          set: { lastRunAt: new Date(), owner },
-        })
-        .catch((err: any) => logger.warn({ err, projectId }, "Failed to update audit lock after website diagnostic run"));
+    const savedAt = new Date().toISOString();
+    const savedId = auditRunId ?? randomUUID();
+    const savedResult = { ...result, serverSavedId: savedId, serverSavedAt: savedAt };
+    if (projectId && "projectId" in savedDiagnosticsTable) {
+      const owner = req.account.username;
+      const persist = async (tx: any) => {
+        await tx.insert(savedDiagnosticsTable).values({ id: savedId, projectId, owner, savedAt, result: savedResult, deletedAt: null });
+        await tx.insert(auditLocksTable).values({ projectId, auditType: "website", owner, lastRunAt: new Date(savedAt) })
+          .onConflictDoUpdate({ target: [auditLocksTable.projectId, auditLocksTable.auditType], set: { lastRunAt: new Date(savedAt), owner } });
+        if (auditRunId) {
+          await tx.execute(sql`UPDATE audit_runs SET status = 'succeeded', completed_at = now(), saved_id = ${savedId} WHERE run_id = ${auditRunId}`);
+        }
+      };
+      if (typeof (db as any).transaction === "function") await db.transaction(persist);
+      else await persist(db);
     }
-
-    res.json(deepStripEmDashes(result));
+    res.json(deepStripEmDashes(savedResult));
   } catch (err: any) {
+    if (auditRunId) await failAuditRun(auditRunId).catch(() => undefined);
     logger.error({ err: err.message }, "Diagnostic analysis failed");
-    res.status(500).json({ error: "Analysis failed. Please try again." });
+    const message = typeof err?.message === "string" && /unavailable/i.test(err.message)
+      ? err.message
+      : "Analysis failed. Please try again.";
+    res.status(500).json({ error: message });
   }
 });
 

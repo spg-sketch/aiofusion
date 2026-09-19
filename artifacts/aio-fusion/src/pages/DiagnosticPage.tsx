@@ -323,10 +323,11 @@ Engine used:
       },
       onSuccess: async (data, run) => {
         const current = loadSavedDiagnostics(projectId);
+        const serverRecord = data as DiagnosticResult & { serverSavedId?: string; serverSavedAt?: string };
         const entry: SavedDiagnostic = {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          savedAt: new Date().toISOString(),
-          result: data,
+          id: serverRecord.serverSavedId || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          savedAt: serverRecord.serverSavedAt || new Date().toISOString(),
+          result: serverRecord,
         };
         const next = [entry, ...current];
         const locallySaved = persistSavedDiagnostics(projectId, next);

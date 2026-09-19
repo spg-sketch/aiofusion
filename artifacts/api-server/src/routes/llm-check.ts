@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
-import { and, eq } from "drizzle-orm";
-import { db, auditLocksTable } from "@workspace/db";
+import { and, eq, sql } from "drizzle-orm";
+import { db, auditLocksTable, savedAuditsTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import {
   completeAssessmentOutcome,
@@ -27,6 +27,8 @@ import { llmCheckConcurrencyGuard } from "../middleware/concurrency-guard";
 import { logAdminEvent } from "../lib/admin-events";
 import { logTokenUsage } from "../lib/token-usage";
 import { checkFairUsage, checkMonthlySpendLimit, detectAndLogSpike } from "../lib/fair-usage";
+import { claimAuditRun, failAuditRun } from "../lib/audit-run-claims";
+import { randomUUID } from "node:crypto";
 
 const llmCheckRouter = Router();
 
@@ -1614,6 +1616,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
   const projectId = typeof rawProjectId === "string" ? rawProjectId.trim() : "";
   const force = rawForce === true;
   const targetPhrases = normaliseExactPhrases(rawTargetPhrases);
+  let auditRunId: string | null | undefined;
 
   if (!companyName || typeof companyName !== "string") {
     res.status(400).json({ error: "companyName is required" });
@@ -1710,6 +1713,15 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     confirmedEntity: authorityData.confirmedEntity,
     knownNamesakes: authorityData.knownNamesakes,
   };
+  if (projectId) {
+    if (typeof (db as any).execute === "function") {
+      auditRunId = await claimAuditRun(projectId, "visibility", req.account.username);
+    }
+    if (auditRunId === null) {
+      res.status(409).json({ error: "A visibility audit is already running for this project.", running: true });
+      return;
+    }
+  }
 
   try {
     // Switch to SSE so the client receives live progress events as probes complete.
@@ -1949,21 +1961,26 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       _tokenUsage: { inputTokens: tokenAccum.input, outputTokens: tokenAccum.output },
     };
 
-    // Record this run so the 21-day lock is enforced on the next attempt.
-    if (projectId) {
-      const owner = typeof req.account?.username === "string" ? req.account.username : "";
-      db.insert(auditLocksTable)
-        .values({ projectId, auditType: "visibility", owner, lastRunAt: new Date() })
-        .onConflictDoUpdate({
-          target: [auditLocksTable.projectId, auditLocksTable.auditType],
-          set: { lastRunAt: new Date(), owner },
-        })
-        .catch((err: any) => logger.warn({ err, projectId }, "Failed to update audit lock after visibility run"));
+    const savedAt = new Date().toISOString();
+    const savedId = auditRunId ?? randomUUID();
+    const savedResult = { ...summary, serverSavedId: savedId, serverSavedAt: savedAt };
+    if (projectId && "projectId" in savedAuditsTable) {
+      const owner = req.account.username;
+      const persist = async (tx: any) => {
+        await tx.insert(savedAuditsTable).values({ id: savedId, projectId, owner, savedAt, result: savedResult, deletedAt: null });
+        await tx.insert(auditLocksTable).values({ projectId, auditType: "visibility", owner, lastRunAt: new Date(savedAt) })
+          .onConflictDoUpdate({ target: [auditLocksTable.projectId, auditLocksTable.auditType], set: { lastRunAt: new Date(savedAt), owner } });
+        if (auditRunId) {
+          await tx.execute(sql`UPDATE audit_runs SET status = 'succeeded', completed_at = now(), saved_id = ${savedId} WHERE run_id = ${auditRunId}`);
+        }
+      };
+      if (typeof (db as any).transaction === "function") await db.transaction(persist);
+      else await persist(db);
     }
-
-    sseSend(res, "result", summary);
+    sseSend(res, "result", savedResult);
     res.end();
   } catch (err: any) {
+    if (auditRunId) await failAuditRun(auditRunId).catch(() => undefined);
     logger.error({ err, companyName }, "LLM visibility check failed");
     if (!res.writableEnded) {
       sseSend(res, "error", { error: "LLM visibility check failed. Please try again." });
