@@ -17,14 +17,21 @@ import type { Client } from "../lib/projectTypes";
 import { getSession as getLocalSession } from "../lib/auth";
 import { getConfirmedEntity } from "../IntakeForm";
 import InfoTip from "../InfoTip";
+import CountdownBanner from "../components/CountdownBanner";
+import { getAuditDurationSeconds, getAuditSampleCount, recordAuditDuration } from "../lib/auditTiming";
+import { aiRunKey, startAiRun, useAiRun } from "../lib/aiRunLifecycle";
 function DiagnosticPage({
   activeClient,
   pendingDiagnosticId,
   onConsumePendingDiagnostic,
+  sessionId,
+  workspaceId,
 }: {
   activeClient: Client;
   pendingDiagnosticId?: string | null;
   onConsumePendingDiagnostic?: () => void;
+  sessionId?: string;
+  workspaceId?: string;
 }) {
   const [urlInput, setUrlInput] = useState("");
   const [contentInput, setContentInput] = useState("");
@@ -39,31 +46,105 @@ function DiagnosticPage({
   const [diagAuditLock, setDiagAuditLock] = useState<AuditLockInfo>({ locked: false });
   const [showDiagConfirm, setShowDiagConfirm] = useState(false);
   const [diagPendingForce, setDiagPendingForce] = useState(false);
+  const mountedRef = useRef(true);
+  const activeProjectRef = useRef(activeClient.id);
+  activeProjectRef.current = activeClient.id;
+  const scopeIdentity = `${sessionId || "anonymous"}\0${workspaceId || "default"}`;
+  const previousScopeIdentityRef = useRef(scopeIdentity);
+  const runScope = {
+    sessionId: sessionId || "anonymous",
+    workspaceId: workspaceId || "default",
+    projectId: activeClient.id,
+  };
+  const runKey = aiRunKey(runScope, "visibility", "diagnostic");
+  const activeRunKeyRef = useRef(runKey);
+  activeRunKeyRef.current = runKey;
+  const lifecycleRun = useAiRun<{
+    content?: string;
+    url?: string;
+    confirmedEntity?: ReturnType<typeof getConfirmedEntity>;
+    projectId: string;
+    force: boolean;
+  }, DiagnosticResult>(runKey);
+  const loadingFromLifecycle = lifecycleRun?.status === "running";
+  const runEstimate = lifecycleRun?.estimateSeconds ?? getAuditDurationSeconds("visibility");
 
   useEffect(() => {
-    setSavedDiagnostics(loadSavedDiagnostics(activeClient.id));
-    setResult(null);
-    setError(null);
-    setJustSaved(false);
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    setLoading(loadingFromLifecycle);
+    if (lifecycleRun?.status === "succeeded" && lifecycleRun.result) {
+      setResult(lifecycleRun.result);
+      setSavedDiagnostics(loadSavedDiagnostics(activeClient.id));
+      setError(null);
+      setJustSaved(true);
+    } else if (lifecycleRun?.status === "failed") {
+      setError(lifecycleRun.error || "Analysis failed. Please try again.");
+    }
+  }, [activeClient.id, lifecycleRun, loadingFromLifecycle]);
+
+  useEffect(() => {
+    const projectId = activeClient.id;
+    const requestRunKey = runKey;
+    const identityChanged = previousScopeIdentityRef.current !== scopeIdentity;
+    previousScopeIdentityRef.current = scopeIdentity;
+    setSavedDiagnostics(identityChanged ? [] : loadSavedDiagnostics(projectId));
+    setResult(lifecycleRun?.status === "succeeded" ? lifecycleRun.result ?? null : null);
+    setError(lifecycleRun?.status === "failed" ? lifecycleRun.error || "Analysis failed. Please try again." : null);
+    setJustSaved(lifecycleRun?.status === "succeeded");
     setDiagAuditLock({ locked: false });
     setShowDiagConfirm(false);
     setDiagPendingForce(false);
     // Sync diagnostic history from server so all logins see the same results.
-    void syncDiagnosticsForProject(activeClient.id).then((merged) => {
-      setSavedDiagnostics(merged);
+    void syncDiagnosticsForProject(projectId).then((merged) => {
+      if (activeProjectRef.current === projectId && activeRunKeyRef.current === requestRunKey) {
+        setSavedDiagnostics(merged);
+      }
     });
-  }, [activeClient.id]);
+  }, [activeClient.id, runKey]);
 
   useEffect(() => {
     if (!activeClient.id) return;
+    const projectId = activeClient.id;
+    const requestRunKey = runKey;
     const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
-    fetch(`${apiBase}/api/audit-lock?projectId=${encodeURIComponent(activeClient.id)}&auditType=website`, {
+    const controller = new AbortController();
+    fetch(`${apiBase}/api/audit-lock?projectId=${encodeURIComponent(projectId)}&auditType=website`, {
       credentials: "include",
+      signal: controller.signal,
     })
       .then((r) => r.json())
-      .then((d: AuditLockInfo) => setDiagAuditLock(d))
+      .then((d: AuditLockInfo) => {
+        if (activeProjectRef.current === projectId && activeRunKeyRef.current === requestRunKey) {
+          setDiagAuditLock(d);
+        }
+      })
       .catch(() => { /* non-blocking */ });
-  }, [activeClient.id]);
+    return () => controller.abort();
+  }, [activeClient.id, runKey]);
+
+  useEffect(() => {
+    if (lifecycleRun?.status !== "succeeded") return;
+    const projectId = activeClient.id;
+    const requestRunKey = runKey;
+    const controller = new AbortController();
+    const base = import.meta.env.DEV ? `https://${window.location.host}` : "";
+    void fetch(`${base}/api/audit-lock?projectId=${encodeURIComponent(projectId)}&auditType=website`, {
+      credentials: "include",
+      signal: controller.signal,
+    })
+      .then((response) => response.ok ? response.json() : null)
+      .then((lock: AuditLockInfo | null) => {
+        if (lock && activeProjectRef.current === projectId && activeRunKeyRef.current === requestRunKey) {
+          setDiagAuditLock(lock);
+        }
+      })
+      .catch(() => { /* non-blocking */ });
+    return () => controller.abort();
+  }, [activeClient.id, lifecycleRun?.status, runKey]);
 
   useEffect(() => {
     if (!pendingDiagnosticId) return;
@@ -90,27 +171,6 @@ function DiagnosticPage({
       alert("Could not save this audit - your browser storage may be full. Try removing a few older saved audits.");
       return;
     }
-    setSavedDiagnostics(next);
-    setJustSaved(true);
-    // Mirror to server so all logins on the same project see this diagnostic.
-    void pushServerDiagnostic(activeClient.id, entry);
-    window.dispatchEvent(new Event("aio:saved-audits-changed"));
-  }
-
-  // Automatically saves a freshly-run audit so it appears in the sidebar
-  // straight away, without relying on the user to spot the "Save audit"
-  // button in the footer. Uses the freshly-fetched savedDiagnostics list
-  // (rather than the possibly-stale `savedDiagnostics` state) so it can't
-  // race with the click-to-save path and create a duplicate.
-  function autoSaveDiagnostic(target: DiagnosticResult) {
-    const current = loadSavedDiagnostics(activeClient.id);
-    const entry: SavedDiagnostic = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      savedAt: new Date().toISOString(),
-      result: target,
-    };
-    const next = [entry, ...current];
-    if (!persistSavedDiagnostics(activeClient.id, next)) return;
     setSavedDiagnostics(next);
     setJustSaved(true);
     // Mirror to server so all logins on the same project see this diagnostic.
@@ -227,46 +287,64 @@ Engine used:
       setError("Please enter a homepage URL or paste content to analyse.");
       return;
     }
-    setLoading(true);
+    if (loadingFromLifecycle) return;
     setError(null);
-    try {
-      const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
-      const resp = await fetch(`${apiBase}/api/diagnostic`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          content: contentInput.trim() || undefined,
-          url: urlInput.trim() || undefined,
-          // Anchor the audit to the company the user confirmed for this brand
-          // (from the Earned Media entity-clarity step), so an ambiguous name is
-          // measured as the same company across every audit. Omitted when no
-          // identity has been confirmed, leaving the result unchanged.
-          confirmedEntity: getConfirmedEntity() || undefined,
-          projectId: activeClient.id,
-          force,
-        }),
-      });
-      if (!resp.ok) {
-        const errData = await resp.json().catch(() => ({}));
-        throw new Error(errData.error || `Server error (${resp.status})`);
-      }
-      const data = await resp.json();
-      setResult(data);
-      setJustSaved(false);
-      // Auto-save every completed audit so it shows up in the sidebar
-      // immediately, without waiting for the user to notice/click "Save audit".
-      // saveDiagnostic() itself is duplicate-safe, so a later manual click
-      // (or the effect below) is a no-op if this already saved it.
-      autoSaveDiagnostic(data);
-      // Refresh audit lock so the next visit shows the correct last-run date.
-      const lockResp = await fetch(`${apiBase}/api/audit-lock?projectId=${encodeURIComponent(activeClient.id)}&auditType=website`, { credentials: "include" }).catch(() => null);
-      if (lockResp?.ok) lockResp.json().then(setDiagAuditLock).catch(() => {});
-    } catch (err: any) {
-      setError(err.message || "Analysis failed. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+    setResult(null);
+    setJustSaved(false);
+    const projectId = activeClient.id;
+    const input = {
+      content: contentInput.trim() || undefined,
+      url: urlInput.trim() || undefined,
+      // Anchor the audit to the company the user confirmed for this brand.
+      confirmedEntity: getConfirmedEntity() || undefined,
+      projectId,
+      force,
+    };
+    startAiRun({
+      key: runKey,
+      scope: { ...runScope },
+      operation: "visibility",
+      subjectId: "diagnostic",
+      input,
+      estimateSeconds: getAuditDurationSeconds("visibility"),
+      execute: async () => {
+        const base = import.meta.env.DEV ? `https://${window.location.host}` : "";
+        const resp = await fetch(`${base}/api/diagnostic`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(input),
+        });
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({}));
+          throw new Error(errData.error || `Server error (${resp.status})`);
+        }
+        return await resp.json() as DiagnosticResult;
+      },
+      onSuccess: async (data, run) => {
+        const current = loadSavedDiagnostics(projectId);
+        const entry: SavedDiagnostic = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          savedAt: new Date().toISOString(),
+          result: data,
+        };
+        const next = [entry, ...current];
+        const locallySaved = persistSavedDiagnostics(projectId, next);
+        const serverSaved = await pushServerDiagnostic(projectId, entry);
+        if (locallySaved || serverSaved) {
+          window.dispatchEvent(new Event("aio:saved-audits-changed"));
+        }
+        if (!serverSaved) {
+          throw new Error("The audit completed but could not be saved. Please try again.");
+        }
+        if (mountedRef.current && activeProjectRef.current === projectId) {
+          setResult(data);
+          setSavedDiagnostics(next);
+          setJustSaved(true);
+        }
+        recordAuditDuration("visibility", Date.now() - run.startedAt, run.estimateSeconds * 1000);
+      },
+    });
   };
 
   if (!result) {
@@ -398,6 +476,15 @@ Engine used:
                 <p className="text-xs font-light" style={{ color: vars.g500 }}>
                   Your website is being analysed alongside the figures measured directly from your page, to produce a comprehensive GEO authority score. This typically takes 15–30 seconds.
                 </p>
+                <div className="mt-4">
+                  <CountdownBanner
+                    active={loadingFromLifecycle}
+                    durationSeconds={runEstimate}
+                    startedAt={lifecycleRun?.startedAt}
+                    label="Website Visibility Audit running"
+                    sampleCount={getAuditSampleCount("visibility")}
+                  />
+                </div>
               </div>
             )}
           </div>

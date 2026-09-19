@@ -117,15 +117,22 @@ export function CreateProjectModal({ onCancel, onCreate, initialName, forClientN
         )}
         {packageCapacity && (
           <div className="text-[13px] leading-relaxed mb-5 px-4 py-3 rounded-xl" data-testid="create-project-capacity" style={{ background: vars.g50, color: vars.g600, border: `1px solid ${vars.g200}` }}>
-            <p>
-              <strong style={{ color: ink }}>{packageCapacity.included}</strong> included ·{" "}
-              <strong style={{ color: ink }}>{packageCapacity.purchased}</strong> purchased ·{" "}
-              <strong style={{ color: ink }}>{packageCapacity.reserved}</strong> reserved ·{" "}
-              <strong style={{ color: ink }}>{packageCapacity.used}</strong> used ·{" "}
-              <strong style={{ color: ink }}>{packageCapacity.remaining === null ? "Unlimited" : Math.max(0, packageCapacity.remaining)}</strong> remaining ·{" "}
-              <strong style={{ color: ink }}>{packageCapacity.allowance === null ? "Unlimited" : packageCapacity.allowance}</strong> allowance
-            </p>
-            <p className="mt-1">{packageCapacity.overLimit ? "Over package limit. Existing hubs remain readable." : "Within package allowance."}</p>
+            {packageCapacity.remaining === null ? (
+              <>
+                <p><strong style={{ color: ink }}>Unlimited projects are included in your package.</strong></p>
+                <p className="mt-1">Creating this project won’t incur an additional charge.</p>
+              </>
+            ) : packageCapacity.remaining > 0 ? (
+              <>
+                <p><strong style={{ color: ink }}>{packageCapacity.remaining} project{packageCapacity.remaining === 1 ? "" : "s"} remaining in your package</strong></p>
+                <p className="mt-1">Creating this project won’t incur an additional charge.</p>
+              </>
+            ) : (
+              <>
+                <p><strong style={{ color: ink }}>No projects remaining in your package</strong></p>
+                <p className="mt-1">Creating this project requires an additional project purchase.</p>
+              </>
+            )}
             {packageCapacity.kind === "agency" && (
               <p className="mt-1">Each managed client can have one project. Creating its first project uses the package that client already reserves.</p>
             )}

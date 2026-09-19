@@ -56,7 +56,7 @@ describe("CreateProjectModal", () => {
     trigger.remove();
   });
 
-  it("shows the authoritative package breakdown without blocking existing work", () => {
+  it("explains when creating a project requires an additional purchase", () => {
     render(
       <CreateProjectModal
         onCancel={vi.fn()}
@@ -75,10 +75,33 @@ describe("CreateProjectModal", () => {
       />,
     );
     const capacity = screen.getByTestId("create-project-capacity");
-    expect(capacity).toHaveTextContent("3 included");
-    expect(capacity).toHaveTextContent("1 purchased");
-    expect(capacity).toHaveTextContent("4 reserved");
-    expect(capacity).toHaveTextContent("0 remaining");
+    expect(capacity).toHaveTextContent("No projects remaining in your package");
+    expect(capacity).toHaveTextContent("Creating this project requires an additional project purchase.");
+    expect(capacity).not.toHaveTextContent("included");
+    expect(capacity).not.toHaveTextContent("reserved");
     expect(capacity).toHaveTextContent("Each managed client can have one project");
+  });
+
+  it("reassures users when a project remains in their package", () => {
+    render(
+      <CreateProjectModal
+        onCancel={vi.fn()}
+        onCreate={vi.fn()}
+        packageCapacity={{
+          billingSlug: "client",
+          kind: "client",
+          included: 1,
+          purchased: 0,
+          reserved: 0,
+          used: 0,
+          remaining: 1,
+          allowance: 1,
+          overLimit: false,
+        }}
+      />,
+    );
+    const capacity = screen.getByTestId("create-project-capacity");
+    expect(capacity).toHaveTextContent("1 project remaining in your package");
+    expect(capacity).toHaveTextContent("Creating this project won’t incur an additional charge.");
   });
 });

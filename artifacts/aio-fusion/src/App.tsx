@@ -2210,7 +2210,13 @@ function App() {
             />
           )}
           {currentPage === "diagnostic" && (
-            <DiagnosticPage activeClient={activeClient} pendingDiagnosticId={pendingDiagnosticId} onConsumePendingDiagnostic={() => setPendingDiagnosticId(null)} />
+            <DiagnosticPage
+              activeClient={activeClient}
+              pendingDiagnosticId={pendingDiagnosticId}
+              onConsumePendingDiagnostic={() => setPendingDiagnosticId(null)}
+              sessionId={aiSessionId}
+              workspaceId={aiWorkspaceId}
+            />
           )}
           {currentPage === "llm-check" && (
             <LlmCheckPage
