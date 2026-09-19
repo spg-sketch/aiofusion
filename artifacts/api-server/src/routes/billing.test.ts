@@ -1096,7 +1096,8 @@ describe("billing routes", () => {
     expect(params.metadata.slug).toBe("buyer-co");
     expect(params.metadata.plan).toBe("inhouse");
     expect(params.metadata.frequency).toBe("quarterly");
-    expect(params.success_url).toContain("checkout=success");
+    expect(params.success_url).toBe("https://test.example.com/?account_section=billing&checkout=success");
+    expect(params.cancel_url).toBe("https://test.example.com/?account_section=billing&checkout=cancelled");
 
     // Customer id persisted for webhook correlation.
     const state = await getBillingState("buyer-co");
@@ -1942,7 +1943,10 @@ describe("project add-ons", () => {
     expect(params.metadata.kind).toBe("project-addon");
     expect(params.metadata.tier).toBe("max");
     expect(params.metadata.slug).toBe("addon-buyer");
-    expect(params.success_url).toContain("session_id={CHECKOUT_SESSION_ID}");
+    expect(params.success_url).toBe(
+      "https://test.example.com/?account_section=billing&checkout=success&session_id={CHECKOUT_SESSION_ID}",
+    );
+    expect(params.cancel_url).toBe("https://test.example.com/?account_section=billing&checkout=cancelled");
   });
 
   it("recovers staging checkout for an included Premium project after a successful webhook", async () => {
@@ -2696,6 +2700,7 @@ describe("portal and invoices", () => {
     expect(res.json.url).toContain("billing.stripe.com");
     const params = stripeCalls.portalSessions[stripeCalls.portalSessions.length - 1] as any;
     expect(params.customer).toBe("cus_portal");
+    expect(params.return_url).toBe("https://test.example.com/?account_section=billing");
   });
 
   it("lists invoices with PDF links; empty without a customer", async () => {
