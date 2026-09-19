@@ -169,10 +169,12 @@ describe("App in-session login - authoritative session and profile handoff", () 
 
     await act(async () => { await new Promise((r) => setTimeout(r, 150)); });
 
-    // Mock PlatformHomePage shows "Project Hub" (session confirmed by
-    // bootstrapAuth). Navigate into the platform.
+    // Mock PlatformHomePage shows "Project Hub" after the single initial
+    // bootstrapAuth call has confirmed the session and hydrated the profile.
+    // That same authority result is passed into the first project sync, so a
+    // duplicate /me request here would be unnecessary.
     const projectHubBtn = await screen.findByRole("button", { name: /Project Hub/i }, { timeout: 8000 });
-    expect(meRequests).toBe(2);
+    expect(meRequests).toBe(1);
     await act(async () => {
       fireEvent.click(projectHubBtn);
       await new Promise((r) => setTimeout(r, 50));
