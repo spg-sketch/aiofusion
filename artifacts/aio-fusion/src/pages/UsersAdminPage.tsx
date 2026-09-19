@@ -47,6 +47,7 @@ export function UsersAdminPage({
   onInsightsAdmin,
   initialSection,
   onSectionChange,
+  onNavigate,
 }: {
   session: LocalSession;
   onBack: () => void;
@@ -58,6 +59,8 @@ export function UsersAdminPage({
   onInsightsAdmin?: () => void;
   initialSection?: string;
   onSectionChange?: (section: string) => void;
+  /** Overrides full-page navigation at the browser boundary (used by tests). */
+  onNavigate?: (destination: string) => void;
 }) {
   const paper = "#f8fafc";
   const ink = "#0a1628";
@@ -369,7 +372,8 @@ export function UsersAdminPage({
       "aio:open-client-projects",
       JSON.stringify({ username: target.username, projectId: target.projectId }),
     );
-    window.location.replace("/");
+    if (onNavigate) onNavigate("/");
+    else window.location.replace("/");
   };
 
   type ViewAccountReconciliation = "matched" | "mismatch" | "unavailable";

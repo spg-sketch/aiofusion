@@ -7,7 +7,7 @@
  * no password field or managed checkbox - accounts are always managed.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
 
 // ---------------------------------------------------------------------------
 // Mocks - must be declared before component import
@@ -97,6 +97,7 @@ beforeEach(() => {
   ];
   pushProjectMeta.mockReset();
   pushProjectMeta.mockResolvedValue({});
+  baseProps.onNavigate.mockReset();
   sessionStorage.clear();
   window.history.replaceState({}, "", "/");
 });
@@ -115,6 +116,7 @@ const baseProps = {
   onBack: () => {},
   onAssignProjectOwner: async () => ({ ok: true }),
   onSignOut: () => {},
+  onNavigate: vi.fn(),
 };
 
 const agencySession = { username: "acme-agency", role: "agency" as const };
@@ -124,16 +126,16 @@ function openClientsSection() {
   fireEvent.click(screen.getAllByRole("button", { name: /^client projects$/i })[0]);
 }
 
-function captureProtectedRedirect() {
-  const originalLocation = window.location;
-  let redirectedTo: string | undefined;
-  Object.defineProperty(window, "location", {
-    writable: true,
-    value: { ...originalLocation, replace: (url: string) => { redirectedTo = url; } },
+async function clickAsync(element: HTMLElement) {
+  await act(async () => {
+    fireEvent.click(element);
   });
+}
+
+function captureProtectedRedirect() {
   return {
-    get url() { return redirectedTo; },
-    restore() { Object.defineProperty(window, "location", { writable: true, value: originalLocation }); },
+    get url() { return baseProps.onNavigate.mock.calls.at(-1)?.[0] as string | undefined; },
+    restore() {},
   };
 }
 
@@ -184,7 +186,7 @@ describe("agency partner client rows", () => {
     const redirect = captureProtectedRedirect();
     openClientsSection();
     expect(screen.getByRole("button", { name: /client one second project/i })).toBeTruthy();
-    fireEvent.click(screen.getAllByRole("button", { name: /^open project hub$/i })[0]);
+    await clickAsync(screen.getAllByRole("button", { name: /^open project hub$/i })[0]);
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("client-one"));
     const raw = sessionStorage.getItem("aio:open-client-projects");
     expect(raw).toBeTruthy();
@@ -195,7 +197,7 @@ describe("agency partner client rows", () => {
 
   it("Open Project Hub enters a client with no projects without a capacity check", async () => {
     openClientsSection();
-    fireEvent.click(screen.getAllByRole("button", { name: /^open project hub$/i })[1]);
+    await clickAsync(screen.getAllByRole("button", { name: /^open project hub$/i })[1]);
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("client-two"));
     expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({ username: "client-two", projectId: null });
   });
@@ -216,7 +218,7 @@ describe("agency partner client rows", () => {
       />,
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: /^open project hub$/i })[1]);
+    await clickAsync(screen.getAllByRole("button", { name: /^open project hub$/i })[1]);
 
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("client-two"));
     expect(onSectionChange).not.toHaveBeenCalled();
@@ -226,7 +228,7 @@ describe("agency partner client rows", () => {
   it("opens a specific project directly from its project chip", async () => {
     const redirect = captureProtectedRedirect();
     openClientsSection();
-    fireEvent.click(screen.getByRole("button", { name: /client one project/i }));
+    await clickAsync(screen.getByRole("button", { name: /client one project/i }));
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("client-one"));
     expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({ username: "client-one", projectId: "proj-1" });
     expect(redirect.url).toBe(`${import.meta.env.BASE_URL || "/"}project-hub`);
@@ -240,7 +242,7 @@ describe("agency partner client rows", () => {
     openClientsSection();
     fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "New Client Co" } });
     fireEvent.change(screen.getByPlaceholderText(/www\.acme\.com/i), { target: { value: "newclient.example.com" } });
-    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+    await clickAsync(screen.getByRole("button", { name: /add client project/i }));
 
     await vi.waitFor(() => expect(serverAddUser).toHaveBeenCalled());
     await vi.waitFor(() => expect(pushProjectMeta).toHaveBeenCalledOnce());
@@ -251,7 +253,7 @@ describe("agency partner client rows", () => {
       project: expect.objectContaining({ id: project.id, name: "New Client Co", owner: "new-client" }),
     }));
     expect(project).toEqual(expect.objectContaining({ name: "New Client Co", owner: "new-client" }));
-    releasePush({ ok: true });
+    await act(async () => { releasePush({ ok: true }); });
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("new-client"));
     await vi.waitFor(() => expect(sessionStorage.getItem("aio:open-client-projects")).toBeTruthy());
     expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({
@@ -269,7 +271,7 @@ describe("agency partner client rows", () => {
     openClientsSection();
     fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "Retry Client Co" } });
     fireEvent.change(screen.getByPlaceholderText(/www\.acme\.com/i), { target: { value: "retryclient.example.com" } });
-    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+    await clickAsync(screen.getByRole("button", { name: /add client project/i }));
 
     await vi.waitFor(() => expect(screen.getByText("The creation response was lost")).toBeTruthy());
     expect(serverAddUser).toHaveBeenCalledTimes(1);
@@ -278,7 +280,7 @@ describe("agency partner client rows", () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+    await clickAsync(screen.getByRole("button", { name: /add client project/i }));
     await vi.waitFor(() => expect(serverAddUser).toHaveBeenCalledTimes(2));
     const secondOptions = (serverAddUser.mock.calls[1] as unknown as unknown[])[4] as { creationRequestKey?: string };
     expect(secondOptions.creationRequestKey).toBe(firstOptions.creationRequestKey);
@@ -291,13 +293,13 @@ describe("agency partner client rows", () => {
     openClientsSection();
     fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "Original Client Co" } });
     fireEvent.change(screen.getByPlaceholderText(/www\.acme\.com/i), { target: { value: "originalclient.example.com" } });
-    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+    await clickAsync(screen.getByRole("button", { name: /add client project/i }));
 
     await vi.waitFor(() => expect(screen.getByText(/couldn't confirm whether this client was created/i)).toBeTruthy());
     // fireEvent intentionally bypasses the disabled control to model a stale
     // browser event; handleAdd must still refuse a second logical request.
     fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "Edited Client Co" } });
-    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+    await clickAsync(screen.getByRole("button", { name: /add client project/i }));
 
     await vi.waitFor(() => expect(screen.getByText(/retry the original request before editing/i)).toBeTruthy());
     expect(serverAddUser).toHaveBeenCalledTimes(1);
@@ -309,10 +311,10 @@ describe("agency partner client rows", () => {
     openClientsSection();
     fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "Locked Client Co" } });
     fireEvent.change(screen.getByPlaceholderText(/www\.acme\.com/i), { target: { value: "lockedclient.example.com" } });
-    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+    await clickAsync(screen.getByRole("button", { name: /add client project/i }));
     await vi.waitFor(() => expect(screen.getByText(/couldn't confirm whether this client was created/i)).toBeTruthy());
 
-    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+    await clickAsync(screen.getByRole("button", { name: /add client project/i }));
     await vi.waitFor(() => expect(screen.getByText("Not authorized")).toBeTruthy());
     expect(screen.getByPlaceholderText(/acme ltd/i)).toBeDisabled();
     expect(serverAddUser).toHaveBeenCalledTimes(2);
@@ -324,7 +326,7 @@ describe("agency partner client rows", () => {
     openClientsSection();
     fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "First Client Co" } });
     fireEvent.change(screen.getByPlaceholderText(/www\.acme\.com/i), { target: { value: "firstclient.example.com" } });
-    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+    await clickAsync(screen.getByRole("button", { name: /add client project/i }));
     await vi.waitFor(() => expect(serverAddUser).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(pushProjectMeta).toHaveBeenCalledOnce());
     await vi.waitFor(() => expect(redirect.url).toBe(`${import.meta.env.BASE_URL || "/"}project-hub`));
@@ -338,7 +340,7 @@ describe("agency partner client rows", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /^client projects$/i })[0]);
     fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "Second Client Co" } });
     fireEvent.change(screen.getByPlaceholderText(/www\.acme\.com/i), { target: { value: "secondclient.example.com" } });
-    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+    await clickAsync(screen.getByRole("button", { name: /add client project/i }));
     await vi.waitFor(() => expect(serverAddUser).toHaveBeenCalledTimes(2));
     const secondOptions = (serverAddUser.mock.calls[1] as unknown as unknown[])[4] as { creationRequestKey?: string };
     expect(secondOptions.creationRequestKey).toMatch(
@@ -363,7 +365,7 @@ describe("agency partner client rows", () => {
     openClientsSection();
     fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "Named Client Co" } });
     fireEvent.change(screen.getByPlaceholderText(/www\.acme\.com/i), { target: { value: "named-client.example.com" } });
-    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+    await clickAsync(screen.getByRole("button", { name: /add client project/i }));
 
     await vi.waitFor(() => expect(pushProjectMeta).toHaveBeenCalledOnce());
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("named-client"));
@@ -396,7 +398,7 @@ describe("agency partner client rows", () => {
 
     const redirect = captureProtectedRedirect();
     render(<SubAccountsPage {...baseProps} session={agencySession as any} initialSection="clients" />);
-    fireEvent.click(screen.getByRole("button", { name: /^create project$/i }));
+    await clickAsync(screen.getByRole("button", { name: /^create project$/i }));
 
     await vi.waitFor(() => expect(pushProjectMeta).toHaveBeenCalledOnce());
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("client-two"));
@@ -430,7 +432,7 @@ describe("agency partner client rows", () => {
     openClientsSection();
     fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "Retry Client Co" } });
     fireEvent.change(screen.getByPlaceholderText(/www\.acme\.com/i), { target: { value: "retry-client.example.com" } });
-    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+    await clickAsync(screen.getByRole("button", { name: /add client project/i }));
 
     await vi.waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Project save failed."));
     expect(serverAddUser).toHaveBeenCalledOnce();
@@ -438,7 +440,7 @@ describe("agency partner client rows", () => {
     expect(pushProjectMeta).toHaveBeenCalledOnce();
     const firstProject = (pushProjectMeta.mock.calls[0] as unknown as [{ id: string }])[0];
 
-    fireEvent.click(screen.getByRole("button", { name: /retry navigation to project hub/i }));
+    await clickAsync(screen.getByRole("button", { name: /retry navigation to project hub/i }));
 
     await vi.waitFor(() => expect(pushProjectMeta).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledOnce());
@@ -459,7 +461,7 @@ describe("agency partner client rows", () => {
     );
 
     openClientsSection();
-    fireEvent.click(screen.getAllByRole("button", { name: /^open project hub$/i })[0]);
+    await clickAsync(screen.getAllByRole("button", { name: /^open project hub$/i })[0]);
 
     await vi.waitFor(() => expect(screen.getByText("The workspace switch failed")).toBeTruthy());
     expect(sessionStorage.getItem("aio:open-client-projects")).toBeNull();
@@ -467,7 +469,7 @@ describe("agency partner client rows", () => {
     expect(serverAddUser).not.toHaveBeenCalled();
 
     serverImpersonate.mockResolvedValueOnce({ ok: true as const });
-    fireEvent.click(screen.getByRole("button", { name: /retry navigation to project hub/i }));
+    await clickAsync(screen.getByRole("button", { name: /retry navigation to project hub/i }));
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledTimes(2));
     expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({
       username: "client-one",
@@ -491,7 +493,7 @@ describe("agency partner client rows", () => {
     );
 
     openClientsSection();
-    fireEvent.click(screen.getAllByRole("button", { name: /^open project hub$/i })[0]);
+    await clickAsync(screen.getAllByRole("button", { name: /^open project hub$/i })[0]);
 
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledOnce());
     expect(screen.queryByRole("alert")).toBeNull();
@@ -506,10 +508,10 @@ describe("agency partner client rows", () => {
   it("keeps an uncertain retry when /me is unavailable and reconciles again before impersonating", async () => {
     serverImpersonate.mockRejectedValueOnce(new Error("Response lost after switch"));
     openClientsSection();
-    fireEvent.click(screen.getAllByRole("button", { name: /^open project hub$/i })[0]);
+    await clickAsync(screen.getAllByRole("button", { name: /^open project hub$/i })[0]);
 
     await vi.waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Response lost after switch"));
-    fireEvent.click(screen.getByRole("button", { name: /retry navigation to project hub/i }));
+    await clickAsync(screen.getByRole("button", { name: /retry navigation to project hub/i }));
     await vi.waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("could not confirm the workspace switch"));
     expect(serverImpersonate).toHaveBeenCalledOnce();
 
@@ -518,7 +520,7 @@ describe("agency partner client rows", () => {
         ? new Response(JSON.stringify({ account: { username: "acme-agency" }, impersonating: null }), { status: 200 })
         : new Response(JSON.stringify({}), { status: 404 }),
     );
-    fireEvent.click(screen.getByRole("button", { name: /retry navigation to project hub/i }));
+    await clickAsync(screen.getByRole("button", { name: /retry navigation to project hub/i }));
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledTimes(2));
     expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({
       username: "client-one",
@@ -533,26 +535,22 @@ describe("agency partner client rows", () => {
       const storageSpy = failureKind === "storage"
         ? vi.spyOn(Storage.prototype, "setItem").mockImplementationOnce(() => { throw failure; })
         : null;
-      const originalLocation = window.location;
       const historySpy = failureKind === "history"
         ? (() => {
-            Object.defineProperty(window, "location", {
-              writable: true,
-              value: { ...originalLocation, replace: () => { throw failure; } },
-            });
-            return { mockRestore: () => Object.defineProperty(window, "location", { writable: true, value: originalLocation }) };
+            baseProps.onNavigate.mockImplementationOnce(() => { throw failure; });
+            return { mockRestore: () => baseProps.onNavigate.mockReset() };
           })()
         : null;
 
       openClientsSection();
-      fireEvent.click(screen.getAllByRole("button", { name: /^open project hub$/i })[0]);
+      await clickAsync(screen.getAllByRole("button", { name: /^open project hub$/i })[0]);
 
       await vi.waitFor(() => expect(screen.getByText(failure.message)).toBeTruthy());
       expect(serverImpersonate).toHaveBeenCalledTimes(1);
       storageSpy?.mockRestore();
       historySpy?.mockRestore();
 
-      fireEvent.click(screen.getByRole("button", { name: /retry navigation to project hub/i }));
+      await clickAsync(screen.getByRole("button", { name: /retry navigation to project hub/i }));
       await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledTimes(1));
       expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({
         username: "client-one",
@@ -564,7 +562,7 @@ describe("agency partner client rows", () => {
   it("keeps a failed entry retry visible after leaving the clients section", async () => {
     serverImpersonate.mockRejectedValueOnce(new Error("Unable to switch workspace"));
     openClientsSection();
-    fireEvent.click(screen.getAllByRole("button", { name: /^open project hub$/i })[0]);
+    await clickAsync(screen.getAllByRole("button", { name: /^open project hub$/i })[0]);
     await vi.waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Unable to switch workspace"));
 
     fireEvent.click(screen.getAllByRole("button", { name: /archived client projects/i })[0]);
@@ -599,20 +597,24 @@ describe("agency partner client rows", () => {
   it("audits projects and requires confirmation before assigning one to a client", async () => {
     const onAssignProjectOwner = vi.fn(async () => ({ ok: true as const }));
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(
-      <SubAccountsPage
-        {...baseProps}
-        session={agencySession as any}
-        initialSection="assign"
-        onAssignProjectOwner={onAssignProjectOwner}
-      />,
-    );
+    await act(async () => {
+      render(
+        <SubAccountsPage
+          {...baseProps}
+          session={agencySession as any}
+          initialSection="assign"
+          onAssignProjectOwner={onAssignProjectOwner}
+        />,
+      );
+    });
     await vi.waitFor(() => {
       expect(screen.getByRole("combobox", { name: /owner for client one project/i })).toBeEnabled();
     });
 
-    fireEvent.change(screen.getByRole("combobox", { name: /owner for client one project/i }), {
-      target: { value: "client-two" },
+    await act(async () => {
+      fireEvent.change(screen.getByRole("combobox", { name: /owner for client one project/i }), {
+        target: { value: "client-two" },
+      });
     });
 
     await vi.waitFor(() => {
@@ -631,7 +633,9 @@ describe("agency partner client rows", () => {
         error: "You cannot modify this project.",
       }],
     });
-    render(<SubAccountsPage {...baseProps} session={agencySession as any} initialSection="assign" />);
+    await act(async () => {
+      render(<SubAccountsPage {...baseProps} session={agencySession as any} initialSection="assign" />);
+    });
 
     await vi.waitFor(() => {
       expect(screen.getByRole("combobox", { name: /owner for client one project/i })).toBeEnabled();
@@ -671,7 +675,7 @@ describe("agency partner create-client form", () => {
     openClientsSection();
     fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "New Client Co" } });
     fireEvent.change(screen.getByPlaceholderText(/www\.acme\.com/i), { target: { value: "newclient.example.com" } });
-    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
+    await clickAsync(screen.getByRole("button", { name: /add client project/i }));
     await vi.waitFor(() => expect(serverAddUser).toHaveBeenCalled());
     const [, password, role, , opts] = serverAddUser.mock.calls[0] as unknown as [
       string, string, string, string, Record<string, unknown>,
@@ -686,7 +690,7 @@ describe("agency partner create-client form", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /edit details/i })[0]);
     fireEvent.change(screen.getByPlaceholderText(/client name/i), { target: { value: "Updated Client" } });
     fireEvent.change(screen.getByPlaceholderText(/website/i), { target: { value: "https://updated.example" } });
-    fireEvent.click(screen.getByRole("button", { name: /save details/i }));
+    await clickAsync(screen.getByRole("button", { name: /save details/i }));
     await vi.waitFor(() => {
       expect(serverSetDisplayName).toHaveBeenCalledWith(
         "client-one",

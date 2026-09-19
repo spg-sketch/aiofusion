@@ -67,6 +67,7 @@ function SubAccountsPage({
   backToAgency,
   onOpenProject,
   onOpenGeorge,
+  onNavigate,
 }: {
   session: LocalSession;
   onBack: () => void;
@@ -93,6 +94,8 @@ function SubAccountsPage({
   onOpenProject?: () => void;
   /** Opens the existing GEOrge support assistant. */
   onOpenGeorge?: () => void;
+  /** Overrides full-page navigation at the browser boundary (used by tests). */
+  onNavigate?: (destination: string | null) => void;
 }) {
   const paper = "#f8fafc";
   const ink = "#0a1628";
@@ -632,7 +635,9 @@ function SubAccountsPage({
           setGoogleLinked(data.account.googleLinked ?? false);
           setMicrosoftLinked(data.account.microsoftLinked ?? false);
         }
-        setIsMasterOwner(data?.masterOwner === true);
+        // A failed probe has no new state to apply. Avoid scheduling a
+        // redundant async update when the endpoint is unavailable.
+        if (data) setIsMasterOwner(data.masterOwner === true);
       })
       .catch(() => { /* non-fatal */ });
   }, []);
@@ -897,10 +902,13 @@ function SubAccountsPage({
       );
       // Use an explicit protected destination on reload. Root is prerendered
       // marketing HTML, which would flash before the auth bootstrap runs.
-       window.location.replace(`${import.meta.env.BASE_URL || "/"}project-hub`);
+      const destination = `${import.meta.env.BASE_URL || "/"}project-hub`;
+      if (onNavigate) onNavigate(destination);
+      else window.location.replace(destination);
       return;
     }
-    window.location.reload();
+    if (onNavigate) onNavigate(null);
+    else window.location.reload();
   };
 
   type TransitionReconciliation = "matched" | "mismatch" | "unavailable";

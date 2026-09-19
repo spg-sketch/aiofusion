@@ -163,7 +163,11 @@ afterEach(() => {
 async function renderAppAt(url: string) {
   window.history.replaceState({}, "", url);
   const { default: App } = await import("./App");
-  return render(<App />);
+  let result!: ReturnType<typeof render>;
+  await act(async () => {
+    result = render(<App />);
+  });
+  return result;
 }
 
 describe("settings-section deep link survives refresh (account_section param)", () => {
@@ -643,12 +647,7 @@ describe("client-project handoff after agency navigation", () => {
       return makeResponse({ rows: [] });
     }));
 
-    const originalLocation = window.location;
     let redirectedTo: string | undefined;
-    Object.defineProperty(window, "location", {
-      writable: true,
-      value: { ...originalLocation, replace: (url: string) => { redirectedTo = url; } },
-    });
     try {
       render(
         <UsersAdminPage
@@ -656,6 +655,7 @@ describe("client-project handoff after agency navigation", () => {
           initialSection="clients"
           onBack={() => {}}
           onAssignProjectOwner={async () => ({ ok: true })}
+          onNavigate={(url) => { redirectedTo = url ?? undefined; }}
         />,
       );
       fireEvent.click(await screen.findByRole("button", { name: "View account" }));
@@ -668,7 +668,6 @@ describe("client-project handoff after agency navigation", () => {
       });
       expect(redirectedTo).toBe("/");
     } finally {
-      Object.defineProperty(window, "location", { writable: true, value: originalLocation });
       cleanup();
     }
 
