@@ -45,7 +45,7 @@ import { MEDIA_RECOMMENDATION_STOP_WORDS, scoreMediaRecommendation } from "../li
 import { assessEditorialFit, type EditorialAssessment, type TargetingBrief } from "../lib/media-editorial-ranking";
 import { checkFairUsage, checkMonthlySpendLimit } from "../lib/fair-usage";
 import { collectJournalistCoverage } from "../lib/journalist-coverage-evidence";
-import { acquirePrivacyIdentityLock, filterSuppressedContacts, isContactSuppressed, isSuppressed, isSuppressedWithDb, privacyHash } from "../lib/journalist-privacy";
+import { acquirePrivacyIdentityLock, createSuppressionMatcher, filterSuppressedContacts, isContactSuppressed, isSuppressed, isSuppressedWithDb, privacyHash } from "../lib/journalist-privacy";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -1940,10 +1940,13 @@ router.get(
       const sort = ["firstName", "lastName", "role", "email", "outletName", "createdAt"].includes(String(req.query.sort))
         ? String(req.query.sort) : "lastName";
       const direction = req.query.direction === "desc" ? -1 : 1;
-      const privacyVisible = (await Promise.all(contactsWithSourceHealth.map(async (contact) => ({
-        contact,
-        suppressed: await isContactSuppressed({ ...contact, outlet: contact.outletName, accountId: normUsername(req.account!.username) }),
-      })))).filter((entry) => !entry.suppressed).map((entry) => entry.contact);
+      const isSuppressedForAccount = await createSuppressionMatcher(normUsername(req.account!.username));
+      const privacyVisible = contactsWithSourceHealth.filter((contact) => !isSuppressedForAccount({
+        name: `${contact.firstName ?? ""} ${contact.lastName ?? ""}`,
+        email: contact.email ?? "",
+        linkedinUrl: contact.linkedinUrl ?? "",
+        outlet: contact.outletName ?? "",
+      }));
       const filtered = privacyVisible.filter((contact) => {
         const haystack = [contact.firstName, contact.lastName, contact.role, contact.email, contact.outletName, contact.outletCategory, contact.outletCountry, contact.notes, contact.reviewNotes, contact.geography, contact.beats.join(" "), contact.sectors.join(" ")]
           .filter(Boolean).join(" ").toLowerCase();

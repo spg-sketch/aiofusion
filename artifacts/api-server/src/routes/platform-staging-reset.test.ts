@@ -126,7 +126,7 @@ import {
   savedTechGeoTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { hashPassword } from "../lib/platform-auth";
+import { hashPassword, repairConfiguredStagingE2eWorkspace } from "../lib/platform-auth";
 import router from "./platform";
 
 type Actor = { username: string; role: string; userId?: string; membershipRole?: string | null };
@@ -157,6 +157,19 @@ async function requestMe(actor: Actor) {
   await new Promise<void>((resolve) => server.once("listening", resolve));
   const port = (server.address() as { port: number }).port;
   const response = await fetch(`http://127.0.0.1:${port}/api/platform/me`);
+  server.close();
+  return response;
+}
+
+async function login(username: string, password: string) {
+  const server = appFor({ username: "", role: "user" }).listen(0);
+  await new Promise<void>((resolve) => server.once("listening", resolve));
+  const port = (server.address() as { port: number }).port;
+  const response = await fetch(`http://127.0.0.1:${port}/api/platform/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
   server.close();
   return response;
 }
@@ -195,6 +208,100 @@ async function seed(target: string, opts: { stripe?: boolean; googleOnly?: boole
 beforeEach(() => { process.env.DEPLOYMENT_ENV = "staging"; });
 
 describe("staging reusable signup reset", () => {
+  it("repairs the configured password-capable E2E identity when its workspace was deleted", async () => {
+    const email = "orphan-e2e@test.invalid";
+    const passwordHash = hashPassword("new-password");
+    process.env.STAGING_E2E_EMAIL = email;
+    const [user] = await db.insert(platformUsersTable).values({
+      email,
+      name: "Reusable E2E",
+      passwordHash,
+      emailVerified: true,
+    }).returning();
+
+    const repairedUsername = await repairConfiguredStagingE2eWorkspace(user!.id);
+    expect(repairedUsername).toMatch(/^aio-e2e-[a-f0-9]{12}$/);
+    const [account] = await db.select().from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, repairedUsername!));
+    const [company] = await db.select().from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, repairedUsername!));
+    const memberships = await db.select().from(platformMembershipsTable)
+      .where(eq(platformMembershipsTable.userId, user!.id));
+    expect(account?.passwordHash).toBe(passwordHash);
+    expect(company?.setupComplete).toBe(false);
+    expect(memberships).toHaveLength(1);
+    expect(memberships[0]?.role).toBe("owner");
+    expect(await repairConfiguredStagingE2eWorkspace(user!.id)).toBeNull();
+  });
+
+  it("does not repair an orphan E2E identity outside staging", async () => {
+    const email = "production-orphan@test.invalid";
+    process.env.STAGING_E2E_EMAIL = email;
+    process.env.DEPLOYMENT_ENV = "production";
+    await db.insert(platformUsersTable).values({
+      email,
+      name: "Production Orphan",
+      passwordHash: hashPassword("new-password"),
+      emailVerified: true,
+    });
+
+    expect(await repairConfiguredStagingE2eWorkspace(
+      (await db.select().from(platformUsersTable)
+        .where(eq(platformUsersTable.email, email)))[0]!.id,
+    )).toBeNull();
+    expect((await db.select().from(platformAccountsTable)
+      .where(eq(platformAccountsTable.email, email)))).toHaveLength(0);
+  });
+
+  it("does not create a workspace when the configured E2E password is wrong", async () => {
+    const email = "wrong-password-e2e@test.invalid";
+    process.env.STAGING_E2E_EMAIL = email;
+    const [user] = await db.insert(platformUsersTable).values({
+      email,
+      name: "Wrong Password E2E",
+      passwordHash: hashPassword("correct-password"),
+      emailVerified: true,
+    }).returning();
+
+    expect((await login(email, "wrong-password")).status).toBe(401);
+    expect((await db.select().from(platformMembershipsTable)
+      .where(eq(platformMembershipsTable.userId, user!.id)))).toHaveLength(0);
+    expect((await db.select().from(platformAccountsTable)
+      .where(eq(platformAccountsTable.email, email)))).toHaveLength(0);
+  });
+
+  it("refuses unverified, mismatched and already-member identities", async () => {
+    process.env.STAGING_E2E_EMAIL = "configured-e2e@test.invalid";
+    const rows = await db.insert(platformUsersTable).values([
+      {
+        email: "configured-e2e@test.invalid",
+        passwordHash: hashPassword("password"),
+        googleId: "google-configured",
+        emailVerified: true,
+      },
+      {
+        email: "unverified-e2e@test.invalid",
+        passwordHash: hashPassword("password"),
+        emailVerified: false,
+      },
+      {
+        email: "different-e2e@test.invalid",
+        passwordHash: hashPassword("password"),
+        emailVerified: true,
+      },
+    ]).returning();
+    expect(await repairConfiguredStagingE2eWorkspace(rows[0]!.id))
+      .toMatch(/^aio-e2e-[a-f0-9]{12}$/);
+    process.env.STAGING_E2E_EMAIL = "unverified-e2e@test.invalid";
+    expect(await repairConfiguredStagingE2eWorkspace(rows[1]!.id)).toBeNull();
+    process.env.STAGING_E2E_EMAIL = "configured-e2e@test.invalid";
+    expect(await repairConfiguredStagingE2eWorkspace(rows[2]!.id)).toBeNull();
+
+    const memberId = await seed("existing-member");
+    process.env.STAGING_E2E_EMAIL = "existing-member@test.invalid";
+    expect(await repairConfiguredStagingE2eWorkspace(memberId)).toBeNull();
+  });
+
   it("denies the capability and reset in production", async () => {
     await seed("production-target");
     process.env.DEPLOYMENT_ENV = "production";

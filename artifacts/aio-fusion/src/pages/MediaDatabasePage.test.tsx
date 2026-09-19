@@ -139,6 +139,26 @@ describe("MediaDatabasePage source health", () => {
     ));
   });
 
+  it("shows a retryable error instead of an endless spinner when initial loading fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new TypeError("network unavailable");
+    }));
+    render(<MediaDatabasePage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Media Database unavailable");
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
+  it("does not duplicate the initial contacts request", async () => {
+    render(<MediaDatabasePage />);
+    await screen.findByText("Jane Reporter");
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+    const contactCalls = vi.mocked(fetch).mock.calls.filter(([input]) =>
+      String(input).includes("/media-db/contacts?"),
+    );
+    expect(contactCalls).toHaveLength(1);
+    expect(String(contactCalls[0]?.[0])).toContain("pageSize=50");
+  });
+
   it("shows the discovery queue to workspace members but instructions only to the canonical Master owner", async () => {
     render(<MediaDatabasePage />);
     await screen.findByText("Jane Reporter");

@@ -317,6 +317,10 @@ function MediaDatabasePage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [allCategories, setAllCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const loadRequestSequence = useRef(0);
+  const loadControllerRef = useRef<AbortController | null>(null);
+  const skippedInitialContactEffect = useRef(false);
   const [outletSearch, setOutletSearch] = useState("");
   const [outletCatFilter, setOutletCatFilter] = useState("");
   const [contactSearch, setContactSearch] = useState("");
@@ -399,28 +403,67 @@ function MediaDatabasePage() {
     : "";
 
   const loadData = async () => {
+    const sequence = ++loadRequestSequence.current;
+    loadControllerRef.current?.abort();
+    const controller = new AbortController();
+    loadControllerRef.current = controller;
     setLoading(true);
+    setLoadError("");
+    const timeout = window.setTimeout(() => controller.abort(), 10_000);
     try {
       const [outR, conR, catR] = await Promise.all([
-        fetch(`${apiBase()}/api/store/media-db/outlets`, { credentials: "include" }),
-        fetch(`${apiBase()}/api/store/media-db/contacts?page=1&pageSize=200`, { credentials: "include" }),
-        fetch(`${apiBase()}/api/store/media-categories`, { credentials: "include" }),
+        fetch(`${apiBase()}/api/store/media-db/outlets`, { credentials: "include", signal: controller.signal }),
+        fetch(`${apiBase()}/api/store/media-db/contacts?page=1&pageSize=50&sort=lastName&direction=asc`, { credentials: "include", signal: controller.signal }),
+        fetch(`${apiBase()}/api/store/media-categories`, { credentials: "include", signal: controller.signal }),
       ]);
-      if (outR.ok) { const d = await outR.json(); setOutlets(d.outlets ?? []); }
-       if (conR.ok) { const d = await conR.json(); setContacts(d.contacts ?? []); setContactTotal(d.total ?? d.contacts?.length ?? 0); }
-      if (catR.ok) {
-        const d = await catR.json();
-        const custom: string[] = (d.custom ?? []).map((c: { name: string }) => c.name);
-        const merged = Array.from(new Set([...(d.standard ?? TRADE_MEDIA_CATEGORIES), ...custom])).sort((a, b) => a.localeCompare(b));
-        setAllCategories(merged);
-      } else {
-        setAllCategories([...TRADE_MEDIA_CATEGORIES]);
+      const failed = [
+        ["publications", outR],
+        ["contacts", conR],
+        ["categories", catR],
+      ].find(([, response]) => !(response as Response).ok);
+      if (failed) {
+        throw new Error(`The ${failed[0]} request returned ${(failed[1] as Response).status}.`);
       }
-    } catch {}
-    setLoading(false);
+      const [outletData, contactData, categoryData] = await Promise.all([
+        outR.json(),
+        conR.json(),
+        catR.json(),
+      ]);
+      if (sequence !== loadRequestSequence.current) return;
+      setOutlets(outletData.outlets ?? []);
+      setContacts(contactData.contacts ?? []);
+      setContactTotal(contactData.total ?? contactData.contacts?.length ?? 0);
+      if (catR.ok) {
+        const custom: string[] = (categoryData.custom ?? []).map((c: { name: string }) => c.name);
+        const merged = Array.from(new Set([...(categoryData.standard ?? TRADE_MEDIA_CATEGORIES), ...custom])).sort((a, b) => a.localeCompare(b));
+        setAllCategories(merged);
+      }
+    } catch (error) {
+      controller.abort();
+      if (sequence !== loadRequestSequence.current) return;
+      setAllCategories([...TRADE_MEDIA_CATEGORIES]);
+      setLoadError(
+        error instanceof DOMException && error.name === "AbortError"
+          ? "The Media Database took too long to respond."
+          : "The Media Database could not be loaded.",
+      );
+    } finally {
+      window.clearTimeout(timeout);
+      if (sequence === loadRequestSequence.current) {
+        loadControllerRef.current = null;
+        setLoading(false);
+      }
+    }
   };
 
-  useEffect(() => { void loadData(); }, []);
+  useEffect(() => {
+    void loadData();
+    return () => {
+      loadRequestSequence.current += 1;
+      loadControllerRef.current?.abort();
+      loadControllerRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     const savedJobId = localStorage.getItem(importJobStorageKey);
@@ -519,7 +562,16 @@ function MediaDatabasePage() {
   }, [searchActive, searchPhrase, searchTopic, searchLocation, searchCategory, searchAuthority, searchPage]);
 
   useEffect(() => {
+    if (!skippedInitialContactEffect.current) {
+      skippedInitialContactEffect.current = true;
+      return;
+    }
     const controller = new AbortController();
+    let timedOut = false;
+    const requestTimeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 10_000);
     const timer = window.setTimeout(() => {
       const params = new URLSearchParams({ page: String(contactPage), pageSize: "50", sort: contactSort, direction: contactDirection });
       if (contactSearch.trim()) params.set("q", contactSearch.trim());
@@ -529,9 +581,17 @@ function MediaDatabasePage() {
       fetch(`${apiBase()}/api/store/media-db/contacts?${params}`, { credentials: "include", signal: controller.signal })
         .then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not search contacts.")))
         .then((data) => { setContacts(data.contacts ?? []); setContactTotal(data.total ?? 0); })
-        .catch((error) => { if (error.name !== "AbortError") console.error(error); });
+        .catch((error) => {
+          if (timedOut) setLoadError("The Media Database took too long to respond.");
+          else if (error.name !== "AbortError") setLoadError("The Media Database could not be loaded.");
+        })
+        .finally(() => window.clearTimeout(requestTimeout));
     }, 200);
-    return () => { controller.abort(); window.clearTimeout(timer); };
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+      window.clearTimeout(requestTimeout);
+    };
   }, [contactSearch, contactCategoryFilter, contactCountryFilter, contactOutletFilter, contactSort, contactDirection, contactPage]);
 
   const resetImport = () => {
@@ -1036,6 +1096,26 @@ function MediaDatabasePage() {
     return (
       <div className="flex items-center justify-center min-h-screen" style={{ background: vars.g50 }}>
         <Loader2 size={28} className="animate-spin" color={vars.accent} />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen p-6 max-w-6xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
+        <div className="mb-6">
+          <div className="flex items-center gap-2.5">
+            <Database size={24} color="#ffffff" />
+            <h1 className="text-[28px] font-semibold mb-1" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Media Database</h1>
+          </div>
+        </div>
+        <div role="alert" className="rounded-2xl border bg-white p-6 shadow-sm" style={{ borderColor: vars.g200 }}>
+          <h2 className="text-[18px] font-semibold" style={{ color: vars.navy }}>Media Database unavailable</h2>
+          <p className="mt-2 text-[14px]" style={{ color: vars.g600 }}>{loadError} Please try again.</p>
+          <button onClick={() => void loadData()} className="mt-4 rounded-lg px-4 py-2 text-[13px] font-semibold text-white" style={{ background: vars.accent }}>
+            Try again
+          </button>
+        </div>
       </div>
     );
   }

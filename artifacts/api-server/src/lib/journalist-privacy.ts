@@ -53,16 +53,25 @@ export function suppressionKeys(identity: PrivacyIdentity) {
   };
 }
 
-export async function isSuppressed(identity: PrivacyIdentity): Promise<boolean> {
-  return isSuppressedWithDb(db, identity);
+type SuppressionRow = {
+  emailHash?: string | null;
+  nameHash?: string | null;
+  linkedinHash?: string | null;
+  outletHash?: string | null;
+};
+
+function matchesSuppression(candidates: SuppressionRow[], identity: PrivacyIdentity): boolean {
+  const keys = suppressionKeys(identity);
+  return candidates.some((row) =>
+    (!!keys.emailHash && row.emailHash === keys.emailHash)
+    || (!!keys.linkedinHash && row.linkedinHash === keys.linkedinHash)
+    || (!!keys.nameHash && !!keys.outletHash && row.nameHash === keys.nameHash && row.outletHash === keys.outletHash),
+  );
 }
 
-export async function isSuppressedWithDb(executor: any, identity: PrivacyIdentity): Promise<boolean> {
-  const keys = suppressionKeys(identity);
-  const accountId = identity.accountId ?? null;
-  let candidates;
+async function loadSuppressionCandidates(executor: any, accountId: string | null): Promise<SuppressionRow[]> {
   try {
-    candidates = await executor.select().from(mediaSuppressionsTable).where(and(
+    return await executor.select().from(mediaSuppressionsTable).where(and(
       eq(mediaSuppressionsTable.active, 1),
       sql`(${mediaSuppressionsTable.scope} = 'shared' OR (${mediaSuppressionsTable.scope} = 'workspace' AND ${mediaSuppressionsTable.accountId} = ${accountId}))`,
     ));
@@ -72,15 +81,32 @@ export async function isSuppressedWithDb(executor: any, identity: PrivacyIdentit
     const cause = (error as { cause?: { code?: string } })?.cause;
     const testContext = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
     if (testContext && /media_suppressions/i.test(String(error)) && (cause?.code === "42P01" || /relation .*media_suppressions.*does not exist/i.test(String(error)))) {
-      return false;
+      return [];
     }
     throw error;
   }
-  return candidates.some((row: any) =>
-    (!!keys.emailHash && row.emailHash === keys.emailHash)
-    || (!!keys.linkedinHash && row.linkedinHash === keys.linkedinHash)
-    || (!!keys.nameHash && !!keys.outletHash && row.nameHash === keys.nameHash && row.outletHash === keys.outletHash),
-  );
+}
+
+export async function isSuppressed(identity: PrivacyIdentity): Promise<boolean> {
+  return isSuppressedWithDb(db, identity);
+}
+
+export async function isSuppressedWithDb(executor: any, identity: PrivacyIdentity): Promise<boolean> {
+  const accountId = identity.accountId ?? null;
+  return matchesSuppression(await loadSuppressionCandidates(executor, accountId), identity);
+}
+
+/** Load applicable suppression hashes once and reuse them across one list request. */
+export async function createSuppressionMatcherWithDb(executor: any, accountId: string | null) {
+  const candidates = await loadSuppressionCandidates(executor, accountId);
+  return (identity: PrivacyIdentity): boolean => matchesSuppression(candidates, {
+    ...identity,
+    accountId,
+  });
+}
+
+export async function createSuppressionMatcher(accountId: string | null) {
+  return createSuppressionMatcherWithDb(db, accountId);
 }
 
 

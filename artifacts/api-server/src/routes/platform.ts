@@ -100,6 +100,7 @@ import {
   deleteWorkspaceMetadata,
   DEFAULT_ADMIN_USERNAME,
   normalizeWorkspaceRole,
+  repairConfiguredStagingE2eWorkspace,
 } from "../lib/platform-auth";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { canAccessInsightsCms, isAioFusionStaffEmail } from "../lib/insights-cms-access";
@@ -1210,6 +1211,16 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
         });
         return;
       }
+      // A dedicated staging E2E identity may outlive a deleted test workspace.
+      // Recreate only that configured, password-only identity's isolated
+      // workspace; ordinary and production logins never enter this path.
+      if (
+        isStagingDeployment()
+        && newUser.email?.trim().toLowerCase()
+          === (process.env.STAGING_E2E_EMAIL?.trim().toLowerCase() ?? "")
+      ) {
+        await repairConfiguredStagingE2eWorkspace(newUser.id);
+      }
       // Credential verified via platform_users. Resolve company for status check.
       const membership = await pickLoginMembership(newUser.id);
       const companySlug = membership?.companySlug ?? normUsername(identifier);
@@ -1311,7 +1322,8 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
       role: account.role,
       needsSetup: legacyNeedsSetup,
     }, rawIp ?? undefined, (req.cookies as Record<string, string> | undefined)?.[TRUSTED_DEVICE_COOKIE]);
-  } catch {
+  } catch (err) {
+    logger.error({ err }, "platform login failed");
     res.status(500).json({ error: "Login failed" });
   }
 });
@@ -7950,7 +7962,7 @@ router.get("/platform/profile/image/:kind", requirePlatformAuth, async (req: Req
       .where(inArray(platformMetaTable.key, keys));
     const row = rows.find((candidate) => candidate.key === keys[0]) ?? rows[0];
     if (!row?.value || !DATA_URL_RE.test(row.value)) {
-      res.status(404).json({ error: "No image" });
+      res.status(204).end();
       return;
     }
     const [, mime] = row.value.match(/^data:(image\/[a-z]+);base64,/) ?? [];

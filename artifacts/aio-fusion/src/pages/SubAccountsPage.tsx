@@ -464,11 +464,11 @@ function SubAccountsPage({
     `${apiBase()}/api/platform/profile/image/${kind}?t=${Date.now()}`;
 
   useEffect(() => {
-    // Probe for existing images; 404 simply means none uploaded yet.
+    // Probe for existing images; 204 means none uploaded yet.
     (["avatar", "logo"] as const).forEach((kind) => {
       fetch(`${apiBase()}/api/platform/profile/image/${kind}`, { credentials: "include" })
         .then((r) => {
-          if (r.ok) (kind === "avatar" ? setAvatarUrl : setLogoUrl)(profileImageUrl(kind));
+          if (r.ok && r.status !== 204) (kind === "avatar" ? setAvatarUrl : setLogoUrl)(profileImageUrl(kind));
         })
         .catch(() => { /* non-fatal */ });
     });

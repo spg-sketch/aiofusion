@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addCalendarMonth, isSuppressedWithDb, legalHoldCoversStore, parseLegalHoldScopes, privacyHash, suppressionKeys } from "./journalist-privacy";
+import { addCalendarMonth, createSuppressionMatcherWithDb, isSuppressedWithDb, legalHoldCoversStore, parseLegalHoldScopes, privacyHash, suppressionKeys } from "./journalist-privacy";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -53,5 +53,27 @@ describe("journalist privacy policy helpers", () => {
     const emailHash = privacyHash("reporter@example.com");
     const workingExecutor = { select: () => ({ from: () => ({ where: () => Promise.resolve([{ active: 1, scope: "shared", emailHash }]) }) }) };
     await expect(isSuppressedWithDb(workingExecutor, { email: "reporter@example.com" })).resolves.toBe(true);
+  });
+
+  it("loads suppression rows once for a request-scoped matcher", async () => {
+    let queries = 0;
+    const executor = {
+      select: () => ({
+        from: () => ({
+          where: async () => {
+            queries += 1;
+            return [
+              { emailHash: privacyHash("blocked@example.com") },
+              { nameHash: privacyHash("Alex Reporter"), outletHash: privacyHash("Daily News") },
+            ];
+          },
+        }),
+      }),
+    };
+    const isSuppressed = await createSuppressionMatcherWithDb(executor, "workspace-a");
+    expect(isSuppressed({ email: "blocked@example.com" })).toBe(true);
+    expect(isSuppressed({ name: "Alex Reporter", outlet: "Daily News" })).toBe(true);
+    expect(isSuppressed({ email: "allowed@example.com" })).toBe(false);
+    expect(queries).toBe(1);
   });
 });

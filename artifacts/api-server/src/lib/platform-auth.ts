@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { isStagingDeployment } from "./app-url";
 import { type Request, type Response } from "express";
 import {
   db,
@@ -538,6 +539,82 @@ export async function createFreshPlatformSignup(opts: {
     });
 
     return { userId: user.id, companyId: company.id };
+  });
+}
+
+/**
+ * Recreate the isolated workspace for the one configured staging E2E identity.
+ *
+ * This never runs for ordinary users or production login. The caller must have
+ * already verified the user's password and staging environment. The helper is
+ * deliberately limited to a verified, password-capable identity with zero
+ * memberships, so it cannot restore access that an administrator revoked from
+ * a real or shared account.
+ */
+export async function repairConfiguredStagingE2eWorkspace(userId: string): Promise<string | null> {
+  if (!isStagingDeployment()) return null;
+  const configuredEmail = process.env.STAGING_E2E_EMAIL?.trim().toLowerCase() ?? "";
+  if (!configuredEmail || !configuredEmail.includes("@")) return null;
+
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT 1 FROM platform_users WHERE id = ${userId} FOR UPDATE`);
+    const [user] = await tx
+      .select()
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.id, userId))
+      .limit(1);
+    if (
+      !user
+      || user.email?.trim().toLowerCase() !== configuredEmail
+      || !user.passwordHash
+      || user.emailVerified !== true
+    ) {
+      return null;
+    }
+
+    const memberships = await tx
+      .select({ companySlug: platformMembershipsTable.companySlug })
+      .from(platformMembershipsTable)
+      .where(eq(platformMembershipsTable.userId, user.id));
+    if (memberships.length > 0) return null;
+
+    // Never reclaim a fixed slug: workspace deletion can leave slug-scoped
+    // media or audit rows behind. A new random slug guarantees this login
+    // cannot take over another workspace or reveal remnants from an old test.
+    const configuredUsername = `aio-e2e-${crypto.randomBytes(6).toString("hex")}`;
+    const companyId = crypto.randomUUID();
+    await tx.insert(platformAccountsTable).values({
+      username: configuredUsername,
+      passwordHash: user.passwordHash,
+      role: "agency",
+      email: configuredEmail,
+      status: "active",
+    });
+    await tx.insert(platformCompaniesTable).values({
+      id: companyId,
+      slug: configuredUsername,
+      role: "agency",
+      email: configuredEmail,
+      displayName: "AIO Fusion E2E Test",
+      status: "active",
+      setupComplete: false,
+    });
+
+    await tx.insert(platformMembershipsTable).values({
+      userId: user.id,
+      companyId,
+      companySlug: configuredUsername,
+      role: "owner",
+    });
+    await tx.insert(platformMetaTable).values({
+      key: `account:onboarding:v1:${configuredUsername}`,
+      value: JSON.stringify({ step: "account_type" }),
+    }).onConflictDoUpdate({
+      target: platformMetaTable.key,
+      set: { value: JSON.stringify({ step: "account_type" }) },
+    });
+
+    return configuredUsername;
   });
 }
 
