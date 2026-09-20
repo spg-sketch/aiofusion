@@ -883,4 +883,55 @@ describe("LlmCheckPage canonical per-run query input", () => {
     expect(JSON.parse(localStorage.getItem(`aio.savedAudits.${second.id}`) || "[]")).toEqual([]);
     expect(JSON.parse(localStorage.getItem(`aio.savedAudits.${CLIENT.id}`) || "[]")).toHaveLength(1);
   });
+
+  it("recovers a completed server audit when the result stream closes early", async () => {
+    seedQueries(CLIENT.id, ["Current query"]);
+    let auditStarted = false;
+    const recoveredResult = {
+      ...LEGACY_RESULT,
+      checkedAt: new Date().toISOString(),
+      serverSavedId: "server-audit-1",
+      serverSavedAt: new Date(Date.now() + 1_000).toISOString(),
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/api/llm-check")) {
+        auditStarted = true;
+        return {
+          ok: true,
+          status: 200,
+          body: {
+            getReader: () => ({
+              read: vi.fn().mockResolvedValue({ done: true, value: undefined }),
+            }),
+          },
+        } as unknown as Response;
+      }
+      if (url.includes("/audits")) {
+        return {
+          ok: true,
+          json: async () => ({
+            audits: auditStarted
+              ? [{
+                  id: recoveredResult.serverSavedId,
+                  savedAt: recoveredResult.serverSavedAt,
+                  result: recoveredResult,
+                }]
+              : [],
+          }),
+        } as unknown as Response;
+      }
+      return supportingResponse(url);
+    }));
+
+    render(<LlmCheckPage activeClient={CLIENT} sessionId="person" workspaceId="workspace" />);
+    fireEvent.click(screen.getByRole("button", { name: "Run Visibility Audit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    expect(await screen.findByText("Detailed probe results")).toBeInTheDocument();
+    expect(screen.queryByText("The audit ended before it finished. Please try again.")).not.toBeInTheDocument();
+    expect(loadSavedAudits(CLIENT.id)).toEqual([
+      expect.objectContaining({ id: "server-audit-1" }),
+    ]);
+  });
 });

@@ -6,7 +6,7 @@ import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfi
 import { syncIntakeForProject } from "./lib/projectSync";
 import { getExactTargetPhrases } from "./lib/exactTargetPhrases";
 import { AuditQueryCoverage, auditQueryCoverageHtml } from "./components/AuditQueryCoverage";
-import { syncAuditsForProject, pushServerAudit, deleteServerAudit } from "./lib/auditSync";
+import { syncAuditsForProject, loadServerAuditsForProject, pushServerAudit, deleteServerAudit } from "./lib/auditSync";
 import { getSession } from "./lib/auth";
 import { aiRunKey, discardAiRun, startAiRun, useAiRun, type AiRun } from "./lib/aiRunLifecycle";
 import {
@@ -1010,6 +1010,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       projectData.competitors = competitors;
     const projectId = activeClient.id;
     const capturedScope = { ...runScope };
+    const requestStartedAt = Date.now();
     startAiRun({
       key: runKey,
       scope: capturedScope,
@@ -1018,6 +1019,19 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       input: { companyName: probeName, keywords, force },
       estimateSeconds: getAuditDurationSeconds("visibility"),
       execute: async (progress) => {
+        const recoverCompletedServerResult = async (): Promise<LlmCheckResult | null> => {
+          const serverAudits = await loadServerAuditsForProject(projectId);
+          if (!serverAudits) return null;
+          const normalisedProbeName = probeName.trim().toLowerCase();
+          const recovered = serverAudits.find((audit) => {
+            const savedAt = Date.parse(audit.savedAt);
+            const companyName = audit.result.companyName?.trim().toLowerCase();
+            return Number.isFinite(savedAt)
+              && savedAt >= requestStartedAt - 1_000
+              && companyName === normalisedProbeName;
+          });
+          return recovered?.result ?? null;
+        };
         const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
         const resp = await fetch(`${apiBase}/api/llm-check`, {
         method: "POST",
@@ -1063,46 +1077,54 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       // The endpoint now streams SSE: progress events while probes run, then a
       // single result event with the full payload.
       if (!resp.body) throw new Error("Response stream could not be read.");
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let finalData: LlmCheckResult | null = null;
-      let sseError: string | null = null;
+      try {
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let finalData: LlmCheckResult | null = null;
+        let sseError: string | null = null;
 
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let sep: number;
-        while ((sep = buffer.indexOf("\n\n")) !== -1) {
-          const chunk = buffer.slice(0, sep);
-          buffer = buffer.slice(sep + 2);
-          let event = "message";
-          let dataStr = "";
-          for (const line of chunk.split("\n")) {
-            if (line.startsWith("event:")) event = line.slice(6).trim();
-            else if (line.startsWith("data:")) dataStr += line.slice(5).trim();
-          }
-          if (!dataStr) continue;
-          let parsed: Record<string, unknown>;
-          try { parsed = JSON.parse(dataStr); } catch { continue; }
-          if (event === "progress") {
-            const done = typeof parsed.done === "number" ? parsed.done : 0;
-            const total = typeof parsed.total === "number" ? parsed.total : 0;
-            if (activeProjectRef.current === projectId) setProbeProgress({ done, total });
-            progress(total > 0 ? (done / total) * 100 : 0);
-          } else if (event === "result") {
-            finalData = parsed as unknown as LlmCheckResult;
-          } else if (event === "error") {
-            sseError = typeof parsed.error === "string" ? parsed.error : "Visibility check failed. Please try again.";
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let sep: number;
+          while ((sep = buffer.indexOf("\n\n")) !== -1) {
+            const chunk = buffer.slice(0, sep);
+            buffer = buffer.slice(sep + 2);
+            let event = "message";
+            let dataStr = "";
+            for (const line of chunk.split("\n")) {
+              if (line.startsWith("event:")) event = line.slice(6).trim();
+              else if (line.startsWith("data:")) dataStr += line.slice(5).trim();
+            }
+            if (!dataStr) continue;
+            let parsed: Record<string, unknown>;
+            try { parsed = JSON.parse(dataStr); } catch { continue; }
+            if (event === "progress") {
+              const done = typeof parsed.done === "number" ? parsed.done : 0;
+              const total = typeof parsed.total === "number" ? parsed.total : 0;
+              if (activeProjectRef.current === projectId) setProbeProgress({ done, total });
+              progress(total > 0 ? (done / total) * 100 : 0);
+            } else if (event === "result") {
+              finalData = parsed as unknown as LlmCheckResult;
+            } else if (event === "error") {
+              sseError = typeof parsed.error === "string" ? parsed.error : "Visibility check failed. Please try again.";
+            }
           }
         }
+
+        if (sseError) throw new Error(sseError);
+        if (finalData) return finalData;
+      } catch (streamError) {
+        const recovered = await recoverCompletedServerResult();
+        if (recovered) return recovered;
+        throw streamError;
       }
 
-      if (sseError) throw new Error(sseError);
-      if (!finalData) throw new Error("The audit ended before it finished. Please try again.");
-
-      return finalData;
+      const recovered = await recoverCompletedServerResult();
+      if (recovered) return recovered;
+      throw new Error("The audit ended before it finished. Please try again.");
       },
       onSuccess: async (finalData, run) => {
         const updated = recordCycle(projectId, authorityIndexFor(finalData));
