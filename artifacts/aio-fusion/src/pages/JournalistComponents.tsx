@@ -367,6 +367,7 @@ export function RecommendationCard({
   refinementLoading = false,
   onRefine,
   onToggleRestriction,
+  sharedScoreCount = 1,
 }: {
   item: Recommendation;
   decision?: Decision;
@@ -384,8 +385,11 @@ export function RecommendationCard({
   refinementLoading?: boolean;
   onRefine?: (signal: "more" | "less" | null) => void;
   onToggleRestriction?: (contactId: number, restricted: boolean) => void;
+  sharedScoreCount?: number;
 }) {
   const c = item.contact;
+  const contactName = [c.firstName, c.lastName].map((part) => part?.trim()).filter(Boolean).join(" ");
+  const hasRecordedName = contactName.length > 0;
   const latestDiscovery = c.provenance?.latestPublicDiscovery;
   return (
     <div className="p-5 border-b last:border-b-0 bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200 }}>
@@ -393,7 +397,7 @@ export function RecommendationCard({
         <div className="flex-1 min-w-[280px]">
           <div className="flex items-center gap-3 mb-1">
             <h3 className="text-[18px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-              {c.firstName} {c.lastName}
+              {hasRecordedName ? contactName : "Contact name not recorded"}
             </h3>
             {c.linkedinUrl && (
               <a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800" title="LinkedIn">
@@ -411,6 +415,14 @@ export function RecommendationCard({
               </button>
             )}
           </div>
+          {!hasRecordedName && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 mb-3" role="alert">
+              <AlertCircle size={15} className="text-amber-700 mt-0.5 shrink-0" />
+              <p className="text-[12px] text-amber-900">
+                <span className="font-bold">Identity review required.</span> Confirm the journalist's name before outreach.
+              </p>
+            </div>
+          )}
           <p className="text-[14px] mb-3" style={{ color: vars.g600 }}>
             <span className="font-medium text-slate-800">{c.role || "No role recorded"}</span>
             {c.outletName && (
@@ -525,8 +537,15 @@ export function RecommendationCard({
 
         <div className="flex flex-col items-end gap-3 min-w-[140px]">
           {showMatchScore !== false && <div className="flex flex-col items-center p-3 rounded-xl border border-slate-100 bg-white shadow-sm w-full">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Match Score</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+              {sharedScoreCount > 1 ? "Shared Match Score" : "Match Score"}
+            </span>
             <MiniDonut score={item.score} color={vars.accent} size={64} />
+            {sharedScoreCount > 1 && (
+              <p className="text-[10px] leading-snug text-center text-slate-500 mt-2" data-testid="shared-score-note">
+                {sharedScoreCount} contacts have this score from the available factors. Their order is not a quality difference.
+              </p>
+            )}
           </div>}
           
           <div className="flex flex-wrap gap-2 justify-end w-full">

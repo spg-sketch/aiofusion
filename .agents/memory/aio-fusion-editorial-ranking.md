@@ -9,6 +9,18 @@ Rank editorial suitability separately from contact readiness and evidence confid
 
 **How to apply:** Keep fixed factor budgets and show weighted-model coverage alongside fit. Feedback can change ordering, not the underlying evidence assessment. Treat the weights as an initial heuristic, not calibrated placement probabilities.
 
+Missing personal identity is a data-quality limitation, not an editorial-fit factor. Keep unnamed records eligible when their topic and outlet evidence is useful, but apply one bounded reduction to the persisted recommendation base score, retain its explanation through feedback reranking, and require identity review before outreach.
+
+**Why:** A publication-only record must not outrank an otherwise comparable named journalist or regain unexplained priority after refinement.
+
+**How to apply:** Determine identity only from meaningful personal-name fields, never outlet or publication labels. Keep the editorial fit score unchanged, and expose the identity limitation separately in ranking reasons, readiness, warnings and recommendation cards.
+
+Equal recommendation scores from equal available factors are genuine ties, not hidden ranking precision. Present the tie count and state that deterministic ordering inside the tie is not a quality difference.
+
+**Why:** Sparse imported profiles often share broad beat, audience and geography labels, so many contacts can legitimately receive the same score.
+
+**How to apply:** Do not add arbitrary variation or use contact IDs as a quality signal. Preserve stable ordering for repeatability, but label repeated scores as shared evidence outcomes until contact-specific evidence differentiates them.
+
 Public search suggestions are not checked reporting evidence. A recency claim requires an author-attributed, relevant page and a publication date actually extracted from that page, with the final redirect destination retained.
 
 **Why:** Model-produced dates and titles can look plausible, and a collector can pass mocked tests while expecting metadata its real fetch helper does not return. Fetching an old article today also does not establish a current role.

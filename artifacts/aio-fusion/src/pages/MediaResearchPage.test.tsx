@@ -74,6 +74,7 @@ vi.mock("../lib/contentAi", () => ({
 }));
 
 import { MediaResearchPage, resolveArticleResearchContext, resolveArticleTargetPhrases, SHORTLIST_EXPORT_COLUMNS, sanitizeSpreadsheetCell as sanitizeResearchSpreadsheetCell, shortlistExportRow } from "./MediaResearchPage";
+import { RecommendationCard } from "./JournalistComponents";
 import { exactTargetPhraseId } from "../lib/exactTargetPhrases";
 import { clearAiRuns } from "../lib/aiRunLifecycle";
 
@@ -516,6 +517,63 @@ describe("MediaResearchPage live discovery", () => {
     expect(await screen.findByText("Persisted Shortlist")).toBeTruthy();
     expect(screen.getByText("Older Energy Weekly")).toBeTruthy();
     expect(screen.queryByText("Recommended from your Media Database")).toBeNull();
+  });
+
+  it("shows a stable fallback and review warning for an unnamed recommendation", async () => {
+    render(
+      <RecommendationCard
+        item={{
+        rank: 1,
+        score: 65,
+        reasons: ["Contact name is not recorded; reduced by 15 points for identity review before outreach."],
+        contact: {
+          id: 91,
+          outletId: 4,
+          firstName: "",
+          lastName: "",
+          role: "Energy editor",
+          email: "",
+          phone: "",
+          notes: "",
+          accountId: null,
+          beats: ["energy"],
+          sectors: ["Energy"],
+          outletName: "Current Energy Daily",
+          outletCategory: "Energy",
+        },
+      }}
+      />,
+    );
+    expect(screen.getByText("Contact name not recorded")).toBeTruthy();
+    expect(screen.getByText(/Identity review required/i)).toBeTruthy();
+    expect(screen.getByText(/reduced by 15 points/i)).toBeTruthy();
+    expect(screen.getByText("Current Energy Daily")).toBeTruthy();
+  });
+
+  it("makes identical evidence scores explicit instead of implying a quality order", () => {
+    render(
+      <RecommendationCard
+        item={{
+          rank: 2,
+          score: 42,
+          reasons: ["Coverage profile matches business"],
+          contact: {
+            id: 92,
+            outletId: 4,
+            firstName: "Jane",
+            lastName: "Reporter",
+            role: "Business reporter",
+            email: "",
+            phone: "",
+            notes: "",
+            accountId: null,
+          },
+        }}
+        sharedScoreCount={34}
+      />,
+    );
+    expect(screen.getByText("Shared Match Score")).toBeTruthy();
+    expect(screen.getByTestId("shared-score-note").textContent).toMatch(/34 contacts.*order is not a quality difference/i);
   });
 
   it.each(["network", "json"] as const)("shows a saved shortlist error when the decision load returns %s failure", async (kind) => {

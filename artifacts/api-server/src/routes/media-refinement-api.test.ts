@@ -111,11 +111,13 @@ beforeAll(async () => {
     { id: "phrase-story", projectId: "project-1", owner: "workspace-a", title: "Phrase story" },
     { id: "long-phrase-story", projectId: "project-1", owner: "workspace-a", title: "Long phrase story" },
     { id: "race-story", projectId: "project-1", owner: "workspace-a", title: "Race story" },
+    { id: "unnamed-story", projectId: "project-1", owner: "workspace-a", title: "Unnamed story" },
   ]);
   const [outlet] = await db.insert(mediaOutletsTable).values({ name: "Energy Daily", category: "Trade press", country: "UK" }).returning();
   await db.insert(mediaContactsTable).values([
     { outletId: outlet.id, firstName: "Jane", lastName: "One", role: "Energy correspondent", beats: ["energy"], sectors: ["technology"], geography: "UK" },
     { outletId: outlet.id, firstName: "John", lastName: "Two", role: "Energy editor", beats: ["energy"], sectors: ["technology"], geography: "UK", email: "john@example.test" },
+    { outletId: outlet.id, firstName: "", lastName: "", role: "Energy correspondent", beats: ["energy"], sectors: ["technology"], geography: "UK", email: "desk@example.test" },
   ]);
   const app = express();
   app.use(express.json());
@@ -211,6 +213,38 @@ async function expectDatabaseColumnsToMatchSchema(
 }
 
 describe("media recommendation refinement API", () => {
+  it("keeps strong unnamed contacts eligible but below comparable named contacts through feedback reranking", async () => {
+    const generated = await request("/store/media-db/recommendations", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({ projectId: "project-1", storyKey: "unnamed-story", terms: ["energy", "technology"] }),
+    });
+    expect(generated.status).toBe(200);
+    const body = await generated.json() as {
+      recommendationSet: { id: number; criteria: { baseScores: Record<string, number> } };
+      items: Array<{ contact: { id: number; firstName: string }; score: number; reasons: string[] }>;
+    };
+    const named = body.items.find((item) => item.contact.firstName === "Jane");
+    const unnamed = body.items.find((item) => !item.contact.firstName);
+    expect(named).toBeDefined();
+    expect(unnamed).toBeDefined();
+    expect(unnamed!.score).toBe(named!.score - 15);
+    expect(unnamed!.score).toBeGreaterThan(0);
+    expect(unnamed!.reasons.join(" ")).toMatch(/name is not recorded.*15 points/i);
+    expect(body.recommendationSet.criteria.baseScores[String(unnamed!.contact.id)]).toBe(unnamed!.score);
+
+    expect((await request("/store/media-db/recommendations/feedback", "workspace-a", {
+      method: "PUT",
+      body: JSON.stringify({ projectId: "project-1", storyKey: "unnamed-story", contactId: unnamed!.contact.id, signal: "less" }),
+    })).status).toBe(200);
+    const reranked = await (await request("/store/media-db/recommendations?projectId=project-1&storyKey=unnamed-story")).json() as {
+      items: Array<{ contact: { id: number }; score: number; reasons: string[] }>;
+    };
+    const savedUnnamed = reranked.items.find((item) => item.contact.id === unnamed!.contact.id);
+    expect(savedUnnamed?.score).toBe(Math.max(0, unnamed!.score - 18));
+    expect(savedUnnamed?.reasons.join(" ")).toMatch(/name is not recorded.*15 points/i);
+    expect(savedUnnamed?.reasons).toContain("Marked Less like this");
+  });
+
   it("migrates the complete recommendation storage contract from a legacy media schema", async () => {
     const tables = await db.execute(sql`
       SELECT table_name

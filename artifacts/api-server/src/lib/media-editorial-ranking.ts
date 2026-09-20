@@ -60,6 +60,25 @@ export type EditorialRankingInput = {
 type AnyRecord = Record<string, unknown>;
 type Factor = EditorialAssessment["factors"][number];
 
+export const UNNAMED_CONTACT_SCORE_REDUCTION = 15;
+export const UNNAMED_CONTACT_REASON = "Contact name is not recorded; reduced by 15 points for identity review before outreach.";
+
+const UNUSABLE_NAME_VALUES = new Set([
+  "unknown",
+  "unnamed",
+  "not known",
+  "not recorded",
+  "not available",
+  "n a",
+  "na",
+  "none",
+  "contact",
+  "journalist",
+  "reporter",
+  "editor",
+  "publication",
+]);
+
 const FACTOR_WEIGHTS = {
   topic: 30,
   recent: 25,
@@ -129,6 +148,43 @@ function fieldText(record: AnyRecord | null | undefined, keys: string[]): string
 
 function fieldValues(record: AnyRecord | null | undefined, keys: string[]): string[] {
   return values(first(record, keys));
+}
+
+function meaningfulPersonalName(value: unknown): boolean {
+  const normalised = key(text(value));
+  return normalised.length > 0
+    && /[\p{L}]/u.test(normalised)
+    && !UNUSABLE_NAME_VALUES.has(normalised);
+}
+
+export function hasUsableContactName(contact: Record<string, unknown> | null | undefined): boolean {
+  if (!contact) return false;
+  return [
+    contact.firstName,
+    contact.first_name,
+    contact.givenName,
+    contact.given_name,
+    contact.lastName,
+    contact.last_name,
+    contact.familyName,
+    contact.family_name,
+    contact.fullName,
+    contact.full_name,
+    contact.contactName,
+    contact.contact_name,
+  ].some(meaningfulPersonalName);
+}
+
+export function reduceScoreForMissingContactName(
+  score: number,
+  contact: Record<string, unknown> | null | undefined,
+): { score: number; reason: string | null } {
+  const boundedScore = Math.max(0, Math.min(100, score));
+  if (hasUsableContactName(contact)) return { score: boundedScore, reason: null };
+  return {
+    score: Math.max(0, boundedScore - UNNAMED_CONTACT_SCORE_REDUCTION),
+    reason: UNNAMED_CONTACT_REASON,
+  };
 }
 
 /**
@@ -339,6 +395,10 @@ export function assessEditorialFit(input: EditorialRankingInput): EditorialAsses
     return normalised ? [normalised] : [];
   });
   const warnings: string[] = [];
+  const namedContact = hasUsableContactName(contact);
+  if (!namedContact) {
+    warnings.push("Contact name is not recorded; verify the person's identity before outreach.");
+  }
 
   const topicTargets = uniquePhrases([
     brief.topic,
@@ -516,6 +576,10 @@ export function assessEditorialFit(input: EditorialRankingInput): EditorialAsses
     readinessReasons.push("Contact or outlet is suppressed / do-not-contact.");
   }
   if (readiness !== "blocked") {
+    if (!namedContact) {
+      readiness = "needs_check";
+      readinessReasons.push("Contact name is not recorded; identity must be reviewed before outreach.");
+    }
     if (!routeAvailable) {
       readiness = "needs_check";
       readinessReasons.push("No valid contact route is available; an email address, phone number, or direct profile route is required.");

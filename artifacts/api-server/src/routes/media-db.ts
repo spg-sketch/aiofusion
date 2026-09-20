@@ -42,7 +42,7 @@ import {
   type ExactTargetPhrase,
 } from "../lib/exact-target-phrases";
 import { MEDIA_RECOMMENDATION_STOP_WORDS, scoreMediaRecommendation } from "../lib/media-recommendation-ranking";
-import { assessEditorialFit, type EditorialAssessment, type TargetingBrief } from "../lib/media-editorial-ranking";
+import { assessEditorialFit, reduceScoreForMissingContactName, type EditorialAssessment, type TargetingBrief } from "../lib/media-editorial-ranking";
 import { checkFairUsage, checkMonthlySpendLimit } from "../lib/fair-usage";
 import { collectJournalistCoverage } from "../lib/journalist-coverage-evidence";
 import { acquirePrivacyIdentityLock, createSuppressionMatcher, filterSuppressedContacts, isContactSuppressed, isSuppressed, isSuppressedWithDb, privacyHash } from "../lib/journalist-privacy";
@@ -2604,7 +2604,11 @@ async function rerankRecommendationSet(accountId: string, projectId: string, sto
       refinementReasons.push(`${entry.signal === "more" ? "Favoured" : "Reduced"} by feedback: ${similarity.signals.join(", ")}`);
     }
     const baseScore = Number(baseScores[String(contact.id)]) || item.score;
-    return { item, score: Math.max(0, Math.min(100, baseScore + adjustment)), reasons: [...item.reasons.filter((reason) => !reason.includes(" by feedback") && !reason.startsWith("Marked ")), ...refinementReasons] };
+    return {
+      item,
+      score: Math.max(0, Math.min(100, baseScore + adjustment)),
+      reasons: [...item.reasons.filter((reason) => !reason.includes(" by feedback") && !reason.startsWith("Marked ")), ...refinementReasons],
+    };
   }).sort((a, b) => b.score - a.score || a.item.contactId - b.item.contactId);
   await Promise.all(ranked.map((entry, index) => db.update(mediaRecommendationItemsTable)
     .set({ score: entry.score, reasons: entry.reasons, rank: index + 1 })
@@ -2714,6 +2718,10 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
         departed: departedContact,
         doNotContact,
       });
+      const identityAdjusted = reduceScoreForMissingContactName(
+        Math.max(Number(assessment.fitScore ?? 0), phraseMatches.exact.length * 15 + phraseMatches.topic.length * 5),
+        contact,
+      );
       return {
         contact: {
           ...contact,
@@ -2723,8 +2731,8 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
           outletCountry: outlet?.country ?? null,
           outletReachBand: outlet?.reachBand ?? null,
         },
-        score: Math.max(Number(assessment.fitScore ?? 0), phraseMatches.exact.length * 15 + phraseMatches.topic.length * 5),
-        reasons,
+        score: identityAdjusted.score,
+        reasons: identityAdjusted.reason ? [...reasons, identityAdjusted.reason] : reasons,
         assessment,
         phraseAttributions: buildPhraseAttributions({
           role: contact.role,

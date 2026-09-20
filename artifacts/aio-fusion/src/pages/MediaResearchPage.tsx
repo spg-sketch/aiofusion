@@ -918,6 +918,7 @@ function MediaResearchPage() {
     editBrief({ regions });
   };
   const contactCard = (item: Recommendation, shortlist = false) => {
+    const sharedScoreCount = shortlist ? 1 : items.filter((candidate) => candidate.score === item.score).length;
     return (
       <RecommendationCard
         key={item.contact.id}
@@ -935,6 +936,7 @@ function MediaResearchPage() {
         refinementLoading={refining === item.contact.id}
         onRefine={shortlist ? undefined : (signal) => void refine(item.contact.id, signal)}
         onToggleRestriction={toggleRestriction}
+        sharedScoreCount={sharedScoreCount}
       />
     );
   };

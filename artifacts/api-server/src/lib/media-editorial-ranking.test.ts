@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { assessEditorialFit, type CoverageEvidence, type TargetingBrief } from "./media-editorial-ranking";
+import {
+  assessEditorialFit,
+  hasUsableContactName,
+  reduceScoreForMissingContactName,
+  UNNAMED_CONTACT_REASON,
+  type CoverageEvidence,
+  type TargetingBrief,
+} from "./media-editorial-ranking";
 
 const brief: TargetingBrief = {
   topic: "renewable energy",
@@ -22,6 +29,7 @@ const checked = (overrides: Partial<CoverageEvidence> = {}): CoverageEvidence =>
 });
 
 const contact = {
+  firstName: "Jane",
   role: "Energy correspondent",
   beats: ["renewable energy", "grid resilience"],
   sectors: ["energy"],
@@ -36,6 +44,33 @@ const outlet = {
 };
 
 describe("assessEditorialFit", () => {
+  it("recognises meaningful personal-name fields but not publication or placeholder labels", () => {
+    expect(hasUsableContactName({ firstName: "Jane" })).toBe(true);
+    expect(hasUsableContactName({ last_name: "Smith" })).toBe(true);
+    expect(hasUsableContactName({ name: "Energy Daily" })).toBe(false);
+    expect(hasUsableContactName({ firstName: "Unknown", lastName: "Reporter" })).toBe(false);
+    expect(hasUsableContactName({ outletName: "Energy Daily" })).toBe(false);
+  });
+
+  it("applies one bounded and explainable missing-name reduction", () => {
+    expect(reduceScoreForMissingContactName(80, { firstName: "Jane" })).toEqual({ score: 80, reason: null });
+    expect(reduceScoreForMissingContactName(80, { firstName: "", lastName: "" })).toEqual({
+      score: 65,
+      reason: UNNAMED_CONTACT_REASON,
+    });
+    expect(reduceScoreForMissingContactName(8, {})).toEqual({ score: 0, reason: UNNAMED_CONTACT_REASON });
+    expect(reduceScoreForMissingContactName(120, {})).toEqual({ score: 85, reason: UNNAMED_CONTACT_REASON });
+  });
+
+  it("requires identity review for an unnamed contact without changing editorial fit", () => {
+    const named = assessEditorialFit({ contact: { ...contact, firstName: "Jane" }, outlet, brief, evidence: [checked()] });
+    const unnamed = assessEditorialFit({ contact: { ...contact, firstName: "" }, outlet, brief, evidence: [checked()] });
+    expect(unnamed.fitScore).toBe(named.fitScore);
+    expect(unnamed.readiness.status).toBe("needs_check");
+    expect(unnamed.readiness.reasons.join(" ")).toMatch(/name is not recorded/i);
+    expect(unnamed.warnings.join(" ")).toMatch(/verify.*identity/i);
+  });
+
   it("uses word boundaries and deduplicates stuffing", () => {
     const result = assessEditorialFit({
       contact: { ...contact, notes: "renewable renewable renewableenergy" },
