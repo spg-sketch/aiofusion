@@ -3,7 +3,12 @@ import { logger } from "./lib/logger";
 import { features } from "./lib/features";
 import { ensureDefaultAdmin, backfillPlatformUsers } from "./lib/platform-auth";
 import { ensureAuditLocksTable } from "./lib/ensure-audit-locks-table";
-import { ensureAuditRunClaimsTable } from "./lib/audit-run-claims";
+import {
+  ensureAuditRunClaimsTable,
+  failExhaustedAuditRuns,
+  reclaimRecoverableAuditRuns,
+  releaseOwnedAuditRunLeases,
+} from "./lib/audit-run-claims";
 import { ensureSavedAuditTables } from "./lib/ensure-saved-audit-tables";
 import { ensurePlatformCompanyCascade } from "./lib/ensure-platform-company-cascade";
 import { ensurePlannerContentColumns } from "./lib/ensure-planner-content-columns";
@@ -45,9 +50,17 @@ import {
   shutdownRuntime,
   type ScheduledJob,
 } from "./lib/runtime-lifecycle";
+import { resumeVisibilityAuditRun } from "./routes/llm-check";
 
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const MICROSOFT_HEALTH_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const AUDIT_RECOVERY_INTERVAL_MS = 30_000;
+
+async function recoverVisibilityAudits(): Promise<void> {
+  await failExhaustedAuditRuns();
+  const runs = await reclaimRecoverableAuditRuns(2);
+  await Promise.all(runs.map((run) => resumeVisibilityAuditRun(run)));
+}
 
 // ---------------------------------------------------------------------------
 // Staging isolation guard
@@ -188,6 +201,11 @@ const server = app.listen(port, (err) => {
   jobs.push(runTrackedJob("seed support FAQ", seedSupportFaq));
   jobs.push(runTrackedJob("seed Insights stories", seedInsights));
   jobs.push(scheduleNonOverlappingJob(
+    "visibility audit recovery sweep",
+    recoverVisibilityAudits,
+    AUDIT_RECOVERY_INTERVAL_MS,
+  ));
+  jobs.push(scheduleNonOverlappingJob(
     "media source reverification sweep",
     runMediaSourceReverification,
     MEDIA_REVERIFICATION_INTERVAL_MS,
@@ -290,6 +308,7 @@ async function handleShutdown(signal: NodeJS.Signals): Promise<void> {
   markRuntimeDraining();
   logger.info({ signal }, "Shutdown started");
   try {
+    await releaseOwnedAuditRunLeases();
     const result = await shutdownRuntime({
       server,
       jobs,

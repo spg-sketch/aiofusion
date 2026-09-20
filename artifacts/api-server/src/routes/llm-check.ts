@@ -27,7 +27,14 @@ import { llmCheckConcurrencyGuard } from "../middleware/concurrency-guard";
 import { logAdminEvent } from "../lib/admin-events";
 import { logTokenUsage } from "../lib/token-usage";
 import { checkFairUsage, checkMonthlySpendLimit, detectAndLogSpike } from "../lib/fair-usage";
-import { claimAuditRun, expireStaleAuditRuns, failAuditRunWithMessage, updateAuditRunProgress } from "../lib/audit-run-claims";
+import {
+  AUDIT_WORKER_ID,
+  claimAuditRun,
+  expireStaleAuditRuns,
+  retryAuditRunAfterFailure,
+  type RecoverableAuditRun,
+  updateAuditRunProgress,
+} from "../lib/audit-run-claims";
 import { randomUUID } from "node:crypto";
 
 const llmCheckRouter = Router();
@@ -1637,14 +1644,14 @@ llmCheckRouter.get("/llm-check/runs", async (req: Request, res: Response) => {
   } : null);
 });
 
-llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, async (req: Request, res: Response) => {
+async function handleLlmCheck(req: Request, res: Response, recoveredRun?: RecoverableAuditRun): Promise<void> {
   if (!req.account) {
     res.status(401).json({ error: "Authentication required" });
     return;
   }
 
   // 1. Monthly GBP spending cap - checked first.
-  {
+  if (!recoveredRun) {
     const { allowed: spendAllowed, spentGbp, limitGbp } = await checkMonthlySpendLimit(req.account.username);
     if (!spendAllowed) {
       const now = new Date();
@@ -1661,7 +1668,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
   }
 
   // 2. DB-backed per-account fair usage check (30-day rolling quota).
-  {
+  if (!recoveredRun) {
     const { allowed, callCount, limit } = await checkFairUsage(req.account.username);
     if (!allowed) {
       const now = new Date();
@@ -1683,7 +1690,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
   const projectId = typeof rawProjectId === "string" ? rawProjectId.trim() : "";
   const force = rawForce === true;
   const targetPhrases = normaliseExactPhrases(rawTargetPhrases);
-  let auditRunId: string | null | undefined;
+  let auditRunId: string | null | undefined = recoveredRun?.runId;
 
   if (!companyName || typeof companyName !== "string") {
     res.status(400).json({ error: "companyName is required" });
@@ -1700,7 +1707,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
 
   // 21-day audit lock: block repeat runs to control LLM costs.
   // Admins can bypass with force=true for legitimate re-runs (e.g. post-relaunch).
-  if (projectId) {
+  if (projectId && !recoveredRun) {
     try {
       const existing = await db
         .select()
@@ -1780,9 +1787,9 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     confirmedEntity: authorityData.confirmedEntity,
     knownNamesakes: authorityData.knownNamesakes,
   };
-  if (projectId) {
+  if (projectId && !recoveredRun) {
     if (typeof (db as any).execute === "function") {
-      auditRunId = await claimAuditRun(projectId, "visibility", req.account.username);
+      auditRunId = await claimAuditRun(projectId, "visibility", req.account.username, req.body);
     }
     if (auditRunId === null) {
       res.status(409).json({ error: "A visibility audit is already running for this project.", running: true });
@@ -1791,6 +1798,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
   }
 
   let releaseConcurrency: (() => void) | undefined;
+  let leaseHeartbeat: NodeJS.Timeout | undefined;
   try {
     const legacyTestStream = auditRunId === undefined;
     releaseConcurrency = (req as any).holdConcurrencyGuard?.() as (() => void) | undefined;
@@ -1880,6 +1888,14 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     // Total individual LLM calls: one per (question × run × model).
     const totalProbeCount = scheduledQuestions.length * RUNS_PER_QUESTION * 2;
     let completedProbes = 0;
+    if (auditRunId) {
+      leaseHeartbeat = setInterval(() => {
+        void updateAuditRunProgress(auditRunId!, completedProbes, totalProbeCount).catch((err) => {
+          logger.warn({ err, auditRunId }, "Could not renew visibility audit lease");
+        });
+      }, 30_000);
+      leaseHeartbeat.unref();
+    }
 
     // Wrap each probe so a progress event fires as soon as it settles.
     async function persistProgress(): Promise<void> {
@@ -2057,12 +2073,22 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     if (projectId && "projectId" in savedAuditsTable) {
       const owner = req.account.username;
       const persist = async (tx: any) => {
+        if (auditRunId) {
+          const claimed = await tx.execute(sql`
+            UPDATE audit_runs
+            SET status = 'succeeded', completed_at = now(), saved_id = ${savedId}
+            WHERE run_id = ${auditRunId}
+              AND status = 'running'
+              AND worker_id = ${AUDIT_WORKER_ID}
+            RETURNING run_id
+          `);
+          if (claimed.rows.length === 0) {
+            throw new Error("Visibility audit lease was lost before completion");
+          }
+        }
         await tx.insert(savedAuditsTable).values({ id: savedId, projectId, owner, savedAt, result: savedResult, deletedAt: null });
         await tx.insert(auditLocksTable).values({ projectId, auditType: "visibility", owner, lastRunAt: new Date(savedAt) })
           .onConflictDoUpdate({ target: [auditLocksTable.projectId, auditLocksTable.auditType], set: { lastRunAt: new Date(savedAt), owner } });
-        if (auditRunId) {
-          await tx.execute(sql`UPDATE audit_runs SET status = 'succeeded', completed_at = now(), saved_id = ${savedId} WHERE run_id = ${auditRunId}`);
-        }
       };
       if (typeof (db as any).transaction === "function") await db.transaction(persist);
       else await persist(db);
@@ -2073,7 +2099,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     }
   } catch (err: any) {
     if (auditRunId) {
-      await failAuditRunWithMessage(auditRunId, "LLM visibility check failed. Please try again.").catch(() => undefined);
+      await retryAuditRunAfterFailure(auditRunId, "The audit attempt stopped and will be retried automatically.").catch(() => undefined);
     }
     logger.error({ err, companyName }, "LLM visibility check failed");
     if (auditRunId === undefined && !res.writableEnded) {
@@ -2081,8 +2107,34 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       res.end();
     }
   } finally {
+    if (leaseHeartbeat) clearInterval(leaseHeartbeat);
     releaseConcurrency?.();
   }
+}
+
+llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, (req, res) => {
+  void handleLlmCheck(req, res);
 });
+
+export async function resumeVisibilityAuditRun(run: RecoverableAuditRun): Promise<void> {
+  if (run.auditType !== "visibility") return;
+  const response: any = {
+    writableEnded: false,
+    status() { return response; },
+    json() { response.writableEnded = true; return response; },
+    setHeader() { return response; },
+    write() { return true; },
+    end() { response.writableEnded = true; return response; },
+  };
+  const request = {
+    account: { username: run.owner, role: "client" },
+    body: run.payload,
+  } as unknown as Request;
+  logger.info(
+    { runId: run.runId, projectId: run.projectId, attempt: run.attemptCount },
+    "Resuming visibility audit after worker restart",
+  );
+  await handleLlmCheck(request, response, run);
+}
 
 export default llmCheckRouter;
