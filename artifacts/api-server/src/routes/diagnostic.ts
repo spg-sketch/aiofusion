@@ -10,7 +10,13 @@ import { diagnosticLimiter } from "../middleware/rate-limit";
 import { diagnosticConcurrencyGuard } from "../middleware/concurrency-guard";
 import { logAdminEvent } from "../lib/admin-events";
 import { logTokenUsage } from "../lib/token-usage";
-import { claimAuditRun, failAuditRun } from "../lib/audit-run-claims";
+import {
+  AUDIT_WORKER_ID,
+  claimAuditRun,
+  retryAuditRunAfterFailure,
+  updateAuditRunProgress,
+  type RecoverableAuditRun,
+} from "../lib/audit-run-claims";
 import { randomUUID } from "node:crypto";
 
 const AUDIT_LOCK_DAYS = 21;
@@ -260,7 +266,28 @@ async function analyseWithOpenAI(content: string, facts?: GeoAuditFacts | null, 
   return { ...analysisResult, _tokenUsage: { inputTokens, outputTokens } };
 }
 
-diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGuard, async (req: Request, res: Response) => {
+type WebsiteAuditPayload = {
+  projectId: string;
+  textToAnalyse: string;
+  fetchedUrl?: string;
+  pagesFetched: string[];
+  pageFacts?: GeoAuditFacts;
+  confirmedEntity?: ConfirmedEntity;
+};
+
+function isWebsiteAuditPayload(value: unknown): value is WebsiteAuditPayload {
+  if (!value || typeof value !== "object") return false;
+  const payload = value as Record<string, unknown>;
+  return typeof payload.projectId === "string"
+    && typeof payload.textToAnalyse === "string"
+    && Array.isArray(payload.pagesFetched)
+    && payload.pagesFetched.every((page) => typeof page === "string")
+    && (payload.fetchedUrl === undefined || typeof payload.fetchedUrl === "string")
+    && (payload.pageFacts === undefined || (payload.pageFacts !== null && typeof payload.pageFacts === "object"))
+    && (payload.confirmedEntity === undefined || sanitizeConfirmedEntity(payload.confirmedEntity) !== null);
+}
+
+async function handleDiagnostic(req: Request, res: Response, recoveredRun?: RecoverableAuditRun): Promise<void> {
   if (!req.account) {
     res.status(401).json({ error: "Authentication required" });
     return;
@@ -268,17 +295,26 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
 
   const { content, url } = req.body;
   const confirmedEntity = sanitizeConfirmedEntity(req.body?.confirmedEntity);
-  const projectId = typeof req.body.projectId === "string" ? req.body.projectId.trim() : "";
+  const recoveredPayload = recoveredRun?.payload;
+  if (recoveredRun && !isWebsiteAuditPayload(recoveredPayload)) {
+    await retryAuditRunAfterFailure(recoveredRun.runId, "The saved website audit input was invalid.");
+    logger.error({ runId: recoveredRun.runId }, "Could not resume website audit with invalid payload");
+    return;
+  }
+  const resumePayload = recoveredRun ? recoveredPayload as WebsiteAuditPayload : undefined;
+  const projectId = recoveredRun
+    ? recoveredRun.projectId
+    : typeof req.body.projectId === "string" ? req.body.projectId.trim() : "";
   const force = req.body.force === true;
 
-  if (!content && !url) {
+  if (!recoveredRun && !content && !url) {
     res.status(400).json({ error: "Either content or url is required" });
     return;
   }
 
   // 21-day audit lock: block repeat runs to control LLM costs.
   // Admins can bypass with force=true for legitimate re-runs (e.g. post-relaunch).
-  if (projectId) {
+  if (projectId && !recoveredRun) {
     try {
       const existing = await db
         .select()
@@ -318,17 +354,17 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
     }
   }
 
-  if (typeof content === "string" && content.length > MAX_CONTENT_CHARS) {
+  if (!recoveredRun && typeof content === "string" && content.length > MAX_CONTENT_CHARS) {
     res.status(400).json({ error: `Content exceeds maximum length of ${MAX_CONTENT_CHARS} characters.` });
     return;
   }
 
-  let textToAnalyse = "";
-  let fetchedUrl: string | undefined;
-  let pagesFetched: string[] = [];
-  let pageFacts: GeoAuditFacts | undefined;
+  let textToAnalyse = resumePayload?.textToAnalyse ?? "";
+  let fetchedUrl: string | undefined = resumePayload?.fetchedUrl;
+  let pagesFetched: string[] = resumePayload?.pagesFetched ?? [];
+  let pageFacts: GeoAuditFacts | undefined = resumePayload?.pageFacts;
 
-  if (typeof url === "string" && url.trim()) {
+  if (!recoveredRun && typeof url === "string" && url.trim()) {
     try {
       const ctx = await fetchGeoAuditContext(url.trim());
       fetchedUrl = ctx.url;
@@ -344,7 +380,7 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
     }
   }
 
-  if (typeof content === "string" && content.trim()) {
+  if (!recoveredRun && typeof content === "string" && content.trim()) {
     const pasted = content.trim();
     textToAnalyse += (textToAnalyse ? "\n\nADDITIONAL CONTENT SUPPLIED BY USER:\n" : "") + pasted;
   }
@@ -356,22 +392,40 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
     return;
   }
 
-  let auditRunId: string | null | undefined;
-  if (projectId && typeof (db as any).execute === "function") {
-    auditRunId = await claimAuditRun(projectId, "website", req.account.username);
+  let auditRunId: string | null | undefined = recoveredRun?.runId;
+  if (projectId && !recoveredRun && typeof (db as any).execute === "function") {
+    const payload: WebsiteAuditPayload = {
+      projectId,
+      textToAnalyse,
+      fetchedUrl,
+      pagesFetched,
+      pageFacts,
+      confirmedEntity: confirmedEntity ?? undefined,
+    };
+    auditRunId = await claimAuditRun(projectId, "website", req.account.username, payload);
     if (auditRunId === null) {
       res.status(409).json({ error: "A website visibility audit is already running for this project.", running: true });
       return;
     }
   }
 
+  let leaseHeartbeat: NodeJS.Timeout | undefined;
   try {
+    if (auditRunId) {
+      leaseHeartbeat = setInterval(() => {
+        void updateAuditRunProgress(auditRunId!, 0, 1).catch((err) => {
+          logger.warn({ err, auditRunId }, "Could not renew website audit lease");
+        });
+      }, 30_000);
+      leaseHeartbeat.unref();
+    }
     // Single deterministic engine (Claude) for repeatable results. OpenAI is a
     // silent fallback only if Claude is unavailable, so a normal run is always
     // one engine, temperature 0.
     let result: any;
     try {
-      const claudeValue = await analyseWithClaude(textToAnalyse, pageFacts, confirmedEntity, { accountId: req.account?.username, projectId });
+      const effectiveEntity = resumePayload?.confirmedEntity ?? confirmedEntity;
+      const claudeValue = await analyseWithClaude(textToAnalyse, pageFacts, effectiveEntity, { accountId: req.account?.username, projectId });
       result = {
         ...claudeValue,
         provider: "claude",
@@ -380,7 +434,8 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
     } catch (claudeErr: any) {
       logger.warn({ err: claudeErr?.message }, "Claude failed, falling back to OpenAI");
       try {
-        const openaiValue = await analyseWithOpenAI(textToAnalyse, pageFacts, confirmedEntity, { accountId: req.account?.username, projectId });
+        const effectiveEntity = resumePayload?.confirmedEntity ?? confirmedEntity;
+        const openaiValue = await analyseWithOpenAI(textToAnalyse, pageFacts, effectiveEntity, { accountId: req.account?.username, projectId });
         result = {
           ...openaiValue,
           provider: "openai",
@@ -402,25 +457,64 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
     if (projectId && "projectId" in savedDiagnosticsTable) {
       const owner = req.account.username;
       const persist = async (tx: any) => {
+        if (auditRunId) {
+          const claimed = await tx.execute(sql`
+            UPDATE audit_runs
+            SET status = 'succeeded', completed_at = now(), saved_id = ${savedId},
+                progress_done = 1, progress_total = 1
+            WHERE run_id = ${auditRunId}
+              AND status = 'running'
+              AND worker_id = ${AUDIT_WORKER_ID}
+            RETURNING run_id
+          `);
+          if (claimed.rows.length === 0) {
+            throw new Error("Website audit lease was lost before completion");
+          }
+        }
         await tx.insert(savedDiagnosticsTable).values({ id: savedId, projectId, owner, savedAt, result: savedResult, deletedAt: null });
         await tx.insert(auditLocksTable).values({ projectId, auditType: "website", owner, lastRunAt: new Date(savedAt) })
           .onConflictDoUpdate({ target: [auditLocksTable.projectId, auditLocksTable.auditType], set: { lastRunAt: new Date(savedAt), owner } });
-        if (auditRunId) {
-          await tx.execute(sql`UPDATE audit_runs SET status = 'succeeded', completed_at = now(), saved_id = ${savedId} WHERE run_id = ${auditRunId}`);
-        }
       };
       if (typeof (db as any).transaction === "function") await db.transaction(persist);
       else await persist(db);
     }
-    res.json(deepStripEmDashes(savedResult));
+    if (!recoveredRun) res.json(deepStripEmDashes(savedResult));
   } catch (err: any) {
-    if (auditRunId) await failAuditRun(auditRunId).catch(() => undefined);
+    if (auditRunId) {
+      await retryAuditRunAfterFailure(auditRunId, "The audit attempt stopped and will be retried automatically.").catch(() => undefined);
+    }
     logger.error({ err: err.message }, "Diagnostic analysis failed");
     const message = typeof err?.message === "string" && /unavailable/i.test(err.message)
       ? err.message
       : "Analysis failed. Please try again.";
-    res.status(500).json({ error: message });
+    if (!recoveredRun) res.status(500).json({ error: message });
+  } finally {
+    if (leaseHeartbeat) clearInterval(leaseHeartbeat);
   }
+}
+
+diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGuard, (req, res) => {
+  void handleDiagnostic(req, res);
 });
+
+export async function resumeWebsiteAuditRun(run: RecoverableAuditRun): Promise<void> {
+  if (run.auditType !== "website") return;
+  const response: any = {
+    writableEnded: false,
+    status() { return response; },
+    json() { response.writableEnded = true; return response; },
+    setHeader() { return response; },
+    end() { response.writableEnded = true; return response; },
+  };
+  const request = {
+    account: { username: run.owner, role: "client" },
+    body: run.payload,
+  } as unknown as Request;
+  logger.info(
+    { runId: run.runId, projectId: run.projectId, attempt: run.attemptCount },
+    "Resuming website audit after worker restart",
+  );
+  await handleDiagnostic(request, response, run);
+}
 
 export default diagnosticRouter;

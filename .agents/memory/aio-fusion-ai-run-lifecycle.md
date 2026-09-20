@@ -14,3 +14,9 @@ For audit work that can exceed an HTTP proxy limit, the app-level lifecycle is o
 **Why:** A retained browser promise still depends on the original HTTP connection. Proxy timeouts, refreshes and route changes must not cancel server work or turn a successful saved audit into a transport failure.
 
 **How to apply:** Keep claim creation before the immediate start response, update the claim lease while work progresses, and commit the saved result, audit lock and successful run state together. Polling errors and terminal audit errors are separate states.
+
+For URL-based audits, persist the bounded fetched content and measured page facts in the claim, not just the URL submitted by the user. Resume from that immutable snapshot and keep the original run ID.
+
+**Why:** Refetching after a restart can analyse a changed page, fail for a newly unavailable URL, or produce a different result under the identity of the original run.
+
+**How to apply:** Fetch and validate first, then claim with the exact analysis input. On completion, require the current worker lease before inserting the saved result, and commit both changes in one transaction so retries cannot create duplicate records.

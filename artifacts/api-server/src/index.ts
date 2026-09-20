@@ -51,15 +51,20 @@ import {
   type ScheduledJob,
 } from "./lib/runtime-lifecycle";
 import { resumeVisibilityAuditRun } from "./routes/llm-check";
+import { resumeWebsiteAuditRun } from "./routes/diagnostic";
 
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const MICROSOFT_HEALTH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const AUDIT_RECOVERY_INTERVAL_MS = 30_000;
 
-async function recoverVisibilityAudits(): Promise<void> {
+async function recoverDurableAudits(): Promise<void> {
   await failExhaustedAuditRuns();
   const runs = await reclaimRecoverableAuditRuns(2);
-  await Promise.all(runs.map((run) => resumeVisibilityAuditRun(run)));
+  await Promise.all(runs.map((run) => {
+    if (run.auditType === "visibility") return resumeVisibilityAuditRun(run);
+    if (run.auditType === "website") return resumeWebsiteAuditRun(run);
+    return Promise.resolve();
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -201,8 +206,8 @@ const server = app.listen(port, (err) => {
   jobs.push(runTrackedJob("seed support FAQ", seedSupportFaq));
   jobs.push(runTrackedJob("seed Insights stories", seedInsights));
   jobs.push(scheduleNonOverlappingJob(
-    "visibility audit recovery sweep",
-    recoverVisibilityAudits,
+    "durable audit recovery sweep",
+    recoverDurableAudits,
     AUDIT_RECOVERY_INTERVAL_MS,
   ));
   jobs.push(scheduleNonOverlappingJob(
