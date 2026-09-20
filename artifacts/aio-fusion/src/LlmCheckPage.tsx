@@ -8,7 +8,7 @@ import { getExactTargetPhrases } from "./lib/exactTargetPhrases";
 import { AuditQueryCoverage, auditQueryCoverageHtml } from "./components/AuditQueryCoverage";
 import { syncAuditsForProject, loadServerAuditsForProject, pushServerAudit, deleteServerAudit } from "./lib/auditSync";
 import { getSession } from "./lib/auth";
-import { aiRunKey, discardAiRun, startAiRun, useAiRun, type AiRun } from "./lib/aiRunLifecycle";
+import { aiRunKey, discardAiRun, getAiRun, startAiRun, useAiRun, type AiRun } from "./lib/aiRunLifecycle";
 import {
   Eye,
   Search,
@@ -804,6 +804,121 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   const runEstimate = lifecycleRun?.estimateSeconds ?? getAuditDurationSeconds("visibility");
   const runStartedAt = lifecycleRun?.startedAt;
 
+  async function pollVisibilityRun(
+    runId: string,
+    projectId: string,
+    progress: (value: number) => void,
+  ): Promise<LlmCheckResult> {
+    const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
+    let retryDelayMs = 1_000;
+    for (;;) {
+      try {
+        const response = await fetch(`${apiBase}/api/llm-check/runs/${encodeURIComponent(runId)}`, {
+          credentials: "include",
+        });
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({ error: "Could not check audit progress." }));
+          if ([401, 403, 404].includes(response.status)) {
+            throw Object.assign(new Error(data.error || `HTTP ${response.status}`), { terminal: true });
+          }
+          throw new Error(data.error || `HTTP ${response.status}`);
+        }
+        const run = await response.json();
+        retryDelayMs = 1_000;
+        const done = typeof run.progress?.done === "number" ? run.progress.done : 0;
+        const total = typeof run.progress?.total === "number" ? run.progress.total : 0;
+        if (activeProjectRef.current === projectId) setProbeProgress({ done, total });
+        progress(total > 0 ? (done / total) * 100 : 0);
+        if (run.status === "succeeded" && run.result) return run.result as LlmCheckResult;
+        if (run.status === "failed") throw Object.assign(
+          new Error(run.error || "Visibility check failed. Please try again."),
+          { terminal: true },
+        );
+      } catch (error) {
+        if ((error as { terminal?: boolean })?.terminal) throw error;
+        await new Promise((resolve) => window.setTimeout(resolve, retryDelayMs));
+        retryDelayMs = Math.min(retryDelayMs * 2, 10_000);
+        continue;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 2_000));
+    }
+  }
+
+  async function readLegacyAuditStream(
+    response: Response,
+    projectId: string,
+    progress: (value: number) => void,
+  ): Promise<LlmCheckResult> {
+    if (!response.body) throw new Error("Response stream could not be read.");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalData: LlmCheckResult | null = null;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let separator: number;
+      while ((separator = buffer.indexOf("\n\n")) !== -1) {
+        const chunk = buffer.slice(0, separator);
+        buffer = buffer.slice(separator + 2);
+        const event = chunk.split("\n").find((line) => line.startsWith("event:"))?.slice(6).trim();
+        const dataText = chunk.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).join("");
+        if (!dataText) continue;
+        const data = JSON.parse(dataText);
+        if (event === "progress") {
+          const done = typeof data.done === "number" ? data.done : 0;
+          const total = typeof data.total === "number" ? data.total : 0;
+          if (activeProjectRef.current === projectId) setProbeProgress({ done, total });
+          progress(total > 0 ? (done / total) * 100 : 0);
+        } else if (event === "result") {
+          finalData = data as LlmCheckResult;
+        } else if (event === "error") {
+          throw new Error(data.error || "Visibility check failed. Please try again.");
+        }
+      }
+    }
+    if (!finalData) throw new Error("The audit ended before it finished. Please try again.");
+    return finalData;
+  }
+
+  async function completeVisibilityRun(
+    finalData: LlmCheckResult,
+    run: AiRun<Record<string, unknown>, LlmCheckResult>,
+  ) {
+    const projectId = run.scope.projectId;
+    const updated = recordCycle(projectId, authorityIndexFor(finalData));
+    const existing = loadSavedAudits(projectId);
+    let next = existing;
+    if (!existing.some((audit) => audit.result.checkedAt === finalData.checkedAt)) {
+      const entry: SavedAudit = {
+        id: finalData.serverSavedId || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        savedAt: finalData.serverSavedAt || new Date().toISOString(),
+        result: finalData,
+      };
+      next = [entry, ...existing];
+      if (persistSavedAudits(projectId, next)) {
+        await pushServerAudit(projectId, entry).catch(() => null);
+        window.dispatchEvent(new Event("aio:saved-audits-changed"));
+      }
+    }
+    if (activeProjectRef.current === projectId) {
+      setResult(finalData);
+      setResultIsFromSaved(false);
+      setCycleData(updated);
+      setSavedAudits(next);
+      setJustSaved(true);
+    }
+    recordAuditDuration("visibility", Date.now() - run.startedAt, run.estimateSeconds * 1000);
+    const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
+    fetch(`${apiBase}/api/audit-lock?projectId=${encodeURIComponent(projectId)}&auditType=visibility`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((lock) => {
+        if (activeProjectRef.current === projectId) setAuditLock(lock);
+      })
+      .catch(() => {});
+  }
+
   // Authenticated App renders provide stable identity props and retain runs
   // across route unmounts. Isolated page renders use anonymous fallback scope,
   // so discard that test/story state when the standalone component unmounts.
@@ -811,6 +926,31 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     if (sessionId || workspaceId) return;
     return () => discardAiRun(runKey);
   }, [runKey, sessionId, workspaceId]);
+
+  useEffect(() => {
+    if (!activeClient.id || lifecycleRun?.status === "running" || lifecycleRun?.status === "succeeded") return;
+    let cancelled = false;
+    const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
+    void fetch(`${apiBase}/api/llm-check/runs?projectId=${encodeURIComponent(activeClient.id)}`, {
+      credentials: "include",
+    })
+      .then((response) => response.ok ? response.json() : null)
+      .then((remoteRun) => {
+        if (cancelled || !remoteRun?.runId || getAiRun(runKey)) return;
+        startAiRun({
+          key: runKey,
+          scope: { ...runScope },
+          operation: "visibility",
+          subjectId: "audit",
+          input: { resumedRunId: remoteRun.runId },
+          estimateSeconds: getAuditDurationSeconds("visibility"),
+          execute: (progress) => pollVisibilityRun(remoteRun.runId, activeClient.id, progress),
+          onSuccess: completeVisibilityRun,
+        });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [activeClient.id, lifecycleRun, runKey]);
 
   useEffect(() => {
     generationRequestRef.current += 1;
@@ -1019,19 +1159,6 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       input: { companyName: probeName, keywords, force },
       estimateSeconds: getAuditDurationSeconds("visibility"),
       execute: async (progress) => {
-        const recoverCompletedServerResult = async (): Promise<LlmCheckResult | null> => {
-          const serverAudits = await loadServerAuditsForProject(projectId);
-          if (!serverAudits) return null;
-          const normalisedProbeName = probeName.trim().toLowerCase();
-          const recovered = serverAudits.find((audit) => {
-            const savedAt = Date.parse(audit.savedAt);
-            const companyName = audit.result.companyName?.trim().toLowerCase();
-            return Number.isFinite(savedAt)
-              && savedAt >= requestStartedAt - 1_000
-              && companyName === normalisedProbeName;
-          });
-          return recovered?.result ?? null;
-        };
         const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
         const resp = await fetch(`${apiBase}/api/llm-check`, {
         method: "POST",
@@ -1073,91 +1200,29 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         }
         throw new Error(data.error || `HTTP ${resp.status}`);
       }
-
-      // The endpoint now streams SSE: progress events while probes run, then a
-      // single result event with the full payload.
-      if (!resp.body) throw new Error("Response stream could not be read.");
-      try {
-        const reader = resp.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let finalData: LlmCheckResult | null = null;
-        let sseError: string | null = null;
-
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          let sep: number;
-          while ((sep = buffer.indexOf("\n\n")) !== -1) {
-            const chunk = buffer.slice(0, sep);
-            buffer = buffer.slice(sep + 2);
-            let event = "message";
-            let dataStr = "";
-            for (const line of chunk.split("\n")) {
-              if (line.startsWith("event:")) event = line.slice(6).trim();
-              else if (line.startsWith("data:")) dataStr += line.slice(5).trim();
-            }
-            if (!dataStr) continue;
-            let parsed: Record<string, unknown>;
-            try { parsed = JSON.parse(dataStr); } catch { continue; }
-            if (event === "progress") {
-              const done = typeof parsed.done === "number" ? parsed.done : 0;
-              const total = typeof parsed.total === "number" ? parsed.total : 0;
-              if (activeProjectRef.current === projectId) setProbeProgress({ done, total });
-              progress(total > 0 ? (done / total) * 100 : 0);
-            } else if (event === "result") {
-              finalData = parsed as unknown as LlmCheckResult;
-            } else if (event === "error") {
-              sseError = typeof parsed.error === "string" ? parsed.error : "Visibility check failed. Please try again.";
-            }
-          }
+      const isLegacyStream = resp.headers?.get?.("content-type")?.includes("text/event-stream")
+        || (!!resp.body && typeof resp.json !== "function");
+      if (isLegacyStream) {
+        try {
+          return await readLegacyAuditStream(resp, projectId, progress);
+        } catch (streamError) {
+          const serverAudits = await loadServerAuditsForProject(projectId);
+          const normalisedProbeName = probeName.trim().toLowerCase();
+          const recovered = serverAudits?.find((audit) => {
+            const savedAt = Date.parse(audit.savedAt);
+            return Number.isFinite(savedAt)
+              && savedAt >= requestStartedAt - 1_000
+              && audit.result.companyName?.trim().toLowerCase() === normalisedProbeName;
+          });
+          if (recovered) return recovered.result;
+          throw streamError;
         }
-
-        if (sseError) throw new Error(sseError);
-        if (finalData) return finalData;
-      } catch (streamError) {
-        const recovered = await recoverCompletedServerResult();
-        if (recovered) return recovered;
-        throw streamError;
       }
-
-      const recovered = await recoverCompletedServerResult();
-      if (recovered) return recovered;
-      throw new Error("The audit ended before it finished. Please try again.");
+      const data = await resp.json();
+      if (!data.runId) throw new Error("The server did not return an audit run identifier.");
+      return pollVisibilityRun(data.runId, projectId, progress);
       },
-      onSuccess: async (finalData, run) => {
-        const updated = recordCycle(projectId, authorityIndexFor(finalData));
-        const existing = loadSavedAudits(projectId);
-        let next = existing;
-        if (!existing.some((audit) => audit.result.checkedAt === finalData.checkedAt)) {
-          const entry: SavedAudit = {
-            id: finalData.serverSavedId || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            savedAt: finalData.serverSavedAt || new Date().toISOString(),
-            result: finalData,
-          };
-          next = [entry, ...existing];
-          if (persistSavedAudits(projectId, next)) {
-            await pushServerAudit(projectId, entry).catch(() => null);
-            window.dispatchEvent(new Event("aio:saved-audits-changed"));
-          }
-        }
-        if (activeProjectRef.current === projectId) {
-          setResult(finalData);
-          setResultIsFromSaved(false);
-          setCycleData(updated);
-          setSavedAudits(next);
-          setJustSaved(true);
-        }
-        recordAuditDuration("visibility", (run.completedAt || Date.now()) - run.startedAt, run.estimateSeconds * 1000);
-        const apiBase2 = import.meta.env.DEV ? `https://${window.location.host}` : "";
-        fetch(`${apiBase2}/api/audit-lock?projectId=${encodeURIComponent(projectId)}&auditType=visibility`, { credentials: "include" })
-          .then((r) => r.json())
-          .then((lock) => {
-            if (activeProjectRef.current === projectId) setAuditLock(lock);
-          })
-          .catch(() => {});
-      },
+      onSuccess: completeVisibilityRun,
     });
   }
 

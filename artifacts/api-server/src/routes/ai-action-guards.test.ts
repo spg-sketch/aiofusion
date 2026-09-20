@@ -470,13 +470,16 @@ async function api(
   path: string,
   opts: { method?: string; body?: unknown; sid?: string } = {},
 ): Promise<{ status: number; json: any; setCookie: string | null }> {
+  const method = opts.method ?? (opts.body !== undefined ? "POST" : "GET");
   const res = await fetch(`${baseUrl}${path}`, {
-    method: opts.method ?? (opts.body !== undefined ? "POST" : "GET"),
+    method,
     headers: {
       "content-type": "application/json",
       ...(opts.sid ? { cookie: `${PLATFORM_COOKIE}=${opts.sid}` } : {}),
     },
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    body: opts.body !== undefined && method !== "GET" && method !== "HEAD"
+      ? JSON.stringify(opts.body)
+      : undefined,
   });
   return {
     status: res.status,

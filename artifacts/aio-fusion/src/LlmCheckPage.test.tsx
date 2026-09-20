@@ -934,4 +934,90 @@ describe("LlmCheckPage canonical per-run query input", () => {
       expect.objectContaining({ id: "server-audit-1" }),
     ]);
   });
+
+  it("starts a durable run and renders the result returned by status polling", async () => {
+    seedQueries(CLIENT.id, ["Current query"]);
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/llm-check/runs/run-1")) {
+        return {
+          ok: true,
+          json: async () => ({
+            runId: "run-1",
+            status: "succeeded",
+            progress: { done: 8, total: 8 },
+            result: { ...LEGACY_RESULT, serverSavedId: "run-1" },
+          }),
+        } as unknown as Response;
+      }
+      if (url.includes("/api/llm-check/runs?")) {
+        return { ok: true, json: async () => null } as unknown as Response;
+      }
+      if (url.endsWith("/api/llm-check") && init?.method === "POST") {
+        return {
+          ok: true,
+          status: 202,
+          json: async () => ({ runId: "run-1", status: "running" }),
+        } as unknown as Response;
+      }
+      return supportingResponse(url);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<LlmCheckPage activeClient={CLIENT} sessionId="person" workspaceId="workspace" />);
+    fireEvent.click(screen.getByRole("button", { name: "Run Visibility Audit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    expect(await screen.findByText("Detailed probe results")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/llm-check/runs/run-1"),
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
+
+  it("reconnects after a temporary polling failure and restores the run after remount", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    seedQueries(CLIENT.id, ["Current query"]);
+    let statusChecks = 0;
+    const fetchMock = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/api/llm-check/runs?")) {
+        return {
+          ok: true,
+          json: async () => ({ runId: "run-reconnect", status: "running", progress: { done: 1, total: 8 } }),
+        } as unknown as Response;
+      }
+      if (url.includes("/api/llm-check/runs/run-reconnect")) {
+        statusChecks++;
+        if (statusChecks === 1) {
+          return {
+            ok: false,
+            status: 502,
+            json: async () => ({ error: "Temporary gateway failure" }),
+          } as unknown as Response;
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            runId: "run-reconnect",
+            status: "succeeded",
+            progress: { done: 8, total: 8 },
+            result: { ...LEGACY_RESULT, serverSavedId: "run-reconnect" },
+          }),
+        } as unknown as Response;
+      }
+      return supportingResponse(url);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const first = render(<LlmCheckPage activeClient={CLIENT} sessionId="person" workspaceId="workspace" />);
+    await waitFor(() => expect(statusChecks).toBe(1));
+    first.unmount();
+    render(<LlmCheckPage activeClient={CLIENT} sessionId="person" workspaceId="workspace" />);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(await screen.findByText("Detailed probe results")).toBeInTheDocument();
+    expect(statusChecks).toBe(2);
+    vi.useRealTimers();
+  });
 });

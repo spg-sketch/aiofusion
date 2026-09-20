@@ -27,7 +27,7 @@ import { llmCheckConcurrencyGuard } from "../middleware/concurrency-guard";
 import { logAdminEvent } from "../lib/admin-events";
 import { logTokenUsage } from "../lib/token-usage";
 import { checkFairUsage, checkMonthlySpendLimit, detectAndLogSpike } from "../lib/fair-usage";
-import { claimAuditRun, failAuditRun } from "../lib/audit-run-claims";
+import { claimAuditRun, expireStaleAuditRuns, failAuditRunWithMessage, updateAuditRunProgress } from "../lib/audit-run-claims";
 import { randomUUID } from "node:crypto";
 
 const llmCheckRouter = Router();
@@ -1570,6 +1570,73 @@ llmCheckRouter.get("/audit-lock", async (req: Request, res: Response) => {
   }
 });
 
+llmCheckRouter.get("/llm-check/runs/:runId", async (req: Request, res: Response) => {
+  if (!req.account) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  const runId = Array.isArray(req.params.runId) ? req.params.runId[0] : req.params.runId;
+  await expireStaleAuditRuns({ runId, auditType: "visibility", owner: req.account.username });
+  const rows = await db.execute(sql`
+    SELECT r.run_id, r.project_id, r.status, r.started_at, r.completed_at,
+           r.progress_done, r.progress_total, r.error_message, r.saved_id,
+           s.result
+    FROM audit_runs r
+    LEFT JOIN saved_audits s ON s.id = r.saved_id AND s.deleted_at IS NULL
+    WHERE r.run_id = ${runId}
+      AND r.audit_type = 'visibility'
+      AND r.owner = ${req.account.username}
+    LIMIT 1
+  `);
+  const run = rows.rows[0] as any;
+  if (!run) {
+    res.status(404).json({ error: "Audit run not found" });
+    return;
+  }
+  res.json({
+    runId: run.run_id,
+    projectId: run.project_id,
+    status: run.status,
+    startedAt: run.started_at,
+    completedAt: run.completed_at,
+    progress: { done: run.progress_done ?? 0, total: run.progress_total ?? 0 },
+    error: run.error_message || undefined,
+    result: run.status === "succeeded" ? run.result : undefined,
+  });
+});
+
+llmCheckRouter.get("/llm-check/runs", async (req: Request, res: Response) => {
+  if (!req.account) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  const projectId = typeof req.query.projectId === "string" ? req.query.projectId.trim() : "";
+  if (!projectId) {
+    res.status(400).json({ error: "projectId is required" });
+    return;
+  }
+  await expireStaleAuditRuns({ projectId, auditType: "visibility", owner: req.account.username });
+  const rows = await db.execute(sql`
+    SELECT run_id, status, started_at, completed_at, progress_done, progress_total
+    FROM audit_runs
+    WHERE project_id = ${projectId}
+      AND audit_type = 'visibility'
+      AND owner = ${req.account.username}
+      AND status = 'running'
+    ORDER BY started_at DESC
+    LIMIT 1
+  `);
+  const run = rows.rows[0] as any;
+  res.json(run ? {
+    runId: run.run_id,
+    projectId,
+    status: run.status,
+    startedAt: run.started_at,
+    completedAt: run.completed_at,
+    progress: { done: run.progress_done ?? 0, total: run.progress_total ?? 0 },
+  } : null);
+});
+
 llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, async (req: Request, res: Response) => {
   if (!req.account) {
     res.status(401).json({ error: "Authentication required" });
@@ -1723,9 +1790,17 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     }
   }
 
+  let releaseConcurrency: (() => void) | undefined;
   try {
-    // Switch to SSE so the client receives live progress events as probes complete.
-    initSse(res);
+    const legacyTestStream = auditRunId === undefined;
+    releaseConcurrency = (req as any).holdConcurrencyGuard?.() as (() => void) | undefined;
+    if (legacyTestStream) initSse(res);
+    else if (!auditRunId) {
+      res.status(500).json({ error: "A durable audit run could not be created." });
+      return;
+    } else {
+      res.status(202).json({ runId: auditRunId, status: "running" });
+    }
 
     // Token accumulator: shared mutable reference passed into all LLM functions
     // so the total token spend for this run is known when building the summary.
@@ -1800,20 +1875,35 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       if (anchoredGenerated[i] !== generated[i]) anchoredQuestions.add(anchoredGenerated[i]);
     }
 
-    // Abort in-flight API calls if the client disconnects mid-audit so we do
-    // not keep consuming LLM credits for a response nobody will receive.
     const probeAbort = new AbortController();
-    res.on("close", () => probeAbort.abort());
 
     // Total individual LLM calls: one per (question × run × model).
     const totalProbeCount = scheduledQuestions.length * RUNS_PER_QUESTION * 2;
     let completedProbes = 0;
 
     // Wrap each probe so a progress event fires as soon as it settles.
+    async function persistProgress(): Promise<void> {
+      if (legacyTestStream) {
+        sseSend(res, "progress", { done: completedProbes, total: totalProbeCount });
+        return;
+      }
+      await updateAuditRunProgress(auditRunId!, completedProbes, totalProbeCount).catch((err) => {
+        logger.warn({ err, auditRunId }, "Could not persist visibility audit progress");
+      });
+    }
+
     function trackProbe(p: Promise<ProbeResult | null>): Promise<ProbeResult | null> {
       return p.then(
-        (r) => { completedProbes++; sseSend(res, "progress", { done: completedProbes, total: totalProbeCount }); return r; },
-        () => { completedProbes++; sseSend(res, "progress", { done: completedProbes, total: totalProbeCount }); return null; },
+        async (r) => {
+          completedProbes++;
+          await persistProgress();
+          return r;
+        },
+        async () => {
+          completedProbes++;
+          await persistProgress();
+          return null;
+        },
       );
     }
 
@@ -1977,15 +2067,21 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       if (typeof (db as any).transaction === "function") await db.transaction(persist);
       else await persist(db);
     }
-    sseSend(res, "result", savedResult);
-    res.end();
+    if (legacyTestStream) {
+      sseSend(res, "result", savedResult);
+      res.end();
+    }
   } catch (err: any) {
-    if (auditRunId) await failAuditRun(auditRunId).catch(() => undefined);
+    if (auditRunId) {
+      await failAuditRunWithMessage(auditRunId, "LLM visibility check failed. Please try again.").catch(() => undefined);
+    }
     logger.error({ err, companyName }, "LLM visibility check failed");
-    if (!res.writableEnded) {
+    if (auditRunId === undefined && !res.writableEnded) {
       sseSend(res, "error", { error: "LLM visibility check failed. Please try again." });
       res.end();
     }
+  } finally {
+    releaseConcurrency?.();
   }
 });
 

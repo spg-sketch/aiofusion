@@ -3,7 +3,7 @@ import { type Request, type Response, type NextFunction } from "express";
 export function createConcurrencyGuard(maxConcurrent: number) {
   let inFlight = 0;
 
-  return function concurrencyGuard(_req: Request, res: Response, next: NextFunction): void {
+  return function concurrencyGuard(req: Request, res: Response, next: NextFunction): void {
     if (inFlight >= maxConcurrent) {
       res.status(503).json({ error: "Server is busy processing other requests. Please try again shortly." });
       return;
@@ -11,6 +11,7 @@ export function createConcurrencyGuard(maxConcurrent: number) {
 
     inFlight++;
     let released = false;
+    let heldAfterResponse = false;
     const release = () => {
       if (!released) {
         released = true;
@@ -18,8 +19,15 @@ export function createConcurrencyGuard(maxConcurrent: number) {
       }
     };
 
-    res.on("finish", release);
-    res.on("close", release);
+    (req as any).holdConcurrencyGuard = () => {
+      heldAfterResponse = true;
+      return release;
+    };
+    const releaseUnlessHeld = () => {
+      if (!heldAfterResponse) release();
+    };
+    res.on("finish", releaseUnlessHeld);
+    res.on("close", releaseUnlessHeld);
 
     next();
   };
