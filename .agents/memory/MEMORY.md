@@ -86,3 +86,4 @@
 - [Article quality scoring](aio-fusion-article-quality-scoring.md) — keep it distinct from campaign Authority and invalidate persisted assessments when content or scoring context changes.
 - [Selective migration approvals](selective-migration-approval-boundaries.md) — exact digest approval governs writes; legacy workspace foreign keys require reviewed SSO bridge or workspace omission.
 - [Long media imports](aio-fusion-long-media-imports.md) — browser requests can time out while the server transaction continues; reconcile the batch before retrying.
+- [Release browser gate integrity](aio-fusion-release-browser-gate.md) — release-critical auth and isolation journeys must use built code, a real temporary DB, and the actual UI, never mocked endpoints.

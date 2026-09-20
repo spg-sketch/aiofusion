@@ -111,11 +111,13 @@ Complete each item in the correct environment. Values, secrets and tokens must n
 
 ## Future staging-to-live release flow
 
-1. Develop and test in staging using only isolated staging data.
-2. Review schema changes, including every rename, and publish the approved release to staging.
-3. Run read-only staging inventory and test external services in their staging/test modes.
-4. Take and verify a production backup, then prove a restore to scratch.
-5. Create a production change record with reconciliation baseline, write-freeze plan, integration checklist and rollback owner.
-6. Publish to production through Replit Publish, run production read-only reconciliation, complete sign-off and monitor.
+1. Develop using only isolated development and staging data.
+2. Run the authoritative release-candidate gate in `RELEASE-QUALITY-GATES.md`. Any failure, timeout or skipped critical check is **NO-GO**.
+3. After application-reviewer approval, publish the approved release to staging.
+4. Complete the staging sign-off checklist. Staging evidence never proves the change is live.
+5. Run read-only staging inventory and test external services in their staging/test modes.
+6. Take and verify a production backup, then prove a restore to scratch.
+7. Create a production change record with reconciliation baseline, write-freeze plan, integration checklist, explicit business-owner approval and rollback owner.
+8. Publish to production through Replit Publish. Only then run the production-only checks in `RELEASE-QUALITY-GATES.md`, complete read-only reconciliation, observe logs and finish sign-off.
 
 Staging releases validate code and schema compatibility. They never promote staging demonstration rows into live data by default.

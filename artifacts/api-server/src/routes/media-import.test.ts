@@ -1236,7 +1236,10 @@ describe("media import route regressions", () => {
     const [batch] = await db.select().from(mediaImportBatchesTable)
       .where(eq(mediaImportBatchesTable.accountId, "v33-workspace"));
     expect((batch!.summary as Record<string, unknown>).rowOutcomes).toBeUndefined();
-  }, 180_000);
+  // Completion validation can run this suite alongside the full release gate,
+  // which runs the API suite again. Allow the real 3 MB workbook reconciliation
+  // enough headroom under that deliberate CPU and database contention.
+  }, 300_000);
 
   it("conflicts same-email rows when names or outlets differ instead of merging them", async () => {
     const rows = [

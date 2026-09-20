@@ -24,11 +24,18 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "test"
+args = "release-candidate"
+
+[[workflows.workflow]]
+name = "release-candidate"
+author = "agent"
 
 [[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "typecheck"
+task = "shell.exec"
+args = "RELEASE_ENVIRONMENT=staging pnpm run release:check"
+
+[workflows.workflow.metadata]
+isValidation = true
 
 [[workflows.workflow]]
 name = "test"
@@ -77,6 +84,7 @@ STAGING_SIGNUP_TEST_EMAIL = "hello@vibestudio.agency"
 
 [nix]
 channel = "stable-25_05"
+packages = ["glib", "nss", "nspr", "dbus", "atk", "at-spi2-atk", "cups", "expat", "libdrm", "mesa", "xorg.libxcb", "xorg.libX11", "xorg.libXcomposite", "xorg.libXdamage", "xorg.libXext", "xorg.libXfixes", "xorg.libXrandr", "libxkbcommon", "pango", "cairo", "alsa-lib", "libgbm"]
 
 [[ports]]
 localPort = 8080

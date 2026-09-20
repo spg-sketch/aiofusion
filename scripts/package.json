@@ -10,7 +10,7 @@
     "restore:download": "tsx ./src/restore-db.ts --download",
     "restore:verify": "tsx ./src/restore-db.ts --verify-restore",
     "inventory": "tsx ./src/inventory-db.ts",
-    "test": "tsx --test ./src/lib/notify.test.ts ./src/lib/object-storage.test.ts ./src/inventory-db.test.ts ./src/seed-staging.test.ts ./src/selective-backup.test.ts ./src/selective-migration-readiness.test.ts ./src/selective-mapping-draft.test.ts ./src/selective-manifest-compiler.test.ts ./src/selective-migration-import.test.ts ./src/selective-migration-rehearsal.test.ts ./src/selective-migration-apply.test.ts",
+    "test": "tsx --test ./src/lib/notify.test.ts ./src/lib/object-storage.test.ts ./src/inventory-db.test.ts ./src/seed-staging.test.ts ./src/selective-backup.test.ts ./src/selective-migration-readiness.test.ts ./src/selective-mapping-draft.test.ts ./src/selective-manifest-compiler.test.ts ./src/selective-migration-import.test.ts ./src/selective-migration-rehearsal.test.ts ./src/selective-migration-apply.test.ts && node --test ./release-gate.test.mjs ./release-smoke.test.mjs",
     "selective-backup": "tsx ./src/selective-backup.ts",
     "selective-rehearsal": "tsx ./src/selective-migration-rehearsal.ts",
     "selective-apply": "tsx ./src/selective-migration-apply.ts",
