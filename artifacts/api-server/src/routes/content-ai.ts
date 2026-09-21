@@ -36,6 +36,24 @@ import {
 
 const contentAiRouter = Router();
 
+async function spendLimitCheck(req: Request, res: Response, next: NextFunction): Promise<void> {
+  if (!req.account) { next(); return; }
+  const { allowed, spentGbp, limitGbp } = await checkMonthlySpendLimit(req.account.username);
+  if (!allowed) {
+    const now = new Date();
+    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
+    const secondsToMonthEnd = Math.max(1, Math.ceil((monthEnd.getTime() - now.getTime()) / 1000));
+    res.setHeader("Retry-After", secondsToMonthEnd);
+    res.status(429).json({
+      error: "Monthly spending limit reached - email info@aiofusion.ai to discuss your plan.",
+      spentGbp: parseFloat(spentGbp.toFixed(4)),
+      limitGbp,
+    });
+    return;
+  }
+  next();
+}
+
 // DB-backed per-account fair usage enforcement. Applied as a named route-level
 // middleware on each POST handler, AFTER the in-memory contentAiLimiter, so
 // the fast IP-based check fires first and this DB query is never reached on a
@@ -43,10 +61,34 @@ const contentAiRouter = Router();
 async function fairUsageCheck(req: Request, res: Response, next: NextFunction): Promise<void> {
   if (!req.account) { next(); return; } // per-route auth handles 401
 
-  // Project ID from the request body - used to enforce 50 actions/project/month.
+  // Resolve the caller-supplied ID against the authenticated account before
+  // using it to scope the quota. Otherwise callers could rotate invented IDs
+  // and get a fresh counter on every request.
   const projectId = typeof req.body?.projectId === "string" && req.body.projectId.trim()
     ? req.body.projectId.trim().slice(0, 200)
     : null;
+  if (!projectId) {
+    res.status(400).json({ error: "A project is required for this AI action." });
+    return;
+  }
+  if (!inAssignedScope(req, projectId)) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
+  const visibleOwners = await getVisibleUsernames(req.account);
+  const [project] = await db
+    .select({ owner: projectsTable.owner })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, projectId), isNull(projectsTable.deletedAt)))
+    .limit(1);
+  if (
+    !project ||
+    !project.owner ||
+    (visibleOwners !== null && !visibleOwners.includes(project.owner.toLowerCase()))
+  ) {
+    res.status(404).json({ error: "Project not found." });
+    return;
+  }
 
   // 1. Monthly GBP spending cap - checked first as it catches runaway cost bugs
   //    that the call-count quota alone would not stop.
@@ -1526,7 +1568,7 @@ contentAiRouter.post(
 contentAiRouter.post(
   "/content/llm-queries",
   contentAiLimiter,
-  fairUsageCheck,
+  spendLimitCheck,
   async (req: Request, res: Response): Promise<void> => {
     if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
     const body = (req.body ?? {}) as Record<string, unknown>;

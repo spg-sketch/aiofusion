@@ -26,7 +26,7 @@ import { deepStripEmDashes } from "../lib/text-sanitise";
 import { llmCheckConcurrencyGuard } from "../middleware/concurrency-guard";
 import { logAdminEvent } from "../lib/admin-events";
 import { logTokenUsage } from "../lib/token-usage";
-import { checkFairUsage, checkMonthlySpendLimit, detectAndLogSpike } from "../lib/fair-usage";
+import { checkMonthlySpendLimit } from "../lib/fair-usage";
 import {
   AUDIT_WORKER_ID,
   claimAuditRun,
@@ -1696,24 +1696,6 @@ async function handleLlmCheck(req: Request, res: Response, recoveredRun?: Recove
       });
       return;
     }
-  }
-
-  // 2. DB-backed per-account fair usage check (30-day rolling quota).
-  if (!recoveredRun) {
-    const { allowed, callCount, limit } = await checkFairUsage(req.account.username);
-    if (!allowed) {
-      const now = new Date();
-      const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
-      const secondsToMonthEnd = Math.max(1, Math.ceil((monthEnd.getTime() - now.getTime()) / 1000));
-      res.setHeader("Retry-After", secondsToMonthEnd);
-      res.status(429).json({
-        error: "Fair usage limit reached - contact us to discuss your plan.",
-        callCount,
-        limit,
-      });
-      return;
-    }
-    void detectAndLogSpike(req.account.username);
   }
 
   const { companyName, sector, sectors, keywords, icp, location, persona, projectData, targetPhrases: rawTargetPhrases, businessType: rawBusinessType, projectId: rawProjectId, force: rawForce } = req.body;

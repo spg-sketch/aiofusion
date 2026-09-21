@@ -20,6 +20,10 @@ import cookieParser from "cookie-parser";
 // Anthropic + OpenAI - mock before any route module is imported.
 // ---------------------------------------------------------------------------
 const { messagesCreate } = vi.hoisted(() => ({ messagesCreate: vi.fn() }));
+const { checkFairUsageMock, checkMonthlySpendLimitMock } = vi.hoisted(() => ({
+  checkFairUsageMock: vi.fn(() => Promise.resolve({ allowed: true, callCount: 0, limit: 50 })),
+  checkMonthlySpendLimitMock: vi.fn(() => Promise.resolve({ allowed: true, spentGbp: 0, limitGbp: 10 })),
+}));
 vi.mock("@anthropic-ai/sdk", () => ({
   default: class MockAnthropic {
     messages = { create: messagesCreate, stream: messagesCreate };
@@ -420,8 +424,8 @@ vi.mock("../lib/token-usage", () => ({
 }));
 
 vi.mock("../lib/fair-usage", () => ({
-  checkFairUsage: () => Promise.resolve({ allowed: true, used: 0, limit: 50 }),
-  checkMonthlySpendLimit: () => Promise.resolve({ allowed: true, spentGbp: 0, limitGbp: 10 }),
+  checkFairUsage: checkFairUsageMock,
+  checkMonthlySpendLimit: checkMonthlySpendLimitMock,
   detectAndLogSpike: () => Promise.resolve(),
 }));
 
@@ -522,6 +526,82 @@ beforeAll(async () => {
       baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
       resolve();
     });
+  });
+});
+
+describe("content fair usage route boundaries", () => {
+  it("blocks counted content but not LLM Check or LLM query generation at quota exhaustion", async () => {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const { sid, company } = await seedAgency(`quota-${suffix}`, `quota-${suffix}@example.test`);
+    await db
+      .update(platformCompaniesTable)
+      .set({ freeAccess: true })
+      .where(eq(platformCompaniesTable.id, company.id));
+    await db.insert(projectsTable).values({
+      id: `quota-project-${suffix}`,
+      name: "Quota boundary project",
+      owner: company.slug,
+    });
+    await db.insert(projectsTable).values({
+      id: `foreign-project-${suffix}`,
+      name: "Foreign quota project",
+      owner: "another-workspace",
+    });
+    checkFairUsageMock.mockResolvedValue({ allowed: false, callCount: 50, limit: 50 });
+    messagesCreate.mockRejectedValue(new Error("provider unavailable in boundary test"));
+    chatCompletionsCreate.mockRejectedValue(new Error("provider unavailable in boundary test"));
+
+    try {
+      const invented = await api("/api/content/optimise", {
+        sid,
+        body: { projectId: `invented-project-${suffix}`, headline: "A headline" },
+      });
+      expect(invented.status).toBe(404);
+      expect(checkFairUsageMock).not.toHaveBeenCalled();
+
+      const foreign = await api("/api/content/optimise", {
+        sid,
+        body: { projectId: `foreign-project-${suffix}`, headline: "A headline" },
+      });
+      expect(foreign.status).toBe(404);
+      expect(checkFairUsageMock).not.toHaveBeenCalled();
+
+      const counted = await api("/api/content/optimise", {
+        sid,
+        body: { projectId: `quota-project-${suffix}`, headline: "A headline" },
+      });
+      expect(counted.status).toBe(429);
+      expect(counted.json).toMatchObject({ callCount: 50, limit: 50 });
+
+      checkFairUsageMock.mockClear();
+      checkMonthlySpendLimitMock.mockResolvedValueOnce({ allowed: false, spentGbp: 10, limitGbp: 10 });
+      const spendBlockedQueries = await api("/api/content/llm-queries", {
+        sid,
+        body: { companyName: "Boundary Test Company" },
+      });
+      expect(spendBlockedQueries.status).toBe(429);
+      expect(spendBlockedQueries.json).toMatchObject({ spentGbp: 10, limitGbp: 10 });
+
+      const queries = await api("/api/content/llm-queries", {
+        sid,
+        body: { companyName: "Boundary Test Company" },
+      });
+      expect(queries.status).not.toBe(429);
+
+      const llmCheck = await api("/api/llm-check", {
+        sid,
+        body: { companyName: "Boundary Test Company", sectors: ["technology"] },
+      });
+      expect(llmCheck.status).not.toBe(429);
+      expect(checkFairUsageMock).not.toHaveBeenCalled();
+    } finally {
+      checkFairUsageMock.mockReset();
+      checkFairUsageMock.mockResolvedValue({ allowed: true, callCount: 0, limit: 50 });
+      checkMonthlySpendLimitMock.mockReset();
+      checkMonthlySpendLimitMock.mockResolvedValue({ allowed: true, spentGbp: 0, limitGbp: 10 });
+      messagesCreate.mockReset();
+      chatCompletionsCreate.mockReset();
+    }
   });
 });
 

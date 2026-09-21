@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { db, auditLocksTable, projectsTable, savedAuditsTable, tokenUsageTable, platformMembershipsTable, platformUsersTable, platformAccountsTable, platformCompaniesTable, platformMetaTable, contactSubmissionsTable } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, sql, gte } from "drizzle-orm";
-import { computeSpikeFlagsForAccounts, getThirtyDayCostByAccount, getCurrentMonthSpendByAccount, getSpendLimitsByAccount, DEFAULT_FAIR_USAGE_LIMIT, DEFAULT_MONTHLY_SPEND_LIMIT_GBP } from "../lib/fair-usage";
+import { computeSpikeFlagsForAccounts, getThirtyDayCostByAccount, getCurrentMonthSpendByAccount, getSpendLimitsByAccount, DEFAULT_FAIR_USAGE_LIMIT, DEFAULT_MONTHLY_SPEND_LIMIT_GBP, FAIR_USAGE_ENFORCEMENT_ENABLED } from "../lib/fair-usage";
 import { logger } from "../lib/logger";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { normUsername, isRestrictedMaster, masterSubrole, MASTER_OWNER_REQUIRED_MESSAGE } from "../lib/platform-auth";
@@ -955,6 +955,7 @@ adminRouter.get(
         spendLimits,
         defaultLimit: DEFAULT_FAIR_USAGE_LIMIT,
         defaultMonthlySpendLimitGbp: DEFAULT_MONTHLY_SPEND_LIMIT_GBP,
+        fairUsageEnforcementEnabled: FAIR_USAGE_ENFORCEMENT_ENABLED,
       });
     } catch (err) {
       logger.error({ err }, "admin token-usage: query failed");
