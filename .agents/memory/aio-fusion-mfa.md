@@ -46,3 +46,15 @@ establish sufficient recovery authority.
 recheck current access at proof consumption, and preserve the separate
 operator-assisted process for people lacking either proof. See the rollout
 document for publication and attended enrollment boundaries.
+
+For real staging MFA rollout work, verify the database fingerprint against the
+dedicated staging-tier connection before any write. `BETA_DATABASE_URL` may
+point to an older beta schema and is not proof that it serves
+`staging.aiofusion.ai`.
+
+**Why:** An operator recovery applied against the beta database did not affect
+the named person's staging login, leaving the legacy-authenticator screen
+active.
+
+**How to apply:** Run the guarded migration dry-run first, confirm the target
+identity and schema, then apply only when the same staging fingerprint matches.
