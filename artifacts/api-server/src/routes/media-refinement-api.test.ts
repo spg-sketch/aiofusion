@@ -111,6 +111,7 @@ beforeAll(async () => {
     { id: "phrase-story", projectId: "project-1", owner: "workspace-a", title: "Phrase story" },
     { id: "long-phrase-story", projectId: "project-1", owner: "workspace-a", title: "Long phrase story" },
     { id: "race-story", projectId: "project-1", owner: "workspace-a", title: "Race story" },
+    { id: "zero-score-story", projectId: "project-1", owner: "workspace-a", title: "Zero score story" },
     { id: "unnamed-story", projectId: "project-1", owner: "workspace-a", title: "Unnamed story" },
   ]);
   const [outlet] = await db.insert(mediaOutletsTable).values({ name: "Energy Daily", category: "Trade press", country: "UK" }).returning();
@@ -482,8 +483,19 @@ describe("media recommendation refinement API", () => {
     });
     expect(enriched.status).toBe(200);
     expect(collectJournalistCoverage).toHaveBeenCalledTimes(Math.min(5, generatedBody.items.length));
-    const enrichedBody = await enriched.json() as { items: Array<{ assessment: { evidence: unknown[] } }> };
+    const enrichedBody = await enriched.json() as { items: Array<{ rank: number; score: number; contact: { id: number }; assessment: { evidence: unknown[] } }> };
     expect(enrichedBody.items[0].assessment.evidence).toHaveLength(1);
+    expect(enrichedBody.items.map((item) => item.score)).toEqual(
+      [...enrichedBody.items.map((item) => item.score)].sort((a, b) => b - a),
+    );
+    expect(enrichedBody.items.map((item) => item.rank)).toEqual(
+      enrichedBody.items.map((_, index) => index + 1),
+    );
+    const storedItems = await db.select().from(mediaRecommendationItemsTable)
+      .where(eq(mediaRecommendationItemsTable.recommendationSetId, generatedBody.recommendationSet.id));
+    expect([...storedItems].sort((a, b) => a.rank - b.rank).map((item) => item.score)).toEqual(
+      [...storedItems].sort((a, b) => Number(b.score) - Number(a.score) || a.contactId - b.contactId).map((item) => item.score),
+    );
     expect(await db.select().from(tokenUsageTable).where(eq(tokenUsageTable.operation, "content-media-recommendations-enrich"))).toHaveLength(1);
     const saved = await db.select().from(mediaRecommendationSetsTable).where(eq(mediaRecommendationSetsTable.id, generatedBody.recommendationSet.id));
     expect((saved[0].criteria as { evidence: Record<string, unknown[]> }).evidence).toBeDefined();
@@ -522,6 +534,30 @@ describe("media recommendation refinement API", () => {
     release();
     const statuses = await Promise.all([first.then((response) => response.status), second.then((response) => response.status)]);
     expect(statuses.sort()).toEqual([200, 409]);
+  });
+
+  it("preserves an explicit zero base score when feedback reranks the set", async () => {
+    const generated = await request("/store/media-db/recommendations", "workspace-a", {
+      method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "zero-score-story", terms: ["energy"] }),
+    });
+    const body = await generated.json() as {
+      recommendationSet: { id: number; criteria: Record<string, unknown> };
+      items: Array<{ contact: { id: number } }>;
+    };
+    const contactId = body.items[0].contact.id;
+    await db.update(mediaRecommendationSetsTable)
+      .set({ criteria: { ...body.recommendationSet.criteria, baseScores: { [String(contactId)]: 0 } } })
+      .where(eq(mediaRecommendationSetsTable.id, body.recommendationSet.id));
+
+    const feedback = await request("/store/media-db/recommendations/feedback", "workspace-a", {
+      method: "PUT",
+      body: JSON.stringify({ projectId: "project-1", storyKey: "zero-score-story", contactId, signal: "less" }),
+    });
+    expect(feedback.status).toBe(200);
+
+    const loaded = await request("/store/media-db/recommendations?projectId=project-1&storyKey=zero-score-story", "workspace-a");
+    const loadedBody = await loaded.json() as { items: Array<{ score: number; contact: { id: number } }> };
+    expect(loadedBody.items.find((item) => item.contact.id === contactId)?.score).toBe(0);
   });
 
   it("tracks the complete outreach journey, preserves snapshots and updates duplicate placements safely", async () => {

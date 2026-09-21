@@ -31,6 +31,7 @@ const unauthorizedBody = { error: "unauthorized" };
 
 let activeWorkspace = "myagency";
 let visibleProjects: unknown[] = [];
+let projectListFailure = false;
 
 function agencyMeResponse() {
   return makeResponse({
@@ -87,6 +88,7 @@ beforeEach(() => {
   includeNewClient = false;
   activeWorkspace = "myagency";
   visibleProjects = [];
+  projectListFailure = false;
 
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     const urlStr = String(url);
@@ -96,6 +98,7 @@ beforeEach(() => {
     // Empty-but-successful project pull so resyncProjects does not take the
     // "unauthorized" branch and re-bootstrap the session.
     if (urlStr.includes("/api/store/projects") && method === "GET") {
+      if (projectListFailure) return makeResponse({ error: "temporarily unavailable" }, 503);
       return makeResponse({ projects: visibleProjects, deletedIds: [] });
     }
     return makeResponse(unauthorizedBody, 401);
@@ -137,6 +140,7 @@ describe("project hub excludes managed clients without projects", () => {
       return originalFetch(url, init);
     }));
     const { default: App } = await import("./App");
+    window.history.replaceState({}, "", "/project-hub");
     render(<App />);
     const requestsTo = (path: string) => vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes(path));
     await waitFor(() => {
@@ -144,6 +148,7 @@ describe("project hub excludes managed clients without projects", () => {
       expect(requestsTo("/api/store/projects")).toHaveLength(1);
       expect(requestsTo("/api/platform/accounts")).toHaveLength(1);
     });
+    expect(screen.queryByText(/No projects yet/i)).not.toBeInTheDocument();
     // A single app poll, not the previous overlapping 90s + 5m poll loops.
     await waitFor(() => {
       expect(requestsTo("/api/support/tickets?mine=true&hasUpdate=true")).toHaveLength(1);
@@ -159,6 +164,42 @@ describe("project hub excludes managed clients without projects", () => {
       releaseProjects();
       releaseContent();
     });
+  });
+
+  it("keeps confirmed projects visible when a background refresh fails", async () => {
+    visibleProjects = [{
+      id: "stable-project",
+      name: "Stable Project",
+      owner: "myagency",
+      logo: null,
+      updatedAt: null,
+      data: { id: "stable-project", name: "Stable Project", owner: "myagency" },
+    }];
+    window.history.replaceState({}, "", "/project-hub");
+    const { default: App } = await import("./App");
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: /Stable Project/i })).toBeInTheDocument();
+    projectListFailure = true;
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(await screen.findByText(/current project has been kept/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Stable Project/i })).toBeInTheDocument();
+    expect(screen.queryByText(/No projects yet/i)).not.toBeInTheDocument();
+  });
+
+  it("shows a retry-only unknown state when the first project load fails", async () => {
+    projectListFailure = true;
+    window.history.replaceState({}, "", "/project-hub");
+    const { default: App } = await import("./App");
+    render(<App />);
+
+    expect(await screen.findByText("Projects unavailable")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Retry project load/i })).toBeInTheDocument();
+    expect(screen.queryByText(/No projects yet/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Create your first project/i })).not.toBeInTheDocument();
   });
 
   it("refreshes the account cache without adding a managed-client placeholder card", async () => {

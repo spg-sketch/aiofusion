@@ -52,6 +52,9 @@ export default function ClientSelectorPage({
   session,
   onGenerateFromUrl,
   workspaceSwitcher,
+  projectSyncStatus = "ready",
+  syncError,
+  onRetrySync,
 }: {
   projects: Client[];
   onSelectClient: (client: Client) => void;
@@ -71,6 +74,9 @@ export default function ClientSelectorPage({
   onGenerateFromUrl?: () => void;
   /** Rendered inside the header right section - workspace switcher when the user belongs to >1 workspace. */
   workspaceSwitcher?: React.ReactNode;
+  projectSyncStatus?: "loading" | "ready" | "error";
+  syncError?: string | null;
+  onRetrySync?: () => void;
 }) {
   useContentStore();
   const displayClients = useMemo(
@@ -121,6 +127,7 @@ export default function ClientSelectorPage({
   const isDirectClient = isClient && !isManagedClient;
   const managedClientCanCreate =
     !isManagedClient || displayClients.length === 0;
+  const projectListReady = projectSyncStatus === "ready";
   // The capacity endpoint is available to project-capable owner, admin and
   // content members without exposing subscription or payment details.
   const clientCanReadAllowance = session?.membershipRole == null
@@ -230,13 +237,17 @@ export default function ClientSelectorPage({
             <span style={{ color: accent }}>Project Hub</span>
           </h1>
           <p className="aio-type-body mt-3 mb-8 max-w-4xl lg:whitespace-nowrap" style={{ color: ink }}>
-            {displayClients.length === 0
+            {displayClients.length === 0 && projectSyncStatus === "loading"
+              ? "Checking the projects available in this workspace."
+              : displayClients.length === 0 && projectSyncStatus === "error"
+                ? "We could not confirm this workspace's projects. Retry before creating or changing projects."
+                : displayClients.length === 0
               ? "Set up your first project to start optimising your PR and marketing output for AI discoverability."
               : "Select a project to manage AI optimisation, ongoing PR and marketing output."}
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
-            {managedClientCanCreate && createProjectAction}
+            {managedClientCanCreate && (displayClients.length > 0 || projectListReady) && createProjectAction}
             <button
               onClick={onArchivedProjects}
               className="aio-button aio-button--outline group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] border border-[#e2e8f0]"
@@ -270,7 +281,48 @@ export default function ClientSelectorPage({
           </div>
         </div>
 
-        {displayClients.length === 0 ? (
+        {syncError && (
+          <div
+            role="alert"
+            className="mb-5 flex flex-col gap-3 rounded-xl border px-4 py-3 text-left sm:flex-row sm:items-center sm:justify-between"
+            style={{ background: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.3)", color: "white" }}
+          >
+            <span className="aio-type-supporting">{syncError}</span>
+            {onRetrySync && (
+              <button type="button" onClick={onRetrySync} className="shrink-0 rounded-full border border-white/40 px-4 py-2 text-xs font-semibold uppercase tracking-wider hover:bg-white/10">
+                Retry
+              </button>
+            )}
+          </div>
+        )}
+
+        {displayClients.length === 0 && projectSyncStatus === "loading" ? (
+          <div
+            aria-live="polite"
+            className="rounded-2xl border-2 border-dashed p-10 text-center sm:p-14"
+            style={{ background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.25)" }}
+          >
+            <h2 className="aio-type-card-title mb-2 text-white">Loading projects...</h2>
+            <p className="aio-type-body mx-auto max-w-md" style={{ color: "rgba(255,255,255,0.7)" }}>
+              Checking the projects available in this workspace.
+            </p>
+          </div>
+        ) : displayClients.length === 0 && projectSyncStatus === "error" ? (
+          <div
+            className="rounded-2xl border-2 border-dashed p-10 text-center sm:p-14"
+            style={{ background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.25)" }}
+          >
+            <h2 className="aio-type-card-title mb-2 text-white">Projects unavailable</h2>
+            <p className="aio-type-body mx-auto mb-6 max-w-md" style={{ color: "rgba(255,255,255,0.7)" }}>
+              The workspace project list could not be confirmed. No projects have been removed.
+            </p>
+            {onRetrySync && (
+              <button type="button" onClick={onRetrySync} className="rounded-full border border-white/40 px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-white hover:bg-white/10">
+                Retry project load
+              </button>
+            )}
+          </div>
+        ) : displayClients.length === 0 ? (
           <div
             className="rounded-2xl border-2 border-dashed p-10 sm:p-14 text-center"
             style={{ background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.25)" }}

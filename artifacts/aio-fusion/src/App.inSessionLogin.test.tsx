@@ -237,7 +237,9 @@ describe("App in-session login - authoritative session and profile handoff", () 
 
     // Phase 2: session is now set. Mock PlatformHomePage renders "Project Hub".
     const projectHubBtn = await screen.findByRole("button", { name: /Project Hub/i }, { timeout: 8000 });
-    expect(meRequests).toBe(3);
+    // The authoritative handoff result is reused by the project sync, so login
+    // needs only the signed-out bootstrap and one post-login confirmation.
+    expect(meRequests).toBe(2);
     await act(async () => {
       fireEvent.click(projectHubBtn);
       await new Promise((r) => setTimeout(r, 50));
@@ -299,7 +301,9 @@ describe("App in-session login - authoritative session and profile handoff", () 
 
     fireEvent.click(await screen.findByText("Project Hub"));
     expect(await screen.findByRole("button", { name: /Create your first project/i })).toBeInTheDocument();
-    expect(meCalls).toBe(3);
+    // Project loading reuses the confirmed /me authority instead of issuing a
+    // redundant third identity request during the same handoff.
+    expect(meCalls).toBe(2);
     expect(allowanceCalls).toBeGreaterThan(0);
   });
 

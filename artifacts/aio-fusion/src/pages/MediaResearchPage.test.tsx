@@ -73,7 +73,7 @@ vi.mock("../lib/contentAi", () => ({
   escapeHtml: (value: string) => value,
 }));
 
-import { MediaResearchPage, resolveArticleResearchContext, resolveArticleTargetPhrases, SHORTLIST_EXPORT_COLUMNS, sanitizeSpreadsheetCell as sanitizeResearchSpreadsheetCell, shortlistExportRow } from "./MediaResearchPage";
+import { MediaResearchPage, orderRecommendations, resolveArticleResearchContext, resolveArticleTargetPhrases, SHORTLIST_EXPORT_COLUMNS, sanitizeSpreadsheetCell as sanitizeResearchSpreadsheetCell, shortlistExportRow } from "./MediaResearchPage";
 import { RecommendationCard } from "./JournalistComponents";
 import { exactTargetPhraseId } from "../lib/exactTargetPhrases";
 import { clearAiRuns } from "../lib/aiRunLifecycle";
@@ -574,6 +574,21 @@ describe("MediaResearchPage live discovery", () => {
     );
     expect(screen.getByText("Shared Match Score")).toBeTruthy();
     expect(screen.getByTestId("shared-score-note").textContent).toMatch(/34 contacts.*order is not a quality difference/i);
+  });
+
+  it("orders every recommendation response by strongest match with stable ties", () => {
+    const recommendation = (id: number, score: number, rank: number) => ({
+      rank,
+      score,
+      reasons: [],
+      phraseAttributions: [],
+      contact: { id },
+    }) as never;
+    expect(orderRecommendations([
+      recommendation(30, 20, 3),
+      recommendation(20, 90, 2),
+      recommendation(10, 90, 1),
+    ]).map((item) => item.contact.id)).toEqual([10, 20, 30]);
   });
 
   it.each(["network", "json"] as const)("shows a saved shortlist error when the decision load returns %s failure", async (kind) => {

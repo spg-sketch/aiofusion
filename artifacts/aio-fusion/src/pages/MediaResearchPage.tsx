@@ -214,6 +214,14 @@ function dedupeRecommendations(rawItems: unknown[]): Recommendation[] {
   });
 }
 
+export function orderRecommendations(items: Recommendation[]): Recommendation[] {
+  return [...items].sort((a, b) =>
+    b.score - a.score
+    || a.rank - b.rank
+    || a.contact.id - b.contact.id
+  );
+}
+
 export function sanitizeSpreadsheetCell(value: unknown): string {
   const text = String(value ?? "");
   return /^[\t\r\n ]*[=+\-@]/.test(text) ? `'${text}` : text;
@@ -486,8 +494,7 @@ function MediaResearchPage() {
       setRecommendationSetId(typeof set?.id === "number" || typeof set?.id === "string" ? set.id : null);
       setRecommendationHasRun(Boolean(set?.id));
       setEvaluation(data.evaluation && typeof data.evaluation === "object" ? data.evaluation as RecommendationEvaluation : null);
-      const nextItems = Array.isArray(data.items) ? dedupeRecommendations(data.items) : [];
-      nextItems.sort((a, b) => b.score - a.score || a.rank - b.rank || a.contact.id - b.contact.id);
+      const nextItems = orderRecommendations(Array.isArray(data.items) ? dedupeRecommendations(data.items) : []);
       setItems(nextItems);
       setTotalMatches(typeof data.totalMatches === "number" ? data.totalMatches : nextItems.length);
     } catch (reason) {
@@ -521,7 +528,7 @@ function MediaResearchPage() {
         : null;
       setRecommendationSetId(typeof set?.id === "number" || typeof set?.id === "string" ? set.id : recommendationSetId);
       setEvaluation(data.evaluation && typeof data.evaluation === "object" ? data.evaluation as RecommendationEvaluation : null);
-      const nextItems = Array.isArray(data.items) ? dedupeRecommendations(data.items) : [];
+      const nextItems = orderRecommendations(Array.isArray(data.items) ? dedupeRecommendations(data.items) : []);
       setItems(nextItems);
       const warnings = nextItems.flatMap((item) => item.assessment?.warnings || []);
       setEnrichmentWarning(Array.from(new Set(warnings)).join(" "));
@@ -594,8 +601,7 @@ function MediaResearchPage() {
       setRecommendationSetId(typeof set?.id === "number" || typeof set?.id === "string" ? set.id : null);
       setRecommendationHasRun(true);
       setEvaluation(data.evaluation && typeof data.evaluation === "object" ? data.evaluation as RecommendationEvaluation : null);
-      const nextItems = Array.isArray(data.items) ? dedupeRecommendations(data.items) : [];
-      nextItems.sort((a, b) => b.score - a.score || a.rank - b.rank || a.contact.id - b.contact.id);
+      const nextItems = orderRecommendations(Array.isArray(data.items) ? dedupeRecommendations(data.items) : []);
       setItems(nextItems);
       setTotalMatches(typeof data.totalMatches === "number" ? data.totalMatches : nextItems.length);
       // The POST response is the authoritative newest set. Refetch decisions

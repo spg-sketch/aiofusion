@@ -568,6 +568,8 @@ function App() {
   // assign the project to that client account.
   const [showGenerateFromUrl, setShowGenerateFromUrl] = useState(false);
   const [storedProjects, setStoredProjects] = useState<Client[]>([]);
+  const [projectSyncStatus, setProjectSyncStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [projectSyncError, setProjectSyncError] = useState<string | null>(null);
 
   // Warm only the small set of destinations that are likely from the current
   // context. Each chunk is queued separately during idle time, preserving route
@@ -640,7 +642,7 @@ function App() {
   } = {}) => {
     // Background focus/visibility timers must never probe project/account
     // endpoints while the cookie authority check is unresolved or signed out.
-    if (authLoadingRef.current || !confirmedSessionRef.current) return;
+    if ((authLoadingRef.current && !options.authority) || !confirmedSessionRef.current) return;
     // Refresh the cached accounts list in the same breath so the managed
     // Clients section stays current across devices. Runs in parallel with the
     // project sync and keeps the existing cache on any failure.
@@ -673,6 +675,11 @@ function App() {
         refreshAuthoritativeSession.current();
         return;
       }
+      if (result === null) {
+        setProjectSyncStatus("error");
+        setProjectSyncError("Projects could not be refreshed. Your current project has been kept. Try again.");
+        return;
+      }
       if (result) {
         // Claim any ownerless project the sync just pulled down (e.g. a legacy
         // NULL-owned row) before showing the list, so it is attributed to the
@@ -682,6 +689,8 @@ function App() {
         const merged = loadStoredProjects() as unknown as Client[];
         setStoredProjects(merged);
         setClientLogos(result.logos);
+        setProjectSyncStatus("ready");
+        setProjectSyncError(null);
         // Update the module-level known-IDs cache so the integrity check inside
         // setActiveProjectId always compares against the current project list,
         // then run a proactive check in case the active ID drifted since the
@@ -753,14 +762,20 @@ function App() {
       if (ap && s && (s.role === "client" || s.role === "agency")) {
         setAccountProfile(ap);
       }
-      setAuthLoading(false);
-      authLoadingRef.current = false;
-      if (!s) return;
+      if (!s) {
+        setAuthLoading(false);
+        authLoadingRef.current = false;
+        return;
+      }
       await migrateLocalStorageContentToServer({ signal });
       if (generation !== authRequestGeneration.current) return;
-      // Project discovery does not depend on archive/planner/scoring reads.
-      // Keep legacy migration ordered but remove the subsequent read waterfall.
+      // Do not expose the project hub's empty state between authentication and
+      // the authoritative project read. That transient gap previously looked
+      // exactly like every project had been deleted.
       await Promise.all([initContentStore({ signal }), resyncProjects({ authority: bootstrap })]);
+      if (signal.aborted || generation !== authRequestGeneration.current) return;
+      setAuthLoading(false);
+      authLoadingRef.current = false;
     })();
   }, [resyncProjects]);
 
@@ -1057,6 +1072,8 @@ function App() {
     confirmedSessionRef.current = null;
     setSessionState(null);
     setStoredProjects([]);
+    setProjectSyncStatus("loading");
+    setProjectSyncError(null);
     setClientLogos({});
     setKnownProjectIds([]);
     setActiveProjectId(null);
@@ -1066,6 +1083,7 @@ function App() {
     setHasPassword(undefined);
     setAccountProfile(null);
     void (async () => {
+      const bootstrap = await bootstrapAuth({ signal });
       const {
         session: confirmedSession,
         needsSetup: eligible,
@@ -1074,7 +1092,7 @@ function App() {
         accountProfile: confirmedProfile,
         impersonating,
         error,
-      } = await bootstrapAuth({ signal });
+      } = bootstrap;
       if (signal.aborted || generation !== authRequestGeneration.current) return;
       if (confirmedSession) setCachedSession(confirmedSession);
       else clearCachedSession();
@@ -1088,10 +1106,15 @@ function App() {
       if (confirmedProfile && confirmedSession && (confirmedSession.role === "client" || confirmedSession.role === "agency")) {
         setAccountProfile(confirmedProfile);
       }
+      if (!confirmedSession) {
+        setAuthLoading(false);
+        authLoadingRef.current = false;
+        return;
+      }
+      await Promise.all([initContentStore({ signal }), resyncProjects({ authority: bootstrap })]);
+      if (signal.aborted || generation !== authRequestGeneration.current) return;
       setAuthLoading(false);
       authLoadingRef.current = false;
-      if (!confirmedSession) return;
-      await Promise.all([initContentStore({ signal }), resyncProjects()]);
     })();
   }, [resyncProjects]);
   refreshAuthoritativeSession.current = () => beginAuthoritativeHandoff(null);
@@ -2100,6 +2123,9 @@ function App() {
        {inviteBannerNode}
       <ClientSelectorPage
         projects={visibleProjects}
+        projectSyncStatus={projectSyncStatus}
+        syncError={projectSyncError}
+        onRetrySync={() => { void resyncProjects(); }}
         workspaceSwitcher={(workspaces.length > 1 || agencyImpersonatedBy) ? (
           <div className="flex items-center gap-3">
             {workspaces.length > 1 && <WorkspaceSwitcher workspaces={workspaces} requestAction={requestDeparture} />}

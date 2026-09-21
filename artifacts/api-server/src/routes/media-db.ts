@@ -2847,54 +2847,84 @@ export function refinementAdjustment(candidate: RefinementContact, example: Refi
   return { points: signals.length * 8, signals };
 }
 
-async function rerankRecommendationSet(accountId: string, projectId: string, storyKey: string) {
-  const [set] = await db.select().from(mediaRecommendationSetsTable)
-    .where(and(eq(mediaRecommendationSetsTable.accountId, accountId), eq(mediaRecommendationSetsTable.projectId, projectId), eq(mediaRecommendationSetsTable.storyKey, storyKey)))
-    .orderBy(desc(mediaRecommendationSetsTable.id)).limit(1);
-  if (!set) return [];
-  const baseScores = (set.criteria && typeof set.criteria === "object" && !Array.isArray(set.criteria)
-    ? (set.criteria as { baseScores?: Record<string, number> }).baseScores
-    : undefined) ?? {};
-  const [storedItems, feedback] = await Promise.all([
-    db.select({ item: mediaRecommendationItemsTable, contact: mediaContactsTable, outletCategory: mediaOutletsTable.category })
-      .from(mediaRecommendationItemsTable)
-      .innerJoin(mediaContactsTable, eq(mediaRecommendationItemsTable.contactId, mediaContactsTable.id))
-      .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
-      .where(eq(mediaRecommendationItemsTable.recommendationSetId, set.id)),
-    db.select().from(mediaRecommendationFeedbackTable).where(and(
-      eq(mediaRecommendationFeedbackTable.accountId, accountId),
-      eq(mediaRecommendationFeedbackTable.projectId, projectId),
-      eq(mediaRecommendationFeedbackTable.storyKey, storyKey),
-    )),
-  ]);
-  const contacts = new Map(storedItems.map(({ contact, outletCategory }) => [contact.id, { ...contact, outletCategory }]));
-  const ranked = storedItems.map(({ item, contact, outletCategory }) => {
-    let adjustment = 0;
-    const refinementReasons: string[] = [];
-    for (const entry of feedback) {
-      const example = contacts.get(entry.contactId);
-      if (!example) continue;
-      if (entry.contactId === contact.id) {
-        adjustment += entry.signal === "more" ? 18 : -18;
-        refinementReasons.push(entry.signal === "more" ? "Marked More like this" : "Marked Less like this");
-        continue;
+type MediaDbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function rerankRecommendationSetLocked(
+  tx: MediaDbTransaction,
+  accountId: string,
+  projectId: string,
+  storyKey: string,
+  recommendationSetId?: number,
+) {
+    const setConditions = [
+      eq(mediaRecommendationSetsTable.accountId, accountId),
+      eq(mediaRecommendationSetsTable.projectId, projectId),
+      eq(mediaRecommendationSetsTable.storyKey, storyKey),
+    ];
+    if (recommendationSetId !== undefined) setConditions.push(eq(mediaRecommendationSetsTable.id, recommendationSetId));
+    const [set] = await tx.select().from(mediaRecommendationSetsTable)
+      .where(and(...setConditions))
+      .orderBy(desc(mediaRecommendationSetsTable.id)).limit(1);
+    if (!set) return [];
+    const baseScores = (set.criteria && typeof set.criteria === "object" && !Array.isArray(set.criteria)
+      ? (set.criteria as { baseScores?: Record<string, number> }).baseScores
+      : undefined) ?? {};
+    const [storedItems, feedback] = await Promise.all([
+      tx.select({ item: mediaRecommendationItemsTable, contact: mediaContactsTable, outletCategory: mediaOutletsTable.category })
+        .from(mediaRecommendationItemsTable)
+        .innerJoin(mediaContactsTable, and(
+          eq(mediaRecommendationItemsTable.contactId, mediaContactsTable.id),
+          isNull(mediaContactsTable.deletedAt),
+        ))
+        .leftJoin(mediaOutletsTable, and(
+          eq(mediaContactsTable.outletId, mediaOutletsTable.id),
+          isNull(mediaOutletsTable.deletedAt),
+        ))
+        .where(eq(mediaRecommendationItemsTable.recommendationSetId, set.id)),
+      tx.select().from(mediaRecommendationFeedbackTable).where(and(
+        eq(mediaRecommendationFeedbackTable.accountId, accountId),
+        eq(mediaRecommendationFeedbackTable.projectId, projectId),
+        eq(mediaRecommendationFeedbackTable.storyKey, storyKey),
+      )),
+    ]);
+    const contacts = new Map(storedItems.map(({ contact, outletCategory }) => [contact.id, { ...contact, outletCategory }]));
+    const ranked = storedItems.map(({ item, contact, outletCategory }) => {
+      let adjustment = 0;
+      const refinementReasons: string[] = [];
+      for (const entry of feedback) {
+        const example = contacts.get(entry.contactId);
+        if (!example) continue;
+        if (entry.contactId === contact.id) {
+          adjustment += entry.signal === "more" ? 18 : -18;
+          refinementReasons.push(entry.signal === "more" ? "Marked More like this" : "Marked Less like this");
+          continue;
+        }
+        const similarity = refinementAdjustment({ ...contact, outletCategory }, example);
+        if (!similarity.points) continue;
+        adjustment += entry.signal === "more" ? similarity.points : -similarity.points;
+        refinementReasons.push(`${entry.signal === "more" ? "Favoured" : "Reduced"} by feedback: ${similarity.signals.join(", ")}`);
       }
-      const similarity = refinementAdjustment({ ...contact, outletCategory }, example);
-      if (!similarity.points) continue;
-      adjustment += entry.signal === "more" ? similarity.points : -similarity.points;
-      refinementReasons.push(`${entry.signal === "more" ? "Favoured" : "Reduced"} by feedback: ${similarity.signals.join(", ")}`);
-    }
-    const baseScore = Number(baseScores[String(contact.id)]) || item.score;
-    return {
-      item,
-      score: Math.max(0, Math.min(100, baseScore + adjustment)),
-      reasons: [...item.reasons.filter((reason) => !reason.includes(" by feedback") && !reason.startsWith("Marked ")), ...refinementReasons],
-    };
-  }).sort((a, b) => b.score - a.score || a.item.contactId - b.item.contactId);
-  await Promise.all(ranked.map((entry, index) => db.update(mediaRecommendationItemsTable)
-    .set({ score: entry.score, reasons: entry.reasons, rank: index + 1 })
-    .where(eq(mediaRecommendationItemsTable.id, entry.item.id))));
-  return ranked;
+      const storedBaseScore = Number(baseScores[String(contact.id)]);
+      const baseScore = Object.prototype.hasOwnProperty.call(baseScores, String(contact.id)) && Number.isFinite(storedBaseScore)
+        ? storedBaseScore
+        : item.score;
+      return {
+        item,
+        score: Math.max(0, Math.min(100, baseScore + adjustment)),
+        reasons: [...item.reasons.filter((reason) => !reason.includes(" by feedback") && !reason.startsWith("Marked ")), ...refinementReasons],
+      };
+    }).sort((a, b) => b.score - a.score || a.item.contactId - b.item.contactId);
+    await Promise.all(ranked.map((entry, index) => tx.update(mediaRecommendationItemsTable)
+      .set({ score: entry.score, reasons: entry.reasons, rank: index + 1 })
+      .where(eq(mediaRecommendationItemsTable.id, entry.item.id))));
+    return ranked;
+}
+
+async function rerankRecommendationSet(accountId: string, projectId: string, storyKey: string) {
+  return db.transaction(async (tx) => {
+    await acquirePrivacyIdentityLock(tx, "recommendations");
+    return rerankRecommendationSetLocked(tx, accountId, projectId, storyKey);
+  });
 }
 
 router.get("/store/media-db/recommendations/brief", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
@@ -3031,30 +3061,117 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
     // Return a focused, immediately useful set. The client reveals five at a
     // time, with later groups already loaded while the first are reviewed.
     const ranked = rankedCandidates.slice(0, 25);
-    const assessments = Object.fromEntries(contacts.map((contact) => {
-      const item = ranked.find((entry) => entry.contact.id === contact.id);
-      if (item) return [String(contact.id), item.assessment];
-      const outlet = contact.outletId ? outletById.get(contact.outletId) : undefined;
-      return [String(contact.id), assessEditorialFit({ contact, outlet, brief, terms, targetPhrases, evidence: priorEvidence[String(contact.id)] ?? [], departed: departed.has(contact.id), doNotContact: restrictions.has(contact.id) })];
-    }));
-    const set = await db.transaction(async (tx) => {
+    const committed = await db.transaction(async (tx) => {
       await acquirePrivacyIdentityLock(tx, "recommendations");
-      for (const item of ranked) {
-        const [current] = await tx.select().from(mediaContactsTable).where(and(eq(mediaContactsTable.id, item.contact.id), isNull(mediaContactsTable.deletedAt))).limit(1);
-        const outlet = current?.outletId ? (await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, current.outletId)).limit(1))[0]?.name : "";
-        if (!current || await isSuppressedWithDb(tx, { ...current, outlet, accountId })) throw new Error("SUPPRESSED_RECOMMENDATION");
+      const requestedContactIds = contacts.map((contact) => contact.id);
+      const currentContacts = requestedContactIds.length
+        ? await tx.select().from(mediaContactsTable).where(and(
+            inArray(mediaContactsTable.id, requestedContactIds),
+            isNull(mediaContactsTable.deletedAt),
+          ))
+        : [];
+      if (currentContacts.length !== requestedContactIds.length) throw new Error("STALE_RECOMMENDATION");
+      const currentOutletIds = [...new Set(currentContacts.flatMap((contact) => contact.outletId ? [contact.outletId] : []))];
+      const currentOutlets = currentOutletIds.length
+        ? await tx.select().from(mediaOutletsTable).where(and(
+            inArray(mediaOutletsTable.id, currentOutletIds),
+            isNull(mediaOutletsTable.deletedAt),
+          ))
+        : [];
+      const currentOutletById = new Map(currentOutlets.map((outlet) => [outlet.id, outlet]));
+      if (currentContacts.some((contact) => contact.outletId && !currentOutletById.has(contact.outletId))) {
+        throw new Error("STALE_RECOMMENDATION");
       }
+      const currentRankedCandidates = currentContacts.map((contact) => {
+        const baseRecommendation = scoreMediaRecommendation(contact, terms);
+        const phraseMatches = phraseMatchSignals(contact, targetPhrases);
+        const reasons = [
+          ...phraseMatches.exact.map((phrase) => `Exact target phrase appears in coverage profile: “${phrase.text}”`),
+          ...phraseMatches.topic.map((phrase) => `Recorded topic/keyword overlap for target phrase: “${phrase.text}”`),
+          ...baseRecommendation.reasons,
+        ];
+        const outlet = contact.outletId ? currentOutletById.get(contact.outletId) : undefined;
+        const assessment = assessEditorialFit({
+          contact,
+          outlet,
+          brief,
+          terms,
+          targetPhrases,
+          evidence: priorEvidence[String(contact.id)] ?? [],
+          departed: departed.has(contact.id),
+          doNotContact: restrictions.has(contact.id),
+        });
+        const identityAdjusted = reduceScoreForMissingContactName(
+          Math.max(Number(assessment.fitScore ?? 0), phraseMatches.exact.length * 15 + phraseMatches.topic.length * 5),
+          contact,
+        );
+        return {
+          contact: {
+            ...contact,
+            outletName: outlet?.name ?? null,
+            outletCategory: outlet?.category ?? null,
+            outletWebsite: outlet?.website ?? null,
+            outletCountry: outlet?.country ?? null,
+            outletReachBand: outlet?.reachBand ?? null,
+          },
+          score: identityAdjusted.score,
+          reasons: identityAdjusted.reason ? [...reasons, identityAdjusted.reason] : reasons,
+          assessment,
+          phraseAttributions: buildPhraseAttributions({
+            role: contact.role,
+            beats: contact.beats,
+            sectors: contact.sectors,
+            publicationAuthority: contact.publicationAuthority,
+            publicationReach: outlet?.reachBand || contact.publicationReach,
+            outletCategory: outlet?.category,
+          }, targetPhrases),
+        };
+      }).filter((item) => item.score > 0 && item.assessment.readiness.status !== "blocked")
+        .sort((a, b) => b.score - a.score || a.contact.id - b.contact.id);
+      const currentTotalMatches = currentRankedCandidates.length;
+      const currentRanked = currentRankedCandidates.slice(0, 25);
+      for (const item of currentRanked) {
+        if (await isSuppressedWithDb(tx, {
+          ...item.contact,
+          outlet: item.contact.outletName ?? "",
+          accountId,
+        })) throw new Error("SUPPRESSED_RECOMMENDATION");
+      }
+      const currentAssessments = Object.fromEntries(
+        currentRanked.map((item) => [String(item.contact.id), item.assessment]),
+      );
       const [created] = await tx.insert(mediaRecommendationSetsTable).values({
         accountId,
         projectId,
         storyKey,
-        criteria: { terms, targetPhrases, brief, assessments, evidence: priorEvidence, warnings: priorWarnings, rankingVersion: "editorial-v1", totalMatches, baseScores: Object.fromEntries(ranked.map((item) => [String(item.contact.id), item.score])) },
+        criteria: {
+          terms,
+          targetPhrases,
+          brief,
+          assessments: currentAssessments,
+          evidence: priorEvidence,
+          warnings: priorWarnings,
+          rankingVersion: "editorial-v1",
+          totalMatches: currentTotalMatches,
+          baseScores: Object.fromEntries(currentRanked.map((item) => [String(item.contact.id), item.score])),
+        },
       }).returning();
-      if (ranked.length) await tx.insert(mediaRecommendationItemsTable).values(ranked.map((item, index) => ({ recommendationSetId: created.id, contactId: item.contact.id, score: item.score, reasons: item.reasons, phraseAttributions: item.phraseAttributions, rank: index + 1 })));
-      return created;
+      if (currentRanked.length) {
+        await tx.insert(mediaRecommendationItemsTable).values(currentRanked.map((item, index) => ({
+          recommendationSetId: created.id,
+          contactId: item.contact.id,
+          score: item.score,
+          reasons: item.reasons,
+          phraseAttributions: item.phraseAttributions,
+          rank: index + 1,
+        })));
+      }
+      const refined = await rerankRecommendationSetLocked(tx, accountId, projectId, storyKey, created.id);
+      return { created, refined, currentRanked, currentTotalMatches };
     });
-    const refined = await rerankRecommendationSet(accountId, projectId, storyKey);
-    const contactById = new Map(ranked.map((item) => [item.contact.id, item.contact]));
+    const set = committed.created;
+    const refined = committed.refined;
+    const contactById = new Map(committed.currentRanked.map((item) => [item.contact.id, item.contact]));
     res.json({
       ok: true,
       recommendationSet: set,
@@ -3067,11 +3184,12 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
          assessment: (set.criteria as RecommendationCriteria).assessments?.[String(entry.item.contactId)] ?? null,
       })),
        brief,
-       totalMatches,
+        totalMatches: committed.currentTotalMatches,
        evaluation: await evaluationSummary(accountId, projectId, storyKey, contacts.length, ranked.length),
     });
   } catch (error) {
     if (error instanceof Error && error.message === "SUPPRESSED_RECOMMENDATION") { res.status(409).json({ error: "One or more contacts are unavailable for processing." }); return; }
+    if (error instanceof Error && error.message === "STALE_RECOMMENDATION") { res.status(409).json({ error: "Media contact data changed while recommendations were being prepared. Try again." }); return; }
     req.log.error({ err: error }, "media recommendations failed"); res.status(500).json({ error: "Failed to create recommendations" });
   }
 });
@@ -3628,22 +3746,65 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
       res.status(409).json({ error: "Recommendations changed while enrichment was running. Reload and try again." });
       return;
     }
-    const nextCriteria: RecommendationCriteria = { ...criteria, brief, assessments, evidence, warnings, rankingVersion: "editorial-v1" };
+    const nextBaseScores = {
+      ...(criteria.baseScores ?? {}),
+      ...Object.fromEntries(enriched.map((row) => [String(row.contact.id), row.score])),
+    };
+    const nextCriteria: RecommendationCriteria = {
+      ...criteria,
+      brief,
+      assessments,
+      evidence,
+      warnings,
+      baseScores: nextBaseScores,
+      rankingVersion: "editorial-v1",
+    };
     const committed = await db.transaction(async (tx) => {
       await acquirePrivacyIdentityLock(tx, "recommendations");
-      const safeEnriched = [];
-      for (const row of enriched) {
+      const [latestSet] = await tx.select({ id: mediaRecommendationSetsTable.id })
+        .from(mediaRecommendationSetsTable)
+        .where(and(
+          eq(mediaRecommendationSetsTable.accountId, accountId),
+          eq(mediaRecommendationSetsTable.projectId, projectId),
+          eq(mediaRecommendationSetsTable.storyKey, storyKey),
+        ))
+        .orderBy(desc(mediaRecommendationSetsTable.id))
+        .limit(1);
+      if (!latestSet || latestSet.id !== set.id) {
+        return { race: false as const, stale: true as const, suppressed: false as const };
+      }
+      const currentRows = await tx.select({
+        item: mediaRecommendationItemsTable,
+        contact: mediaContactsTable,
+        outlet: mediaOutletsTable,
+      })
+        .from(mediaRecommendationItemsTable)
+        .innerJoin(mediaContactsTable, and(
+          eq(mediaRecommendationItemsTable.contactId, mediaContactsTable.id),
+          isNull(mediaContactsTable.deletedAt),
+        ))
+        .leftJoin(mediaOutletsTable, and(
+          eq(mediaContactsTable.outletId, mediaOutletsTable.id),
+          isNull(mediaOutletsTable.deletedAt),
+        ))
+        .where(eq(mediaRecommendationItemsTable.recommendationSetId, set.id))
+        .orderBy(mediaRecommendationItemsTable.rank);
+      if (
+        currentRows.length !== rows.length
+        || currentRows.some((row) => row.contact.outletId && !row.outlet)
+      ) {
+        return { race: false as const, stale: false as const, suppressed: true as const };
+      }
+      for (const row of currentRows) {
         if (await isSuppressedWithDb(tx, {
           name: `${row.contact.firstName} ${row.contact.lastName}`.trim(),
           email: row.contact.email,
           linkedinUrl: row.contact.linkedinUrl,
           outlet: row.outlet?.name,
           accountId,
-        })) continue;
-        safeEnriched.push(row);
-      }
-      if (safeEnriched.length !== enriched.length) {
-        return { race: false as const, suppressed: true as const };
+        })) {
+          return { race: false as const, stale: false as const, suppressed: true as const };
+        }
       }
       // Criteria is the optimistic-lock snapshot. Two slow enrichments can
       // both finish provider calls, but only the first one may commit its
@@ -3655,13 +3816,9 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
           sql`${mediaRecommendationSetsTable.criteria} = ${JSON.stringify(criteria)}::jsonb`,
         ))
         .returning();
-      if (!updated) return { race: true as const, suppressed: false };
-      await Promise.all(safeEnriched.map((row, index) => tx.update(mediaRecommendationItemsTable)
-        .set({ score: row.score, rank: index + 1 }).where(and(
-          eq(mediaRecommendationItemsTable.id, row.item.id),
-          eq(mediaRecommendationItemsTable.recommendationSetId, set.id),
-        ))));
-      return { race: false as const, updated, suppressed: false as const };
+      if (!updated) return { race: true as const, stale: false as const, suppressed: false as const };
+      const ranked = await rerankRecommendationSetLocked(tx, accountId, projectId, storyKey, set.id);
+      return { race: false as const, stale: false as const, updated, ranked, currentRows, suppressed: false as const };
     });
     if (committed.race) {
       res.status(409).json({ error: "Recommendations changed while enrichment was running. Reload and try again." });
@@ -3671,21 +3828,29 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
       res.status(409).json({ error: "One or more recommendation contacts became unavailable during enrichment." });
       return;
     }
+    if (committed.stale) {
+      res.status(409).json({ error: "A newer recommendation set is available. Reload before checking coverage." });
+      return;
+    }
     const updatedSet = committed.updated;
+    const reranked = committed.ranked;
+    const rowByContactId = new Map(committed.currentRows.map((row) => [row.contact.id, row]));
     const safeResponseRows = [];
-    for (const row of rows) {
+    for (const rankedRow of reranked) {
+      const row = rowByContactId.get(rankedRow.item.contactId);
+      if (!row) continue;
       if (await isContactSuppressed({ ...row.contact, outlet: row.outlet?.name, accountId })) continue;
-      safeResponseRows.push(row);
+      safeResponseRows.push({ ...row, rankedRow });
     }
     res.json({
       ok: true, recommendationSet: updatedSet,
        items: safeResponseRows.map((row, index) => {
-         const enrichedRow = enriched.find((candidate) => candidate.contact.id === row.contact.id);
+           const enrichedRow = enriched.find((candidate) => candidate.contact.id === row.contact.id);
          return {
            rank: index + 1,
            contact: { ...row.contact, outletName: row.outlet?.name ?? null, outletCategory: row.outlet?.category ?? null, outletWebsite: row.outlet?.website ?? null, outletCountry: row.outlet?.country ?? null, outletReachBand: row.outlet?.reachBand ?? null },
-           score: enrichedRow?.score ?? row.item.score,
-           reasons: row.item.reasons,
+            score: row.rankedRow.score,
+            reasons: row.rankedRow.reasons,
            phraseAttributions: row.item.phraseAttributions,
            assessment: enrichedRow?.assessment ?? assessments[String(row.contact.id)] ?? null,
          };

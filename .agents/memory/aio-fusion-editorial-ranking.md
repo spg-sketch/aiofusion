@@ -32,3 +32,9 @@ Enrichment must be explicit, bounded, owner/project/article-scoped and concurren
 **Why:** Slow network work can finish after a newer brief or evidence check. Saving a new targeting brief must not discard prior source history, and a failed provider request must not masquerade as a completed check.
 
 **How to apply:** Reassess retained evidence against the latest brief, preserve historical outreach snapshots, and commit slow enrichment only when its source state is still current.
+
+Recommendation ranking writes must be exact-set and atomic with their criteria snapshot. Re-read current, non-deleted contact and outlet identities after slow provider work; validate suppression, update enrichment base scores, apply current feedback, and persist contiguous ranks under one shared lock.
+
+**Why:** Criteria-only compare-and-swap does not detect feedback-only rank changes, and reranking "the latest set" can update a different set when generation overlaps enrichment. Pre-provider contact snapshots can also become deleted or suppressed before commit.
+
+**How to apply:** Pass the intended set ID through every rerank. Creation and enrichment transactions must build their response from the same committed set rows. Treat zero as a valid base score, not a missing value.
