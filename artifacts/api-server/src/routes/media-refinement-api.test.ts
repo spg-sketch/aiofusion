@@ -129,7 +129,7 @@ beforeAll(async () => {
   app.get("/verification-page", (_req, res) => res.type("html").send('<!doctype html><html><head><link rel="canonical" href="/verification-page"><meta property="og:title" content="Verified headline"><meta property="article:published_time" content="2026-09-03"></head><body><h1>Verified headline</h1></body></html>'));
   app.use((req, _res, next) => {
     req.account = { username: String(req.headers["x-workspace"] || "workspace-a"), role: "user" } as NonNullable<typeof req.account>;
-    req.log = { info: vi.fn(), warn: vi.fn(), error: vi.fn((...args: unknown[]) => console.error(...args)) } as unknown as typeof req.log;
+    req.log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as typeof req.log;
     next();
   });
   app.use("/api", mediaDbRouter);

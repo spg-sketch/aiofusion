@@ -191,7 +191,7 @@ function visibleAccountsFromHierarchy(
   let accountParent: string | null = null;
   for (const row of rows) {
     const username = normUsername(row.username);
-    const parent = normUsername(row.parent);
+    const parent = row.parent ? normUsername(row.parent) : "";
     if (!parent) continue;
     const children = childrenByParent.get(parent) ?? [];
     children.push(username);
