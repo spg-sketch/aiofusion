@@ -26,6 +26,28 @@ vi.mock("./lib/contentAi", async (importOriginal) => {
   return { ...mod, apiBase: () => "" };
 });
 
+// These tests cover redirect handoff, not OTP keyboard behaviour. The upstream
+// input-otp package schedules a password-manager probe that can fire after
+// jsdom teardown under full-suite load, so keep this integration boundary
+// timer-free here.
+vi.mock("./components/ui/input-otp", async () => {
+  const React = await import("react");
+  return {
+    InputOTP: React.forwardRef<HTMLDivElement, React.PropsWithChildren>(
+      ({ children }, ref) => <div ref={ref}>{children}</div>,
+    ),
+    InputOTPGroup: React.forwardRef<HTMLDivElement, React.PropsWithChildren>(
+      ({ children }, ref) => <div ref={ref}>{children}</div>,
+    ),
+    InputOTPSlot: React.forwardRef<HTMLDivElement, { index: number }>(
+      ({ index: _index }, ref) => <div ref={ref} />,
+    ),
+    InputOTPSeparator: React.forwardRef<HTMLDivElement>(
+      (_props, ref) => <div ref={ref} role="separator" />,
+    ),
+  };
+});
+
 // jsdom lacks these; landing/marketing chunks and the OTP input reference them.
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class {
