@@ -37,4 +37,4 @@ Recommendation ranking writes must be exact-set and atomic with their criteria s
 
 **Why:** Criteria-only compare-and-swap does not detect feedback-only rank changes, and reranking "the latest set" can update a different set when generation overlaps enrichment. Pre-provider contact snapshots can also become deleted or suppressed before commit.
 
-**How to apply:** Pass the intended set ID through every rerank. Creation and enrichment transactions must build their response from the same committed set rows. Treat zero as a valid base score, not a missing value.
+**How to apply:** Pass the intended set ID through every rerank. Creation and enrichment transactions must build their response from the same committed set rows. Reapply contact and outlet workspace visibility after every slow operation, exclude records whose outlet became hidden or deleted, and never serialize their outlet fields. Treat zero as a valid base score, not a missing value.

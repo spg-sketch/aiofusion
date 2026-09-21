@@ -113,6 +113,10 @@ beforeAll(async () => {
     { id: "race-story", projectId: "project-1", owner: "workspace-a", title: "Race story" },
     { id: "zero-score-story", projectId: "project-1", owner: "workspace-a", title: "Zero score story" },
     { id: "unnamed-story", projectId: "project-1", owner: "workspace-a", title: "Unnamed story" },
+    { id: "outlet-security-story", projectId: "project-1", owner: "workspace-a", title: "Outlet security story" },
+    { id: "outlet-race-story", projectId: "project-1", owner: "workspace-a", title: "Outlet race story" },
+    { id: "visibility-race-story", projectId: "project-1", owner: "workspace-a", title: "Visibility race story" },
+    { id: "deleted-contact-story", projectId: "project-1", owner: "workspace-a", title: "Deleted contact story" },
   ]);
   const [outlet] = await db.insert(mediaOutletsTable).values({ name: "Energy Daily", category: "Trade press", country: "UK" }).returning();
   await db.insert(mediaContactsTable).values([
@@ -125,7 +129,7 @@ beforeAll(async () => {
   app.get("/verification-page", (_req, res) => res.type("html").send('<!doctype html><html><head><link rel="canonical" href="/verification-page"><meta property="og:title" content="Verified headline"><meta property="article:published_time" content="2026-09-03"></head><body><h1>Verified headline</h1></body></html>'));
   app.use((req, _res, next) => {
     req.account = { username: String(req.headers["x-workspace"] || "workspace-a"), role: "user" } as NonNullable<typeof req.account>;
-    req.log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as typeof req.log;
+    req.log = { info: vi.fn(), warn: vi.fn(), error: vi.fn((...args: unknown[]) => console.error(...args)) } as unknown as typeof req.log;
     next();
   });
   app.use("/api", mediaDbRouter);
@@ -214,6 +218,59 @@ async function expectDatabaseColumnsToMatchSchema(
 }
 
 describe("media recommendation refinement API", () => {
+  it("excludes contacts attached to private or deleted outlets without failing valid recommendations", async () => {
+    const [privateOutlet] = await db.insert(mediaOutletsTable).values({
+      name: "Workspace B Confidential",
+      category: "Private category",
+      website: "https://private.workspace-b.test",
+      accountId: "workspace-b",
+    }).returning();
+    const [deletedOutlet] = await db.insert(mediaOutletsTable).values({
+      name: "Deleted Confidential",
+      category: "Deleted category",
+      website: "https://deleted.test",
+      deletedAt: new Date(),
+    }).returning();
+    const inserted = await db.insert(mediaContactsTable).values([
+      {
+        outletId: privateOutlet.id,
+        firstName: "Private",
+        lastName: "Reporter",
+        role: "Energy editor",
+        beats: ["energy"],
+        sectors: ["technology"],
+      },
+      {
+        outletId: deletedOutlet.id,
+        firstName: "Deleted",
+        lastName: "Reporter",
+        role: "Energy editor",
+        beats: ["energy"],
+        sectors: ["technology"],
+      },
+    ]).returning({ id: mediaContactsTable.id });
+
+    const response = await request("/store/media-db/recommendations", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: "project-1",
+        storyKey: "outlet-security-story",
+        terms: ["energy", "technology"],
+      }),
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      items: Array<{ score: number; contact: { id: number; outletName?: string | null; outletWebsite?: string | null } }>;
+    };
+    expect(body.items.length).toBeGreaterThan(0);
+    expect(body.items.map((item) => item.contact.id)).not.toEqual(expect.arrayContaining(inserted.map((row) => row.id)));
+    expect(JSON.stringify(body)).not.toContain("Workspace B Confidential");
+    expect(JSON.stringify(body)).not.toContain("private.workspace-b.test");
+    expect(body.items.map((item) => item.score)).toEqual(
+      [...body.items.map((item) => item.score)].sort((a, b) => b - a),
+    );
+  });
+
   it("keeps strong unnamed contacts eligible but below comparable named contacts through feedback reranking", async () => {
     const generated = await request("/store/media-db/recommendations", "workspace-a", {
       method: "POST",
@@ -534,6 +591,192 @@ describe("media recommendation refinement API", () => {
     release();
     const statuses = await Promise.all([first.then((response) => response.status), second.then((response) => response.status)]);
     expect(statuses.sort()).toEqual([200, 409]);
+  });
+
+  it("drops a recommendation whose outlet becomes private during enrichment", async () => {
+    const [outlet] = await db.insert(mediaOutletsTable).values({
+      name: "Visible Security Journal",
+      category: "Trade press",
+      website: "https://visible-security.test",
+      accountId: "workspace-a",
+    }).returning();
+    const [contact] = await db.insert(mediaContactsTable).values({
+      outletId: outlet.id,
+      firstName: "Riley",
+      lastName: "Race",
+      role: "Quantumsecurity editor",
+      beats: ["quantumsecurity"],
+      sectors: ["quantumsecurity"],
+      accountId: "workspace-a",
+    }).returning();
+    const generated = await request("/store/media-db/recommendations", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: "project-1",
+        storyKey: "outlet-race-story",
+        terms: ["quantumsecurity"],
+      }),
+    });
+    expect(generated.status).toBe(200);
+    const generatedBody = await generated.json() as {
+      recommendationSet: { id: number };
+      items: Array<{ contact: { id: number } }>;
+    };
+    expect(generatedBody.items.some((item) => item.contact.id === contact.id)).toBe(true);
+
+    let providerStarted!: () => void;
+    let releaseProvider!: () => void;
+    const started = new Promise<void>((resolve) => { providerStarted = resolve; });
+    const gate = new Promise<void>((resolve) => { releaseProvider = resolve; });
+    collectJournalistCoverage.mockImplementationOnce(async () => {
+      providerStarted();
+      await gate;
+      return { evidence: [], warnings: [] };
+    }).mockResolvedValue({ evidence: [], warnings: [] });
+
+    const enriching = request("/store/media-db/recommendations/enrich", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: "project-1",
+        storyKey: "outlet-race-story",
+        recommendationSetId: generatedBody.recommendationSet.id,
+      }),
+    });
+    await started;
+    await db.update(mediaOutletsTable)
+      .set({ accountId: "workspace-b" })
+      .where(eq(mediaOutletsTable.id, outlet.id));
+    releaseProvider();
+
+    const response = await enriching;
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      items: Array<{ score: number; contact: { id: number; outletName?: string | null } }>;
+    };
+    expect(body.items.some((item) => item.contact.id === contact.id)).toBe(false);
+    expect(JSON.stringify(body)).not.toContain("Visible Security Journal");
+    expect(body.items.map((item) => item.score)).toEqual(
+      [...body.items.map((item) => item.score)].sort((a, b) => b - a),
+    );
+    const stored = await db.select().from(mediaRecommendationItemsTable)
+      .where(eq(mediaRecommendationItemsTable.recommendationSetId, generatedBody.recommendationSet.id));
+    expect(stored.some((item) => item.contactId === contact.id)).toBe(false);
+  });
+
+  it("rechecks workspace visibility after coverage collection before returning outlet data", async () => {
+    await db.execute(sql`
+      INSERT INTO platform_accounts (username, role, parent)
+      VALUES ('workspace-child', 'client', 'workspace-a')
+    `);
+    const [outlet] = await db.insert(mediaOutletsTable).values({
+      name: "Child Workspace Confidential",
+      category: "Trade press",
+      website: "https://child-private.test",
+      accountId: "workspace-child",
+    }).returning();
+    const [contact] = await db.insert(mediaContactsTable).values({
+      outletId: outlet.id,
+      firstName: "Casey",
+      lastName: "Child",
+      role: "Visibilityrace editor",
+      beats: ["visibilityrace"],
+      sectors: ["visibilityrace"],
+    }).returning();
+    const generated = await request("/store/media-db/recommendations", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: "project-1",
+        storyKey: "visibility-race-story",
+        terms: ["visibilityrace"],
+      }),
+    });
+    expect(generated.status).toBe(200);
+    const generatedBody = await generated.json() as {
+      recommendationSet: { id: number };
+      items: Array<{ contact: { id: number } }>;
+    };
+    expect(generatedBody.items.some((item) => item.contact.id === contact.id)).toBe(true);
+
+    let providerStarted!: () => void;
+    let releaseProvider!: () => void;
+    const started = new Promise<void>((resolve) => { providerStarted = resolve; });
+    const gate = new Promise<void>((resolve) => { releaseProvider = resolve; });
+    collectJournalistCoverage.mockImplementationOnce(async () => {
+      providerStarted();
+      await gate;
+      return { evidence: [], warnings: [] };
+    }).mockResolvedValue({ evidence: [], warnings: [] });
+
+    const enriching = request("/store/media-db/recommendations/enrich", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: "project-1",
+        storyKey: "visibility-race-story",
+        recommendationSetId: generatedBody.recommendationSet.id,
+      }),
+    });
+    await started;
+    await db.execute(sql`UPDATE platform_accounts SET parent = NULL WHERE username = 'workspace-child'`);
+    releaseProvider();
+
+    const response = await enriching;
+    expect(response.status).toBe(200);
+    const body = await response.json() as { items: Array<{ contact: { id: number } }> };
+    expect(body.items.some((item) => item.contact.id === contact.id)).toBe(false);
+    expect(JSON.stringify(body)).not.toContain("Child Workspace Confidential");
+    expect(JSON.stringify(body)).not.toContain("child-private.test");
+  });
+
+  it("does not send an already deleted contact to the coverage provider", async () => {
+    const [outlet] = await db.insert(mediaOutletsTable).values({
+      name: "Deletion Test Journal",
+      category: "Trade press",
+      accountId: "workspace-a",
+    }).returning();
+    const [contact] = await db.insert(mediaContactsTable).values({
+      outletId: outlet.id,
+      firstName: "Dana",
+      lastName: "Deleted",
+      role: "Deletedcontact editor",
+      beats: ["deletedcontact"],
+      sectors: ["deletedcontact"],
+      accountId: "workspace-a",
+    }).returning();
+    const generated = await request("/store/media-db/recommendations", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: "project-1",
+        storyKey: "deleted-contact-story",
+        terms: ["deletedcontact"],
+      }),
+    });
+    expect(generated.status).toBe(200);
+    const generatedBody = await generated.json() as {
+      recommendationSet: { id: number };
+      items: Array<{ contact: { id: number } }>;
+    };
+    expect(generatedBody.items.some((item) => item.contact.id === contact.id)).toBe(true);
+    await db.update(mediaContactsTable)
+      .set({ deletedAt: new Date() })
+      .where(eq(mediaContactsTable.id, contact.id));
+    collectJournalistCoverage.mockClear();
+    collectJournalistCoverage.mockResolvedValue({ evidence: [], warnings: [] });
+
+    const response = await request("/store/media-db/recommendations/enrich", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: "project-1",
+        storyKey: "deleted-contact-story",
+        recommendationSetId: generatedBody.recommendationSet.id,
+      }),
+    });
+    expect(response.status).toBe(200);
+    const providerNames = collectJournalistCoverage.mock.calls.map(
+      ([input]) => input.contact.name,
+    );
+    expect(providerNames).not.toContain("Dana Deleted");
+    const body = await response.json() as { items: Array<{ contact: { id: number } }> };
+    expect(body.items.some((item) => item.contact.id === contact.id)).toBe(false);
   });
 
   it("preserves an explicit zero base score when feedback reranks the set", async () => {
