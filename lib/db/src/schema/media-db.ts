@@ -1,4 +1,4 @@
-import { integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -20,7 +20,10 @@ export const mediaOutletsTable = pgTable("media_outlets", {
   accountId: varchar("account_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
-});
+}, (table) => [
+  index("media_outlets_live_account_name").on(table.accountId, table.deletedAt, table.name),
+  index("media_outlets_live_category_country").on(table.category, table.country, table.deletedAt),
+]);
 
 // accountId is nullable — admins can create global contacts (accountId = null)
 // visible to all accounts, same as global outlets.
@@ -59,7 +62,10 @@ export const mediaContactsTable = pgTable("media_contacts", {
   accountId: varchar("account_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
-});
+}, (table) => [
+  index("media_contacts_live_account_name").on(table.accountId, table.deletedAt, table.lastName, table.firstName),
+  index("media_contacts_live_outlet").on(table.outletId, table.deletedAt),
+]);
 
 /**
  * An immutable, workspace/project-scoped snapshot of a public search result.

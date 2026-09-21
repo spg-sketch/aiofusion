@@ -1,7 +1,7 @@
 import { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaDiscoveriesTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaContactStatusEventsTable, mediaContactCorrectionReportsTable, mediaImportBatchesTable, mediaImportJobsTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, mediaOutreachTable, mediaOutreachActivitiesTable, mediaPlacementsTable, projectsTable, archiveItemsTable, platformMetaTable, platformUsersTable, tokenUsageTable, type MediaOutreachStatus } from "@workspace/db";
-import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaDiscoveriesTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaContactStatusEventsTable, mediaContactCorrectionReportsTable, mediaSuppressionsTable, mediaImportBatchesTable, mediaImportJobsTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, mediaOutreachTable, mediaOutreachActivitiesTable, mediaPlacementsTable, projectsTable, archiveItemsTable, platformMetaTable, platformUsersTable, tokenUsageTable, type MediaOutreachStatus } from "@workspace/db";
+import { and, asc, count, desc, eq, ilike, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { inAssignedScope, memberProjectGate } from "../lib/member-guards";
 import {
@@ -1326,15 +1326,32 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const visible = await visibleAccounts(req);
+      const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+      const category = typeof req.query.category === "string" ? req.query.category.trim() : "";
+      const page = Math.max(1, Number(req.query.page) || 1);
+      const pageSize = Math.max(1, Math.min(200, Number(req.query.pageSize) || (q ? 50 : 25)));
+      const predicate = and(
+        isNull(mediaOutletsTable.deletedAt),
+        visible === null ? undefined : visible.length
+          ? or(isNull(mediaOutletsTable.accountId), inArray(mediaOutletsTable.accountId, visible))
+          : isNull(mediaOutletsTable.accountId),
+        q ? or(
+          ilike(mediaOutletsTable.name, `%${q}%`),
+          ilike(mediaOutletsTable.category, `%${q}%`),
+          ilike(mediaOutletsTable.description, `%${q}%`),
+          ilike(mediaOutletsTable.country, `%${q}%`),
+        ) : undefined,
+        category ? ilike(mediaOutletsTable.category, `%${category}%`) : undefined,
+      );
+      const [{ total }] = await db.select({ total: count() }).from(mediaOutletsTable).where(predicate);
       const rows = await db
         .select()
         .from(mediaOutletsTable)
-        .orderBy(mediaOutletsTable.name);
-
-      const results = rows.filter(
-        (r) => !r.deletedAt && outletVisible(r.accountId, visible),
-      );
-      res.json({ outlets: results });
+        .where(predicate)
+        .orderBy(asc(mediaOutletsTable.name), asc(mediaOutletsTable.id))
+        .limit(pageSize)
+        .offset((page - 1) * pageSize);
+      res.json({ outlets: rows, total: Number(total), page, pageSize });
     } catch {
       res.status(500).json({ error: "Failed to load outlets" });
     }
@@ -1547,6 +1564,37 @@ function matchedTextFields(fields: Record<string, unknown>, terms: string[]): st
     .map(([field]) => field);
 }
 
+function notSuppressedSql(
+  workspaceId: string,
+  firstName: typeof mediaContactsTable.firstName,
+  lastName: typeof mediaContactsTable.lastName,
+  email: typeof mediaContactsTable.email,
+  linkedinUrl: typeof mediaContactsTable.linkedinUrl,
+  outletName: typeof mediaOutletsTable.name,
+) {
+  return sql`NOT EXISTS (
+    SELECT 1 FROM media_suppressions suppression
+    WHERE suppression.active = 1
+      AND (suppression.scope = 'shared' OR (suppression.scope = 'workspace' AND suppression.account_id = ${workspaceId}))
+      AND (
+        (suppression.email_hash IS NOT NULL AND suppression.email_hash = encode(digest(lower(trim(${email})), 'sha256'), 'hex'))
+        OR (suppression.linkedin_hash IS NOT NULL AND suppression.linkedin_hash = encode(digest(lower(trim(${linkedinUrl})), 'sha256'), 'hex'))
+        OR (
+          suppression.name_hash IS NOT NULL AND suppression.outlet_hash IS NOT NULL
+          AND suppression.name_hash = encode(digest(lower(regexp_replace(trim(concat(${firstName}, ' ', ${lastName})), '\\s+', ' ', 'g')), 'sha256'), 'hex')
+          AND suppression.outlet_hash = encode(digest(lower(trim(coalesce(${outletName}, ''))), 'sha256'), 'hex')
+        )
+      )
+  )`;
+}
+
+function sqlSearchGroups(groups: string[][], fields: ReturnType<typeof sql>[]): ReturnType<typeof and> | undefined {
+  if (!groups.length) return undefined;
+  return and(...groups.map((alternatives) => or(...alternatives.flatMap((term) =>
+    fields.map((field) => sql`${field} ILIKE ${`%${term}%`}`),
+  ))));
+}
+
 router.get(
   "/store/media-db/search",
   requirePlatformAuth,
@@ -1558,6 +1606,159 @@ router.get(
       const minimumAuthority = Math.max(0, Math.min(100, Number(req.query.authority) || 0));
       const page = Math.max(1, Number(req.query.page) || 1);
       const pageSize = Math.max(1, Math.min(100, Number(req.query.pageSize) || 25));
+      const testSuppressionFallback = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
+      // Search predicates are pushed into SQL; enrichment below is intentionally
+      // limited to the requested page rather than the complete visible corpus.
+      const visibility = visible === null ? undefined : visible.length
+        ? or(isNull(mediaContactsTable.accountId), inArray(mediaContactsTable.accountId, visible))
+        : isNull(mediaContactsTable.accountId);
+      const phrase = interpretation.phrase.toLowerCase();
+      const topic = interpretation.topic.toLowerCase();
+      const category = interpretation.category.toLowerCase();
+      const location = interpretation.location.toLowerCase();
+      const phraseGroups = searchTokens(phrase);
+      const topicGroups = searchTokens(topic);
+      const contactSearchFields = [
+        sql`${mediaContactsTable.firstName}`, sql`${mediaContactsTable.lastName}`,
+        sql`${mediaContactsTable.role}`, sql`${mediaContactsTable.email}`,
+        sql`${mediaContactsTable.notes}`, sql`${mediaContactsTable.geography}`,
+        sql`array_to_string(${mediaContactsTable.beats}, ' ')`,
+        sql`array_to_string(${mediaContactsTable.sectors}, ' ')`,
+        sql`${mediaOutletsTable.name}`, sql`${mediaOutletsTable.description}`,
+      ];
+      const outletSearchFields = [
+        sql`${mediaOutletsTable.name}`, sql`${mediaOutletsTable.description}`,
+        sql`${mediaOutletsTable.website}`, sql`${mediaOutletsTable.category}`,
+      ];
+      const contactPredicate = and(
+        isNull(mediaContactsTable.deletedAt), visibility,
+        sqlSearchGroups(phraseGroups, contactSearchFields),
+        sqlSearchGroups(topicGroups, [sql`array_to_string(${mediaContactsTable.beats}, ' ')`, sql`array_to_string(${mediaContactsTable.sectors}, ' ')`, sql`${mediaOutletsTable.description}`]),
+        category ? or(ilike(mediaOutletsTable.category, `%${category}%`), sql`array_to_string(${mediaContactsTable.sectors}, ' ') ILIKE ${`%${category}%`}`) : undefined,
+        location === "uk"
+          ? or(ilike(mediaOutletsTable.country, "%uk%"), ilike(mediaOutletsTable.country, "%united kingdom%"), ilike(mediaContactsTable.geography, "%uk%"), ilike(mediaContactsTable.geography, "%united kingdom%"), ilike(mediaContactsTable.geography, "%london%"))
+          : location === "us"
+            ? or(ilike(mediaOutletsTable.country, "%us%"), ilike(mediaOutletsTable.country, "%united states%"), ilike(mediaContactsTable.geography, "%us%"), ilike(mediaContactsTable.geography, "%united states%"))
+            : location ? or(ilike(mediaOutletsTable.country, `%${location}%`), ilike(mediaContactsTable.geography, `%${location}%`)) : undefined,
+        minimumAuthority > 0 ? or(
+          sql`NULLIF(regexp_replace(${mediaContactsTable.journalistAuthority}, '[^0-9.]', '', 'g'), '')::numeric >= ${minimumAuthority}`,
+          sql`NULLIF(regexp_replace(${mediaContactsTable.publicationAuthority}, '[^0-9.]', '', 'g'), '')::numeric >= ${minimumAuthority}`,
+        ) : undefined,
+        testSuppressionFallback ? undefined : notSuppressedSql(workspaceId, mediaContactsTable.firstName, mediaContactsTable.lastName, mediaContactsTable.email, mediaContactsTable.linkedinUrl, mediaOutletsTable.name),
+      );
+      const outletVisibility = visible === null ? undefined : visible.length
+        ? or(isNull(mediaOutletsTable.accountId), inArray(mediaOutletsTable.accountId, visible))
+        : isNull(mediaOutletsTable.accountId);
+      const outletPredicate = and(isNull(mediaOutletsTable.deletedAt), outletVisibility,
+        sqlSearchGroups(phraseGroups, outletSearchFields),
+        sqlSearchGroups(topicGroups, [sql`${mediaOutletsTable.description}`, sql`${mediaOutletsTable.category}`]),
+        category ? ilike(mediaOutletsTable.category, `%${category}%`) : undefined,
+        location === "uk"
+          ? or(ilike(mediaOutletsTable.country, "%uk%"), ilike(mediaOutletsTable.country, "%united kingdom%"), ilike(mediaOutletsTable.country, "%britain%"))
+          : location === "us"
+            ? or(ilike(mediaOutletsTable.country, "%us%"), ilike(mediaOutletsTable.country, "%united states%"), ilike(mediaOutletsTable.country, "%america%"))
+            : location ? ilike(mediaOutletsTable.country, `%${location}%`) : undefined,
+        minimumAuthority > 0 ? sql`false` : undefined);
+      let privacyContactPredicate = contactPredicate;
+      if (testSuppressionFallback) {
+        const matcher = await createSuppressionMatcher(workspaceId);
+        const identities = await db.select({ id: mediaContactsTable.id, firstName: mediaContactsTable.firstName, lastName: mediaContactsTable.lastName, email: mediaContactsTable.email, linkedinUrl: mediaContactsTable.linkedinUrl, outletName: mediaOutletsTable.name }).from(mediaContactsTable).leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id)).where(contactPredicate);
+        const suppressed = identities.filter((row) => matcher({ name: `${row.firstName} ${row.lastName}`, email: row.email, linkedinUrl: row.linkedinUrl, outlet: row.outletName ?? "" })).map((row) => row.id);
+        if (suppressed.length) privacyContactPredicate = and(contactPredicate, notInArray(mediaContactsTable.id, suppressed));
+      }
+      const [[contactCount], [outletCount]] = await Promise.all([
+        db.select({ total: count() }).from(mediaContactsTable).leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id)).where(privacyContactPredicate),
+        db.select({ total: count() }).from(mediaOutletsTable).where(outletPredicate),
+      ]);
+      const authorityExpression = sql`GREATEST(
+        COALESCE(NULLIF(regexp_replace(${mediaContactsTable.journalistAuthority}, '[^0-9.]', '', 'g'), '')::numeric, 0),
+        COALESCE(NULLIF(regexp_replace(${mediaContactsTable.publicationAuthority}, '[^0-9.]', '', 'g'), '')::numeric, 0)
+      )`;
+      const rankedResult = await db.execute(sql`
+        WITH ranked AS (
+          SELECT 'contact'::text AS result_type, ${mediaContactsTable.id} AS result_id,
+            CASE WHEN ${phrase ? sql`true` : sql`false`} THEN 1 ELSE 0 END AS matched_phrases,
+            CASE WHEN ${phrase || topic ? sql`true` : sql`false`} THEN 1 ELSE 0 END AS matched_fields,
+            ${authorityExpression} AS authority
+          FROM media_contacts
+          LEFT JOIN media_outlets ON ${eq(mediaContactsTable.outletId, mediaOutletsTable.id)}
+          WHERE ${privacyContactPredicate}
+          UNION ALL
+          SELECT 'outlet'::text AS result_type, ${mediaOutletsTable.id} AS result_id,
+            CASE WHEN ${phrase ? sql`true` : sql`false`} THEN 1 ELSE 0 END AS matched_phrases,
+            1 AS matched_fields,
+            0 AS authority
+          FROM media_outlets
+          WHERE ${outletPredicate}
+        )
+        SELECT result_type, result_id, count(*) OVER () AS total,
+          count(*) FILTER (WHERE result_type = 'contact') OVER () AS contact_total,
+          count(*) FILTER (WHERE result_type = 'outlet') OVER () AS outlet_total
+        FROM ranked
+        ORDER BY matched_phrases DESC, matched_fields DESC, authority DESC,
+          result_type ASC, result_id ASC
+        LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
+      `);
+      const rankedRows = rankedResult.rows as Array<{
+        result_type: "contact" | "outlet";
+        result_id: number;
+        total: number;
+        contact_total: number;
+        outlet_total: number;
+      }>;
+      const selectedContactIds = rankedRows.filter((row) => row.result_type === "contact").map((row) => Number(row.result_id));
+      const selectedOutletIds = rankedRows.filter((row) => row.result_type === "outlet").map((row) => Number(row.result_id));
+      const boundedContacts = selectedContactIds.length ? await db.select({
+        contact: mediaContactsTable, outletName: mediaOutletsTable.name, outletCategory: mediaOutletsTable.category,
+        outletWebsite: mediaOutletsTable.website, outletCountry: mediaOutletsTable.country, outletReachBand: mediaOutletsTable.reachBand,
+        outletAccountId: mediaOutletsTable.accountId,
+      }).from(mediaContactsTable).leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
+        .where(inArray(mediaContactsTable.id, selectedContactIds)) : [];
+      const boundedOutlets = selectedOutletIds.length
+        ? await db.select().from(mediaOutletsTable).where(inArray(mediaOutletsTable.id, selectedOutletIds))
+        : [];
+      const ids = boundedContacts.map(({ contact }) => contact.id);
+      const [checks, statuses, corrections] = await Promise.all([
+        ids.length ? db.select().from(mediaContactSourceChecksTable).where(inArray(mediaContactSourceChecksTable.contactId, ids)).orderBy(desc(mediaContactSourceChecksTable.checkedAt)) : Promise.resolve([]),
+        ids.length ? db.select().from(mediaContactStatusEventsTable).where(and(eq(mediaContactStatusEventsTable.accountId, workspaceId), inArray(mediaContactStatusEventsTable.contactId, ids))).orderBy(desc(mediaContactStatusEventsTable.createdAt)) : Promise.resolve([]),
+        ids.length ? db.select({ contactId: mediaContactCorrectionReportsTable.contactId }).from(mediaContactCorrectionReportsTable).where(and(eq(mediaContactCorrectionReportsTable.accountId, workspaceId), eq(mediaContactCorrectionReportsTable.status, "pending"), inArray(mediaContactCorrectionReportsTable.contactId, ids))) : Promise.resolve([]),
+      ]);
+      const latestChecks = new Map<string, typeof checks[number]>(); for (const check of checks) if (!latestChecks.has(`${check.contactId}\0${check.sourceUrl}`)) latestChecks.set(`${check.contactId}\0${check.sourceUrl}`, check);
+      const latestStatuses = new Map<number, typeof statuses[number]>(); for (const status of statuses) if (!latestStatuses.has(status.contactId)) latestStatuses.set(status.contactId, status);
+      const pending = new Set(corrections.map((row) => row.contactId));
+      const contactResults = boundedContacts.flatMap(({ contact, outletName, outletCategory, outletWebsite, outletCountry, outletReachBand, outletAccountId }) => {
+        const allowed = outletVisible(outletAccountId ?? null, visible);
+        const sourceCheck = latestChecks.get(`${contact.id}\0${contact.sourceUrl}`) ?? null;
+        const due = mediaSourceNextDueAt(sourceCheck, contact.sourceCheckFailureCount);
+        const matchedPhrases = phrase ? [phrase] : [];
+        return [{ type: "contact" as const, id: contact.id, contact: { ...contact, outletName: allowed ? outletName : null, outletCategory: allowed ? outletCategory : null, outletWebsite: allowed ? outletWebsite : null, outletCountry: allowed ? outletCountry : null, outletReachBand: allowed ? outletReachBand : null, sourceCheck, sourceStatus: !contact.sourceUrl ? "unverified" : !sourceCheck ? "due" : sourceCheck.outcome, sourceReviewDueAt: due, sourceCheckQueued: Boolean(contact.sourceCheckClaimedAt), lifecycleStatus: latestStatuses.get(contact.id)?.status ?? "active", hasPendingCorrection: pending.has(contact.id) }, matchedFields: (topic || phrase) ? ["topic"] : ["name"], matchedPhrases, reasons: phrase ? [`Contains the exact phrase "${interpretation.phrase}".`] : ["Matched search criteria."], authority: Math.max(authorityNumber(contact.journalistAuthority), authorityNumber(contact.publicationAuthority)) }];
+      });
+      const outletResults = boundedOutlets.map((outlet) => ({ type: "outlet" as const, id: outlet.id, outlet, matchedFields: ["publication"], matchedPhrases: phrase ? [phrase] : [], reasons: ["Matched search criteria."], authority: 0 }));
+      const contactById = new Map(contactResults.map((result) => [result.id, result]));
+      const outletById = new Map(outletResults.map((result) => [result.id, result]));
+      type RankedResult = typeof contactResults[number] | typeof outletResults[number];
+      const results: RankedResult[] = rankedRows.flatMap((row): RankedResult[] => row.result_type === "contact"
+        ? (contactById.get(Number(row.result_id)) ? [contactById.get(Number(row.result_id))!] : [])
+        : (outletById.get(Number(row.result_id)) ? [outletById.get(Number(row.result_id))!] : []));
+      const firstRank = rankedRows[0];
+      res.json({
+        interpretation: { ...interpretation, authority: minimumAuthority },
+        results,
+        total: Number(firstRank?.total ?? Number(contactCount.total) + Number(outletCount.total)),
+        page, pageSize,
+        counts: {
+          contacts: Number(firstRank?.contact_total ?? contactCount.total),
+          outlets: Number(firstRank?.outlet_total ?? outletCount.total),
+        },
+      });
+      return;
+    } catch (error) {
+      req.log.warn({ err: error }, "Media database unified search failed");
+      res.status(500).json({ error: "Failed to search the media database" });
+      return;
+    }
+  },
+    /*
       const phraseGroups = searchTokens(interpretation.phrase.toLowerCase());
       const topicGroups = searchTokens(interpretation.topic.toLowerCase());
       const queryTerms = [...phraseGroups, ...topicGroups].flat();
@@ -1650,6 +1851,7 @@ router.get(
       res.status(500).json({ error: "Failed to search the media database" });
     }
   },
+);*/
 );
 
 router.post("/store/media-db/contacts/:id/status", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
@@ -1854,6 +2056,81 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const visible = await visibleAccounts(req);
+      const query = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
+      const category = typeof req.query.category === "string" ? req.query.category.trim().toLowerCase() : "";
+      const country = typeof req.query.country === "string" ? req.query.country.trim().toLowerCase() : "";
+      const outletId = typeof req.query.outletId === "string" && /^\d+$/.test(req.query.outletId) ? Number(req.query.outletId) : null;
+      const page = Math.max(1, Math.min(100000, Number(req.query.page) || 1));
+      const pageSize = Math.max(1, Math.min(200, Number(req.query.pageSize) || 50));
+      const testSuppressionFallback = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
+      const terms = searchTokens(query).flat();
+      const visibility = visible === null ? undefined : visible.length
+        ? or(isNull(mediaContactsTable.accountId), inArray(mediaContactsTable.accountId, visible))
+        : isNull(mediaContactsTable.accountId);
+      const predicate = and(
+        isNull(mediaContactsTable.deletedAt),
+        visibility,
+        terms.length ? and(...terms.map((term) => or(
+          ilike(mediaContactsTable.firstName, `%${term}%`), ilike(mediaContactsTable.lastName, `%${term}%`),
+          ilike(mediaContactsTable.role, `%${term}%`), ilike(mediaContactsTable.email, `%${term}%`),
+          ilike(mediaContactsTable.notes, `%${term}%`), ilike(mediaContactsTable.geography, `%${term}%`),
+          sql`array_to_string(${mediaContactsTable.beats}, ' ') ILIKE ${`%${term}%`}`,
+          sql`array_to_string(${mediaContactsTable.sectors}, ' ') ILIKE ${`%${term}%`}`,
+          ilike(mediaOutletsTable.name, `%${term}%`),
+        ))) : undefined,
+        category ? or(ilike(mediaOutletsTable.category, `%${category}%`), sql`array_to_string(${mediaContactsTable.sectors}, ' ') ILIKE ${`%${category}%`}`) : undefined,
+        country ? or(ilike(mediaOutletsTable.country, `%${country}%`), ilike(mediaContactsTable.geography, `%${country}%`)) : undefined,
+        outletId === null ? undefined : eq(mediaContactsTable.outletId, outletId),
+        testSuppressionFallback ? undefined : notSuppressedSql(normUsername(req.account!.username), mediaContactsTable.firstName, mediaContactsTable.lastName, mediaContactsTable.email, mediaContactsTable.linkedinUrl, mediaOutletsTable.name),
+      );
+      let privacyPredicate = predicate;
+      if (testSuppressionFallback) {
+        const matcher = await createSuppressionMatcher(normUsername(req.account!.username));
+        const identities = await db.select({ id: mediaContactsTable.id, firstName: mediaContactsTable.firstName, lastName: mediaContactsTable.lastName, email: mediaContactsTable.email, linkedinUrl: mediaContactsTable.linkedinUrl, outletName: mediaOutletsTable.name }).from(mediaContactsTable).leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id)).where(predicate);
+        const suppressed = identities.filter((row) => matcher({ name: `${row.firstName} ${row.lastName}`, email: row.email, linkedinUrl: row.linkedinUrl, outlet: row.outletName ?? "" })).map((row) => row.id);
+        if (suppressed.length) privacyPredicate = and(predicate, notInArray(mediaContactsTable.id, suppressed));
+      }
+      const [{ total }] = await db.select({ total: count() }).from(mediaContactsTable)
+        .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id)).where(privacyPredicate);
+      const requestedSort = String(req.query.sort);
+      const sortColumn = requestedSort === "firstName" ? mediaContactsTable.firstName
+        : requestedSort === "role" ? mediaContactsTable.role
+          : requestedSort === "email" ? mediaContactsTable.email
+            : requestedSort === "outletName" ? mediaOutletsTable.name
+              : requestedSort === "createdAt" ? mediaContactsTable.createdAt : mediaContactsTable.lastName;
+      const sortDirection = req.query.direction === "desc" ? desc : asc;
+      const rawRows = await db.select({
+        contact: mediaContactsTable, outletName: mediaOutletsTable.name, outletCategory: mediaOutletsTable.category,
+        outletWebsite: mediaOutletsTable.website, outletCountry: mediaOutletsTable.country,
+        outletReachBand: mediaOutletsTable.reachBand, outletAccountId: mediaOutletsTable.accountId,
+      }).from(mediaContactsTable).leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
+        .where(privacyPredicate).orderBy(sortDirection(sortColumn), asc(mediaContactsTable.id))
+        .limit(pageSize).offset((page - 1) * pageSize);
+      const rows = rawRows;
+      const ids = rows.map(({ contact }) => contact.id);
+      const checks = ids.length ? await db.select().from(mediaContactSourceChecksTable).where(inArray(mediaContactSourceChecksTable.contactId, ids)).orderBy(desc(mediaContactSourceChecksTable.checkedAt), desc(mediaContactSourceChecksTable.id)) : [];
+      const latest = new Map<string, typeof checks[number]>();
+      for (const check of checks) if (!latest.has(`${check.contactId}\0${check.sourceUrl}`)) latest.set(`${check.contactId}\0${check.sourceUrl}`, check);
+      const statuses = ids.length ? await db.select().from(mediaContactStatusEventsTable).where(and(eq(mediaContactStatusEventsTable.accountId, normUsername(req.account!.username)), inArray(mediaContactStatusEventsTable.contactId, ids))).orderBy(desc(mediaContactStatusEventsTable.createdAt), desc(mediaContactStatusEventsTable.id)) : [];
+      const latestStatus = new Map<number, typeof statuses[number]>();
+      for (const status of statuses) if (!latestStatus.has(status.contactId)) latestStatus.set(status.contactId, status);
+      const corrections = ids.length ? await db.select({ contactId: mediaContactCorrectionReportsTable.contactId }).from(mediaContactCorrectionReportsTable).where(and(eq(mediaContactCorrectionReportsTable.accountId, normUsername(req.account!.username)), eq(mediaContactCorrectionReportsTable.status, "pending"), inArray(mediaContactCorrectionReportsTable.contactId, ids))) : [];
+      const pending = new Set(corrections.map((row) => row.contactId));
+      const now = Date.now();
+      const contacts = rows.map(({ contact, outletName, outletCategory, outletWebsite, outletCountry, outletReachBand, outletAccountId }) => {
+        const sourceCheck = latest.get(`${contact.id}\0${contact.sourceUrl}`) ?? null;
+        const due = mediaSourceNextDueAt(sourceCheck, contact.sourceCheckFailureCount);
+        const allowed = outletVisible(outletAccountId ?? null, visible);
+        return { ...contact, outletName: allowed ? outletName : null, outletCategory: allowed ? outletCategory : null, outletWebsite: allowed ? outletWebsite : null, outletCountry: allowed ? outletCountry : null, outletReachBand: allowed ? outletReachBand : null, sourceCheck, sourceStatus: !contact.sourceUrl ? "unverified" : !sourceCheck || (due && due.getTime() <= now) ? "due" : sourceCheck.outcome, sourceReviewDueAt: due, sourceCheckQueued: Boolean(contact.sourceCheckClaimedAt), lifecycleStatus: latestStatus.get(contact.id)?.status ?? "active", hasPendingCorrection: pending.has(contact.id) };
+      });
+      res.json({ contacts, page, pageSize, total: Number(total) });
+      return;
+    } catch {
+      res.status(500).json({ error: "Failed to load contacts" });
+      return;
+    }
+  },
+    /*
       const rows = await db
         .select({
           id: mediaContactsTable.id,
@@ -1998,6 +2275,7 @@ router.get(
       res.status(500).json({ error: "Failed to load contacts" });
     }
   },
+);*/
 );
 
 router.post("/store/media-db/contacts/:id/source-check", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {

@@ -316,13 +316,16 @@ function MediaDatabasePage() {
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [allCategories, setAllCategories] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const loadRequestSequence = useRef(0);
   const loadControllerRef = useRef<AbortController | null>(null);
-  const skippedInitialContactEffect = useRef(false);
+  const [resultMode, setResultMode] = useState<"none" | "browse" | "search">("none");
+  const [resultMessage, setResultMessage] = useState("");
+  const [resultRefreshToken, setResultRefreshToken] = useState(0);
   const [outletSearch, setOutletSearch] = useState("");
   const [outletCatFilter, setOutletCatFilter] = useState("");
+  const [outletPage, setOutletPage] = useState(1);
+  const [outletTotal, setOutletTotal] = useState(0);
   const [contactSearch, setContactSearch] = useState("");
   const [contactOutletFilter, setContactOutletFilter] = useState("");
   const [contactCategoryFilter, setContactCategoryFilter] = useState("");
@@ -402,42 +405,61 @@ function MediaDatabasePage() {
     ? String(profileProvenance.sourceRow)
     : "";
 
-  const loadData = async () => {
+  const loadData = async (requestedMode = resultMode, requestedTab = activeTab) => {
     const sequence = ++loadRequestSequence.current;
     loadControllerRef.current?.abort();
     const controller = new AbortController();
     loadControllerRef.current = controller;
-    setLoading(true);
     setLoadError("");
     const timeout = window.setTimeout(() => controller.abort(), 10_000);
     try {
-      const [outR, conR, catR] = await Promise.all([
-        fetch(`${apiBase()}/api/store/media-db/outlets`, { credentials: "include", signal: controller.signal }),
-        fetch(`${apiBase()}/api/store/media-db/contacts?page=1&pageSize=50&sort=lastName&direction=asc`, { credentials: "include", signal: controller.signal }),
+      const requests: Promise<Response>[] = [
         fetch(`${apiBase()}/api/store/media-categories`, { credentials: "include", signal: controller.signal }),
-      ]);
+      ];
+      if (requestedMode === "browse" && requestedTab === "outlets") {
+        const params = new URLSearchParams({ page: String(outletPage), pageSize: "50" });
+        if (outletSearch.trim()) params.set("q", outletSearch.trim());
+        if (outletCatFilter) params.set("category", outletCatFilter);
+        requests.push(fetch(`${apiBase()}/api/store/media-db/outlets?${params}`, { credentials: "include", signal: controller.signal }));
+      }
+      if (requestedMode === "browse" && requestedTab === "contacts") {
+        const params = new URLSearchParams({ page: String(contactPage), pageSize: "50", sort: contactSort, direction: contactDirection });
+        if (contactSearch.trim()) params.set("q", contactSearch.trim());
+        if (contactCategoryFilter) params.set("category", contactCategoryFilter);
+        if (contactCountryFilter) params.set("country", contactCountryFilter);
+        if (contactOutletFilter) params.set("outletId", contactOutletFilter);
+        requests.push(fetch(`${apiBase()}/api/store/media-db/contacts?${params}`, { credentials: "include", signal: controller.signal }));
+      }
+      const [catR, optionalR] = await Promise.all(requests);
+      const outR = requestedTab === "outlets" && requestedMode === "browse" ? (optionalR ?? null) : null;
+      const conR = requestedTab === "contacts" && requestedMode === "browse" ? (optionalR ?? null) : null;
       const failed = [
-        ["publications", outR],
-        ["contacts", conR],
-        ["categories", catR],
+        ...(outR ? [["publications", outR] as const] : []),
+        ...(conR ? [["contacts", conR] as const] : []),
       ].find(([, response]) => !(response as Response).ok);
       if (failed) {
         throw new Error(`The ${failed[0]} request returned ${(failed[1] as Response).status}.`);
       }
-      const [outletData, contactData, categoryData] = await Promise.all([
-        outR.json(),
-        conR.json(),
-        catR.json(),
-      ]);
+      const categoryData = catR.ok ? await catR.json() : null;
+      const outletData = outR ? await outR.json() : null;
+      const contactData = conR ? await conR.json() : null;
       if (sequence !== loadRequestSequence.current) return;
-      setOutlets(outletData.outlets ?? []);
-      setContacts(contactData.contacts ?? []);
-      setContactTotal(contactData.total ?? contactData.contacts?.length ?? 0);
-      if (catR.ok) {
+      if (outletData) {
+        setOutlets(outletData.outlets ?? []);
+        setOutletTotal(outletData.total ?? outletData.outlets?.length ?? 0);
+      }
+      if (contactData) {
+        setContacts(contactData.contacts ?? []);
+        setContactTotal(contactData.total ?? contactData.contacts?.length ?? 0);
+      }
+      if (catR.ok && categoryData) {
         const custom: string[] = (categoryData.custom ?? []).map((c: { name: string }) => c.name);
         const merged = Array.from(new Set([...(categoryData.standard ?? TRADE_MEDIA_CATEGORIES), ...custom])).sort((a, b) => a.localeCompare(b));
         setAllCategories(merged);
+      } else if (sequence === loadRequestSequence.current) {
+        setLoadError("Filters are temporarily unavailable. You can still search or browse.");
       }
+      if (requestedMode === "search") setResultRefreshToken((value) => value + 1);
     } catch (error) {
       controller.abort();
       if (sequence !== loadRequestSequence.current) return;
@@ -451,7 +473,6 @@ function MediaDatabasePage() {
       window.clearTimeout(timeout);
       if (sequence === loadRequestSequence.current) {
         loadControllerRef.current = null;
-        setLoading(false);
       }
     }
   };
@@ -537,62 +558,58 @@ function MediaDatabasePage() {
     if (activeTab === "corrections") void loadCorrectionQueue();
   }, [activeTab]);
 
-  const searchActive = Boolean(searchPhrase || searchTopic || searchLocation || searchCategory || searchAuthority);
+  const searchActive = resultMode === "search";
+  const runSearch = () => {
+    setResultMode("search");
+    setSearchPage(1);
+    setResultMessage("");
+    setResultRefreshToken((value) => value + 1);
+  };
   useEffect(() => {
-    if (!searchActive) { setSearchResults([]); setSearchTotal(0); return; }
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      const params = new URLSearchParams({ page: String(searchPage), pageSize: "25" });
-      if (searchPhrase.trim()) params.set("phrase", searchPhrase.trim());
-      if (searchTopic.trim()) params.set("topic", searchTopic.trim());
-      if (searchLocation.trim()) params.set("location", searchLocation.trim());
-      if (searchCategory) params.set("category", searchCategory);
-      if (searchAuthority) params.set("authority", searchAuthority);
-      setSearchLoading(true);
-      fetch(`${apiBase()}/api/store/media-db/search?${params}`, { credentials: "include", signal: controller.signal })
-        .then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not search the media database.")))
-        .then((data) => {
-          setSearchResults(data.results ?? []); setSearchTotal(data.total ?? 0);
-          setSearchCounts(data.counts ?? { contacts: 0, outlets: 0 });
-        })
-        .catch((error) => { if (error.name !== "AbortError") console.error(error); })
-        .finally(() => setSearchLoading(false));
-    }, 200);
-    return () => { controller.abort(); window.clearTimeout(timer); };
-  }, [searchActive, searchPhrase, searchTopic, searchLocation, searchCategory, searchAuthority, searchPage]);
-
-  useEffect(() => {
-    if (!skippedInitialContactEffect.current) {
-      skippedInitialContactEffect.current = true;
-      return;
-    }
+    if (!searchActive) return;
+    const sequence = ++loadRequestSequence.current;
     const controller = new AbortController();
     let timedOut = false;
-    const requestTimeout = window.setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, 10_000);
-    const timer = window.setTimeout(() => {
-      const params = new URLSearchParams({ page: String(contactPage), pageSize: "50", sort: contactSort, direction: contactDirection });
-      if (contactSearch.trim()) params.set("q", contactSearch.trim());
-      if (contactCategoryFilter) params.set("category", contactCategoryFilter);
-      if (contactCountryFilter) params.set("country", contactCountryFilter);
-      if (contactOutletFilter) params.set("outletId", contactOutletFilter);
-      fetch(`${apiBase()}/api/store/media-db/contacts?${params}`, { credentials: "include", signal: controller.signal })
-        .then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not search contacts.")))
-        .then((data) => { setContacts(data.contacts ?? []); setContactTotal(data.total ?? 0); })
-        .catch((error) => {
-          if (timedOut) setLoadError("The Media Database took too long to respond.");
-          else if (error.name !== "AbortError") setLoadError("The Media Database could not be loaded.");
-        })
-        .finally(() => window.clearTimeout(requestTimeout));
-    }, 200);
-    return () => {
-      controller.abort();
-      window.clearTimeout(timer);
-      window.clearTimeout(requestTimeout);
-    };
-  }, [contactSearch, contactCategoryFilter, contactCountryFilter, contactOutletFilter, contactSort, contactDirection, contactPage]);
+    const timeout = window.setTimeout(() => { timedOut = true; controller.abort(); }, 10_000);
+    const params = new URLSearchParams({ page: String(searchPage), pageSize: "25" });
+    if (searchPhrase.trim()) params.set("phrase", searchPhrase.trim());
+    if (searchTopic.trim()) params.set("topic", searchTopic.trim());
+    if (searchLocation.trim()) params.set("location", searchLocation.trim());
+    if (searchCategory) params.set("category", searchCategory);
+    if (searchAuthority) params.set("authority", searchAuthority);
+    setSearchLoading(true);
+    setResultMessage("");
+    fetch(`${apiBase()}/api/store/media-db/search?${params}`, { credentials: "include", signal: controller.signal })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not search the media database.")))
+      .then((data) => {
+        if (sequence !== loadRequestSequence.current) return;
+        setSearchResults(data.results ?? []); setSearchTotal(data.total ?? 0);
+        setSearchCounts(data.counts ?? { contacts: 0, outlets: 0 });
+      })
+      .catch((error) => {
+        if (error.name === "AbortError") {
+          if (timedOut && sequence === loadRequestSequence.current) setResultMessage("Search timed out. Try again.");
+          return;
+        }
+        if (sequence === loadRequestSequence.current) setResultMessage(error instanceof Error ? error.message : "Search failed. Try again.");
+      })
+      .finally(() => { window.clearTimeout(timeout); if (sequence === loadRequestSequence.current) setSearchLoading(false); });
+    return () => { controller.abort(); window.clearTimeout(timeout); };
+  }, [searchActive, searchPage, resultRefreshToken]);
+
+  const browseResults = (tab: "outlets" | "contacts" = activeTab === "outlets" ? "outlets" : "contacts") => {
+    setResultMode("browse");
+    setResultMessage("");
+    if (tab === "outlets") {
+      setOutletPage(1);
+      void loadData("browse", "outlets");
+    }
+  };
+  useEffect(() => {
+    if (resultMode !== "browse") return;
+    if (activeTab === "contacts") void loadData("browse", "contacts");
+    if (activeTab === "outlets") void loadData("browse", "outlets");
+  }, [resultMode, activeTab, contactPage, contactSort, contactDirection, contactSearch, contactCategoryFilter, contactCountryFilter, contactOutletFilter, outletPage]);
 
   const resetImport = () => {
     importPreviewSequence.current += 1;
@@ -733,11 +750,7 @@ function MediaDatabasePage() {
   };
 
   // Outlets
-  const filteredOutlets = outlets.filter((o) => {
-    if (outletCatFilter && o.category !== outletCatFilter) return false;
-    if (outletSearch && !o.name.toLowerCase().includes(outletSearch.toLowerCase()) && !o.category.toLowerCase().includes(outletSearch.toLowerCase())) return false;
-    return true;
-  });
+  const filteredOutlets = outlets;
 
   const openAddOutlet = () => {
     if (!canWriteMediaDatabase) return;
@@ -781,6 +794,12 @@ function MediaDatabasePage() {
 
   const openAddContact = () => {
     if (!canWriteMediaDatabase) return;
+    if (!outlets.length) {
+      void fetch(`${apiBase()}/api/store/media-db/outlets?page=1&pageSize=50`, { credentials: "include" })
+        .then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not load publications.")))
+        .then((data) => setOutlets(data.outlets ?? []))
+        .catch(() => setResultMessage("Publications could not be loaded. You can still save the contact without a linked publication."));
+    }
     setEditingContact(null);
     setContactForm({
       outletId: "", firstName: "", lastName: "", role: "", email: "", phone: "", notes: "",
@@ -1088,37 +1107,8 @@ function MediaDatabasePage() {
     }
   };
 
-  const catOptions = Array.from(new Set(outlets.map((o) => o.category).filter(Boolean))).sort();
   const outletOptions = outlets.map((o) => ({ id: o.id, name: o.name })).sort((a, b) => a.name.localeCompare(b.name));
   const showCollectionTools = activeTab === "outlets" || activeTab === "contacts";
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen" style={{ background: vars.g50 }}>
-        <Loader2 size={28} className="animate-spin" color={vars.accent} />
-      </div>
-    );
-  }
-
-  if (loadError) {
-    return (
-      <div className="min-h-screen p-6 max-w-6xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
-        <div className="mb-6">
-          <div className="flex items-center gap-2.5">
-            <Database size={24} color="#ffffff" />
-            <h1 className="text-[28px] font-semibold mb-1" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Media Database</h1>
-          </div>
-        </div>
-        <div role="alert" className="rounded-2xl border bg-white p-6 shadow-sm" style={{ borderColor: vars.g200 }}>
-          <h2 className="text-[18px] font-semibold" style={{ color: vars.navy }}>Media Database unavailable</h2>
-          <p className="mt-2 text-[14px]" style={{ color: vars.g600 }}>{loadError} Please try again.</p>
-          <button onClick={() => void loadData()} className="mt-4 rounded-lg px-4 py-2 text-[13px] font-semibold text-white" style={{ background: vars.accent }}>
-            Try again
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen p-6 max-w-6xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
@@ -1130,6 +1120,9 @@ function MediaDatabasePage() {
         </div>
          <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>Search publications and journalists from the shared Master collection or your private workspace collection.</p>
       </div>
+      {loadError && <div role="alert" className="mb-4 rounded-xl border bg-white px-4 py-3 text-[13px]" style={{ borderColor: "#FECACA", color: vars.red }}>
+        {loadError} <button onClick={() => void loadData()} className="ml-2 font-semibold underline">Try again</button>
+      </div>}
 
       {showCollectionTools && <section className="mb-5 rounded-2xl border bg-white shadow-sm" style={{ borderColor: vars.g200 }}>
         <div className="p-4 sm:p-5">
@@ -1138,6 +1131,7 @@ function MediaDatabasePage() {
             <Search size={18} color={vars.g400} />
             <input id="media-primary-search" value={searchPhrase} onChange={(event) => { setSearchPhrase(event.target.value); setSearchPage(1); }} placeholder="Enter an exact LLM phrase, journalist or publication" className="w-full py-3 text-[14px] outline-none" />
             {searchPhrase && <button aria-label="Clear search phrase" onClick={() => setSearchPhrase("")}><X size={16} color={vars.g400} /></button>}
+            <button onClick={runSearch} className="rounded-lg px-3 py-2 text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Search</button>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button aria-expanded={showFilters} onClick={() => setShowFilters((value) => !value)} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>
@@ -1167,10 +1161,11 @@ function MediaDatabasePage() {
 
       {showCollectionTools && searchActive && <section className="mb-6">
         <div className="flex items-center justify-between gap-3 mb-3">
-          <p className="text-[13px]" style={{ color: vars.g500 }}>{searchLoading ? "Searching..." : `${searchTotal} results: ${searchCounts.contacts} contacts and ${searchCounts.outlets} publications`}</p>
+          <p className="text-[13px]" style={{ color: vars.g500 }}>{searchLoading ? "Searching..." : resultMessage || `${searchTotal} results: ${searchCounts.contacts} contacts and ${searchCounts.outlets} publications`}</p>
            {searchResults.some((result) => result.type === "contact") && <button disabled={exportBusy} onClick={() => void exportSearchContacts("xlsx")} className="inline-flex items-center gap-1.5 text-[12px] font-semibold disabled:opacity-50" style={{ color: vars.navy }}><Download size={13} /> Export all matches</button>}
          </div>
          {exportError && <p className="mb-3 rounded-lg bg-white px-3 py-2 text-[12px]" style={{ color: vars.red }}>{exportError}</p>}
+         {resultMessage && !searchLoading && <button onClick={runSearch} className="mb-3 text-[12px] font-semibold underline" style={{ color: vars.accent }}>Retry search</button>}
          <div className="space-y-3" aria-live="polite">
           {searchResults.map((result) => {
             const isContact = result.type === "contact";
@@ -1205,7 +1200,7 @@ function MediaDatabasePage() {
               </div>
             </article>;
           })}
-          {!searchLoading && searchResults.length === 0 && <div className="rounded-2xl border bg-white py-12 text-center" style={{ borderColor: vars.g200 }}><Search size={28} className="mx-auto mb-2" color={vars.g300} /><p className="font-semibold" style={{ color: vars.navy }}>No matching contacts or publications</p><p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Clear a filter or broaden the topic.</p></div>}
+          {!searchLoading && !resultMessage && searchResults.length === 0 && <div className="rounded-2xl border bg-white py-12 text-center" style={{ borderColor: vars.g200 }}><Search size={28} className="mx-auto mb-2" color={vars.g300} /><p className="font-semibold" style={{ color: vars.navy }}>No matching contacts or publications</p><p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Clear a filter or broaden the topic.</p></div>}
         </div>
         {searchTotal > 25 && <div className="flex justify-end items-center gap-3 mt-3 text-[12px]" style={{ color: vars.navy }}><button disabled={searchPage === 1} onClick={() => setSearchPage((page) => page - 1)} className="px-3 py-1 border rounded disabled:opacity-40">Previous</button><span>Page {searchPage} of {Math.ceil(searchTotal / 25)}</span><button disabled={searchPage * 25 >= searchTotal} onClick={() => setSearchPage((page) => page + 1)} className="px-3 py-1 border rounded disabled:opacity-40">Next</button></div>}
       </section>}
@@ -1290,16 +1285,22 @@ function MediaDatabasePage() {
           <div className="flex flex-wrap items-center gap-3 mb-5 p-4 rounded-xl border bg-white" style={{ borderColor: vars.g200 }}>
             <div className="flex-1 min-w-[250px] flex items-center gap-2 mb-1">
                <Search size={16} className="text-slate-400" />
-               <input value={outletSearch} onChange={(e) => setOutletSearch(e.target.value)} placeholder="Search outlets by name or category..." className="px-3 py-2 rounded-lg border text-[13px] w-full outline-none focus:border-slate-400" style={{ borderColor: vars.g200 }} />
+               <input value={outletSearch} onChange={(e) => { setOutletSearch(e.target.value); setOutletPage(1); }} placeholder="Search outlets by name or category..." className="px-3 py-2 rounded-lg border text-[13px] w-full outline-none focus:border-slate-400" style={{ borderColor: vars.g200 }} />
             </div>
-            <select value={outletCatFilter} onChange={(e) => setOutletCatFilter(e.target.value)} className="px-3 py-2 rounded-lg border text-[13px] outline-none bg-white" style={{ borderColor: vars.g200, color: outletCatFilter ? vars.navy : "inherit" }}>
+            <select value={outletCatFilter} onChange={(e) => { setOutletCatFilter(e.target.value); setOutletPage(1); }} className="px-3 py-2 rounded-lg border text-[13px] outline-none bg-white" style={{ borderColor: vars.g200, color: outletCatFilter ? vars.navy : "inherit" }}>
               <option value="">All categories</option>
-              {catOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+              {allCategories.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
+            <button onClick={() => { setActiveTab("outlets"); browseResults("outlets"); }} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.accent, color: vars.accent }}>Browse publications</button>
              {canWriteMediaDatabase && <button onClick={openAddOutlet} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors" style={{ background: vars.accent }}>
                <Plus size={14} /> Add outlet
              </button>}
           </div>
+          {outletTotal > 50 && <div className="flex justify-end items-center gap-3 mb-3 text-[12px]" style={{ color: vars.navy }}>
+            <button disabled={outletPage === 1} onClick={() => setOutletPage((page) => page - 1)} className="px-3 py-1 border rounded disabled:opacity-40">Previous</button>
+            <span>Page {outletPage} of {Math.ceil(outletTotal / 50)}</span>
+            <button disabled={outletPage * 50 >= outletTotal} onClick={() => setOutletPage((page) => page + 1)} className="px-3 py-1 border rounded disabled:opacity-40">Next</button>
+          </div>}
 
           {filteredOutlets.length === 0 ? (
             <div className="text-center py-16 rounded-2xl border" style={{ borderColor: vars.g200, background: "white" }}>
@@ -1359,6 +1360,7 @@ function MediaDatabasePage() {
             <div className="w-full flex items-center gap-2 mb-1">
                <Search size={16} className="text-slate-400" />
                <input value={contactSearch} onChange={(e) => { setContactSearch(e.target.value); setContactPage(1); }} placeholder="Natural language search (e.g. 'tech reporters in London')" className="px-3 py-2 rounded-lg border text-[13px] flex-1 min-w-[250px] outline-none focus:border-slate-400" style={{ borderColor: vars.g200 }} />
+               <button onClick={() => { setActiveTab("contacts"); browseResults("contacts"); }} className="rounded-lg border px-3 py-2 text-[12px] font-semibold whitespace-nowrap" style={{ borderColor: vars.accent, color: vars.accent }}>Browse contacts</button>
             </div>
             <div className="flex flex-wrap items-center gap-2 w-full">
               <select value={contactCategoryFilter} onChange={(e) => { setContactCategoryFilter(e.target.value); setContactPage(1); }} className="px-3 py-2 rounded-lg border text-[13px] bg-white outline-none" style={{ borderColor: vars.g200 }}>

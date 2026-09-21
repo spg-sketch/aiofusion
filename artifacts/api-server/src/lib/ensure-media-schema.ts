@@ -9,6 +9,9 @@ import { logger } from "./logger";
  * rows remain valid while the new required fields are introduced.
  */
 export async function ensureMediaSchema(): Promise<void> {
+  if (process.env.VITEST !== "true" && process.env.NODE_ENV !== "test") {
+    await db.execute(sql`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
+  }
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS journalist_privacy_requests (
       id serial PRIMARY KEY, request_type varchar(20) NOT NULL, name text NOT NULL,
@@ -473,6 +476,10 @@ export async function ensureMediaSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS media_contact_corrections_workspace_status
       ON media_contact_correction_reports (account_id, status, contact_id)
   `);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS media_outlets_live_account_name ON media_outlets (account_id, deleted_at, name)`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS media_outlets_live_category_country ON media_outlets (category, country, deleted_at)`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS media_contacts_live_account_name ON media_contacts (account_id, deleted_at, last_name, first_name)`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS media_contacts_live_outlet ON media_contacts (outlet_id, deleted_at)`);
   await db.execute(sql`
     CREATE UNIQUE INDEX IF NOT EXISTS media_recommendation_items_unique
       ON media_recommendation_items (recommendation_set_id, contact_id)

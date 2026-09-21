@@ -32,6 +32,21 @@ const changedContact = {
 let testOutlets: Record<string, unknown>[] = [];
 let importPreviewMode: "legacy" | "review" | "refresh" | "publication" = "legacy";
 let exportAllPagesMode = false;
+let searchTotalOverride = 2;
+let searchEmptyMode = false;
+let outletTotalOverride = 0;
+
+async function browseContacts() {
+  fireEvent.click(screen.getByRole("button", { name: "Browse contacts" }));
+  expect(await screen.findByText("Jane Reporter")).toBeTruthy();
+}
+
+async function browseOutlets() {
+  fireEvent.click(screen.getByRole("button", { name: /Outlets \(/i }));
+  fireEvent.click(screen.getByRole("button", { name: "Browse publications" }));
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/outlets?"))).toBe(true));
+  await new Promise((resolve) => window.setTimeout(resolve, 0));
+}
 
 describe("MediaDatabasePage source health", () => {
   beforeEach(() => {
@@ -75,7 +90,7 @@ describe("MediaDatabasePage source health", () => {
       if (url.includes("/media-db/search")) {
         return new Response(JSON.stringify({
           interpretation: { phrase: "energy", topic: "", location: "", category: "", authority: 0 },
-          results: [{
+          results: searchEmptyMode ? [] : [{
             type: "contact", id: 12, contact: changedContact, authority: 75,
             matchedFields: ["role"], matchedPhrases: ["energy"],
             reasons: ["Matched role.", "Contains the exact phrase \"energy\"."],
@@ -83,7 +98,7 @@ describe("MediaDatabasePage source health", () => {
             type: "outlet", id: 20, outlet: { id: 20, name: "Energy Weekly", category: "Energy", website: "energy.example", description: "", country: "UK", reachBand: "National", accountId: null },
             authority: 0, matchedFields: ["publication"], matchedPhrases: [], reasons: ["Matched publication."],
           }],
-          total: 2, counts: { contacts: 1, outlets: 1 },
+           total: searchTotalOverride, counts: { contacts: searchEmptyMode ? 0 : 1, outlets: searchEmptyMode ? 0 : 1 },
         }), { status: 200 });
       }
       if (url.includes("/contacts")) {
@@ -101,8 +116,16 @@ describe("MediaDatabasePage source health", () => {
           total: 2,
         }), { status: 200 });
       }
-      if (url.includes("/outlets")) return new Response(JSON.stringify({ outlets: testOutlets }), { status: 200 });
-      if (url.includes("/media-categories")) return new Response(JSON.stringify({ standard: [], custom: [] }), { status: 200 });
+      if (url.includes("/outlets")) {
+        const query = new URL(url, "http://test.local").searchParams;
+        return new Response(JSON.stringify({
+          outlets: testOutlets,
+          total: outletTotalOverride || testOutlets.length,
+          page: query.get("page"),
+          pageSize: query.get("pageSize"),
+        }), { status: 200 });
+      }
+      if (url.includes("/media-categories")) return new Response(JSON.stringify({ standard: ["Energy"], custom: [] }), { status: 200 });
       return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
     }));
   });
@@ -113,12 +136,15 @@ describe("MediaDatabasePage source health", () => {
     testOutlets = [];
     importPreviewMode = "legacy";
     exportAllPagesMode = false;
+    searchTotalOverride = 2;
+    searchEmptyMode = false;
+    outletTotalOverride = 0;
     vi.unstubAllGlobals();
   });
 
   it("shows changed and source-less statuses and requires explicit approval", async () => {
     render(<MediaDatabasePage />);
-    expect(await screen.findByText("Jane Reporter")).toBeTruthy();
+    await browseContacts();
     expect(screen.getByText("Changed")).toBeTruthy();
     expect(screen.getByText("Unverified")).toBeTruthy();
 
@@ -139,36 +165,79 @@ describe("MediaDatabasePage source health", () => {
     ));
   });
 
-  it("shows a retryable error instead of an endless spinner when initial loading fails", async () => {
+  it("keeps the shell visible and shows a retryable inline error when metadata loading fails", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => {
       throw new TypeError("network unavailable");
     }));
     render(<MediaDatabasePage />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Media Database unavailable");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Media Database could not be loaded");
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 
-  it("does not duplicate the initial contacts request", async () => {
+  it("does not request result records on initial render", async () => {
     render(<MediaDatabasePage />);
-    await screen.findByText("Jane Reporter");
     await new Promise((resolve) => window.setTimeout(resolve, 250));
     const contactCalls = vi.mocked(fetch).mock.calls.filter(([input]) =>
       String(input).includes("/media-db/contacts?"),
     );
-    expect(contactCalls).toHaveLength(1);
-    expect(String(contactCalls[0]?.[0])).toContain("pageSize=50");
+    expect(contactCalls).toHaveLength(0);
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/outlets?"))).toBe(false);
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/search?"))).toBe(false);
+  });
+
+  it("loads contacts only after an explicit browse action", async () => {
+    render(<MediaDatabasePage />);
+    await browseContacts();
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/contacts?"))).toBe(true);
+  });
+
+  it("server-pages publication browsing and carries search and category filters", async () => {
+    testOutlets = [{ id: 2, name: "Example News", category: "Energy", website: "", description: "", country: "UK", reachBand: "", accountId: "account-a" }];
+    outletTotalOverride = 101;
+    render(<MediaDatabasePage />);
+    await browseOutlets();
+    fireEvent.change(screen.getByPlaceholderText("Search outlets by name or category..."), { target: { value: "example" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "" }), { target: { value: "Energy" } });
+    fireEvent.click(screen.getByRole("button", { name: "Browse publications" }));
+    await waitFor(() => {
+      const calls = vi.mocked(fetch).mock.calls.map(([input]) => String(input)).filter((input) => input.includes("/media-db/outlets?"));
+      expect(calls.some((input) => input.includes("q=example") && input.includes("category=Energy") && input.includes("page=1") && input.includes("pageSize=50"))).toBe(true);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/outlets?") && String(input).includes("page=2"))).toBe(true));
+  });
+
+  it("requires explicit submit and paginates unified search results", async () => {
+    searchTotalOverride = 50;
+    render(<MediaDatabasePage />);
+    fireEvent.change(screen.getByLabelText("Search contacts and publications"), { target: { value: "energy" } });
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/search?"))).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(await screen.findByText("Energy Weekly")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/search?page=2"))).toBe(true));
+  });
+
+  it("renders an explicit no-results state without replacing the page shell", async () => {
+    searchEmptyMode = true;
+    render(<MediaDatabasePage />);
+    fireEvent.change(screen.getByLabelText("Search contacts and publications"), { target: { value: "nothing" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(await screen.findByText("No matching contacts or publications")).toBeTruthy();
+    expect(screen.getByText("Media Database")).toBeTruthy();
   });
 
   it("shows the discovery queue to workspace members but instructions only to the canonical Master owner", async () => {
     render(<MediaDatabasePage />);
-    await screen.findByText("Jane Reporter");
+    await browseContacts();
     expect(screen.getByRole("button", { name: "Discoveries" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Research instructions" })).toBeNull();
 
     cleanup();
     localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "admin", role: "admin", membershipRole: "owner" }));
     render(<MediaDatabasePage />);
-    await screen.findByText("Jane Reporter");
+    await browseContacts();
     expect(screen.getByRole("button", { name: "Discoveries" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Research instructions" })).toBeTruthy();
   });
@@ -199,7 +268,9 @@ describe("MediaDatabasePage source health", () => {
     Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: () => undefined });
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     render(<MediaDatabasePage />);
-    await screen.findByText("Jane Reporter");
+    await browseOutlets();
+    fireEvent.click(screen.getByRole("button", { name: /Contacts \(/i }));
+    await browseContacts();
     fireEvent.change(screen.getAllByRole("combobox")[2], { target: { value: "2" } });
     const exportStart = vi.mocked(fetch).mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: "Excel" }));
@@ -222,8 +293,9 @@ describe("MediaDatabasePage source health", () => {
 
   it("shows unified explained results and opens a provenance-safe correction report", async () => {
     render(<MediaDatabasePage />);
-    await screen.findByText("Jane Reporter");
+    await browseContacts();
     fireEvent.change(screen.getByLabelText("Search contacts and publications"), { target: { value: "energy" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(await screen.findByText("Energy Weekly")).toBeTruthy();
     expect(screen.getByText("1 contacts and 1 publications", { exact: false })).toBeTruthy();
     expect(screen.getByText("Matched role")).toBeTruthy();
@@ -239,7 +311,7 @@ describe("MediaDatabasePage source health", () => {
     localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "admin", role: "admin" }));
     vi.stubGlobal("crypto", { randomUUID: () => "test-import-key" });
     render(<MediaDatabasePage />);
-    await screen.findByText("Jane Reporter");
+    await browseContacts();
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
 
     expect(screen.getByLabelText("Shared collection")).toBeChecked();
@@ -279,7 +351,7 @@ describe("MediaDatabasePage source health", () => {
     localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "admin", role: "admin" }));
     vi.stubGlobal("crypto", { randomUUID: () => "review-import-key" });
     render(<MediaDatabasePage />);
-    await screen.findByText("Jane Reporter");
+    await browseContacts();
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(fileInput, { target: { files: [{ name: "review.csv", size: 42, text: async () => "First Name,Last Name,Publication,Email\nJane,Reporter,Example News,jane@example.com" }] } });
@@ -310,7 +382,7 @@ describe("MediaDatabasePage source health", () => {
     localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "admin", role: "admin" }));
     vi.stubGlobal("crypto", { randomUUID: () => `${mode}-import-key` });
     render(<MediaDatabasePage />);
-    await screen.findByText("Jane Reporter");
+    await browseContacts();
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(fileInput, { target: { files: [{ name: `${mode}.csv`, size: 42, text: async () => "First Name,Last Name,Publication,Email\nJane,Reporter,Example News,jane@example.com" }] } });
@@ -327,8 +399,8 @@ describe("MediaDatabasePage source health", () => {
       { id: 2, name: "Agency News", category: "Technology", website: "", description: "", country: "UK", reachBand: "", accountId: "agency-a", collectionScope: "workspace" },
     ];
     render(<MediaDatabasePage />);
-    await screen.findByText("Jane Reporter");
-    fireEvent.click(screen.getByRole("button", { name: /Outlets \(2\)/i }));
+    await browseContacts();
+    await browseOutlets();
 
     expect(screen.getByText("Shared collection")).toBeTruthy();
     expect(screen.getAllByTitle("Edit")).toHaveLength(1);
@@ -339,7 +411,7 @@ describe("MediaDatabasePage source health", () => {
   it("defaults non-Master imports to a private workspace target without offering shared access", async () => {
     localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "agency-a", role: "agency" }));
     render(<MediaDatabasePage />);
-    await screen.findByText("Jane Reporter");
+    await browseContacts();
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
 
     expect(screen.queryByLabelText("Shared collection")).toBeNull();
@@ -353,14 +425,14 @@ describe("MediaDatabasePage source health", () => {
       { id: 2, name: "Agency News", category: "Technology", website: "", description: "", country: "UK", reachBand: "", accountId: "account-a", collectionScope: "workspace" },
     ];
     render(<MediaDatabasePage />);
-    await screen.findByText("Jane Reporter");
+    await browseContacts();
 
     expect(screen.queryByRole("button", { name: "Add contact" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add publication" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Import" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Import CSV" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /Outlets \(2\)/i }));
+    await browseOutlets();
     expect(screen.queryAllByTitle("Edit")).toHaveLength(0);
     expect(screen.queryAllByTitle("Delete")).toHaveLength(0);
 
@@ -378,14 +450,14 @@ describe("MediaDatabasePage source health", () => {
       { id: 2, name: "Agency News", category: "Technology", website: "", description: "", country: "UK", reachBand: "", accountId: "account-a", collectionScope: "workspace" },
     ];
     render(<MediaDatabasePage />);
-    await screen.findByText("Jane Reporter");
+    await browseContacts();
 
     expect(screen.queryByRole("button", { name: "Add contact" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add publication" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Import" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Import CSV" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /Outlets \(2\)/i }));
+    await browseOutlets();
     expect(screen.queryAllByTitle("Edit")).toHaveLength(0);
     expect(screen.queryAllByTitle("Delete")).toHaveLength(0);
 
@@ -397,6 +469,7 @@ describe("MediaDatabasePage source health", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
     fireEvent.change(screen.getByLabelText("Search contacts and publications"), { target: { value: "energy" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(await screen.findByText("Energy Weekly")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Mark as departed" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Flag incorrect details" })).toBeNull();

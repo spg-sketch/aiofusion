@@ -371,4 +371,80 @@ describe("media source health routes", () => {
     expect((await db.select().from(mediaContactsTable))[0].email).toBe("newer-manual@example.com");
     expect(((await (await get("/store/media-db/corrections", "admin")).json()) as { corrections: unknown[] }).corrections).toHaveLength(1);
   });
+
+  it("keeps large media lists SQL-bounded, scoped, paged, and suppression-aware", async () => {
+    const [outlet] = await db.insert(mediaOutletsTable).values({
+      name: "Scale News", category: "Technology", accountId: "account-a",
+    }).returning();
+    await db.insert(mediaOutletsTable).values([
+      { name: "Hidden News", category: "Technology", accountId: "account-b" },
+      { name: "Deleted News", category: "Technology", accountId: "account-a", deletedAt: new Date() },
+    ]);
+    const contacts = Array.from({ length: 260 }, (_, index) => ({
+      outletId: outlet!.id, firstName: "Scale", lastName: `Reporter ${index}`,
+      role: "Editor", email: `scale-${index}@example.test`, sectors: ["Technology"],
+      journalistAuthority: "80", accountId: "account-a",
+    }));
+    await db.insert(mediaContactsTable).values(contacts);
+    await db.insert(mediaContactsTable).values([
+      { firstName: "Hidden", lastName: "Reporter", accountId: "account-b", sectors: ["Technology"] },
+      { firstName: "Deleted", lastName: "Reporter", accountId: "account-a", deletedAt: new Date(), sectors: ["Technology"] },
+    ]);
+    await db.insert(mediaSuppressionsTable).values({
+      scope: "workspace", accountId: "account-a",
+      emailHash: privacyHash("scale-0@example.test"), reason: "scale test",
+    });
+
+    const first = await (await get("/store/media-db/contacts?page=1&pageSize=25", "account-a")).json() as { contacts: Array<{ email: string }>; total: number; pageSize: number };
+    expect(first.pageSize).toBe(25);
+    expect(first.contacts).toHaveLength(25);
+    expect(first.total).toBe(259);
+    expect(first.contacts.map((row) => row.email)).not.toContain("scale-0@example.test");
+    const second = await (await get("/store/media-db/contacts?page=2&pageSize=25", "account-a")).json() as { contacts: Array<{ email: string }>; total: number };
+    expect(second.contacts).toHaveLength(25);
+    expect(second.total).toBe(first.total);
+    expect(second.contacts[0]?.email).not.toBe(first.contacts[0]?.email);
+
+    const search = await (await get("/store/media-db/search?phrase=scale&page=2&pageSize=20", "account-a")).json() as {
+      results: Array<{ type: string }>; total: number; counts: { contacts: number; outlets: number };
+    };
+    expect(search.results).toHaveLength(20);
+    expect(search.total).toBe(260);
+    expect(search.counts.contacts).toBe(259);
+    expect(search.counts.outlets).toBe(1);
+    expect(search.results.filter((result) => result.type === "contact").length).toBeGreaterThanOrEqual(19);
+  });
+
+  it("keeps mixed unified-search pages stable across contact and publication ties", async () => {
+    const [firstOutlet, secondOutlet] = await db.insert(mediaOutletsTable).values([
+      { name: "Tie Publication", category: "TieCategory", description: "tie", accountId: "account-a" },
+      { name: "Tie Publication", category: "OtherCategory", description: "tie", accountId: "account-a" },
+    ]).returning();
+    const [firstContact, secondContact] = await db.insert(mediaContactsTable).values([
+      { outletId: firstOutlet!.id, firstName: "Tie", lastName: "Alpha", role: "tie", journalistAuthority: "90", accountId: "account-a" },
+      { outletId: secondOutlet!.id, firstName: "Tie", lastName: "Beta", role: "tie", journalistAuthority: "10", accountId: "account-a" },
+    ]).returning();
+
+    const pageOne = await (await get("/store/media-db/search?phrase=tie&page=1&pageSize=2", "account-a")).json() as {
+      results: Array<{ type: string; id: number }>; total: number;
+    };
+    const pageTwo = await (await get("/store/media-db/search?phrase=tie&page=2&pageSize=2", "account-a")).json() as {
+      results: Array<{ type: string; id: number }>; total: number;
+    };
+    expect(pageOne.total).toBeGreaterThanOrEqual(4);
+    expect(pageTwo.total).toBe(pageOne.total);
+    expect(pageOne.results).toHaveLength(2);
+    expect(pageTwo.results).toHaveLength(2);
+    expect(pageTwo.results.map((result) => `${result.type}:${result.id}`))
+      .not.toEqual(expect.arrayContaining(pageOne.results.map((result) => `${result.type}:${result.id}`)));
+    expect([firstContact!.id, secondContact!.id]).toEqual(expect.arrayContaining(
+      [...pageOne.results, ...pageTwo.results].filter((result) => result.type === "contact").map((result) => result.id),
+    ));
+
+    const categoryResponse = await get("/store/media-db/outlets?page=1&pageSize=10&category=TieCategory", "account-a");
+    const categoryBody = await categoryResponse.json() as { outlets: Array<{ id: number; category: string }>; total: number };
+    expect(categoryBody.outlets.every((outlet) => outlet.category === "TieCategory")).toBe(true);
+    expect(categoryBody.outlets.some((outlet) => outlet.id === firstOutlet!.id)).toBe(true);
+    expect(categoryBody.outlets.some((outlet) => outlet.id === secondOutlet!.id)).toBe(false);
+  });
 });
