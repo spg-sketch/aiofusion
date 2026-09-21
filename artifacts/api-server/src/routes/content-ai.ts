@@ -24,6 +24,15 @@ import {
   normaliseSubmittedExactTargetPhrases,
   type ExactTargetPhrase,
 } from "../lib/exact-target-phrases";
+import {
+  completeMediaDiscoveryRun,
+  createMediaDiscoveryRun,
+  failMediaDiscoveryRun,
+  getLatestMediaDiscoveryRun,
+  getMediaDiscoveryRun,
+  setMediaDiscoveryCandidates,
+  settleMediaDiscoveryCandidate,
+} from "../lib/media-discovery-runs";
 
 const contentAiRouter = Router();
 
@@ -1160,11 +1169,7 @@ contentAiRouter.post(
   },
 );
 
-contentAiRouter.post(
-  "/content/media-discover",
-  contentAiLimiter,
-  fairUsageCheck,
-  async (req: Request, res: Response): Promise<void> => {
+const mediaDiscoverWorker = async (req: Request, res: Response): Promise<void> => {
     if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
     const body = (req.body ?? {}) as Record<string, unknown>;
     const content = (body.content ?? {}) as Record<string, unknown>;
@@ -1389,23 +1394,31 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
           phraseAttributions: normaliseReturnedPhraseAttributions(item.phraseAttributions, targetPhrases),
         }];
       });
+      const runId = (req as Request & { mediaDiscoveryRunId?: string }).mediaDiscoveryRunId;
+      if (runId) await setMediaDiscoveryCandidates(runId, candidates);
       const checked = await mapWithConcurrency(candidates, 5, async (candidate): Promise<TrustedMediaDiscovery | null> => {
         try {
           const source = await fetchSiteContent(candidate.sourceUrl, 20_000);
           const evidenceText = `${source.title} ${source.description} ${source.text}`.toLowerCase();
           const fullName = `${candidate.firstName} ${candidate.lastName}`.trim().toLowerCase();
-          if (!fullName || !evidenceText.includes(fullName)) return null;
+          if (!fullName || !evidenceText.includes(fullName)) {
+            if (runId) await settleMediaDiscoveryCandidate(runId, candidate.candidateKey, null);
+            return null;
+          }
           const publishedEmails = new Set(
             (evidenceText.match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+/gi) || [])
               .map((email) => email.toLowerCase()),
           );
           const candidateEmail = candidate.email.trim().toLowerCase();
           const email = candidateEmail && publishedEmails.has(candidateEmail) ? candidateEmail : "";
-          return {
+          const verified = {
             ...candidate,
             email,
           };
+          if (runId) await settleMediaDiscoveryCandidate(runId, candidate.candidateKey, verified);
+          return verified;
         } catch {
+          if (runId) await settleMediaDiscoveryCandidate(runId, candidate.candidateKey, null, "The cited page could not be checked.");
           return null;
         }
       });
@@ -1421,6 +1434,89 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
       logger.error({ err: error }, "content-ai: live media discovery failed");
       res.status(502).json({ error: "Live media research could not be completed right now. Please try again." });
     }
+};
+
+function serialiseMediaDiscoveryRun(row: any, owner?: string) {
+  const items = Array.isArray(row.items) ? row.items : [];
+  const verifiedItems = items.filter((item: any) => item?.evidenceStatus === "verified") as TrustedMediaDiscovery[];
+  const liveToken = owner && verifiedItems.length > 0
+    ? signMediaDiscoveries({
+        accountId: owner,
+        projectId: row.project_id,
+        expiresAt: Date.now() + 30 * 60 * 1000,
+        items: verifiedItems,
+      })
+    : "";
+  return {
+    runId: row.run_id,
+    projectId: row.project_id,
+    storyKey: row.story_key,
+    status: row.status,
+    items,
+    discoveryToken: liveToken || row.discovery_token || "",
+    error: row.error_message || "",
+    startedAt: row.started_at,
+    updatedAt: row.updated_at,
+    completedAt: row.completed_at,
+  };
+}
+
+contentAiRouter.get("/content/journalist-search-runs/latest", async (req: Request, res: Response): Promise<void> => {
+  if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
+  const projectId = asString(req.query.projectId, 200);
+  const storyKey = asString(req.query.storyKey, 400);
+  if (!projectId || !storyKey || !(await mediaDiscoveryProjectVisible(req, projectId))) {
+    res.status(404).json({ error: "Run not found" });
+    return;
+  }
+  const row = await getLatestMediaDiscoveryRun(normUsername(req.account.username), projectId, storyKey);
+  res.json(row ? serialiseMediaDiscoveryRun(row, normUsername(req.account.username)) : null);
+});
+
+contentAiRouter.get("/content/journalist-search-runs/:runId", async (req: Request, res: Response): Promise<void> => {
+  if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
+  const row = await getMediaDiscoveryRun(asString(req.params.runId, 100), normUsername(req.account.username));
+  if (!row) { res.status(404).json({ error: "Run not found" }); return; }
+  if (!(await mediaDiscoveryProjectVisible(req, String((row as any).project_id || "")))) {
+    res.status(404).json({ error: "Run not found" });
+    return;
+  }
+  res.json(serialiseMediaDiscoveryRun(row, normUsername(req.account.username)));
+});
+
+contentAiRouter.post(
+  "/content/media-discover",
+  contentAiLimiter,
+  fairUsageCheck,
+  async (req: Request, res: Response): Promise<void> => {
+    if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const projectId = asString(body.projectId, 200);
+    const storyKey = asString(body.storyKey, 400) || "new-article";
+    if (!projectId || !(await mediaDiscoveryProjectVisible(req, projectId))) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+    const runId = await createMediaDiscoveryRun(normUsername(req.account.username), projectId, storyKey);
+    const workerReq = req as Request & { mediaDiscoveryRunId?: string };
+    workerReq.mediaDiscoveryRunId = runId;
+    let workerStatusCode = 200;
+    const workerRes = {
+      status(code: number) { workerStatusCode = code; return this; },
+      json(payload: any) {
+        if (workerStatusCode >= 400) {
+          void failMediaDiscoveryRun(runId, payload?.error || "Live media research failed.");
+        } else {
+          void completeMediaDiscoveryRun(runId, payload?.discoveryToken || "");
+        }
+        return this;
+      },
+    } as unknown as Response;
+    void mediaDiscoverWorker(workerReq, workerRes).catch((error) => {
+      logger.error({ err: error, runId }, "content-ai: background media discovery failed");
+      void failMediaDiscoveryRun(runId, "Live media research could not be completed right now.");
+    });
+    res.json({ runId, status: "running" });
   },
 );
 

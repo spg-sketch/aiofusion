@@ -9,6 +9,7 @@ import {
   reclaimRecoverableAuditRuns,
   releaseOwnedAuditRunLeases,
 } from "./lib/audit-run-claims";
+import { ensureMediaDiscoveryRunsTable } from "./lib/media-discovery-runs";
 import { ensureSavedAuditTables } from "./lib/ensure-saved-audit-tables";
 import { ensurePlatformCompanyCascade } from "./lib/ensure-platform-company-cascade";
 import { ensurePlannerContentColumns } from "./lib/ensure-planner-content-columns";
@@ -147,6 +148,7 @@ async function runStartupMigrations(): Promise<void> {
   const steps: Array<[string, () => Promise<unknown>]> = [
     ["audit_locks table", ensureAuditLocksTable],
     ["audit_runs table", ensureAuditRunClaimsTable],
+    ["media_discovery_runs table", ensureMediaDiscoveryRunsTable],
     ["saved audit tables", ensureSavedAuditTables],
     ["platform_companies cascade FK", ensurePlatformCompanyCascade],
     ["planner content columns", ensurePlannerContentColumns],

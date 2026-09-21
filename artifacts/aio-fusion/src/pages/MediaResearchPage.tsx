@@ -340,10 +340,27 @@ function MediaResearchPage() {
   const storyKey = selected?.id || "";
   const discoveryRunKey = aiRunKey(discoveryScope, "media-discover", storyKey || "new-article");
   type DiscoveryRunResult = { items: LiveDiscovery[]; discoveryToken: string };
+  type RemoteDiscoveryRun = DiscoveryRunResult & { runId: string; status: "running" | "succeeded" | "failed"; error?: string };
   const discoveryRun = useAiRun<
     { projectId: string; storyKey: string },
     DiscoveryRunResult
   >(discoveryRunKey);
+
+  const pollDiscoveryRun = async (runId: string, progress?: (value: number) => void): Promise<DiscoveryRunResult> => {
+    for (;;) {
+      const response = await fetch(`${apiBase()}/api/content/journalist-search-runs/${encodeURIComponent(runId)}`, { credentials: "include" });
+      const data = await response.json() as RemoteDiscoveryRun & { error?: string };
+      if (!response.ok) throw new Error(data.error || "Could not load live media research.");
+      const nextItems = Array.isArray(data.items) ? data.items : [];
+      setLiveItems(nextItems);
+      if (data.discoveryToken) setDiscoveryToken(data.discoveryToken);
+      const settled = nextItems.filter((item) => item.evidenceStatus !== "pending").length;
+      progress?.(nextItems.length ? settled / nextItems.length : 0);
+      if (data.status === "failed") throw new Error(data.error || "Could not complete live media research.");
+      if (data.status === "succeeded") return { items: nextItems, discoveryToken: data.discoveryToken || "" };
+      await new Promise((resolve) => window.setTimeout(resolve, 1200));
+    }
+  };
 
   const [brief, setBrief] = useState<TargetingBrief>({ topic: "", angle: "", audience: "", regions: [], publicationTypes: [], whyNow: "" });
   const [, setBriefIsDirty] = useState(false);
@@ -677,6 +694,35 @@ function MediaResearchPage() {
     return () => { invalidateRequests(); };
   }, [storyKey, projectId]);
 
+  useEffect(() => {
+    if (!projectId || !storyKey) return;
+    let cancelled = false;
+    void (async () => {
+      const response = await fetch(`${apiBase()}/api/content/journalist-search-runs/latest?projectId=${encodeURIComponent(projectId)}&storyKey=${encodeURIComponent(storyKey)}`, { credentials: "include" });
+      if (!response.ok || cancelled) return;
+      const remote = await response.json() as RemoteDiscoveryRun | null;
+      if (!remote || cancelled || activeStoryRef.current !== `${projectId}:${storyKey}`) return;
+      setLiveItems(Array.isArray(remote.items) ? remote.items : []);
+      if (remote.discoveryToken) setDiscoveryToken(remote.discoveryToken);
+      if (remote.status === "running" && !discoveryRun) {
+        startAiRun<{ resumedRunId: string }, DiscoveryRunResult>({
+          key: discoveryRunKey,
+          scope: discoveryScope,
+          operation: "media-discover",
+          subjectId: storyKey,
+          input: { resumedRunId: remote.runId },
+          estimateSeconds: 90,
+          execute: (progress) => pollDiscoveryRun(remote.runId, progress),
+        });
+      }
+    })().catch(() => {
+      // A missing historical run must not block database recommendations.
+    });
+    return () => { cancelled = true; };
+    // Run identity and story identity are represented by discoveryRunKey.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discoveryRunKey]);
+
   // The lifecycle is app-owned, so a page unmount must not lose a live
   // discovery. Rehydrate its result when the user navigates back to this page.
   useEffect(() => {
@@ -708,11 +754,12 @@ function MediaResearchPage() {
       subjectId: storyKey || "new-article",
       input: { projectId, storyKey },
       estimateSeconds: 90,
-      execute: async () => {
+      execute: async (progress) => {
         const response = await fetch(`${apiBase()}/api/content/media-discover`, {
           method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             projectId,
+            storyKey,
             content: {
               title: selected.title,
               headline: selected.headline,
@@ -730,10 +777,13 @@ function MediaResearchPage() {
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Could not complete live media research.");
-        const items = Array.isArray(data.items) ? data.items as LiveDiscovery[] : [];
-        const token = typeof data.discoveryToken === "string" ? data.discoveryToken : "";
-        if (!token && items.length > 0) throw new Error("The live discovery could not be saved because its verification token was missing.");
-        return { items, discoveryToken: token };
+        const immediateItems = Array.isArray(data.items) ? data.items as LiveDiscovery[] : null;
+        if (immediateItems) {
+          return { items: immediateItems, discoveryToken: typeof data.discoveryToken === "string" ? data.discoveryToken : "" };
+        }
+        const runId = typeof data.runId === "string" ? data.runId : "";
+        if (!runId) throw new Error("The live discovery run could not be started.");
+        return pollDiscoveryRun(runId, progress);
       },
       onSuccess: async (result) => {
         // The app-owned lifecycle retains the verified result across in-app
@@ -978,6 +1028,10 @@ function MediaResearchPage() {
                <input aria-label="Angle" value={brief.angle} onChange={e => editBrief({ angle: e.target.value })} placeholder="e.g. New product launch" className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400" />
             </div>
             <div>
+              <label className="block text-[12px] font-bold mb-1" style={{ color: vars.navy }}>Audience</label>
+               <input aria-label="Audience" value={brief.audience} onChange={e => editBrief({ audience: e.target.value })} placeholder="e.g. CIOs, Consumers" className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400" />
+            </div>
+            <div>
               <label className="block text-[12px] font-bold mb-1" style={{ color: vars.navy }}>Why Now</label>
                <input aria-label="Why now" value={brief.whyNow} onChange={e => editBrief({ whyNow: e.target.value })} placeholder="e.g. Upcoming trade show" className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400" />
             </div>
@@ -1008,7 +1062,7 @@ function MediaResearchPage() {
         )}
         {Object.keys(feedback).length > 0 && <button disabled={refining !== null} onClick={() => void resetRefinement()} className="self-start text-[12px] px-3 py-2 border rounded-lg bg-white disabled:opacity-50" style={{ borderColor: vars.g200 }}><RotateCcw size={14} className={`inline mr-1 ${refining === "reset" ? "animate-spin" : ""}`} />Reset refinement</button>}
        </div></div>{enrichmentWarning && <p className="mx-5 mb-3 rounded-lg bg-amber-50 border border-amber-100 p-3 text-[12px] text-amber-800">Coverage check warning: {enrichmentWarning}</p>}{items.slice(0, visibleRecommendationCount).map((item) => contactCard(item))}{visibleRecommendationCount < items.length && <div className="p-5 border-t text-center" style={{ borderColor: vars.g200 }}><button type="button" data-testid="button-show-more-recommendations" onClick={() => setVisibleRecommendationCount((count) => Math.min(items.length, count + 5))} className="px-5 py-2.5 rounded-lg border bg-white text-[13px] font-semibold hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}>Show 5 more preloaded matches</button></div>}</section>}
-     {liveItems.length > 0 && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Unverified public web discoveries</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{liveItems.length} current journalists across {livePublicationCount} publications, grounded in public author pages, profiles or article bylines. Review the evidence, then send each discovery for human approval.</p></div>
+      {liveItems.length > 0 && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Public web discoveries</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{liveItems.length} current journalists across {livePublicationCount} publications. {liveLoading ? "Evidence checks are continuing. Verified cards are ready to review now." : "Evidence checks are complete."}</p></div>
       {liveGroups.filter((group) => group.items.length > 0).map((group) => <div key={group.label}>
         <div className="px-5 py-2.5 border-b text-[12px] font-bold uppercase tracking-wide" style={{ color: vars.navy, background: "rgba(31,116,143,0.07)", borderColor: vars.g200 }}>{group.label} · {group.items.length}</div>
         {group.items.map((candidate) => (

@@ -154,6 +154,8 @@ export type LiveDiscovery = {
   confidence: "High" | "Medium" | "Low";
   verifiedAt: string;
   phraseAttributions?: PhraseAttribution[];
+  evidenceStatus?: "pending" | "verified" | "failed";
+  evidenceFailure?: string;
 };
 
 export type DiscoveryReviewStatus = "saving" | "submitted" | "approved" | "rejected" | "error";
@@ -671,7 +673,8 @@ export function LiveDiscoveryCard({
 }) {
   const isHighConf = candidate.confidence === "High";
   const reviewStatus = status || (isSaving ? "saving" : isSaved ? "submitted" : undefined);
-  const canSendForReview = !reviewStatus || reviewStatus === "error";
+  const evidenceStatus = candidate.evidenceStatus || "verified";
+  const canSendForReview = evidenceStatus === "verified" && (!reviewStatus || reviewStatus === "error");
   return (
     <div className="p-5 border-b last:border-b-0 bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200 }}>
       <div className="flex flex-wrap gap-4 items-start justify-between">
@@ -687,9 +690,10 @@ export function LiveDiscoveryCard({
                 background: isHighConf ? "#E5F5EC" : "rgba(200,73,122,0.1)" 
               }}
             >
-              Unverified discovery · {candidate.confidence} source confidence
+              {evidenceStatus === "pending" ? "Evidence check pending" : evidenceStatus === "failed" ? "Evidence check failed" : "Evidence verified"} · {candidate.confidence} source confidence
             </span>
           </div>
+          {evidenceStatus === "failed" && <p className="mb-4 rounded-lg border border-rose-100 bg-rose-50 p-3 text-[12px] text-rose-700">{candidate.evidenceFailure || "The cited page did not verify this journalist."}</p>}
           <p className="text-[14px] mb-3" style={{ color: vars.g600 }}>
             <span className="font-medium text-slate-800">{candidate.role || "Editorial contact"}</span>
             {candidate.outletName && (
@@ -748,7 +752,7 @@ export function LiveDiscoveryCard({
             </div>
           )}
 
-          {candidate.evidence && (
+            {candidate.evidence && evidenceStatus !== "failed" && (
             <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100 mb-4 border-l-4" style={{ borderLeftColor: "#3D9B6B" }}>
               <span className="text-[12px] font-bold text-emerald-900 block mb-1">AI-generated summary of the cited source</span>
               <p className="text-[13px] text-emerald-900 leading-relaxed">{candidate.evidence}</p>
@@ -774,7 +778,11 @@ export function LiveDiscoveryCard({
               boxShadow: reviewStatus === "approved" || reviewStatus === "rejected" ? "none" : "0 2px 4px rgba(10,22,40,0.15)"
             }}
           >
-            {reviewStatus === "saving" ? (
+            {evidenceStatus === "pending" ? (
+              <><Loader2 size={16} className="animate-spin" /> Checking evidence...</>
+            ) : evidenceStatus === "failed" ? (
+              <><AlertCircle size={16} /> Evidence failed</>
+            ) : reviewStatus === "saving" ? (
               <><div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div> Sending...</>
             ) : reviewStatus === "submitted" ? (
               <><Check size={16} /> Submitted for review</>

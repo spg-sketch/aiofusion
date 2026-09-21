@@ -80,6 +80,7 @@
 - [Media visibility comparison](aio-fusion-media-visibility-comparison.md) — compare phrase checks only when the effective query, provider, model, run count, and methodology version all match.
 - [Performance measurement](aio-fusion-performance-measurement.md) — separate published, anonymous and fixture-backed timings; measure destination content, not sidebar labels.
 - [In-tab AI run ownership](aio-fusion-ai-run-lifecycle.md) — timed AI work is app-owned, wall-clock based, and identity-scoped; route unmounts must not own request completion.
+- [Incremental journalist discovery runs](aio-fusion-journalist-discovery-runs.md) — live searches persist server-side; expose pending, verified and failed evidence while checks continue.
 - [Journalist privacy outcomes](aio-fusion-journalist-privacy.md) — rights decisions require verified identity, explicit human-selected matches and scope; suppressions must be rechecked at every write boundary.
 - [Editor unsaved-change guards](aio-fusion-unsaved-editor-guards.md) — compare exact saved snapshots and defer navigation centrally; saved handoffs must bypass stale registration state.
 - [Database-backed media targeting](aio-fusion-database-media-targeting.md) — content targeting uses populated accessible contact industries; Project Set-Up 1.9 only supplies exact-match defaults.
