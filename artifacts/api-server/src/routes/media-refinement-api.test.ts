@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import express from "express";
-import { eq, getTableColumns, sql } from "drizzle-orm";
+import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 
@@ -117,6 +117,7 @@ beforeAll(async () => {
     { id: "outlet-race-story", projectId: "project-1", owner: "workspace-a", title: "Outlet race story" },
     { id: "visibility-race-story", projectId: "project-1", owner: "workspace-a", title: "Visibility race story" },
     { id: "deleted-contact-story", projectId: "project-1", owner: "workspace-a", title: "Deleted contact story" },
+    { id: "post-commit-race-story", projectId: "project-1", owner: "workspace-a", title: "Post-commit race story" },
   ]);
   const [outlet] = await db.insert(mediaOutletsTable).values({ name: "Energy Daily", category: "Trade press", country: "UK" }).returning();
   await db.insert(mediaContactsTable).values([
@@ -249,6 +250,21 @@ describe("media recommendation refinement API", () => {
         sectors: ["technology"],
       },
     ]).returning({ id: mediaContactsTable.id });
+    await db.insert(mediaRecommendationSetsTable).values({
+      accountId: "workspace-a",
+      projectId: "project-1",
+      storyKey: "outlet-security-story",
+      criteria: {
+        evidence: {
+          [String(inserted[0].id)]: [{
+            title: "Private prior coverage",
+            url: "https://private.workspace-b.test/prior-evidence",
+            excerpt: "Confidential excerpt",
+          }],
+        },
+        warnings: { [String(inserted[0].id)]: ["Private warning"] },
+      },
+    });
 
     const response = await request("/store/media-db/recommendations", "workspace-a", {
       method: "POST",
@@ -266,9 +282,32 @@ describe("media recommendation refinement API", () => {
     expect(body.items.map((item) => item.contact.id)).not.toEqual(expect.arrayContaining(inserted.map((row) => row.id)));
     expect(JSON.stringify(body)).not.toContain("Workspace B Confidential");
     expect(JSON.stringify(body)).not.toContain("private.workspace-b.test");
+    expect(JSON.stringify(body)).not.toContain("Private prior coverage");
+    expect(JSON.stringify(body)).not.toContain("Confidential excerpt");
     expect(body.items.map((item) => item.score)).toEqual(
       [...body.items.map((item) => item.score)].sort((a, b) => b - a),
     );
+
+    const generatedSet = body as unknown as {
+      recommendationSet: { id: number; criteria: Record<string, unknown> };
+    };
+    await db.update(mediaRecommendationSetsTable).set({
+      criteria: {
+        ...generatedSet.recommendationSet.criteria,
+        evidence: {
+          [String(inserted[0].id)]: [{
+            title: "Historical private coverage",
+            url: "https://private.workspace-b.test/historical-evidence",
+          }],
+        },
+      },
+    }).where(eq(mediaRecommendationSetsTable.id, generatedSet.recommendationSet.id));
+    const reloaded = await request(
+      "/store/media-db/recommendations?projectId=project-1&storyKey=outlet-security-story",
+      "workspace-a",
+    );
+    expect(reloaded.status).toBe(200);
+    expect(JSON.stringify(await reloaded.json())).not.toContain("private.workspace-b.test");
   });
 
   it("keeps strong unnamed contacts eligible but below comparable named contacts through feedback reranking", async () => {
@@ -663,6 +702,71 @@ describe("media recommendation refinement API", () => {
     expect(stored.some((item) => item.contactId === contact.id)).toBe(false);
   });
 
+  it("revalidates outlet visibility again after enrichment commits and before responding", async () => {
+    const [outlet] = await db.insert(mediaOutletsTable).values({
+      name: "Post Commit Journal",
+      category: "Trade press",
+      website: "https://post-commit.test",
+    }).returning();
+    const [contact] = await db.insert(mediaContactsTable).values({
+      outletId: outlet.id,
+      firstName: "Robin",
+      lastName: "Race",
+      role: "Postcommitrace editor",
+      beats: ["postcommitrace"],
+      sectors: ["postcommitrace"],
+    }).returning();
+    const generated = await request("/store/media-db/recommendations", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: "project-1",
+        storyKey: "post-commit-race-story",
+        terms: ["postcommitrace"],
+      }),
+    });
+    expect(generated.status).toBe(200);
+    const generatedBody = await generated.json() as {
+      recommendationSet: { id: number };
+      items: Array<{ contact: { id: number } }>;
+    };
+    expect(generatedBody.items.some((item) => item.contact.id === contact.id)).toBe(true);
+    collectJournalistCoverage.mockResolvedValue({ evidence: [], warnings: [] });
+
+    const originalTransaction = db.transaction.bind(db);
+    let transactionCount = 0;
+    const transactionSpy = vi.spyOn(db, "transaction").mockImplementation((async (...args: Parameters<typeof db.transaction>) => {
+      transactionCount += 1;
+      const result = await originalTransaction(...args);
+      if (transactionCount === 1) {
+        await db.update(mediaOutletsTable)
+          .set({ accountId: "workspace-b" })
+          .where(eq(mediaOutletsTable.id, outlet.id));
+      }
+      return result;
+    }) as typeof db.transaction);
+    try {
+      const response = await request("/store/media-db/recommendations/enrich", "workspace-a", {
+        method: "POST",
+        body: JSON.stringify({
+          projectId: "project-1",
+          storyKey: "post-commit-race-story",
+          recommendationSetId: generatedBody.recommendationSet.id,
+        }),
+      });
+      expect(response.status).toBe(200);
+      const body = await response.json() as {
+        recommendationSet: { criteria: { evidence?: Record<string, unknown[]> } };
+        items: Array<{ contact: { id: number } }>;
+      };
+      expect(body.items.some((item) => item.contact.id === contact.id)).toBe(false);
+      expect(body.recommendationSet.criteria.evidence?.[String(contact.id)]).toBeUndefined();
+      expect(JSON.stringify(body)).not.toContain("Post Commit Journal");
+      expect(JSON.stringify(body)).not.toContain("post-commit.test");
+    } finally {
+      transactionSpy.mockRestore();
+    }
+  });
+
   it("rechecks workspace visibility after coverage collection before returning outlet data", async () => {
     await db.execute(sql`
       INSERT INTO platform_accounts (username, role, parent)
@@ -725,6 +829,81 @@ describe("media recommendation refinement API", () => {
     expect(body.items.some((item) => item.contact.id === contact.id)).toBe(false);
     expect(JSON.stringify(body)).not.toContain("Child Workspace Confidential");
     expect(JSON.stringify(body)).not.toContain("child-private.test");
+  });
+
+  it("refuses recommendation writes when access to the project owner is no longer current", async () => {
+    await db.insert(projectsTable).values({
+      id: "child-project",
+      owner: "workspace-child",
+    });
+    await db.insert(archiveItemsTable).values({
+      id: "child-story",
+      projectId: "child-project",
+      owner: "workspace-child",
+      title: "Child workspace story",
+    });
+
+    // The request-level visibility mock represents the stale authorization
+    // captured before the transaction. The locked hierarchy is already current.
+    const refusedCreation = await request("/store/media-db/recommendations", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: "child-project",
+        storyKey: "child-story",
+        terms: ["energy"],
+      }),
+    });
+    expect(refusedCreation.status).toBe(409);
+    expect(await db.select().from(mediaRecommendationSetsTable).where(and(
+      eq(mediaRecommendationSetsTable.projectId, "child-project"),
+      eq(mediaRecommendationSetsTable.storyKey, "child-story"),
+    ))).toHaveLength(0);
+
+    await db.execute(sql`UPDATE platform_accounts SET parent = 'workspace-a' WHERE username = 'workspace-child'`);
+    const generated = await request("/store/media-db/recommendations", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: "child-project",
+        storyKey: "child-story",
+        terms: ["energy"],
+      }),
+    });
+    expect(generated.status).toBe(200);
+    const generatedBody = await generated.json() as {
+      recommendationSet: { id: number; criteria: Record<string, unknown> };
+    };
+
+    let providerStarted!: () => void;
+    let releaseProvider!: () => void;
+    const started = new Promise<void>((resolve) => { providerStarted = resolve; });
+    const gate = new Promise<void>((resolve) => { releaseProvider = resolve; });
+    collectJournalistCoverage.mockImplementationOnce(async () => {
+      providerStarted();
+      await gate;
+      return { evidence: [], warnings: [] };
+    }).mockResolvedValue({ evidence: [], warnings: [] });
+    const usageBefore = await db.select().from(tokenUsageTable)
+      .where(eq(tokenUsageTable.operation, "content-media-recommendations-enrich"));
+    const enriching = request("/store/media-db/recommendations/enrich", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: "child-project",
+        storyKey: "child-story",
+        recommendationSetId: generatedBody.recommendationSet.id,
+      }),
+    });
+    await started;
+    await db.execute(sql`UPDATE platform_accounts SET parent = NULL WHERE username = 'workspace-child'`);
+    releaseProvider();
+
+    const refusedEnrichment = await enriching;
+    expect(refusedEnrichment.status).toBe(409);
+    const [savedSet] = await db.select().from(mediaRecommendationSetsTable)
+      .where(eq(mediaRecommendationSetsTable.id, generatedBody.recommendationSet.id));
+    expect(savedSet.criteria).toEqual(generatedBody.recommendationSet.criteria);
+    const usageAfter = await db.select().from(tokenUsageTable)
+      .where(eq(tokenUsageTable.operation, "content-media-recommendations-enrich"));
+    expect(usageAfter).toHaveLength(usageBefore.length);
   });
 
   it("does not send an already deleted contact to the coverage provider", async () => {

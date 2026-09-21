@@ -19,3 +19,4 @@ Vitest is the test runner. `pnpm --filter @workspace/api-server run test` (node 
 
 - **react-qr-code bundled d.ts breaks under @types/react 19** (TS2607/TS2786 on `<QRCode>`): its ambient class-component declaration clashes; fix by casting the default import to a function-component type in MfaPanels.tsx — `pnpm dedupe` does NOT fix this one.
 - **Change-password route tests**: the shared test app in platform-login-signup.test.ts injects `req.account = null`; authed routes need a per-suite server that resolves the sid (cookie or Bearer) via getPlatformSessionAccount.
+- **Native V8 worker crashes are not assertion failures:** parallel Vitest can rarely abort inside `ThreadIsolation::UnregisterWasmAllocation`, followed by `ERR_IPC_CHANNEL_CLOSED`. Treat this as runtime instability only when the same revision passes the release gate and affected focused suites.
