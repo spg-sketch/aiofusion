@@ -67,7 +67,7 @@ vi.mock("@workspace/db", async () => {
 vi.mock("../middleware/platform-auth", () => ({ requirePlatformAuth: (_req: unknown, _res: unknown, next: () => void) => next() }));
 vi.mock("../lib/member-guards", () => ({ memberProjectGate: (_req: unknown, _res: unknown, next: () => void) => next(), inAssignedScope: () => true }));
 vi.mock("../lib/platform-auth", () => ({
-  getVisibleUsernames: async (account: { username: string }) => [account.username.toLowerCase()],
+  getVisibleUsernames: async (account: { username: string }) => [account.username.toLowerCase(), "workspace-child"],
   getAccount: async (username: string) => ({ username: username.toLowerCase(), parent: null, role: "agency", status: "active" }),
   normUsername: (value: string) => value.toLowerCase(),
 }));

@@ -6,6 +6,7 @@ import { requirePlatformAuth } from "../middleware/platform-auth";
 import { inAssignedScope, memberProjectGate } from "../lib/member-guards";
 import {
   DEFAULT_ADMIN_USERNAME,
+  getVisibleUsernames,
   normUsername,
   canWriteProjects,
 } from "../lib/platform-auth";
@@ -213,12 +214,13 @@ function visibleAccountsFromHierarchy(
 }
 
 async function visibleAccounts(req: Request): Promise<string[] | null> {
-  if (req.account?.role === "admin") return visibleAccountsFromHierarchy(req, []);
-  const rows = await db.select({
-    username: platformAccountsTable.username,
-    parent: platformAccountsTable.parent,
-  }).from(platformAccountsTable);
-  return visibleAccountsFromHierarchy(req, rows);
+  // Authentication normalises non-Master rows with a legacy `admin` role to an
+  // agency, but keep this boundary defensive for legacy sessions and tests:
+  // only the canonical Master workspace gets the unrestricted visibility list.
+  if (req.account?.role === "admin" && normUsername(req.account.username) !== DEFAULT_ADMIN_USERNAME) {
+    return [normUsername(req.account.username)];
+  }
+  return getVisibleUsernames(req.account!);
 }
 
 function isMasterWorkspace(req: Request): boolean {
