@@ -135,6 +135,8 @@ interface LlmCheckResult {
   assessment?: AuthorityAssessment | null;
   assessmentStatus?: AssessmentStatus;
   assessmentOutcome?: AssessmentOutcome;
+  assessmentRetryCount?: number;
+  assessmentRetryLimit?: number;
   entityClarity?: EntityClarity | null;
   detectionVersion?: number;
   phraseMeasurements?: import("./lib/mediaVisibilityImpact").PhraseMeasurement[];
@@ -786,6 +788,8 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   const [auditLock, setAuditLock] = useState<AuditLockInfo>({ locked: false });
   const [showRunConfirm, setShowRunConfirm] = useState(false);
   const [pendingForce, setPendingForce] = useState(false);
+  const [assessmentRetrying, setAssessmentRetrying] = useState(false);
+  const [assessmentRetryError, setAssessmentRetryError] = useState("");
   // The identity the user has confirmed is theirs for an ambiguous brand name.
   // Read from the project on mount/switch; persisted via setConfirmedEntity so
   // the next audit run anchors to it.
@@ -1071,6 +1075,52 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     }
     setSavedAudits(next);
     window.dispatchEvent(new Event("aio:saved-audits-changed"));
+  }
+
+  async function retryAuthorityAssessment() {
+    if (!result || assessmentRetrying) return;
+    const auditId = result.serverSavedId
+      || savedAudits.find((audit) => audit.result.checkedAt === result.checkedAt)?.id;
+    if (!auditId) {
+      setAssessmentRetryError("This older audit cannot retry only the Authority assessment. Please contact support.");
+      return;
+    }
+
+    setAssessmentRetrying(true);
+    setAssessmentRetryError("");
+    try {
+      const projectData = getProjectAuthorityData();
+      projectData.buyerQuestions = buyerQuestions;
+      projectData.competitors = competitors;
+      const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
+      const response = await fetch(
+        `${apiBase}/api/store/projects/${encodeURIComponent(activeClient.id)}/audits/${encodeURIComponent(auditId)}/retry-assessment`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectData }),
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.audit?.result) {
+        throw new Error(payload.error || "The Authority assessment could not be retried.");
+      }
+
+      const updatedAudit = payload.audit as SavedAudit;
+      const next = savedAudits.some((audit) => audit.id === updatedAudit.id)
+        ? savedAudits.map((audit) => audit.id === updatedAudit.id ? updatedAudit : audit)
+        : [updatedAudit, ...savedAudits];
+      persistSavedAudits(activeClient.id, next);
+      setSavedAudits(next);
+      setResult(updatedAudit.result);
+      setJustSaved(true);
+      window.dispatchEvent(new Event("aio:saved-audits-changed"));
+    } catch (error) {
+      setAssessmentRetryError(error instanceof Error ? error.message : "The Authority assessment could not be retried.");
+    } finally {
+      setAssessmentRetrying(false);
+    }
   }
 
   useEffect(() => {
@@ -2291,14 +2341,34 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             <p className="text-[12px] leading-relaxed" style={{ color: "#78350F" }}>
               {assessmentFallbackReason(result)} This is not the complete AI Authority Scorecard.
             </p>
+            {assessmentRetryError && (
+              <p className="text-[12px] font-semibold mt-2" style={{ color: "#B91C1C" }} data-testid="status-authority-retry-error">
+                {assessmentRetryError}
+              </p>
+            )}
+            {(result.assessmentRetryCount ?? 0) < (result.assessmentRetryLimit ?? 3) && (
+              <p className="text-[11px] mt-2" style={{ color: "#92400E" }}>
+                Authority-only retries remaining: {(result.assessmentRetryLimit ?? 3) - (result.assessmentRetryCount ?? 0)}
+              </p>
+            )}
+            {(result.assessmentRetryCount ?? 0) >= (result.assessmentRetryLimit ?? 3) && (
+              <p className="text-[11px] font-semibold mt-2" style={{ color: "#92400E" }}>
+                Three Authority assessment retries have been used. The saved visibility evidence remains available.
+              </p>
+            )}
           </div>
-          <button
-            onClick={() => { setResult(null); setError(""); setResultIsFromSaved(false); }}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold shrink-0 transition-all hover:brightness-95"
-            style={{ background: "#D97706", color: "white" }}
-          >
-            <Repeat size={13} /> Retry audit
-          </button>
+          {(result.assessmentRetryCount ?? 0) < (result.assessmentRetryLimit ?? 3) && (
+            <button
+              onClick={retryAuthorityAssessment}
+              disabled={assessmentRetrying}
+              data-testid="button-retry-authority-assessment"
+              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold shrink-0 transition-all hover:brightness-95 disabled:opacity-60 disabled:cursor-not-allowed"
+              style={{ background: "#D97706", color: "white" }}
+            >
+              {assessmentRetrying ? <Loader2 size={13} className="animate-spin" /> : <Repeat size={13} />}
+              {assessmentRetrying ? "Retrying Authority assessment…" : "Retry Authority assessment"}
+            </button>
+          )}
         </div>
       )}
 

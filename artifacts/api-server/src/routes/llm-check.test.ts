@@ -406,6 +406,23 @@ describe("scoreAuthority end-to-end fallback", () => {
     });
   });
 
+  it("uses a larger output budget and identifies token-truncated JSON as incomplete", async () => {
+    messagesCreate.mockResolvedValue({
+      ...modelReply('{"index": 70, "dimensions": [{"name": "Presence"'),
+      stop_reason: "max_tokens",
+      usage: { input_tokens: 10_000, output_tokens: 8_000 },
+    });
+
+    const result = await scoreAuthorityWithOutcome("Acme", {}, baseEvidence, baseMetrics);
+
+    expect(messagesCreate).toHaveBeenCalledWith(expect.objectContaining({ max_tokens: 8_000 }));
+    expect(result.assessment).toBeNull();
+    expect(result.assessmentOutcome).toEqual({
+      status: "fallback",
+      reasonCategory: "incomplete_response",
+    });
+  });
+
   it("returns incomplete_response metadata for parseable but incomplete output", async () => {
     messagesCreate.mockResolvedValue(modelReply('{"index":33}'));
     const result = await scoreAuthorityWithOutcome("Acme", {}, baseEvidence, baseMetrics);
@@ -1435,7 +1452,7 @@ describe("llm-check HTTP routes - audit-lock", () => {
       expect(progress.at(-1)?.data).toEqual({ done: (count + 1) * 4, total: (count + 1) * 4 });
       expect(chatCompletionsCreate).toHaveBeenCalledTimes((count + 1) * 2);
       expect(messagesCreate.mock.calls.filter(([request]) => request.system?.includes("knowledgeable business advisor"))).toHaveLength((count + 1) * 2);
-      const scoringCalls = messagesCreate.mock.calls.filter(([request]) => request.max_tokens === 5000);
+      const scoringCalls = messagesCreate.mock.calls.filter(([request]) => request.max_tokens === 8000);
       expect(scoringCalls).toHaveLength(1);
       for (const target of targetPhrases) {
         expect(JSON.stringify(scoringCalls[0][0].messages)).toContain(target.text);

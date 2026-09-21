@@ -605,6 +605,7 @@ const PAID_AI_PREFIXES = [
   "/ai-assist",
   "/content",
   "/store/media-db/recommendations/enrich",
+  "/store/projects/:id/audits/:auditId/retry-assessment",
 ] as const;
 
 /**

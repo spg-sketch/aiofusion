@@ -983,7 +983,7 @@ export interface EntityClarity {
 
 const DIMENSION_NAMES = AUTHORITY_DIMENSION_NAMES;
 
-function sanitizeProjectData(raw: unknown): ProjectAuthorityData {
+export function sanitizeProjectData(raw: unknown): ProjectAuthorityData {
   const d = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const strArr = (v: unknown, cap: number, len: number): string[] =>
     Array.isArray(v)
@@ -1272,16 +1272,16 @@ Return STRICT JSON only - no prose before or after, no markdown fences. Exactly 
 {
   "index": <overall AI Authority Index 0-100>,
   "grade": "<A*|A|B|C|D|E>",
-  "summary": "<2 to 3 sentence executive summary in plain British English>",
-  "dimensions": [{ "name": "Presence", "score": <0-100>, "justification": "<one sentence>", "confidence": "high|medium|low" }, ... all 8 dimensions in the order listed],
-  "topGaps": ["<the most important visibility gap>", ... up to 5],
-  "priorityActions": [{ "action": "<what to do>", "rationale": "<why, grounded in the evidence>", "priority": "high|medium|low", "failedProbes": ["<exact question string where brand was absent and this action would help>", ... up to 3, or omit if not applicable] }, ... up to 5],
-  "queryTable": [{ "query": "<the probed question>", "appeared": <true|false>, "notes": "<what the engines said, or which rivals they recommended instead>" }, ... one row per query in the evidence],
-  "competitorInsights": [{ "name": "<competitor name exactly as it appears in the probe evidence>", "description": "<1-2 plain sentences: what this organisation does and why engines recommend it, based only on what the probe evidence shows - do not invent details>" }, ... one entry per competitor from the probe evidence that does NOT appear in the client's own competitors list above. Omit tracked competitors. Omit generic terms like 'Agency' or 'United Kingdom'. Maximum 8 entries.],
-  "categoryFraming": [{ "query": "<the probed question>", "themes": "<1-2 sentences: how AI engines frame this topic, the key concepts and vocabulary they use, based only on the probe evidence for this query - do not invent details. Max 60 words.>" }, ... one entry per probe query. Focus on what the engines DO say - frameworks, dominant terminology, competitor context - not on what the brand failed to do.],
+  "summary": "<2 to 3 concise sentences, maximum 60 words total, in plain British English>",
+  "dimensions": [{ "name": "Presence", "score": <0-100>, "justification": "<one sentence, maximum 25 words>", "confidence": "high|medium|low" }, ... all 8 dimensions in the order listed],
+  "topGaps": ["<the most important visibility gap, maximum 15 words>", ... up to 5],
+  "priorityActions": [{ "action": "<what to do, maximum 20 words>", "rationale": "<why, grounded in the evidence, maximum 25 words>", "priority": "high|medium|low", "failedProbes": ["<exact question string where brand was absent and this action would help>", ... up to 3, or omit if not applicable] }, ... up to 5],
+  "queryTable": [{ "query": "<the probed question>", "appeared": <true|false>, "notes": "<what the engines said, or which rivals they recommended instead, maximum 30 words>" }, ... exactly one row per query in the evidence],
+  "competitorInsights": [{ "name": "<competitor name exactly as it appears in the probe evidence>", "description": "<what this organisation does and why engines recommend it, maximum 35 words, based only on the probe evidence>" }, ... one entry per competitor from the probe evidence that does NOT appear in the client's own competitors list above. Omit tracked competitors. Omit generic terms like 'Agency' or 'United Kingdom'. Maximum 8 entries.],
+  "categoryFraming": [{ "query": "<the probed question>", "themes": "<how AI engines frame this topic, maximum 40 words, based only on the probe evidence for this query>" }, ... exactly one entry per probe query. Focus on what the engines DO say - frameworks, dominant terminology, competitor context - not on what the brand failed to do.],
   "narrativeSignals": {
-    "gpt": ["<adjective or short framing used by ChatGPT to describe the brand>", ... 2-6 items, or [] if brand was absent in GPT probes],
-    "claude": ["<adjective or short framing used by Claude to describe the brand>", ... 2-6 items, or [] if brand was absent in Claude probes],
+    "gpt": ["<adjective or framing of no more than 6 words used by ChatGPT to describe the brand>", ... 2-6 items, or [] if brand was absent in GPT probes],
+    "claude": ["<adjective or framing of no more than 6 words used by Claude to describe the brand>", ... 2-6 items, or [] if brand was absent in Claude probes],
     "divergence": "<one plain sentence describing a material difference in how GPT and Claude frame the brand, or null if the signals are broadly similar or both engines have no data>"
   }
 }
@@ -1329,7 +1329,7 @@ ${JSON.stringify(evidence, null, 1)}`;
   try {
     const response = await client.messages.create({
       model: "claude-sonnet-4-5",
-      max_tokens: 5000,
+      max_tokens: 8000,
       system:
         "You are a precise AI visibility analyst. You never fabricate evidence. You return strict JSON only, with British spelling, no em dashes and no emojis.",
       messages: [{ role: "user", content: prompt }],
@@ -1343,15 +1343,46 @@ ${JSON.stringify(evidence, null, 1)}`;
     }
     if (tokenAccum) { tokenAccum.input += _inputTokens; tokenAccum.output += _outputTokens; }
     const rawAssessmentText = extractJson(text);
-    if (!rawAssessmentText) return fallbackAuthorityResult("invalid_response");
+    if (!rawAssessmentText) {
+      logger.warn(
+        {
+          companyName,
+          stopReason: response.stop_reason,
+          outputTokens: _outputTokens,
+          responseChars: text.length,
+        },
+        "Authority scoring returned no complete JSON object",
+      );
+      return fallbackAuthorityResult(response.stop_reason === "max_tokens" ? "incomplete_response" : "invalid_response");
+    }
     let rawAssessment: unknown;
     try {
       rawAssessment = JSON.parse(rawAssessmentText);
     } catch {
+      logger.warn(
+        {
+          companyName,
+          stopReason: response.stop_reason,
+          outputTokens: _outputTokens,
+          responseChars: text.length,
+        },
+        "Authority scoring returned malformed JSON",
+      );
       return fallbackAuthorityResult("invalid_response");
     }
     const assessment = parseAssessment(text);
-    if (!assessment) return fallbackAuthorityResult("invalid_response");
+    if (!assessment) {
+      logger.warn(
+        {
+          companyName,
+          stopReason: response.stop_reason,
+          outputTokens: _outputTokens,
+          responseChars: text.length,
+        },
+        "Authority scoring JSON could not be normalised",
+      );
+      return fallbackAuthorityResult("invalid_response");
+    }
     if (
       !isCompleteAuthorityAssessmentPayload(rawAssessment) ||
       !isCompleteAuthorityAssessment(assessment)

@@ -5,8 +5,11 @@ import { requirePlatformAuth } from "../middleware/platform-auth";
 import { getVisibleUsernames, normUsername } from "../lib/platform-auth";
 import { memberProjectGate, inAssignedScope } from "../lib/member-guards";
 import { normaliseSavedAssessmentResult } from "../lib/assessment-outcome";
+import { sanitizeProjectData, scoreAuthorityWithOutcome } from "./llm-check";
 
 const router: IRouter = Router();
+const MAX_ASSESSMENT_RETRIES = 3;
+const activeAssessmentRetries = new Set<string>();
 
 // Membership role gate: billing members blocked, viewers read-only, and
 // project-scoped members restricted to their assigned projects.
@@ -132,6 +135,187 @@ router.post(
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to save audit" });
+    }
+  },
+);
+
+router.post(
+  "/store/projects/:id/audits/:auditId/retry-assessment",
+  requirePlatformAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    const projectId = String(req.params.id || "").trim();
+    const auditId = String(req.params.auditId || "").trim();
+    if (!projectId || !auditId) {
+      res.status(400).json({ error: "Missing project id or audit id" });
+      return;
+    }
+
+    const retryKey = `${projectId}:${auditId}`;
+    if (activeAssessmentRetries.has(retryKey)) {
+      res.status(409).json({ error: "This Authority assessment retry is already running." });
+      return;
+    }
+
+    try {
+      const visible = await visibleOwners(req);
+      const projectOwner = await getProjectOwner(projectId);
+      if (projectOwner === undefined || !canSee(projectOwner, visible)) {
+        res.status(404).json({ error: "Audit not found" });
+        return;
+      }
+
+      const rows = await db
+        .select()
+        .from(savedAuditsTable)
+        .where(
+          and(
+            eq(savedAuditsTable.id, auditId),
+            eq(savedAuditsTable.projectId, projectId),
+            isNull(savedAuditsTable.deletedAt),
+          ),
+        )
+        .limit(1);
+      const row = rows[0];
+      if (!row) {
+        res.status(404).json({ error: "Audit not found" });
+        return;
+      }
+
+      const result = normaliseSavedAssessmentResult(row.result) as Record<string, any>;
+      if (result.assessmentOutcome?.status === "complete" || result.assessment) {
+        res.status(409).json({ error: "This Authority assessment is already complete." });
+        return;
+      }
+
+      const retryCount = Number.isInteger(result.assessmentRetryCount)
+        ? Math.max(0, result.assessmentRetryCount)
+        : 0;
+      if (retryCount >= MAX_ASSESSMENT_RETRIES) {
+        res.status(429).json({
+          error: "The three Authority assessment retries have already been used.",
+          retryCount,
+          retryLimit: MAX_ASSESSMENT_RETRIES,
+        });
+        return;
+      }
+
+      const probes = Array.isArray(result.probes)
+        ? result.probes.filter((probe: unknown): probe is Record<string, any> => !!probe && typeof probe === "object")
+        : [];
+      if (!result.companyName || probes.length === 0) {
+        res.status(422).json({ error: "The saved audit does not contain enough evidence to retry the Authority assessment." });
+        return;
+      }
+
+      const evidenceByQuery = new Map<string, {
+        question: string;
+        appeared: boolean;
+        competitors: Set<string>;
+        chatgpt: string;
+        claude: string;
+      }>();
+      for (const probe of probes) {
+        const question = typeof probe.question === "string" ? probe.question.trim() : "";
+        if (!question) continue;
+        const evidence = evidenceByQuery.get(question) ?? {
+          question,
+          appeared: false,
+          competitors: new Set<string>(),
+          chatgpt: "",
+          claude: "",
+        };
+        evidence.appeared ||= probe.mentioned === true;
+        if (Array.isArray(probe.competitors)) {
+          probe.competitors
+            .filter((competitor: unknown): competitor is string => typeof competitor === "string")
+            .forEach((competitor: string) => evidence.competitors.add(competitor.slice(0, 120)));
+        }
+        const preview = typeof probe.responsePreview === "string" ? probe.responsePreview.slice(0, 700) : "";
+        const model = typeof probe.model === "string" ? probe.model : "";
+        if (model.includes("GPT")) evidence.chatgpt = preview;
+        if (model.includes("Claude")) evidence.claude = preview;
+        evidenceByQuery.set(question, evidence);
+      }
+      const evidence = [...evidenceByQuery.values()].map((item) => ({
+        question: item.question,
+        appeared: item.appeared,
+        competitors: [...item.competitors].slice(0, 12),
+        chatgpt: item.chatgpt,
+        claude: item.claude,
+      }));
+      if (evidence.length === 0) {
+        res.status(422).json({ error: "The saved audit does not contain enough evidence to retry the Authority assessment." });
+        return;
+      }
+
+      const topCompetitors = Array.isArray(result.topCompetitors)
+        ? result.topCompetitors
+            .filter((item: unknown): item is Record<string, any> => !!item && typeof item === "object")
+            .map((item: Record<string, any>) => ({
+              name: typeof item.name === "string" ? item.name.slice(0, 120) : "",
+              mentions: Number.isFinite(item.mentions) ? Math.max(0, Math.round(item.mentions)) : 0,
+            }))
+            .filter((item: { name: string }) => item.name)
+        : [];
+      const totalMentions = Number.isFinite(result.totalMentions) ? Math.max(0, result.totalMentions) : 0;
+      const competitorMentions = topCompetitors.reduce(
+        (sum: number, competitor: { mentions: number }) => sum + competitor.mentions,
+        0,
+      );
+      const shareOfVoice = totalMentions + competitorMentions > 0
+        ? Math.round((totalMentions / (totalMentions + competitorMentions)) * 100)
+        : 0;
+      const gptContexts = probes
+        .filter((probe) => String(probe.model ?? "").includes("GPT") && probe.mentioned === true && typeof probe.mentionContext === "string")
+        .map((probe) => String(probe.mentionContext));
+      const claudeContexts = probes
+        .filter((probe) => String(probe.model ?? "").includes("Claude") && probe.mentioned === true && typeof probe.mentionContext === "string")
+        .map((probe) => String(probe.mentionContext));
+      const failedQuestions = evidence.filter((item) => !item.appeared).map((item) => item.question);
+
+      activeAssessmentRetries.add(retryKey);
+      const authorityResult = await scoreAuthorityWithOutcome(
+        String(result.companyName),
+        sanitizeProjectData(req.body?.projectData),
+        evidence,
+        {
+          presence: Number.isFinite(result.visibilityScore) ? result.visibilityScore : 0,
+          shareOfVoice,
+          visibilityScore: Number.isFinite(result.visibilityScore) ? result.visibilityScore : 0,
+          topCompetitors,
+        },
+        result.entityClarity && typeof result.entityClarity === "object" ? result.entityClarity : null,
+        { gptContexts, claudeContexts, failedQuestions },
+        req.account!.username,
+        projectId,
+      );
+
+      const updatedResult = normaliseSavedAssessmentResult({
+        ...result,
+        ...authorityResult,
+        assessmentRetryCount: retryCount + 1,
+        assessmentRetryLimit: MAX_ASSESSMENT_RETRIES,
+      });
+      await db
+        .update(savedAuditsTable)
+        .set({ result: updatedResult })
+        .where(
+          and(
+            eq(savedAuditsTable.id, auditId),
+            eq(savedAuditsTable.projectId, projectId),
+            isNull(savedAuditsTable.deletedAt),
+          ),
+        );
+      res.json({
+        audit: { id: row.id, savedAt: row.savedAt, result: updatedResult },
+        retryCount: retryCount + 1,
+        retryLimit: MAX_ASSESSMENT_RETRIES,
+      });
+    } catch (err) {
+      req.log.error({ err, projectId, auditId }, "Authority assessment retry failed");
+      res.status(500).json({ error: "The Authority assessment could not be retried. Please try again." });
+    } finally {
+      activeAssessmentRetries.delete(retryKey);
     }
   },
 );

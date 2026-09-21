@@ -243,7 +243,7 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
     expect(screen.getByText("Appeared in 4 of 10 probes.")).toBeInTheDocument();
   });
 
-  it("shows a visible warning and retry action for a fallback assessment", () => {
+  it("shows a visible warning and Authority-only retry action for a fallback assessment", () => {
     seedSavedAudit(FALLBACK_RESULT);
     render(
       <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
@@ -251,9 +251,24 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
 
     expect(screen.getByText(/Authority assessment incomplete - showing visibility fallback/i)).toBeInTheDocument();
     expect(screen.getByText(/This is not the complete AI Authority Scorecard/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Retry audit/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Retry Authority assessment/i })).toBeInTheDocument();
+    expect(screen.getByText(/Authority-only retries remaining: 3/i)).toBeInTheDocument();
     expect(screen.queryByText("AI Authority scorecard")).not.toBeInTheDocument();
     expect(screen.queryByText("Prioritised actions")).not.toBeInTheDocument();
+  });
+
+  it("stops offering Authority retries after three attempts", () => {
+    seedSavedAudit({
+      ...FALLBACK_RESULT,
+      assessmentRetryCount: 3,
+      assessmentRetryLimit: 3,
+    });
+    render(
+      <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
+    );
+
+    expect(screen.queryByRole("button", { name: /Retry Authority assessment/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Three Authority assessment retries have been used/i)).toBeInTheDocument();
   });
 
   it("does not show fallback messaging for a complete assessment", () => {

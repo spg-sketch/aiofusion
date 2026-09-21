@@ -47,6 +47,11 @@ router.use(
   blockReadOnlyMembers,
   requirePaidOrTrial,
 );
+router.use(
+  "/store/projects/:id/audits/:auditId/retry-assessment",
+  blockReadOnlyMembers,
+  requirePaidOrTrial,
+);
 router.use(diagnosticRouter);
 router.use(seoAuditRouter);
 router.use(llmCheckRouter);
