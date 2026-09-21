@@ -281,6 +281,28 @@ export function contactExportRow(contact: Contact): string[] {
   ].map((value) => String(value ?? ""));
 }
 
+export function isUploadedMediaContact(contact: Contact): boolean {
+  const provenance = contact.provenance;
+  if (!provenance || typeof provenance !== "object") return false;
+  return Boolean(provenance.sourceHash || provenance.importFilename || provenance.sourceType || provenance.sourceRow);
+}
+
+export function contactCompletenessPercent(contact: Contact): number {
+  const checks = [
+    Boolean(contact.firstName.trim() && contact.lastName.trim()),
+    Boolean(contact.role.trim()),
+    Boolean(contact.outletId || contact.outletName?.trim()),
+    Boolean(contact.email.trim() || contact.phone.trim() || contact.mobile?.trim()),
+    Boolean(contact.beats?.length || contact.sectors?.length),
+    Boolean(contact.geography?.trim() || contact.outletCountry?.trim()),
+    Boolean(contact.sourceRef?.trim() || contact.sourceUrl?.trim()),
+    Boolean(contact.confidence?.trim() || contact.confidenceLevel?.trim()),
+    Boolean(contact.seniority?.trim() || contact.editorialStatus?.trim() || contact.language?.trim()),
+    Boolean(contact.notes.trim() || contact.reviewNotes?.trim() || contact.linkedinUrl?.trim()),
+  ];
+  return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+}
+
 function isSharedCollection(item: CollectionOwnedItem): boolean {
   // Older API responses identify the centrally managed collection with a null
   // accountId. Prefer the explicit scope when the newer response is present.
@@ -975,6 +997,29 @@ function MediaDatabasePage() {
     </div>;
   };
 
+  const recordVerificationBadge = (contact: Contact, includeSourceStatus = true) => {
+    if (!isUploadedMediaContact(contact)) return sourceBadge(contact);
+    const completeness = contactCompletenessPercent(contact);
+    return <div className="mt-1 flex flex-wrap items-center gap-1.5">
+      <span
+        className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold"
+        style={{ color: "#166534", background: "#DCFCE7" }}
+        title="Verified as a record supplied through an approved Media Database upload."
+      >
+        Verified upload
+      </span>
+      <span
+        className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold"
+        style={completeness >= 80
+          ? { color: "#166534", background: "#ECFDF5" }
+          : { color: "#92400E", background: "#FEF3C7" }}
+      >
+        {completeness >= 80 ? `Complete (${completeness}%)` : `${completeness}% complete`}
+      </span>
+      {includeSourceStatus && sourceBadge(contact)}
+    </div>;
+  };
+
   const fetchAllContactsForExport = async (): Promise<Contact[]> => {
     const pageSize = 200;
     const all: Contact[] = [];
@@ -1184,7 +1229,7 @@ function MediaDatabasePage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {result.authority > 0 && <span className="rounded-lg border px-2.5 py-1.5 text-[11px] font-bold" style={{ borderColor: vars.g200, color: vars.navy }}>Authority {result.authority}</span>}
-                  {contact && sourceBadge(contact)}
+                   {contact && recordVerificationBadge(contact)}
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">{result.matchedFields.map((field) => <span key={field} className="rounded-md bg-yellow-100 px-2 py-1 text-[11px] font-semibold text-yellow-900">Matched {field}</span>)}{result.matchedPhrases.map((phrase) => <span key={phrase} className="rounded-md bg-indigo-100 px-2 py-1 text-[11px] font-semibold text-indigo-900">Exact phrase: “{phrase}”</span>)}</div>
@@ -1428,7 +1473,7 @@ function MediaDatabasePage() {
                         <p className="font-semibold" style={{ color: vars.navy }}>{`${c.firstName} ${c.lastName}`.trim()}</p>
                          {c.outletCategory && <p className="text-[11px] font-light" style={{ color: vars.g500 }}>{c.outletCategory}</p>}
                          {isSharedCollection(c) && <span className="inline-flex text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded" style={{ background: "rgba(31,116,143,0.1)", color: vars.accent }}>Shared collection</span>}
-                        {sourceBadge(c)}
+                         {recordVerificationBadge(c)}
                          {(c.beats?.length || c.sectors?.length || c.seniority || c.editorialStatus) && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>{[c.beats?.length ? `Beats: ${c.beats.join(", ")}` : "", c.sectors?.length ? `Sectors: ${c.sectors.join(", ")}` : "", c.seniority, c.editorialStatus].filter(Boolean).join(" · ")}</p>}
                          {(c.reach || c.reachBand || c.authority !== undefined || c.authorityScore !== undefined || c.confidence || c.confidenceLevel) && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>{[c.reach || c.reachBand ? `Reach: ${c.reach || c.reachBand}` : "", c.authority ?? c.authorityScore !== undefined ? `Authority: ${c.authority ?? c.authorityScore}` : "", c.confidence || c.confidenceLevel ? `Confidence: ${c.confidence || c.confidenceLevel}` : ""].filter(Boolean).join(" · ")}</p>}
                       </td>
@@ -1796,7 +1841,11 @@ function MediaDatabasePage() {
                 <div className="rounded-xl border p-4" style={{ borderColor: vars.g200, background: vars.g50 }}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                         <div className="flex items-center gap-2"><span className="text-[12px] font-bold" style={{ color: vars.navy }}>Public source health</span><span className="text-[10px] uppercase tracking-wide" style={{ color: vars.g500 }}>Page verification</span>{sourceBadge(showContactProfile)}</div>
+                         <div className="flex flex-wrap items-center gap-2">
+                           <span className="text-[12px] font-bold" style={{ color: vars.navy }}>Database record</span>
+                           {recordVerificationBadge(showContactProfile, false)}
+                         </div>
+                         <div className="flex items-center gap-2 mt-3"><span className="text-[12px] font-bold" style={{ color: vars.navy }}>Public source health</span><span className="text-[10px] uppercase tracking-wide" style={{ color: vars.g500 }}>Page verification</span>{sourceBadge(showContactProfile)}</div>
                       <p className="text-[11px] mt-1" style={{ color: vars.g500 }}>
                         {!showContactProfile.sourceUrl ? "No public source is attached to this contact."
                           : showContactProfile.sourceCheck ? `Last checked ${new Date(showContactProfile.sourceCheck.checkedAt).toLocaleString()}`

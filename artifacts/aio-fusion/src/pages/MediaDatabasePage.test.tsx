@@ -10,7 +10,7 @@ vi.mock("../IntakeForm", () => ({
   getProjectMediaCategories: () => [],
 }));
 
-import { MediaDatabasePage, contactExportRow, importOutcomesWithErrors, importPlanHasWork, sanitizeSpreadsheetCell } from "./MediaDatabasePage";
+import { MediaDatabasePage, contactCompletenessPercent, contactExportRow, importOutcomesWithErrors, importPlanHasWork, isUploadedMediaContact, sanitizeSpreadsheetCell } from "./MediaDatabasePage";
 
 const changedContact = {
   id: 12, outletId: 2, firstName: "Jane", lastName: "Reporter", role: "Energy Editor",
@@ -140,6 +140,20 @@ describe("MediaDatabasePage source health", () => {
     searchEmptyMode = false;
     outletTotalOverride = 0;
     vi.unstubAllGlobals();
+  });
+
+  it("treats uploaded rows as verified records and marks 80 percent as complete", () => {
+    const eightyPercent = {
+      ...changedContact,
+      confidence: "",
+      linkedinUrl: "",
+      notes: "",
+      reviewNotes: "",
+      seniority: "Senior",
+    };
+    expect(isUploadedMediaContact(eightyPercent as never)).toBe(true);
+    expect(contactCompletenessPercent(eightyPercent as never)).toBe(80);
+    expect(isUploadedMediaContact({ ...eightyPercent, provenance: null } as never)).toBe(false);
   });
 
   it("shows changed and source-less statuses and requires explicit approval", async () => {

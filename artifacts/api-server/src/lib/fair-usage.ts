@@ -6,6 +6,10 @@ import { getProjectActionLimit } from "./billing";
 
 export const DEFAULT_FAIR_USAGE_LIMIT = 50;
 export const SPIKE_RATIO_THRESHOLD = 3;
+// Temporarily disabled for launch testing. Usage continues to be recorded and
+// reported, so enforcement can be restored without losing the launch-period
+// history by setting FAIR_USAGE_ENFORCEMENT_ENABLED=true.
+export const FAIR_USAGE_ENFORCEMENT_ENABLED = process.env.FAIR_USAGE_ENFORCEMENT_ENABLED === "true";
 
 // Default monthly GBP cap per account. Can be overridden per-account by an
 // admin via platform_meta key `spendLimit:monthly:gbp:{slug}`.
@@ -100,9 +104,9 @@ export async function checkFairUsage(accountId: string, projectId?: string | nul
     // limit. The per-account admin multiplier still applies on top.
     const baseLimit = await getProjectActionLimit(accountId, projectId);
     const limit = Math.round(baseLimit * multiplier);
-    const allowed = callCount < limit;
+    const allowed = !FAIR_USAGE_ENFORCEMENT_ENABLED || callCount < limit;
 
-    if (!allowed) {
+    if (FAIR_USAGE_ENFORCEMENT_ENABLED && !allowed) {
       logger.warn(
         { accountId, projectId, callCount, limit, multiplier },
         "fair-usage: project over 30-day action limit - returning 429",
