@@ -453,7 +453,9 @@ describe("media recommendation refinement API", () => {
     expect((await request("/store/media-db/recommendations/brief", "workspace-a", {
       method: "PUT", body: JSON.stringify({ projectId: "project-1", storyKey: "story-1", brief }),
     })).status).toBe(200);
-    expect(await (await request("/store/media-db/recommendations/brief?projectId=project-1&storyKey=story-1")).json()).toMatchObject({ brief });
+    expect(await (await request("/store/media-db/recommendations/brief?projectId=project-1&storyKey=story-1")).json()).toMatchObject({
+      brief: { ...brief, audience: "" },
+    });
 
     const generated = await request("/store/media-db/recommendations", "workspace-a", {
       method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "story-1", terms: ["energy"] }),

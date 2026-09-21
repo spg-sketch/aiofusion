@@ -48,6 +48,11 @@ export function safeHttpUrl(v: unknown): string {
 // wins when it can, but the user is never left waiting forever.
 export const CONTENT_AI_TIMEOUT_MS = 100_000;
 
+export function estimatedGenerationProgress(elapsedSeconds: number, durationSeconds: number): number {
+  if (!Number.isFinite(elapsedSeconds) || !Number.isFinite(durationSeconds) || durationSeconds <= 0) return 0;
+  return Math.min(95, Math.max(0, Math.round((elapsedSeconds / durationSeconds) * 100)));
+}
+
 // Streams a content-AI response. The server replies with Server-Sent Events:
 //   event: progress  -> { chars }   (incremental output as the model writes)
 //   event: result    -> the final payload
@@ -126,6 +131,7 @@ export function GenerationProgress({
   compact = false,
   textColor,
   startedAt,
+  durationSeconds,
 }: {
   stages: string[];
   chars: number;
@@ -133,6 +139,7 @@ export function GenerationProgress({
   compact?: boolean;
   textColor?: string;
   startedAt?: number;
+  durationSeconds?: number;
 }) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
@@ -142,7 +149,13 @@ export function GenerationProgress({
     const id = setInterval(update, 250);
     return () => clearInterval(id);
   }, [startedAt]);
-  const stageIdx = Math.min(stages.length - 1, Math.floor(elapsed / 6));
+  const estimatedProgress = durationSeconds
+    ? estimatedGenerationProgress(elapsed, durationSeconds)
+    : null;
+  const estimatePassed = Boolean(durationSeconds && elapsed >= durationSeconds);
+  const stageIdx = estimatedProgress === null
+    ? Math.min(stages.length - 1, Math.floor(elapsed / 6))
+    : Math.min(stages.length - 1, Math.floor((estimatedProgress / 100) * stages.length));
   const stage = stages[stageIdx] || stages[stages.length - 1] || "Working…";
   const tint = `${accent}14`;
   return (
@@ -159,11 +172,31 @@ export function GenerationProgress({
           </span>
         </div>
         <span className={`flex-shrink-0 tabular-nums ${compact ? "text-[10px]" : "text-[11px]"}`} style={{ color: vars.g500 }}>
-          {elapsed}s{chars > 0 ? ` · ~${Math.round(chars / 5).toLocaleString()} words` : ""}
+          {estimatedProgress === null
+            ? `${elapsed}s`
+            : estimatePassed
+              ? "Taking longer than estimated"
+              : `Approximately ${estimatedProgress}%`}
+          {chars > 0 ? ` · ${chars.toLocaleString()} characters generated` : ""}
         </span>
       </div>
-      <div className={`relative overflow-hidden rounded-full ${compact ? "mt-1.5 h-1" : "mt-2.5 h-1.5"}`} style={{ background: `${accent}26` }}>
-        <span className="aio-indeterminate-bar" style={{ background: accent }} />
+      <div
+        className={`relative overflow-hidden rounded-full ${compact ? "mt-1.5 h-1" : "mt-2.5 h-2"}`}
+        style={{ background: `${accent}26` }}
+        role={estimatedProgress === null ? undefined : "progressbar"}
+        aria-label={estimatedProgress === null ? undefined : "Estimated optimisation progress"}
+        aria-valuemin={estimatedProgress === null ? undefined : 0}
+        aria-valuemax={estimatedProgress === null ? undefined : 100}
+        aria-valuenow={estimatedProgress ?? undefined}
+      >
+        {estimatedProgress === null ? (
+          <span className="aio-indeterminate-bar" style={{ background: accent }} />
+        ) : (
+          <span
+            className="block h-full rounded-full transition-[width] duration-500 ease-out"
+            style={{ width: `${estimatedProgress}%`, background: accent }}
+          />
+        )}
       </div>
       {!compact && (
         <p className="text-[10.5px] font-light mt-2" style={{ color: vars.g500 }}>

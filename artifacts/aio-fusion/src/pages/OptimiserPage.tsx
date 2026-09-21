@@ -1147,6 +1147,8 @@ OUTPUT INSTRUCTIONS:
                   ]}
                   chars={optimiseChars}
                   accent={vars.coral}
+                  startedAt={optimisationStartedAt}
+                  durationSeconds={optimisationEstimate}
                 />
               </div>
             )}

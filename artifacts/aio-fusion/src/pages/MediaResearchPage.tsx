@@ -315,7 +315,10 @@ function MediaResearchPage() {
   const preloadIdRef = useRef(preloadId);
   const [selectedId, setSelectedId] = useState(() => preloadId || readRememberedResearchSelection(selectionStorageKey));
   const [items, setItems] = useState<Recommendation[]>([]);
+  const [visibleRecommendationCount, setVisibleRecommendationCount] = useState(5);
+  const [totalMatches, setTotalMatches] = useState(0);
   const [decisions, setDecisions] = useState<Record<number, Decision>>({});
+  const [decisionSaving, setDecisionSaving] = useState<Record<number, boolean>>({});
   const [decisionContacts, setDecisionContacts] = useState<Record<number, Contact>>({});
   const [decisionAssessments, setDecisionAssessments] = useState<Record<number, Recommendation["assessment"]>>({});
   const [loading, setLoading] = useState(false);
@@ -466,7 +469,10 @@ function MediaResearchPage() {
       setRecommendationSetId(typeof set?.id === "number" || typeof set?.id === "string" ? set.id : null);
       setRecommendationHasRun(Boolean(set?.id));
       setEvaluation(data.evaluation && typeof data.evaluation === "object" ? data.evaluation as RecommendationEvaluation : null);
-      setItems(Array.isArray(data.items) ? dedupeRecommendations(data.items) : []);
+      const nextItems = Array.isArray(data.items) ? dedupeRecommendations(data.items) : [];
+      nextItems.sort((a, b) => b.score - a.score || a.rank - b.rank || a.contact.id - b.contact.id);
+      setItems(nextItems);
+      setTotalMatches(typeof data.totalMatches === "number" ? data.totalMatches : nextItems.length);
     } catch (reason) {
       // A failed refresh must not erase a previously visible, auditable set.
       // Keep the failure visible instead of silently falling back to generated
@@ -553,6 +559,8 @@ function MediaResearchPage() {
     const request: RequestHandle = { id: ++requestSequence.current, key: requestKey, controller: new AbortController() };
     recommendationRequest.current = request;
     setEnrichmentWarning("");
+    setVisibleRecommendationCount(5);
+    setTotalMatches(0);
     setItems([]);
     try {
       const response = await fetch(`${apiBase()}/api/store/media-db/recommendations`, {
@@ -569,7 +577,10 @@ function MediaResearchPage() {
       setRecommendationSetId(typeof set?.id === "number" || typeof set?.id === "string" ? set.id : null);
       setRecommendationHasRun(true);
       setEvaluation(data.evaluation && typeof data.evaluation === "object" ? data.evaluation as RecommendationEvaluation : null);
-      setItems(Array.isArray(data.items) ? dedupeRecommendations(data.items) : []);
+      const nextItems = Array.isArray(data.items) ? dedupeRecommendations(data.items) : [];
+      nextItems.sort((a, b) => b.score - a.score || a.rank - b.rank || a.contact.id - b.contact.id);
+      setItems(nextItems);
+      setTotalMatches(typeof data.totalMatches === "number" ? data.totalMatches : nextItems.length);
       // The POST response is the authoritative newest set. Refetch decisions
       // for persistence, but do not let a concurrent/lagging GET replace that
       // freshly returned recommendation list.
@@ -812,6 +823,7 @@ function MediaResearchPage() {
     decisionLoadSequence.current += 1;
     const requestId = ++requestSequence.current;
     decisionRequests.current[contactId] = { id: requestId, key: requestKey };
+    setDecisionSaving((current) => ({ ...current, [contactId]: true }));
     try {
       const response = await fetch(`${apiBase()}/api/store/media-db/recommendations/decisions`, {
         method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" },
@@ -832,6 +844,11 @@ function MediaResearchPage() {
       }
     } finally {
       if (decisionRequests.current[contactId]?.id === requestId) delete decisionRequests.current[contactId];
+      setDecisionSaving((current) => {
+        const next = { ...current };
+        delete next[contactId];
+        return next;
+      });
     }
   };
   const refine = async (contactId: number, signal: "more" | "less" | null) => {
@@ -934,6 +951,7 @@ function MediaResearchPage() {
         isShortlist={shortlist}
         refinement={feedback[item.contact.id]}
         refinementLoading={refining === item.contact.id}
+        actionLoading={Boolean(decisionSaving[item.contact.id])}
         onRefine={shortlist ? undefined : (signal) => void refine(item.contact.id, signal)}
         onToggleRestriction={toggleRestriction}
         sharedScoreCount={sharedScoreCount}
@@ -941,7 +959,7 @@ function MediaResearchPage() {
     );
   };
   return <div className="p-6 sm:p-8 max-w-6xl mx-auto"><div className="mb-6"><div className="flex gap-3 items-center"><Target color="#fff" size={28} /><h1 className="text-3xl sm:text-4xl" style={{ color: "#fff", fontFamily: "'Alice', Georgia, serif" }}>Media Research</h1></div><p className="text-[14px] mt-2" style={{ color: "rgba(255,255,255,.85)" }}>Match trusted contacts already in your database or discover current journalists from public web sources. Every live result includes evidence and a source. Live search sends the selected article excerpt to OpenAI only after you explicitly run it.</p></div>
-    <section className="bg-white rounded-2xl border p-5 mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><label className="block text-[12px] font-bold mb-2" style={{ color: vars.navy }}>Saved article</label><select data-testid="select-research-article" value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setItems([]); setLiveItems([]); setDiscoveryToken(""); setError(""); }} className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400"><option value="">Choose a saved article</option>{archive.map((a) => <option key={a.id} value={a.id}>{a.title} ({a.contentType})</option>)}</select>{selected && <><div className="grid sm:grid-cols-2 gap-2 mt-4"><SummaryRow label="Article" value={selected.title} /><SummaryRow label="Categories" value={categories.join(", ") || "No categories selected"} /></div><div className="mt-3 rounded-lg border px-3 py-2" style={{ borderColor: vars.g200 }}><p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: vars.g500 }}>Exact target phrases</p>{activeTargetPhrases.length ? <ul className="mt-1 list-disc pl-4 text-[13px]" style={{ color: vars.g600 }}>{activeTargetPhrases.map((phrase) => <li key={phrase.id}><span className="font-medium">{phrase.text}</span><span className="ml-2 text-[11px] text-slate-400">({phrase.intentGroup})</span></li>)}</ul> : <p className="mt-1 text-[12px] text-slate-500">No exact phrases selected for this article or project.</p>}</div></>}
+    <section className="bg-white rounded-2xl border p-5 mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><label className="block text-[12px] font-bold mb-2" style={{ color: vars.navy }}>Saved article</label><select data-testid="select-research-article" value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setItems([]); setVisibleRecommendationCount(5); setTotalMatches(0); setLiveItems([]); setDiscoveryToken(""); setError(""); }} className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400"><option value="">Choose a saved article</option>{archive.map((a) => <option key={a.id} value={a.id}>{a.title} ({a.contentType})</option>)}</select>{selected && <><div className="grid sm:grid-cols-2 gap-2 mt-4"><SummaryRow label="Article" value={selected.title} /><SummaryRow label="Categories" value={categories.join(", ") || "No categories selected"} /></div><div className="mt-3 rounded-lg border px-3 py-2" style={{ borderColor: vars.g200 }}><p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: vars.g500 }}>Exact target phrases</p>{activeTargetPhrases.length ? <ul className="mt-1 list-disc pl-4 text-[13px]" style={{ color: vars.g600 }}>{activeTargetPhrases.map((phrase) => <li key={phrase.id}><span className="font-medium">{phrase.text}</span><span className="ml-2 text-[11px] text-slate-400">({phrase.intentGroup})</span></li>)}</ul> : <p className="mt-1 text-[12px] text-slate-500">No exact phrases selected for this article or project.</p>}</div></>}
        <div className="mt-5 pt-5 border-t" style={{ borderColor: vars.g100 }}>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-[14px] font-semibold" style={{ color: vars.navy }}>Targeting Brief</h3>
@@ -958,10 +976,6 @@ function MediaResearchPage() {
             <div>
               <label className="block text-[12px] font-bold mb-1" style={{ color: vars.navy }}>Angle</label>
                <input aria-label="Angle" value={brief.angle} onChange={e => editBrief({ angle: e.target.value })} placeholder="e.g. New product launch" className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400" />
-            </div>
-            <div>
-              <label className="block text-[12px] font-bold mb-1" style={{ color: vars.navy }}>Audience</label>
-               <input aria-label="Audience" value={brief.audience} onChange={e => editBrief({ audience: e.target.value })} placeholder="e.g. CIOs, Consumers" className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400" />
             </div>
             <div>
               <label className="block text-[12px] font-bold mb-1" style={{ color: vars.navy }}>Why Now</label>
@@ -984,7 +998,7 @@ function MediaResearchPage() {
 
        <div className="mt-5 pt-5 border-t flex flex-wrap gap-3" style={{ borderColor: vars.g100 }}><button data-testid="button-recommend-contacts" disabled={loading || briefLoading || briefReadyKey !== `${projectId}:${storyKey}` || Boolean(briefLoadError) || !selected || brief.regions.length === 0 || !brief.topic || !brief.angle} onClick={() => void saveAndRecommend()} className="px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-all shadow-sm" style={{ background: vars.coral }}>{loading ? <Loader2 className="inline animate-spin mr-1.5" size={16} /> : <Target className="inline mr-1.5" size={16} />}Save brief & match database contacts</button>{items.length > 0 && <button data-testid="button-discover-live" disabled={liveLoading || briefLoading || briefReadyKey !== `${projectId}:${storyKey}` || Boolean(briefLoadError) || !selected || brief.regions.length === 0} onClick={() => void discoverLive()} className="px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-all shadow-sm" style={{ background: vars.navy }}>{liveLoading ? <Loader2 className="inline animate-spin mr-1.5" size={16} /> : <Search className="inline mr-1.5" size={16} />}Expand with live search</button>}</div><p className="mt-3 text-[11px]" style={{ color: vars.g500 }}>External live search is explicit and does not run automatically. It uses the selected article excerpt and the saved Targeting Brief for AI evaluation. The selected article excerpt is sent to OpenAI only when you explicitly run live search; any returned email must be supported by the cited public source.</p></section>
     {error && <p data-testid="status-research-error" className="p-3 rounded bg-white text-[12px] mb-5" style={{ color: vars.red }}>{error}</p>}
-       {(loading || items.length > 0) && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b flex flex-wrap justify-between gap-3" style={{ background: vars.g50, borderColor: vars.g200 }}><div><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Recommended from your Media Database</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{loading ? "Preparing recommendations from your project and selected article..." : `${items.length} contacts ranked from saved database fields and article-specific refinement. Match explanations show how feedback affected the order.`}</p>{evaluation && <p className="text-[11px] mt-2 text-slate-500">Evaluation: {evaluation.evaluated} evaluated · {evaluation.shortlisted} shortlisted · {evaluation.contacted} contacted · {evaluation.responded} responded · {evaluation.placed} placed</p>}</div>
+       {(loading || items.length > 0) && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b flex flex-wrap justify-between gap-3" style={{ background: vars.g50, borderColor: vars.g200 }}><div><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Recommended from your Media Database</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{loading ? "Finding and ranking the strongest matches..." : `Showing ${Math.min(visibleRecommendationCount, items.length)} of ${items.length} ranked matches${totalMatches > items.length ? ` from ${totalMatches} relevant connections` : ""}. Results are capped at 25 and the next five are already loaded.`}</p>{evaluation && <p className="text-[11px] mt-2 text-slate-500">Evaluation: {evaluation.evaluated} evaluated · {evaluation.shortlisted} shortlisted · {evaluation.contacted} contacted · {evaluation.responded} responded · {evaluation.placed} placed</p>}</div>
        <div className="flex gap-2">
          {items.length > 0 && recommendationSetId !== null && (
            <button disabled={enriching} onClick={() => void enrichRecommendations(recommendationSetId)} className="self-start text-[12px] px-3 py-2 border rounded-lg bg-white disabled:opacity-50 hover:bg-slate-50 transition-colors shadow-sm" style={{ borderColor: vars.g200 }}>
@@ -993,7 +1007,7 @@ function MediaResearchPage() {
           </button>
         )}
         {Object.keys(feedback).length > 0 && <button disabled={refining !== null} onClick={() => void resetRefinement()} className="self-start text-[12px] px-3 py-2 border rounded-lg bg-white disabled:opacity-50" style={{ borderColor: vars.g200 }}><RotateCcw size={14} className={`inline mr-1 ${refining === "reset" ? "animate-spin" : ""}`} />Reset refinement</button>}
-       </div></div>{enrichmentWarning && <p className="mx-5 mb-3 rounded-lg bg-amber-50 border border-amber-100 p-3 text-[12px] text-amber-800">Coverage check warning: {enrichmentWarning}</p>}{items.map((item) => contactCard(item))}</section>}
+       </div></div>{enrichmentWarning && <p className="mx-5 mb-3 rounded-lg bg-amber-50 border border-amber-100 p-3 text-[12px] text-amber-800">Coverage check warning: {enrichmentWarning}</p>}{items.slice(0, visibleRecommendationCount).map((item) => contactCard(item))}{visibleRecommendationCount < items.length && <div className="p-5 border-t text-center" style={{ borderColor: vars.g200 }}><button type="button" data-testid="button-show-more-recommendations" onClick={() => setVisibleRecommendationCount((count) => Math.min(items.length, count + 5))} className="px-5 py-2.5 rounded-lg border bg-white text-[13px] font-semibold hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}>Show 5 more preloaded matches</button></div>}</section>}
      {liveItems.length > 0 && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Unverified public web discoveries</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{liveItems.length} current journalists across {livePublicationCount} publications, grounded in public author pages, profiles or article bylines. Review the evidence, then send each discovery for human approval.</p></div>
       {liveGroups.filter((group) => group.items.length > 0).map((group) => <div key={group.label}>
         <div className="px-5 py-2.5 border-b text-[12px] font-bold uppercase tracking-wide" style={{ color: vars.navy, background: "rgba(31,116,143,0.07)", borderColor: vars.g200 }}>{group.label} · {group.items.length}</div>

@@ -2600,6 +2600,7 @@ type RecommendationCriteria = {
   terms?: string[];
   targetPhrases?: ExactTargetPhrase[];
   baseScores?: Record<string, number>;
+  totalMatches?: number;
   brief?: TargetingBrief;
   assessments?: Record<string, EditorialAssessment>;
   evidence?: Record<string, unknown[]>;
@@ -2624,7 +2625,9 @@ function normaliseBrief(value: unknown, fallback: TargetingBrief): TargetingBrie
   return {
     topic: typeof raw.topic === "string" ? raw.topic.trim().slice(0, 1000) : fallback.topic,
     angle: typeof raw.angle === "string" ? raw.angle.trim().slice(0, 1000) : fallback.angle,
-    audience: typeof raw.audience === "string" ? raw.audience.trim().slice(0, 1000) : fallback.audience,
+    // Audience is intentionally excluded from Media Research matching. Keep
+    // the legacy field empty so older saved briefs cannot affect ranking.
+    audience: "",
     regions: strings(raw.regions),
     publicationTypes: strings(raw.publicationTypes),
     whyNow: typeof raw.whyNow === "string" ? raw.whyNow.trim().slice(0, 1000) : fallback.whyNow,
@@ -2975,7 +2978,7 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
     ]);
     const outlets = await db.select().from(mediaOutletsTable).where(isNull(mediaOutletsTable.deletedAt));
     const outletById = new Map(outlets.filter((outlet) => outletVisible(outlet.accountId, visible)).map((outlet) => [outlet.id, outlet]));
-    const ranked = contacts.map((contact) => {
+    const rankedCandidates = contacts.map((contact) => {
       const baseRecommendation = scoreMediaRecommendation(contact, terms);
       const phraseMatches = phraseMatchSignals(contact, targetPhrases);
       const reasons = [
@@ -3023,7 +3026,11 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
       };
     }).filter((item) => item.score > 0 && item.assessment.readiness.status !== "blocked"
       && (!item.contact.outletId || outletById.has(item.contact.outletId)))
-      .sort((a, b) => b.score - a.score || a.contact.id - b.contact.id).slice(0, 100);
+      .sort((a, b) => b.score - a.score || a.contact.id - b.contact.id);
+    const totalMatches = rankedCandidates.length;
+    // Return a focused, immediately useful set. The client reveals five at a
+    // time, with later groups already loaded while the first are reviewed.
+    const ranked = rankedCandidates.slice(0, 25);
     const assessments = Object.fromEntries(contacts.map((contact) => {
       const item = ranked.find((entry) => entry.contact.id === contact.id);
       if (item) return [String(contact.id), item.assessment];
@@ -3041,7 +3048,7 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
         accountId,
         projectId,
         storyKey,
-        criteria: { terms, targetPhrases, brief, assessments, evidence: priorEvidence, warnings: priorWarnings, rankingVersion: "editorial-v1", baseScores: Object.fromEntries(ranked.map((item) => [String(item.contact.id), item.score])) },
+        criteria: { terms, targetPhrases, brief, assessments, evidence: priorEvidence, warnings: priorWarnings, rankingVersion: "editorial-v1", totalMatches, baseScores: Object.fromEntries(ranked.map((item) => [String(item.contact.id), item.score])) },
       }).returning();
       if (ranked.length) await tx.insert(mediaRecommendationItemsTable).values(ranked.map((item, index) => ({ recommendationSetId: created.id, contactId: item.contact.id, score: item.score, reasons: item.reasons, phraseAttributions: item.phraseAttributions, rank: index + 1 })));
       return created;
@@ -3060,6 +3067,7 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
          assessment: (set.criteria as RecommendationCriteria).assessments?.[String(entry.item.contactId)] ?? null,
       })),
        brief,
+       totalMatches,
        evaluation: await evaluationSummary(accountId, projectId, storyKey, contacts.length, ranked.length),
     });
   } catch (error) {
@@ -3490,7 +3498,8 @@ router.get("/store/media-db/recommendations", requirePlatformAuth, async (req: R
   }).from(mediaRecommendationItemsTable)
     .innerJoin(mediaContactsTable, eq(mediaRecommendationItemsTable.contactId, mediaContactsTable.id))
     .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
-    .where(and(eq(mediaRecommendationItemsTable.recommendationSetId, set.id), isNull(mediaContactsTable.deletedAt)));
+    .where(and(eq(mediaRecommendationItemsTable.recommendationSetId, set.id), isNull(mediaContactsTable.deletedAt)))
+    .orderBy(asc(mediaRecommendationItemsTable.rank), desc(mediaRecommendationItemsTable.score));
    const candidateRows = filterVisibleRecommendationItems(rows.map((row) => ({ ...row, contact: row.contact })), visible);
    const visibleRows = (await Promise.all(candidateRows.map(async (row) => ({
      row,
@@ -3526,6 +3535,7 @@ router.get("/store/media-db/recommendations", requirePlatformAuth, async (req: R
   });
   res.json({
     ok: true, recommendationSet: set, items, brief: savedBrief,
+    totalMatches: Math.max(items.length, criteria.totalMatches ?? 0),
     evaluation: await evaluationSummary(accountId, projectId, storyKey, Object.keys(criteria.assessments ?? {}).length, items.length),
   });
 });

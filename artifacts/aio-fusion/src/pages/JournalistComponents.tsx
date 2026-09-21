@@ -1,6 +1,6 @@
 import React from "react";
 import { vars } from "../marketing/vars";
-import { Mail, Phone, MapPin, Globe, ExternalLink, Linkedin, Twitter, Clock, Edit, Check, ThumbsDown, ThumbsUp, Database, Target, Award, Shield, FileText, Undo2, ChevronDown, ChevronRight, AlertCircle, Ban } from "lucide-react";
+import { Mail, Phone, MapPin, Globe, ExternalLink, Linkedin, Twitter, Clock, Edit, Check, ThumbsDown, ThumbsUp, Database, Target, Award, Shield, FileText, Undo2, ChevronDown, ChevronRight, AlertCircle, Ban, Loader2 } from "lucide-react";
 import { MiniDonut } from "./shared";
 
 export type Contact = {
@@ -365,6 +365,7 @@ export function RecommendationCard({
   showMatchScore = true,
   refinement,
   refinementLoading = false,
+  actionLoading = false,
   onRefine,
   onToggleRestriction,
   sharedScoreCount = 1,
@@ -383,6 +384,7 @@ export function RecommendationCard({
   showMatchScore?: boolean;
   refinement?: "more" | "less";
   refinementLoading?: boolean;
+  actionLoading?: boolean;
   onRefine?: (signal: "more" | "less" | null) => void;
   onToggleRestriction?: (contactId: number, restricted: boolean) => void;
   sharedScoreCount?: number;
@@ -593,27 +595,32 @@ export function RecommendationCard({
             {!isShortlist && onAccept && onDecline && (
               <>
                 <button 
+                  type="button"
                   data-testid={`button-accept-${c.id}`} 
                   onClick={onAccept} 
+                  disabled={actionLoading}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors" 
                   style={{ background: "#3D9B6B", boxShadow: "0 1px 2px rgba(61,155,107,0.3)" }}
                 >
-                  <Check size={14} /> Add to shortlist
+                  {actionLoading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                  {actionLoading ? "Saving..." : decision?.decision === "shortlisted" ? "Added to shortlist" : "Add to shortlist"}
                 </button>
                 <button 
+                  type="button"
                   data-testid={`button-decline-${c.id}`} 
                   onClick={onDecline} 
+                  disabled={actionLoading}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold border transition-colors bg-white hover:bg-slate-50" 
                   style={{ borderColor: vars.g200, color: vars.g600 }}
                 >
                   <ThumbsDown size={14} /> Decline
                 </button>
                 {onRefine && <>
-                  <button disabled={refinementLoading} aria-pressed={refinement === "more"} onClick={() => onRefine(refinement === "more" ? null : "more")} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-semibold border ${refinement === "more" ? "bg-emerald-50 border-emerald-300 text-emerald-800" : "bg-white border-slate-200 text-slate-600"}`}>
-                    {refinement === "more" ? <Undo2 size={14} /> : <ThumbsUp size={14} />} {refinement === "more" ? "Undo More like this" : "More like this"}
+                  <button type="button" disabled={refinementLoading} aria-pressed={refinement === "more"} onClick={() => onRefine(refinement === "more" ? null : "more")} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-semibold border ${refinement === "more" ? "bg-emerald-50 border-emerald-300 text-emerald-800" : "bg-white border-slate-200 text-slate-600"}`}>
+                    {refinementLoading ? <Loader2 size={14} className="animate-spin" /> : refinement === "more" ? <Undo2 size={14} /> : <ThumbsUp size={14} />} {refinement === "more" ? "Undo More like this" : "More like this"}
                   </button>
-                  <button disabled={refinementLoading} aria-pressed={refinement === "less"} onClick={() => onRefine(refinement === "less" ? null : "less")} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-semibold border ${refinement === "less" ? "bg-rose-50 border-rose-300 text-rose-800" : "bg-white border-slate-200 text-slate-600"}`}>
-                    {refinement === "less" ? <Undo2 size={14} /> : <ThumbsDown size={14} />} {refinement === "less" ? "Undo Less like this" : "Less like this"}
+                  <button type="button" disabled={refinementLoading} aria-pressed={refinement === "less"} onClick={() => onRefine(refinement === "less" ? null : "less")} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-semibold border ${refinement === "less" ? "bg-rose-50 border-rose-300 text-rose-800" : "bg-white border-slate-200 text-slate-600"}`}>
+                    {refinementLoading ? <Loader2 size={14} className="animate-spin" /> : refinement === "less" ? <Undo2 size={14} /> : <ThumbsDown size={14} />} {refinement === "less" ? "Undo Less like this" : "Less like this"}
                   </button>
                 </>}
               </>

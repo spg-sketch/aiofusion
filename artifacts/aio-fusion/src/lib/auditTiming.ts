@@ -6,7 +6,7 @@ const DEFAULTS: Record<AuditOperationType, number> = {
   draft: 60,
   "intake-auto-fill": 90,
   "content-draft": 75,
-  "content-optimise": 40,
+  "content-optimise": 90,
   "website-project": 90,
 };
 
@@ -16,6 +16,10 @@ const OVERTIME_RATIO_THRESHOLD = 0.2;
 const OVERTIME_MIN_SECONDS = 15;
 
 function storageKey(type: AuditOperationType): string {
+  // Content Optimiser previously started from a 40-second baseline, leaving
+  // some browsers with rolling estimates around 30 seconds. Start its measured
+  // history afresh against the corrected 90-second baseline.
+  if (type === "content-optimise") return "aio.auditTiming.v2.content-optimise";
   return `aio.auditTiming.${type}`;
 }
 

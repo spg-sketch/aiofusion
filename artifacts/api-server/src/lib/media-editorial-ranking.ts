@@ -451,10 +451,9 @@ export function assessEditorialFit(input: EditorialRankingInput): EditorialAsses
       : "Unknown: no page-checked, author-matched coverage with a valid, non-future public date and topic overlap.",
   );
 
-  const audienceTargets = uniquePhrases([
-    brief.audience,
-    ...values(brief.publicationTypes),
-  ]);
+  // User-entered audience is not a Media Research ranking input. Publication
+  // types remain useful because they describe the requested outlet format.
+  const audienceTargets = uniquePhrases(values(brief.publicationTypes));
   const outletTypes = outletPublicationTypes(outlet);
   const outletAudienceCorpus = audienceCorpus(outlet);
   const audience = matchingScore(outletAudienceCorpus, audienceTargets);
@@ -472,10 +471,10 @@ export function assessEditorialFit(input: EditorialRankingInput): EditorialAsses
     audienceScore === null
       ? audienceTargets.length
         ? "Unknown: the outlet has no category, sector or publication type to compare."
-        : "Unknown: no audience or publication-type target was supplied."
+        : "Unknown: no publication-type target was supplied."
       : audienceScore
         ? `Matched ${[...audience.matched, ...(typeMatch?.matched ?? [])].join(", ")} in outlet category/sector or publication type.`
-        : "No audience target matched the outlet category, sector or publication type; reach and authority are not used.",
+        : "No publication-type target matched the outlet category, sector or publication type; reach and authority are not used.",
   );
 
   const requestedRegions = values(brief.regions);
