@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 export const RELEASE_STAGE_TIMEOUTS = Object.freeze({
+  "release automation guard": 60_000,
   typecheck: 10 * 60_000,
   "api regression suite": 10 * 60_000,
   "web regression suite": 10 * 60_000,
@@ -20,6 +21,7 @@ export const RELEASE_STAGE_TIMEOUTS = Object.freeze({
 export const DEFAULT_STAGE_TIMEOUT_MS = 10 * 60_000;
 
 export const RELEASE_STAGES = [
+  ["release automation guard", "pnpm run release:validate-automation", RELEASE_STAGE_TIMEOUTS["release automation guard"]],
   ["typecheck", "pnpm run typecheck", RELEASE_STAGE_TIMEOUTS.typecheck],
   ["api regression suite", "pnpm --filter @workspace/api-server run test", RELEASE_STAGE_TIMEOUTS["api regression suite"]],
   ["web regression suite", "pnpm --filter @workspace/aio-fusion run test", RELEASE_STAGE_TIMEOUTS["web regression suite"]],

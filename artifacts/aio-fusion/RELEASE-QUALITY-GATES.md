@@ -12,14 +12,15 @@ This is the only command that establishes a release candidate. Developer `test` 
 
 The command is fail-fast and runs these required stages in order:
 
-1. Workspace typechecks
-2. API regression suite
-3. Web regression suite
-4. Operational script tests
-5. API production build
-6. Web production and pre-render build
-7. Isolated production-bundle API startup and `/api/healthz` readiness check
-8. Chromium critical journeys for public routing, sign-in, authorised workspace access and denied access
+1. Repository publication-automation guard
+2. Workspace typechecks
+3. API regression suite
+4. Web regression suite
+5. Operational script tests
+6. API production build
+7. Web production and pre-render build
+8. Isolated production-bundle API startup and `/api/healthz` readiness check
+9. Chromium critical journeys for public routing, sign-in, authorised workspace access and denied access
 
 Every stage must run and pass. A missing tool, build output, browser, fixture prerequisite or environment value is a failure, not a skip. The first failure stops the run and names the failed stage.
 
@@ -51,7 +52,9 @@ After all stages pass, the application reviewer gives explicit approval to publi
 RELEASE_ENVIRONMENT=staging pnpm run release:publish -- <staging-publish-command> [arguments...]
 ```
 
-This command reads `release-evidence/latest.json` and stops before invoking the publisher if the gate failed, the evidence covers another Git revision, the recorded source was dirty, or the current checkout is dirty. It does not replace reviewer approval. Production publication still requires the business owner and release owner approval in the cutover runbook.
+This guarded command is the only supported staging publication entry point for operators and repository-managed automation. Never invoke a staging publisher directly from a workflow, package script, runbook or shell. The release gate runs `pnpm run release:validate-automation` and fails if repository workflow configuration or the root package scripts contain a direct publisher invocation.
+
+The guarded command reads `release-evidence/latest.json` and stops before invoking the publisher if the gate failed, the evidence covers another Git revision, the recorded source was dirty, or the current checkout is dirty. It does not replace reviewer approval. Production publication still requires the business owner and release owner approval in the cutover runbook.
 
 ## Staging sign-off
 

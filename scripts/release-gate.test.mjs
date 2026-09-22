@@ -11,6 +11,10 @@ import {
   runReleaseGate,
   runStagingPublication,
 } from "./release-lib.mjs";
+import {
+  assertGuardedStagingAutomation,
+  validateReleaseAutomation,
+} from "./release-automation-guard.mjs";
 
 const MATCHING_SOURCE = {
   gitRevision: "0123456789abcdef0123456789abcdef01234567",
@@ -21,6 +25,7 @@ const sourceState = async () => MATCHING_SOURCE;
 
 test("keeps every release-blocking stage in the required order", () => {
   assert.deepEqual(RELEASE_STAGES.map(([name]) => name), [
+    "release automation guard",
     "typecheck",
     "api regression suite",
     "web regression suite",
@@ -32,6 +37,83 @@ test("keeps every release-blocking stage in the required order", () => {
   ]);
   assert.match(RELEASE_STAGES.at(-1)[1], /playwright/);
   assert.ok(RELEASE_STAGES.every(([, , timeoutMs]) => timeoutMs > 0));
+});
+
+test("rejects repository automation that invokes a publisher directly", () => {
+  assert.throws(
+    () => assertGuardedStagingAutomation(
+      ".github/workflows/publish-staging.yml",
+      "run: replit deploy --environment staging",
+    ),
+    /bypasses the release-evidence guard/,
+  );
+});
+
+test("rejects a package script that aliases a publisher outside the guard", () => {
+  assert.throws(
+    () => assertGuardedStagingAutomation(
+      "package.json",
+      '{"scripts":{"publish:staging":"replit deploy --environment staging"}}',
+    ),
+    /bypasses the release-evidence guard/,
+  );
+});
+
+test("rejects a direct publisher chained with guarded command text", () => {
+  assert.throws(
+    () => assertGuardedStagingAutomation(
+      ".github/workflows/publish-staging.yml",
+      "run: replit deploy --environment staging && pnpm run release:publish -- replit deploy --environment staging",
+    ),
+    /bypasses the release-evidence guard/,
+  );
+});
+
+test("rejects a direct publisher when guarded command text appears only in a comment", () => {
+  assert.throws(
+    () => assertGuardedStagingAutomation(
+      ".github/workflows/publish-staging.yml",
+      "run: replit deploy --environment staging # pnpm run release:publish -- replit deploy",
+    ),
+    /bypasses the release-evidence guard/,
+  );
+});
+
+test("rejects an unguarded script in minified package JSON containing another guarded script", () => {
+  assert.throws(
+    () => assertGuardedStagingAutomation(
+      "package.json",
+      '{"scripts":{"safe":"pnpm run release:publish -- replit deploy","unsafe":"replit deploy"}}',
+    ),
+    /scripts\.unsafe/,
+  );
+});
+
+for (const operator of ["||", "&&"]) {
+  test(`rejects a package script that uses ${operator} to publish outside the guard`, () => {
+    assert.throws(
+      () => assertGuardedStagingAutomation(
+        "package.json",
+        JSON.stringify({
+          scripts: {
+            "publish:staging": `pnpm run release:publish -- true ${operator} replit deploy --environment staging`,
+          },
+        }),
+      ),
+      /scripts\.publish:staging/,
+    );
+  });
+}
+
+test("accepts repository automation that invokes a publisher through the guard", () => {
+  assert.doesNotThrow(() => assertGuardedStagingAutomation(
+    ".github/workflows/publish-staging.yml",
+    "run: RELEASE_ENVIRONMENT=staging pnpm run release:publish -- replit deploy --environment staging",
+  ));
+});
+
+test("current repository publication automation passes the guard", async () => {
+  await validateReleaseAutomation();
 });
 
 test("fails closed when HEAD changes while Git source state is captured", async () => {
