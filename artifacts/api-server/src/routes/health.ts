@@ -14,7 +14,15 @@ router.get("/healthz", (_req, res) => {
   const activeFlags = Object.entries(features)
     .filter(([, v]) => v === true)
     .map(([k]) => k);
-  const data = HealthCheckResponse.parse({ status: "ok", features: activeFlags });
+  const configuredRevision = process.env["RELEASE_GIT_REVISION"]?.trim().toLowerCase();
+  const releaseRevision = configuredRevision && /^[0-9a-f]{40}$/.test(configuredRevision)
+    ? configuredRevision
+    : undefined;
+  const data = HealthCheckResponse.parse({
+    status: "ok",
+    features: activeFlags,
+    ...(releaseRevision ? { releaseRevision } : {}),
+  });
   res.json(data);
 });
 

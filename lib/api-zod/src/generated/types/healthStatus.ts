@@ -10,4 +10,9 @@ export interface HealthStatus {
   status: string;
   /** Names of active server-side feature flags. Empty on production; lists enabled flags on staging. */
   features: string[];
+  /**
+     * Verified Git revision supplied by the guarded staging publisher, when available.
+     * @pattern ^[0-9a-f]{40}$
+     */
+  releaseRevision?: string;
 }

@@ -54,20 +54,21 @@ RELEASE_ENVIRONMENT=staging pnpm run release:publish -- <staging-publish-command
 
 This guarded command is the only supported staging publication entry point for operators and repository-managed automation. Never invoke a staging publisher directly from a workflow, package script, runbook or shell. The release gate runs `pnpm run release:validate-automation` and fails if repository workflow configuration or the root package scripts contain a direct publisher invocation.
 
-The guarded command reads `release-evidence/latest.json` and stops before invoking the publisher if the gate failed, the evidence covers another Git revision, the recorded source was dirty, or the current checkout is dirty. It does not replace reviewer approval. Production publication still requires the business owner and release owner approval in the cutover runbook.
+The guarded command reads `release-evidence/latest.json` and stops before invoking the publisher if the gate failed, the evidence covers another Git revision, the recorded source was dirty, or the current checkout is dirty. After validation, it supplies the verified revision to the staging publisher as `RELEASE_GIT_REVISION`. The staging publication command must preserve that environment value in the deployed API runtime. It does not replace reviewer approval. Production publication still requires the business owner and release owner approval in the cutover runbook.
 
 ## Staging sign-off
 
 After publishing the approved candidate to staging:
 
-1. Confirm staging `/api/healthz` is ready.
+1. Confirm staging `/api/healthz` is ready and returns `releaseRevision`.
 2. Confirm the deployment and database are labelled staging.
 3. Check sign-in, an authorised workspace, and denied cross-workspace access using approved test accounts.
 4. Review startup and request logs for new errors.
 5. Test OAuth, email and Stripe only in their staging/test modes.
-6. Record UTC time, release identifier, environment and pass/fail only.
+6. Compare the health response's `releaseRevision` with `gitRevision` in the approved `release-evidence/latest.json`. They must be the same full 40-character hash.
+7. Record UTC time, release identifier, environment and pass/fail only.
 
-Any failed critical journey, health regression, environment mismatch, unexplained error spike or data-integrity concern is NO-GO for production.
+If `releaseRevision` is absent or differs from the approved evidence, staging sign-off is NO-GO. Any failed critical journey, health regression, environment mismatch, unexplained error spike or data-integrity concern is also NO-GO for production.
 
 ## Post-production verification
 

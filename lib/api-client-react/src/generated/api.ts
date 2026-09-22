@@ -62,6 +62,7 @@ type AwaitedInput<T> = PromiseLike<T> | T;
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 
+
 const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
   const result = { queryKey } as T & { queryKey: K };
   for (const key of Object.keys(query)) {
@@ -78,6 +79,8 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
 };
 
 export const getHealthCheckUrl = () => {
+
+
 
 
   return `/api/healthz`
@@ -99,6 +102,9 @@ export const healthCheck = async ( options?: Parameters<typeof customFetch>[1]):
 );}
 
 
+
+
+
 export const getHealthCheckQueryKey = () => {
     return [
     `/api/healthz`
@@ -114,7 +120,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getHealthCheckQueryKey();
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof healthCheck>>> = ({ signal }) => healthCheck({ signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData> & { queryKey: QueryKey }
@@ -141,7 +151,14 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 }
 
 
+
+
+
+
+
 export const getGetCurrentAuthUserUrl = () => {
+
+
 
 
   return `/api/auth/user`
@@ -162,6 +179,9 @@ export const getCurrentAuthUser = async ( options?: Parameters<typeof customFetc
 );}
 
 
+
+
+
 export const getGetCurrentAuthUserQueryKey = () => {
     return [
     `/api/auth/user`
@@ -177,7 +197,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getGetCurrentAuthUserQueryKey();
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof getCurrentAuthUser>>> = ({ signal }) => getCurrentAuthUser({ signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCurrentAuthUser>>, TError, TData> & { queryKey: QueryKey }
@@ -202,6 +226,11 @@ export function useGetCurrentAuthUser<TData = Awaited<ReturnType<typeof getCurre
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+
+
+
+
 
 
 export const getBeginBrowserLoginUrl = (params?: BeginBrowserLoginParams,) => {
@@ -234,6 +263,9 @@ export const beginBrowserLogin = async (params?: BeginBrowserLoginParams, option
 );}
 
 
+
+
+
 export const getBeginBrowserLoginQueryKey = (params?: BeginBrowserLoginParams,) => {
     return [
     `/api/login`, ...(params ? [params] : [])
@@ -249,7 +281,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getBeginBrowserLoginQueryKey(params);
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof beginBrowserLogin>>> = ({ signal }) => beginBrowserLogin(params, { signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof beginBrowserLogin>>, TError, TData> & { queryKey: QueryKey }
@@ -274,6 +310,11 @@ export function useBeginBrowserLogin<TData = Awaited<ReturnType<typeof beginBrow
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+
+
+
+
 
 
 export const getHandleBrowserLoginCallbackUrl = (params?: HandleBrowserLoginCallbackParams,) => {
@@ -306,6 +347,9 @@ export const handleBrowserLoginCallback = async (params?: HandleBrowserLoginCall
 );}
 
 
+
+
+
 export const getHandleBrowserLoginCallbackQueryKey = (params?: HandleBrowserLoginCallbackParams,) => {
     return [
     `/api/callback`, ...(params ? [params] : [])
@@ -321,7 +365,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getHandleBrowserLoginCallbackQueryKey(params);
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof handleBrowserLoginCallback>>> = ({ signal }) => handleBrowserLoginCallback(params, { signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof handleBrowserLoginCallback>>, TError, TData> & { queryKey: QueryKey }
@@ -348,7 +396,14 @@ export function useHandleBrowserLoginCallback<TData = Awaited<ReturnType<typeof 
 }
 
 
+
+
+
+
+
 export const getLogoutBrowserSessionUrl = () => {
+
+
 
 
   return `/api/logout`
@@ -369,6 +424,9 @@ export const logoutBrowserSession = async ( options?: Parameters<typeof customFe
 );}
 
 
+
+
+
 export const getLogoutBrowserSessionQueryKey = () => {
     return [
     `/api/logout`
@@ -384,7 +442,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getLogoutBrowserSessionQueryKey();
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof logoutBrowserSession>>> = ({ signal }) => logoutBrowserSession({ signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof logoutBrowserSession>>, TError, TData> & { queryKey: QueryKey }
@@ -411,7 +473,14 @@ export function useLogoutBrowserSession<TData = Awaited<ReturnType<typeof logout
 }
 
 
+
+
+
+
+
 export const getExchangeMobileAuthorizationCodeUrl = () => {
+
+
 
 
   return `/api/mobile-auth/token-exchange`
@@ -438,6 +507,9 @@ return customFetch<MobileTokenExchangeSuccess>(getExchangeMobileAuthorizationCod
 );}
 
 
+
+
+
 export const getExchangeMobileAuthorizationCodeMutationKey = () => ['exchangeMobileAuthorizationCode'] as const;
 
 export const getExchangeMobileAuthorizationCodeMutationOptions = <TError = ErrorType<ErrorEnvelope>,
@@ -452,11 +524,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof exchangeMobileAuthorizationCode>>, ExchangeMobileAuthorizationCodeMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  exchangeMobileAuthorizationCode(data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -483,6 +561,8 @@ export const useExchangeMobileAuthorizationCode = <TError = ErrorType<ErrorEnvel
 export const getLogoutMobileSessionUrl = () => {
 
 
+
+
   return `/api/mobile-auth/logout`
 }
 
@@ -501,6 +581,9 @@ export const logoutMobileSession = async ( options?: Parameters<typeof customFet
 );}
 
 
+
+
+
 export const getLogoutMobileSessionMutationKey = () => ['logoutMobileSession'] as const;
 
 export const getLogoutMobileSessionMutationOptions = <TError = ErrorType<unknown>,
@@ -515,11 +598,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof logoutMobileSession>>, void> = () => {
 
 
           return  logoutMobileSession(requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -546,6 +635,8 @@ export const useLogoutMobileSession = <TError = ErrorType<unknown>,
 export const getListPublishedInsightsUrl = () => {
 
 
+
+
   return `/api/insights`
 }
 
@@ -564,6 +655,9 @@ export const listPublishedInsights = async ( options?: Parameters<typeof customF
 );}
 
 
+
+
+
 export const getListPublishedInsightsQueryKey = () => {
     return [
     `/api/insights`
@@ -579,7 +673,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getListPublishedInsightsQueryKey();
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof listPublishedInsights>>> = ({ signal }) => listPublishedInsights({ signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPublishedInsights>>, TError, TData> & { queryKey: QueryKey }
@@ -606,7 +704,14 @@ export function useListPublishedInsights<TData = Awaited<ReturnType<typeof listP
 }
 
 
+
+
+
+
+
 export const getGetPublishedInsightUrl = (slug: string,) => {
+
+
 
 
   return `/api/insights/${slug}`
@@ -627,6 +732,9 @@ export const getPublishedInsight = async (slug: string, options?: Parameters<typ
 );}
 
 
+
+
+
 export const getGetPublishedInsightQueryKey = (slug: string,) => {
     return [
     `/api/insights/${slug}`
@@ -642,7 +750,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getGetPublishedInsightQueryKey(slug);
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublishedInsight>>> = ({ signal }) => getPublishedInsight(slug, { signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, enabled: slug !== null && slug !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublishedInsight>>, TError, TData> & { queryKey: QueryKey }
@@ -669,7 +781,14 @@ export function useGetPublishedInsight<TData = Awaited<ReturnType<typeof getPubl
 }
 
 
+
+
+
+
+
 export const getListAdminInsightsUrl = () => {
+
+
 
 
   return `/api/admin/insights`
@@ -690,6 +809,9 @@ export const listAdminInsights = async ( options?: Parameters<typeof customFetch
 );}
 
 
+
+
+
 export const getListAdminInsightsQueryKey = () => {
     return [
     `/api/admin/insights`
@@ -705,7 +827,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getListAdminInsightsQueryKey();
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminInsights>>> = ({ signal }) => listAdminInsights({ signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdminInsights>>, TError, TData> & { queryKey: QueryKey }
@@ -732,7 +858,14 @@ export function useListAdminInsights<TData = Awaited<ReturnType<typeof listAdmin
 }
 
 
+
+
+
+
+
 export const getCreateAdminInsightUrl = () => {
+
+
 
 
   return `/api/admin/insights`
@@ -759,6 +892,9 @@ return customFetch<InsightArticle>(getCreateAdminInsightUrl(),
 );}
 
 
+
+
+
 export const getCreateAdminInsightMutationKey = () => ['createAdminInsight'] as const;
 
 export const getCreateAdminInsightMutationOptions = <TError = ErrorType<ErrorEnvelope>,
@@ -773,11 +909,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAdminInsight>>, CreateAdminInsightMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  createAdminInsight(data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -802,6 +944,8 @@ export const useCreateAdminInsight = <TError = ErrorType<ErrorEnvelope>,
     }
 
 export const getUpdateAdminInsightUrl = (id: string,) => {
+
+
 
 
   return `/api/admin/insights/${id}`
@@ -829,6 +973,9 @@ return customFetch<InsightArticle>(getUpdateAdminInsightUrl(id),
 );}
 
 
+
+
+
 export const getUpdateAdminInsightMutationKey = () => ['updateAdminInsight'] as const;
 
 export const getUpdateAdminInsightMutationOptions = <TError = ErrorType<ErrorEnvelope>,
@@ -843,11 +990,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAdminInsight>>, UpdateAdminInsightMutationVariables> = (props) => {
           const {id,data} = props ?? {};
 
           return  updateAdminInsight(id,data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -874,6 +1027,8 @@ export const useUpdateAdminInsight = <TError = ErrorType<ErrorEnvelope>,
 export const getDeleteAdminInsightUrl = (id: string,) => {
 
 
+
+
   return `/api/admin/insights/${id}`
 }
 
@@ -892,6 +1047,9 @@ export const deleteAdminInsight = async (id: string, options?: Parameters<typeof
 );}
 
 
+
+
+
 export const getDeleteAdminInsightMutationKey = () => ['deleteAdminInsight'] as const;
 
 export const getDeleteAdminInsightMutationOptions = <TError = ErrorType<unknown>,
@@ -906,11 +1064,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAdminInsight>>, DeleteAdminInsightMutationVariables> = (props) => {
           const {id} = props ?? {};
 
           return  deleteAdminInsight(id,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -937,6 +1101,8 @@ export const useDeleteAdminInsight = <TError = ErrorType<unknown>,
 export const getListAdminInsightMediaUrl = () => {
 
 
+
+
   return `/api/admin/insights/media`
 }
 
@@ -955,6 +1121,9 @@ export const listAdminInsightMedia = async ( options?: Parameters<typeof customF
 );}
 
 
+
+
+
 export const getListAdminInsightMediaQueryKey = () => {
     return [
     `/api/admin/insights/media`
@@ -970,7 +1139,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getListAdminInsightMediaQueryKey();
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminInsightMedia>>> = ({ signal }) => listAdminInsightMedia({ signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdminInsightMedia>>, TError, TData> & { queryKey: QueryKey }
@@ -997,7 +1170,14 @@ export function useListAdminInsightMedia<TData = Awaited<ReturnType<typeof listA
 }
 
 
+
+
+
+
+
 export const getCreateAdminInsightMediaUrl = () => {
+
+
 
 
   return `/api/admin/insights/media/metadata`
@@ -1024,6 +1204,9 @@ return customFetch<InsightMedia>(getCreateAdminInsightMediaUrl(),
 );}
 
 
+
+
+
 export const getCreateAdminInsightMediaMutationKey = () => ['createAdminInsightMedia'] as const;
 
 export const getCreateAdminInsightMediaMutationOptions = <TError = ErrorType<unknown>,
@@ -1038,11 +1221,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAdminInsightMedia>>, CreateAdminInsightMediaMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  createAdminInsightMedia(data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -1093,6 +1282,9 @@ export const getMediaRecommendationBrief = async (params: GetMediaRecommendation
 );}
 
 
+
+
+
 export const getGetMediaRecommendationBriefQueryKey = (params?: GetMediaRecommendationBriefParams,) => {
     return [
     `/api/store/media-db/recommendations/brief`, ...(params ? [params] : [])
@@ -1108,7 +1300,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getGetMediaRecommendationBriefQueryKey(params);
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof getMediaRecommendationBrief>>> = ({ signal }) => getMediaRecommendationBrief(params, { signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMediaRecommendationBrief>>, TError, TData> & { queryKey: QueryKey }
@@ -1116,6 +1312,7 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 
 export type GetMediaRecommendationBriefQueryResult = NonNullable<Awaited<ReturnType<typeof getMediaRecommendationBrief>>>
 export type GetMediaRecommendationBriefQueryError = ErrorType<unknown>
+
 
 
 export function useGetMediaRecommendationBrief<TData = Awaited<ReturnType<typeof getMediaRecommendationBrief>>, TError = ErrorType<unknown>>(
@@ -1131,7 +1328,14 @@ export function useGetMediaRecommendationBrief<TData = Awaited<ReturnType<typeof
 }
 
 
+
+
+
+
+
 export const getSaveMediaRecommendationBriefUrl = () => {
+
+
 
 
   return `/api/store/media-db/recommendations/brief`
@@ -1155,6 +1359,9 @@ return customFetch<RecommendationBriefEnvelope>(getSaveMediaRecommendationBriefU
 );}
 
 
+
+
+
 export const getSaveMediaRecommendationBriefMutationKey = () => ['saveMediaRecommendationBrief'] as const;
 
 export const getSaveMediaRecommendationBriefMutationOptions = <TError = ErrorType<unknown>,
@@ -1169,11 +1376,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveMediaRecommendationBrief>>, SaveMediaRecommendationBriefMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  saveMediaRecommendationBrief(data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -1221,6 +1434,9 @@ export const listMediaDiscoveries = async (params?: ListMediaDiscoveriesParams, 
 );}
 
 
+
+
+
 export const getListMediaDiscoveriesQueryKey = (params?: ListMediaDiscoveriesParams,) => {
     return [
     `/api/store/media-db/discoveries`, ...(params ? [params] : [])
@@ -1236,7 +1452,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getListMediaDiscoveriesQueryKey(params);
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof listMediaDiscoveries>>> = ({ signal }) => listMediaDiscoveries(params, { signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMediaDiscoveries>>, TError, TData> & { queryKey: QueryKey }
@@ -1244,6 +1464,7 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 
 export type ListMediaDiscoveriesQueryResult = NonNullable<Awaited<ReturnType<typeof listMediaDiscoveries>>>
 export type ListMediaDiscoveriesQueryError = ErrorType<unknown>
+
 
 
 export function useListMediaDiscoveries<TData = Awaited<ReturnType<typeof listMediaDiscoveries>>, TError = ErrorType<unknown>>(
@@ -1259,7 +1480,14 @@ export function useListMediaDiscoveries<TData = Awaited<ReturnType<typeof listMe
 }
 
 
+
+
+
+
+
 export const getSaveMediaDiscoveryUrl = () => {
+
+
 
 
   return `/api/store/media-db/discoveries`
@@ -1283,6 +1511,9 @@ return customFetch<MediaDiscoveryEnvelope>(getSaveMediaDiscoveryUrl(),
 );}
 
 
+
+
+
 export const getSaveMediaDiscoveryMutationKey = () => ['saveMediaDiscovery'] as const;
 
 export const getSaveMediaDiscoveryMutationOptions = <TError = ErrorType<unknown>,
@@ -1297,11 +1528,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveMediaDiscovery>>, SaveMediaDiscoveryMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  saveMediaDiscovery(data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -1325,6 +1562,8 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 export const getApproveMediaDiscoveryUrl = (id: number,) => {
 
 
+
+
   return `/api/store/media-db/discoveries/${id}/approve`
 }
 
@@ -1338,6 +1577,9 @@ export const approveMediaDiscovery = async (id: number, options?: Parameters<typ
 
   }
 );}
+
+
+
 
 
 export const getApproveMediaDiscoveryMutationKey = () => ['approveMediaDiscovery'] as const;
@@ -1354,11 +1596,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveMediaDiscovery>>, ApproveMediaDiscoveryMutationVariables> = (props) => {
           const {id} = props ?? {};
 
           return  approveMediaDiscovery(id,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -1380,6 +1628,8 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     }
 
 export const getRejectMediaDiscoveryUrl = (id: number,) => {
+
+
 
 
   return `/api/store/media-db/discoveries/${id}/reject`
@@ -1404,6 +1654,9 @@ return customFetch<MediaDiscoveryEnvelope>(getRejectMediaDiscoveryUrl(id),
 );}
 
 
+
+
+
 export const getRejectMediaDiscoveryMutationKey = () => ['rejectMediaDiscovery'] as const;
 
 export const getRejectMediaDiscoveryMutationOptions = <TError = ErrorType<unknown>,
@@ -1418,11 +1671,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof rejectMediaDiscovery>>, RejectMediaDiscoveryMutationVariables> = (props) => {
           const {id,data} = props ?? {};
 
           return  rejectMediaDiscovery(id,data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -1446,6 +1705,8 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 export const getGetMediaDiscoveryInstructionsUrl = () => {
 
 
+
+
   return `/api/store/media-db/discovery-instructions`
 }
 
@@ -1459,6 +1720,9 @@ export const getMediaDiscoveryInstructions = async ( options?: Parameters<typeof
 
   }
 );}
+
+
+
 
 
 export const getGetMediaDiscoveryInstructionsQueryKey = () => {
@@ -1476,7 +1740,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getGetMediaDiscoveryInstructionsQueryKey();
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof getMediaDiscoveryInstructions>>> = ({ signal }) => getMediaDiscoveryInstructions({ signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMediaDiscoveryInstructions>>, TError, TData> & { queryKey: QueryKey }
@@ -1484,6 +1752,7 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 
 export type GetMediaDiscoveryInstructionsQueryResult = NonNullable<Awaited<ReturnType<typeof getMediaDiscoveryInstructions>>>
 export type GetMediaDiscoveryInstructionsQueryError = ErrorType<unknown>
+
 
 
 export function useGetMediaDiscoveryInstructions<TData = Awaited<ReturnType<typeof getMediaDiscoveryInstructions>>, TError = ErrorType<unknown>>(
@@ -1499,7 +1768,14 @@ export function useGetMediaDiscoveryInstructions<TData = Awaited<ReturnType<type
 }
 
 
+
+
+
+
+
 export const getUpdateMediaDiscoveryInstructionsUrl = () => {
+
+
 
 
   return `/api/store/media-db/discovery-instructions`
@@ -1523,6 +1799,9 @@ return customFetch<MediaDiscoveryInstructionsEnvelope>(getUpdateMediaDiscoveryIn
 );}
 
 
+
+
+
 export const getUpdateMediaDiscoveryInstructionsMutationKey = () => ['updateMediaDiscoveryInstructions'] as const;
 
 export const getUpdateMediaDiscoveryInstructionsMutationOptions = <TError = ErrorType<unknown>,
@@ -1537,11 +1816,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateMediaDiscoveryInstructions>>, UpdateMediaDiscoveryInstructionsMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  updateMediaDiscoveryInstructions(data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -1589,6 +1874,9 @@ export const getMediaRecommendations = async (params: GetMediaRecommendationsPar
 );}
 
 
+
+
+
 export const getGetMediaRecommendationsQueryKey = (params?: GetMediaRecommendationsParams,) => {
     return [
     `/api/store/media-db/recommendations`, ...(params ? [params] : [])
@@ -1604,7 +1892,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getGetMediaRecommendationsQueryKey(params);
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof getMediaRecommendations>>> = ({ signal }) => getMediaRecommendations(params, { signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMediaRecommendations>>, TError, TData> & { queryKey: QueryKey }
@@ -1612,6 +1904,7 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 
 export type GetMediaRecommendationsQueryResult = NonNullable<Awaited<ReturnType<typeof getMediaRecommendations>>>
 export type GetMediaRecommendationsQueryError = ErrorType<unknown>
+
 
 
 export function useGetMediaRecommendations<TData = Awaited<ReturnType<typeof getMediaRecommendations>>, TError = ErrorType<unknown>>(
@@ -1627,7 +1920,14 @@ export function useGetMediaRecommendations<TData = Awaited<ReturnType<typeof get
 }
 
 
+
+
+
+
+
 export const getCreateMediaRecommendationsUrl = () => {
+
+
 
 
   return `/api/store/media-db/recommendations`
@@ -1651,6 +1951,9 @@ return customFetch<void>(getCreateMediaRecommendationsUrl(),
 );}
 
 
+
+
+
 export const getCreateMediaRecommendationsMutationKey = () => ['createMediaRecommendations'] as const;
 
 export const getCreateMediaRecommendationsMutationOptions = <TError = ErrorType<unknown>,
@@ -1665,11 +1968,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof createMediaRecommendations>>, CreateMediaRecommendationsMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  createMediaRecommendations(data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -1693,6 +2002,8 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 export const getEnrichMediaRecommendationsUrl = () => {
 
 
+
+
   return `/api/store/media-db/recommendations/enrich`
 }
 
@@ -1714,6 +2025,9 @@ return customFetch<void>(getEnrichMediaRecommendationsUrl(),
 );}
 
 
+
+
+
 export const getEnrichMediaRecommendationsMutationKey = () => ['enrichMediaRecommendations'] as const;
 
 export const getEnrichMediaRecommendationsMutationOptions = <TError = ErrorType<unknown>,
@@ -1728,11 +2042,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof enrichMediaRecommendations>>, EnrichMediaRecommendationsMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  enrichMediaRecommendations(data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -1756,6 +2076,8 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 export const getSetMediaRecommendationContactRestrictionUrl = () => {
 
 
+
+
   return `/api/store/media-db/recommendations/contact-restriction`
 }
 
@@ -1777,6 +2099,9 @@ return customFetch<void>(getSetMediaRecommendationContactRestrictionUrl(),
 );}
 
 
+
+
+
 export const getSetMediaRecommendationContactRestrictionMutationKey = () => ['setMediaRecommendationContactRestriction'] as const;
 
 export const getSetMediaRecommendationContactRestrictionMutationOptions = <TError = ErrorType<unknown>,
@@ -1791,11 +2116,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof setMediaRecommendationContactRestriction>>, SetMediaRecommendationContactRestrictionMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  setMediaRecommendationContactRestriction(data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -1817,6 +2148,8 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     }
 
 export const getRequestInsightUploadUrlUrl = () => {
+
+
 
 
   return `/api/storage/uploads/request-url`
@@ -1843,6 +2176,9 @@ return customFetch<UploadUrlResponse>(getRequestInsightUploadUrlUrl(),
 );}
 
 
+
+
+
 export const getRequestInsightUploadUrlMutationKey = () => ['requestInsightUploadUrl'] as const;
 
 export const getRequestInsightUploadUrlMutationOptions = <TError = ErrorType<unknown>,
@@ -1857,11 +2193,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestInsightUploadUrl>>, RequestInsightUploadUrlMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  requestInsightUploadUrl(data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}

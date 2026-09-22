@@ -113,7 +113,10 @@ export async function runStagingPublication({
 
   const currentSource = await getSourceState();
   assertReleaseEvidenceCurrent(evidence, currentSource);
-  await publish();
+  await publish({
+    environment: "staging",
+    gitRevision: evidence.gitRevision,
+  });
   return { evidence, currentSource };
 }
 

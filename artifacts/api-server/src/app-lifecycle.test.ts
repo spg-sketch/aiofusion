@@ -35,6 +35,29 @@ describe("API lifecycle responses", () => {
     expect(await draining.json()).toMatchObject({ state: "draining" });
   });
 
+  it("reports only a valid verified release revision", async () => {
+    markRuntimeReady();
+    const originalRevision = process.env["RELEASE_GIT_REVISION"];
+    try {
+      process.env["RELEASE_GIT_REVISION"] = "ABCDEF0123456789ABCDEF0123456789ABCDEF01";
+      const published = await fetch(`${baseUrl}/api/healthz`);
+      expect(await published.json()).toMatchObject({
+        status: "ok",
+        releaseRevision: "abcdef0123456789abcdef0123456789abcdef01",
+      });
+
+      process.env["RELEASE_GIT_REVISION"] = "not-safe-to-expose";
+      const invalid = await fetch(`${baseUrl}/api/healthz`);
+      expect(await invalid.json()).not.toHaveProperty("releaseRevision");
+    } finally {
+      if (originalRevision === undefined) {
+        delete process.env["RELEASE_GIT_REVISION"];
+      } else {
+        process.env["RELEASE_GIT_REVISION"] = originalRevision;
+      }
+    }
+  });
+
   it("returns the same safe request reference as the response header", async () => {
     markRuntimeReady();
     const response = await fetch(`${baseUrl}/api/healthz`, {

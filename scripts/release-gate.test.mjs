@@ -261,18 +261,24 @@ test("publishes staging when latest evidence passed for the matching clean revis
   const evidencePath = path.join(dir, "latest.json");
   await writeFile(evidencePath, JSON.stringify({ status: "passed", ...MATCHING_SOURCE }));
   let publications = 0;
+  let publicationMetadata;
 
   const result = await runStagingPublication({
     env: { RELEASE_ENVIRONMENT: "staging" },
     evidencePath,
     getSourceState: async () => MATCHING_SOURCE,
-    publish: async () => {
+    publish: async (metadata) => {
       publications += 1;
+      publicationMetadata = metadata;
     },
   });
 
   assert.equal(publications, 1);
   assert.equal(result.evidence.status, "passed");
+  assert.deepEqual(publicationMetadata, {
+    environment: "staging",
+    gitRevision: MATCHING_SOURCE.gitRevision,
+  });
 });
 
 test("blocks staging publication for failed, stale, or dirty release evidence", async () => {
