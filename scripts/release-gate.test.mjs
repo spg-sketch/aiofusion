@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -9,6 +9,7 @@ import {
   getGitSourceState,
   RELEASE_STAGES,
   runReleaseGate,
+  runStagingPublication,
 } from "./release-lib.mjs";
 
 const MATCHING_SOURCE = {
@@ -171,6 +172,88 @@ test("rejects evidence from dirty source and matching evidence with new uncommit
     ...MATCHING_SOURCE,
     sourceState: "dirty",
   }), /current source state is dirty/);
+});
+
+test("publishes staging when latest evidence passed for the matching clean revision", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "release-publish-"));
+  const evidencePath = path.join(dir, "latest.json");
+  await writeFile(evidencePath, JSON.stringify({ status: "passed", ...MATCHING_SOURCE }));
+  let publications = 0;
+
+  const result = await runStagingPublication({
+    env: { RELEASE_ENVIRONMENT: "staging" },
+    evidencePath,
+    getSourceState: async () => MATCHING_SOURCE,
+    publish: async () => {
+      publications += 1;
+    },
+  });
+
+  assert.equal(publications, 1);
+  assert.equal(result.evidence.status, "passed");
+});
+
+test("blocks staging publication for failed, stale, or dirty release evidence", async () => {
+  const blockedCases = [
+    {
+      name: "failed evidence",
+      evidence: { status: "failed", ...MATCHING_SOURCE },
+      currentSource: MATCHING_SOURCE,
+      message: /passed gate/,
+    },
+    {
+      name: "another revision",
+      evidence: { status: "passed", ...MATCHING_SOURCE },
+      currentSource: { ...MATCHING_SOURCE, gitRevision: "fedcba9876543210fedcba9876543210fedcba98" },
+      message: /different Git revision/,
+    },
+    {
+      name: "recorded dirty source",
+      evidence: { status: "passed", ...MATCHING_SOURCE, sourceState: "dirty" },
+      currentSource: MATCHING_SOURCE,
+      message: /source state was dirty/,
+    },
+    {
+      name: "current dirty source",
+      evidence: { status: "passed", ...MATCHING_SOURCE },
+      currentSource: { ...MATCHING_SOURCE, sourceState: "dirty" },
+      message: /current source state is dirty/,
+    },
+  ];
+
+  for (const blockedCase of blockedCases) {
+    let publications = 0;
+    await assert.rejects(runStagingPublication({
+      env: { RELEASE_ENVIRONMENT: "staging" },
+      readEvidence: async () => blockedCase.evidence,
+      getSourceState: async () => blockedCase.currentSource,
+      publish: async () => {
+        publications += 1;
+      },
+    }), blockedCase.message, blockedCase.name);
+    assert.equal(publications, 0, blockedCase.name);
+  }
+});
+
+test("blocks staging publication when latest evidence cannot be read", async () => {
+  let sourceReads = 0;
+  let publications = 0;
+  await assert.rejects(runStagingPublication({
+    env: { RELEASE_ENVIRONMENT: "staging" },
+    evidencePath: "release-evidence/latest.json",
+    readEvidence: async () => {
+      throw new Error("missing");
+    },
+    getSourceState: async () => {
+      sourceReads += 1;
+      return MATCHING_SOURCE;
+    },
+    publish: async () => {
+      publications += 1;
+    },
+  }), /could not be read/);
+  assert.equal(sourceReads, 0);
+  assert.equal(publications, 0);
 });
 
 test("fails the gate before stages when the initial source is dirty", async () => {

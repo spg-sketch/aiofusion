@@ -8,7 +8,8 @@
     "test": "pnpm --filter @workspace/api-server run test && pnpm --filter @workspace/aio-fusion run test",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
-    "release:check": "node scripts/release-gate.mjs"
+    "release:check": "node scripts/release-gate.mjs",
+    "release:publish": "node scripts/release-publish.mjs"
   },
   "private": true,
   "pnpm": {

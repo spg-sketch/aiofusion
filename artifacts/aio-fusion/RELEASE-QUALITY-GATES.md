@@ -45,7 +45,13 @@ The gate refuses to start from a dirty checkout. After every stage passes, it re
 
 The release is **NO-GO** if any stage failed, did not run, was skipped, timed out, or used the wrong environment. Evidence is also **NO-GO** when its Git revision differs from the revision being published, when the evidence says `sourceState: "dirty"`, or when the current checkout has uncommitted changes. Reviewers must compare `git rev-parse HEAD` with `gitRevision` in the evidence and confirm `git status --porcelain` is empty. Any commit or uncommitted release change after the gate requires a new release check.
 
-After all stages pass and the revision and clean-source checks match, the application reviewer gives the explicit approval to publish to staging. Production publication still requires the business owner and release owner approval in the cutover runbook.
+After all stages pass, the application reviewer gives explicit approval to publish to staging. Run the approved staging publisher through the guarded entry point:
+
+```bash
+RELEASE_ENVIRONMENT=staging pnpm run release:publish -- <staging-publish-command> [arguments...]
+```
+
+This command reads `release-evidence/latest.json` and stops before invoking the publisher if the gate failed, the evidence covers another Git revision, the recorded source was dirty, or the current checkout is dirty. It does not replace reviewer approval. Production publication still requires the business owner and release owner approval in the cutover runbook.
 
 ## Staging sign-off
 

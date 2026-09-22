@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { execFile } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -87,6 +87,32 @@ export function assertReleaseEvidenceCurrent(evidence, currentSource) {
     throw new Error("Release evidence is not approvable while the current source state is dirty.");
   }
   return true;
+}
+
+export async function runStagingPublication({
+  env = process.env,
+  evidencePath = path.join("release-evidence", "latest.json"),
+  getSourceState = getGitSourceState,
+  readEvidence = async (filePath) => JSON.parse(await readFile(filePath, "utf8")),
+  publish,
+} = {}) {
+  assertReleaseEnvironment(env);
+  if (typeof publish !== "function") {
+    throw new Error("A staging publication command is required.");
+  }
+
+  let evidence;
+  try {
+    evidence = await readEvidence(evidencePath);
+  } catch (error) {
+    const detail = error instanceof SyntaxError ? "is not valid JSON" : "could not be read";
+    throw new Error(`Release evidence ${detail}: ${evidencePath}`, { cause: error });
+  }
+
+  const currentSource = await getSourceState();
+  assertReleaseEvidenceCurrent(evidence, currentSource);
+  await publish();
+  return { evidence, currentSource };
 }
 
 export async function runCommand(command, options = {}) {
