@@ -1,7 +1,11 @@
 import { spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { createServer } from "node:net";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 export const RELEASE_STAGE_TIMEOUTS = Object.freeze({
   typecheck: 10 * 60_000,
@@ -51,6 +55,40 @@ export function assertReleaseEnvironment(env = process.env) {
   return target;
 }
 
+export async function getGitSourceState({ cwd = process.cwd(), exec = execFileAsync } = {}) {
+  const commandOptions = { cwd, encoding: "utf8" };
+  const { stdout: revisionBefore } = await exec("git", ["rev-parse", "HEAD"], commandOptions);
+  const { stdout: status } = await exec("git", ["status", "--porcelain", "--untracked-files=normal"], commandOptions);
+  const { stdout: revisionAfter } = await exec("git", ["rev-parse", "HEAD"], commandOptions);
+  const gitRevision = revisionBefore.trim();
+  if (!/^[0-9a-f]{40}$/i.test(gitRevision)) {
+    throw new Error("Could not determine a valid Git revision for release evidence.");
+  }
+  if (gitRevision !== revisionAfter.trim()) {
+    throw new Error("Git revision changed while release source state was being captured.");
+  }
+  return {
+    gitRevision,
+    sourceState: status.trim() ? "dirty" : "clean",
+  };
+}
+
+export function assertReleaseEvidenceCurrent(evidence, currentSource) {
+  if (!evidence || evidence.status !== "passed") {
+    throw new Error("Release evidence must show a passed gate.");
+  }
+  if (!evidence.gitRevision || evidence.gitRevision !== currentSource?.gitRevision) {
+    throw new Error("Release evidence is stale because it covers a different Git revision.");
+  }
+  if (evidence.sourceState !== "clean") {
+    throw new Error("Release evidence is not approvable because its source state was dirty.");
+  }
+  if (currentSource.sourceState !== "clean") {
+    throw new Error("Release evidence is not approvable while the current source state is dirty.");
+  }
+  return true;
+}
+
 export async function runCommand(command, options = {}) {
   const { timeoutMs = 0, ...spawnOptions } = options;
   await new Promise((resolve, reject) => {
@@ -91,12 +129,21 @@ export async function runReleaseGate({
   now = () => new Date(),
   evidencePath = path.join("release-evidence", "latest.json"),
   defaultStageTimeoutMs = DEFAULT_STAGE_TIMEOUT_MS,
+  getSourceState = getGitSourceState,
 } = {}) {
   const startedAt = now().toISOString();
   let environment;
   let result;
+  let source = {};
+  let safeguardFailure = "environment safeguards";
   const results = [];
   try {
+    source = await getSourceState();
+    safeguardFailure = "source revision safeguards";
+    if (source.sourceState !== "clean") {
+      throw new Error("Release checks require a clean source state.");
+    }
+    safeguardFailure = "environment safeguards";
     environment = assertReleaseEnvironment(env);
     for (const [name, command, configuredTimeoutMs] of stages) {
       const timeoutMs = configuredTimeoutMs ?? defaultStageTimeoutMs;
@@ -119,24 +166,29 @@ export async function runReleaseGate({
         throw error;
       }
     }
-    result = { status: "passed", environment, startedAt, finishedAt: now().toISOString(), stages: results };
+    safeguardFailure = "source revision safeguards";
+    const finalSource = await getSourceState();
+    assertReleaseEvidenceCurrent({ status: "passed", ...source }, finalSource);
+    result = { status: "passed", environment, ...source, startedAt, finishedAt: now().toISOString(), stages: results };
   } catch (error) {
     result = {
       status: "failed",
       environment: environment ?? env.RELEASE_ENVIRONMENT ?? "invalid",
+      ...source,
       startedAt,
       finishedAt: now().toISOString(),
       stages: results,
-      failedStage: results.at(-1)?.status === "failed" ? results.at(-1)?.name : "environment safeguards",
+      failedStage: results.at(-1)?.status === "failed" ? results.at(-1)?.name : safeguardFailure,
     };
   } finally {
     result ??= {
       status: "failed",
       environment: environment ?? env.RELEASE_ENVIRONMENT ?? "invalid",
+      ...source,
       startedAt,
       finishedAt: now().toISOString(),
       stages: results,
-      failedStage: "environment safeguards",
+      failedStage: safeguardFailure,
     };
     await mkdir(path.dirname(evidencePath), { recursive: true });
     await writeFile(evidencePath, `${JSON.stringify(result, null, 2)}\n`, { mode: 0o600 });

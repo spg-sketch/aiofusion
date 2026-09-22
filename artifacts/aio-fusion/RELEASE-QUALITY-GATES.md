@@ -39,9 +39,13 @@ surviving the release check.
 
 ## Evidence and approval
 
-The gate writes `release-evidence/latest.json` with the UTC start/end time, target environment, stage names, durations and pass/fail result. A failure or timeout includes `failedStage`; timed-out stage entries also include `timedOut: true`. It records no environment-variable values, credentials, request bodies or customer data. Attach or copy this non-sensitive summary to the change record.
+The gate writes `release-evidence/latest.json` with the UTC start/end time, target environment, exact Git revision, `clean` or `dirty` source-state marker, stage names, durations and pass/fail result. A failure or timeout includes `failedStage`; timed-out stage entries also include `timedOut: true`. It records no environment-variable values, repository credentials, request bodies or customer data. Attach or copy this non-sensitive summary to the change record.
 
-The release is **NO-GO** if any stage failed, did not run, was skipped, timed out, or used the wrong environment. After all stages pass, the application reviewer checks the evidence and gives the explicit approval to publish to staging. Production publication still requires the business owner and release owner approval in the cutover runbook.
+The gate refuses to start from a dirty checkout. After every stage passes, it reads Git state again and fails if `HEAD` changed or any tracked or untracked source change appeared during the run.
+
+The release is **NO-GO** if any stage failed, did not run, was skipped, timed out, or used the wrong environment. Evidence is also **NO-GO** when its Git revision differs from the revision being published, when the evidence says `sourceState: "dirty"`, or when the current checkout has uncommitted changes. Reviewers must compare `git rev-parse HEAD` with `gitRevision` in the evidence and confirm `git status --porcelain` is empty. Any commit or uncommitted release change after the gate requires a new release check.
+
+After all stages pass and the revision and clean-source checks match, the application reviewer gives the explicit approval to publish to staging. Production publication still requires the business owner and release owner approval in the cutover runbook.
 
 ## Staging sign-off
 
