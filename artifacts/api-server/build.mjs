@@ -9,6 +9,10 @@ import { rm } from "node:fs/promises";
 globalThis.require = createRequire(import.meta.url);
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
+const releaseRevision = process.env.RELEASE_GIT_REVISION?.trim().toLowerCase();
+if (releaseRevision && !/^[0-9a-f]{40}$/.test(releaseRevision)) {
+  throw new Error("RELEASE_GIT_REVISION must be a full 40-character Git revision.");
+}
 
 async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
@@ -25,6 +29,9 @@ async function buildAll() {
     outdir: distDir,
     outExtension: { ".js": ".mjs" },
     logLevel: "info",
+    define: {
+      __RELEASE_GIT_REVISION__: releaseRevision ? JSON.stringify(releaseRevision) : "undefined",
+    },
     // Some packages may not be bundleable, so we externalize them, we can add more here as needed.
     // Some of the packages below may not be imported or installed, but we're adding them in case they are in the future.
     // Examples of unbundleable packages:

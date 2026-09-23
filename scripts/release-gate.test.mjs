@@ -4,11 +4,13 @@ import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
   assertReleaseEnvironment,
   assertReleaseEvidenceCurrent,
   getGitSourceState,
+  readCurrentReleaseEvidence,
   RELEASE_STAGES,
   runReleaseGate,
   runStagingPublication,
@@ -18,12 +20,14 @@ import {
   validateReleaseAutomation,
 } from "./release-automation-guard.mjs";
 import { verifyGuardedStagingPublication } from "./release-staging-verification.mjs";
+import { runManagedStagingBuild } from "./release-managed-build.mjs";
 
 const MATCHING_SOURCE = {
   gitRevision: "0123456789abcdef0123456789abcdef01234567",
   sourceState: "clean",
 };
 
+const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sourceState = async () => MATCHING_SOURCE;
 const execFileAsync = promisify(execFile);
 
@@ -160,7 +164,26 @@ test("accepts guarded helper publishers and unrelated deployment utilities", asy
 });
 
 test("current repository publication automation passes the guard", async () => {
-  await validateReleaseAutomation();
+  await validateReleaseAutomation({ cwd: REPOSITORY_ROOT });
+});
+
+test("every managed artifact production build uses the release-evidence guard", async () => {
+  for (const artifactToml of [
+    "artifacts/api-server/.replit-artifact/artifact.toml",
+    "artifacts/aio-fusion/.replit-artifact/artifact.toml",
+  ]) {
+    const source = await readFile(path.join(REPOSITORY_ROOT, artifactToml), "utf8");
+    assert.match(
+      source,
+      /scripts\/release-managed-build\.mjs/,
+      `${artifactToml} must fail closed through the managed build guard`,
+    );
+    assert.match(
+      source,
+      /RELEASE_ENVIRONMENT\s*=\s*"staging"/,
+      `${artifactToml} must explicitly target staging`,
+    );
+  }
 });
 
 test("fails closed when HEAD changes while Git source state is captured", async () => {
@@ -389,6 +412,61 @@ test("blocks staging publication when latest evidence cannot be read", async () 
   }), /could not be read/);
   assert.equal(sourceReads, 0);
   assert.equal(publications, 0);
+});
+
+test("managed staging build passes only the approved revision to its build command", async () => {
+  let spawned;
+  const result = await runManagedStagingBuild({
+    command: "pnpm",
+    args: ["run", "build"],
+    env: { RELEASE_ENVIRONMENT: "staging" },
+    validateEvidence: async () => ({
+      evidence: { status: "passed", ...MATCHING_SOURCE },
+      currentSource: MATCHING_SOURCE,
+    }),
+    spawnProcess: (command, args, options) => {
+      spawned = { command, args, options };
+      return {
+        once(event, callback) {
+          if (event === "exit") queueMicrotask(() => callback(0, null));
+          return this;
+        },
+      };
+    },
+  });
+
+  assert.deepEqual(result, { environment: "staging", gitRevision: MATCHING_SOURCE.gitRevision });
+  assert.equal(spawned.command, "pnpm");
+  assert.deepEqual(spawned.args, ["run", "build"]);
+  assert.equal(spawned.options.env.RELEASE_GIT_REVISION, MATCHING_SOURCE.gitRevision);
+});
+
+test("managed staging build never starts when release evidence is rejected", async () => {
+  let spawned = false;
+  await assert.rejects(runManagedStagingBuild({
+    command: "pnpm",
+    env: { RELEASE_ENVIRONMENT: "staging" },
+    validateEvidence: async () => {
+      throw new Error("Release evidence is stale because it covers a different Git revision.");
+    },
+    spawnProcess: () => {
+      spawned = true;
+    },
+  }), /different Git revision/);
+  assert.equal(spawned, false);
+});
+
+test("reads current evidence through the shared release policy", async () => {
+  const accepted = await readCurrentReleaseEvidence({
+    readEvidence: async () => ({ status: "passed", ...MATCHING_SOURCE }),
+    getSourceState: sourceState,
+  });
+  assert.equal(accepted.evidence.gitRevision, MATCHING_SOURCE.gitRevision);
+
+  await assert.rejects(readCurrentReleaseEvidence({
+    readEvidence: async () => ({ status: "failed", ...MATCHING_SOURCE }),
+    getSourceState: sourceState,
+  }), /passed gate/);
 });
 
 test("staging verification runs the real guarded entry point and invokes the publisher exactly once", async () => {

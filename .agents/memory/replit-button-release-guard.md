@@ -8,3 +8,9 @@ The Replit Publish button is a separate managed publication path and cannot be w
 **Why:** The staging workflow uses Replit's Publish button and has no non-interactive publisher command. The live staging deployment remained on the older build even after the guarded command and release gate passed locally.
 
 **How to apply:** When release evidence must gate the real publisher, enforce it in the managed deployment build or another control that the Publish button necessarily executes. Verify the published health revision after the button-based release.
+
+The revision reported by health must be fixed by the approved build artifact, not a mutable runtime environment value.
+
+**Why:** A runtime override can make health report a revision other than the one the managed build actually approved.
+
+**How to apply:** Pass the approved revision into the build, embed it in the API output, and prefer that embedded value when reporting deployed health.

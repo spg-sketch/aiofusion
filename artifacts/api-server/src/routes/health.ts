@@ -3,6 +3,8 @@ import { HealthCheckResponse } from "@workspace/api-zod";
 import { features } from "../lib/features";
 import { getRuntimeState } from "../lib/runtime-lifecycle";
 
+declare const __RELEASE_GIT_REVISION__: string | undefined;
+
 const router: IRouter = Router();
 
 router.get("/healthz", (_req, res) => {
@@ -14,7 +16,10 @@ router.get("/healthz", (_req, res) => {
   const activeFlags = Object.entries(features)
     .filter(([, v]) => v === true)
     .map(([k]) => k);
-  const configuredRevision = process.env["RELEASE_GIT_REVISION"]?.trim().toLowerCase();
+  const bundledRevision = typeof __RELEASE_GIT_REVISION__ === "string"
+    ? __RELEASE_GIT_REVISION__
+    : undefined;
+  const configuredRevision = (bundledRevision ?? process.env["RELEASE_GIT_REVISION"])?.trim().toLowerCase();
   const releaseRevision = configuredRevision && /^[0-9a-f]{40}$/.test(configuredRevision)
     ? configuredRevision
     : undefined;

@@ -66,7 +66,9 @@ pnpm run release:verify-staging-publish -- <staging-publish-command> [arguments.
 
 The verification publishes once through the guarded entry point, waits for staging `/api/healthz` to report the approved `releaseRevision`, then temporarily substitutes mismatched evidence and confirms the same publisher is blocked. It restores the original evidence file before exiting. The command refuses non-staging URLs and environments.
 
-This command applies only when staging has a non-interactive publisher command. The current Replit Publish button cannot be passed to the shell guard. Until the managed deployment build enforces the same evidence check, button-based publishing must be treated as an unguarded path and cannot satisfy this verification.
+This command applies only when staging has a non-interactive publisher command. The Replit Publish button cannot be passed to the shell guard, so both managed artifact production builds run `scripts/release-managed-build.mjs` instead. That build entry point applies the same missing, failed, dirty and revision-mismatch checks before either artifact build starts. It also embeds the approved revision into the API bundle so `/api/healthz` reports the exact revision accepted by the managed build.
+
+For a normal button-based staging publication, first create current passing evidence with `release:check`, then click Publish without changing or committing any files. The managed build fails closed if the evidence is absent, invalid, failed, dirty or for a different revision. Any source change after approval requires a new release check.
 
 ## Staging sign-off
 

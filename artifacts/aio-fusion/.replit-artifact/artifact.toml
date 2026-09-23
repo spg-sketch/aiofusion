@@ -18,9 +18,14 @@ localPort = 18664
 run = "pnpm --filter @workspace/aio-fusion run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/aio-fusion", "run", "build" ]
 publicDir = "artifacts/aio-fusion/dist/public"
 serve = "static"
+
+[services.production.build]
+args = [ "node", "scripts/release-managed-build.mjs", "pnpm", "--filter", "@workspace/aio-fusion", "run", "build" ]
+
+[services.production.build.env]
+RELEASE_ENVIRONMENT = "staging"
 
 
 [services.env]

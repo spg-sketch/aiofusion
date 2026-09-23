@@ -91,6 +91,24 @@ export function assertReleaseEvidenceCurrent(evidence, currentSource) {
   return true;
 }
 
+export async function readCurrentReleaseEvidence({
+  evidencePath = path.join("release-evidence", "latest.json"),
+  getSourceState = getGitSourceState,
+  readEvidence = async (filePath) => JSON.parse(await readFile(filePath, "utf8")),
+} = {}) {
+  let evidence;
+  try {
+    evidence = await readEvidence(evidencePath);
+  } catch (error) {
+    const detail = error instanceof SyntaxError ? "is not valid JSON" : "could not be read";
+    throw new Error(`Release evidence ${detail}: ${evidencePath}`, { cause: error });
+  }
+
+  const currentSource = await getSourceState();
+  assertReleaseEvidenceCurrent(evidence, currentSource);
+  return { evidence, currentSource };
+}
+
 export async function runStagingPublication({
   env = process.env,
   evidencePath = path.join("release-evidence", "latest.json"),
@@ -103,16 +121,11 @@ export async function runStagingPublication({
     throw new Error("A staging publication command is required.");
   }
 
-  let evidence;
-  try {
-    evidence = await readEvidence(evidencePath);
-  } catch (error) {
-    const detail = error instanceof SyntaxError ? "is not valid JSON" : "could not be read";
-    throw new Error(`Release evidence ${detail}: ${evidencePath}`, { cause: error });
-  }
-
-  const currentSource = await getSourceState();
-  assertReleaseEvidenceCurrent(evidence, currentSource);
+  const { evidence, currentSource } = await readCurrentReleaseEvidence({
+    evidencePath,
+    getSourceState,
+    readEvidence,
+  });
   await publish({
     environment: "staging",
     gitRevision: evidence.gitRevision,
