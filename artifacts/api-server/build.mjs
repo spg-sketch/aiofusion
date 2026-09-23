@@ -19,10 +19,10 @@ async function buildAll() {
   await rm(distDir, { recursive: true, force: true });
 
   await esbuild({
-    entryPoints: [
-      path.resolve(artifactDir, "src/index.ts"),
-      path.resolve(artifactDir, "src/release-smoke.ts"),
-    ],
+    entryPoints: {
+      index: path.resolve(artifactDir, "src/bootstrap.ts"),
+      "release-smoke": path.resolve(artifactDir, "src/release-smoke.ts"),
+    },
     platform: "node",
     bundle: true,
     format: "esm",

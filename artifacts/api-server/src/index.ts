@@ -71,11 +71,10 @@ async function recoverDurableAudits(): Promise<void> {
 // ---------------------------------------------------------------------------
 // Staging isolation guard
 // ---------------------------------------------------------------------------
-// If DEPLOYMENT_ENV (or NODE_ENV as a fallback) is "staging", verify that
-// DATABASE_URL does not contain any of the substrings listed in
-// PRODUCTION_DB_IDENTIFIERS (comma-separated hostnames / db names).  If it
-// does, we refuse to boot so that a misconfigured secret can never silently
-// contaminate production data.
+// bootstrap.ts binds staging DATABASE_URL to BETA_DATABASE_URL before this
+// module (and @workspace/db) loads. Verify that exact target here rather than
+// relying on hostname/name substring heuristics, which can become stale and
+// incorrectly classify the beta database as production.
 // ---------------------------------------------------------------------------
 const deploymentEnv = (
   process.env["DEPLOYMENT_ENV"] ??
@@ -90,37 +89,26 @@ assertCanonicalDomainIsSafeForDeployment();
 
 if (deploymentEnv === "staging") {
   const dbUrl = process.env["DATABASE_URL"] ?? "";
-  const rawIdentifiers = process.env["PRODUCTION_DB_IDENTIFIERS"] ?? "";
-  const productionIdentifiers = rawIdentifiers
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const betaDbUrl = process.env["BETA_DATABASE_URL"]?.trim() ?? "";
+  const productionDbUrl = process.env["PRODUCTION_DATABASE_URL"]?.trim() ?? "";
 
-  if (productionIdentifiers.length === 0) {
+  if (!betaDbUrl || dbUrl !== betaDbUrl) {
     logger.error(
-      "FATAL: DEPLOYMENT_ENV=staging but PRODUCTION_DB_IDENTIFIERS is not set. " +
-        "Set PRODUCTION_DB_IDENTIFIERS to the production DB hostname or name " +
-        "(comma-separated) so the isolation guard can verify this deployment is " +
-        "not connected to the production database.",
+      "FATAL: Staging DATABASE_URL is not bound to BETA_DATABASE_URL. " +
+        "Start the production bundle through bootstrap.ts and verify the beta secret.",
     );
     process.exit(1);
   }
 
-  for (const identifier of productionIdentifiers) {
-    if (dbUrl.includes(identifier)) {
-      logger.error(
-        { identifier },
-        "FATAL: Staging deployment is pointed at the production database. " +
-          "Update DATABASE_URL to the staging database and redeploy.",
-      );
-      process.exit(1);
-    }
+  if (productionDbUrl && dbUrl === productionDbUrl) {
+    logger.error(
+      "FATAL: Staging BETA_DATABASE_URL equals PRODUCTION_DATABASE_URL. " +
+        "Correct the protected database secrets before publishing.",
+    );
+    process.exit(1);
   }
 
-  logger.info(
-    { identifiersChecked: productionIdentifiers.length },
-    "Staging isolation check passed - DATABASE_URL does not reference production.",
-  );
+  logger.info("Staging database target confirmed");
 }
 
 // ---------------------------------------------------------------------------

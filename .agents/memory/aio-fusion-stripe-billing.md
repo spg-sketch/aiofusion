@@ -21,6 +21,14 @@ Do not assume a legacy beta connection, workspace database, and published stagin
 
 **How to apply:** stop before Stripe writes if schema or target checks fail. Persist recovery IDs before each external write, guarantee compensating database cleanup, and verify scoped cleanup. Deleting test clocks does not erase historical Stripe test invoices or charges.
 
+## Staging database target promotion
+
+When staging is rebound from Replit's deployment database to the dedicated beta database, validate identity using exact secret equality, not a hostname/name substring list.
+
+**Why:** a stale `PRODUCTION_DB_IDENTIFIERS` value classified the correct beta URL as production. Compilation succeeded, but the API exited during Autoscale service creation and the publish UI did not show the application error; deployment runtime logs did.
+
+**How to apply:** bind `DATABASE_URL` to `BETA_DATABASE_URL` before database imports, assert exact equality afterward, and reject exact equality with `PRODUCTION_DATABASE_URL`. Preflight the full startup schema and exact production bundle against beta, with Stripe disabled during local readiness checks so it cannot move the published webhook.
+
 ## Payment recovery evidence
 
 Treat checkout acknowledgement, subscription activation, and complete Billing details as separate checks.
