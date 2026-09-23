@@ -115,6 +115,12 @@ export async function initStripe(): Promise<void> {
     return;
   }
 
+  // The mirror schema must exist before staging moves the webhook or starts its
+  // signed-delivery probe. Otherwise that probe can successfully update
+  // business billing state while stripe-replit-sync fails on stripe.accounts.
+  await runMigrations({ databaseUrl });
+  logger.info("stripe-init: stripe schema ready");
+
   if (deploymentEnv === "staging") {
     try {
       const valid = completeStripeWebhookReadinessProbe(await configureStagingWebhookUrl());
@@ -136,11 +142,13 @@ export async function initStripe(): Promise<void> {
     } catch (err) {
       logger.warn({ err }, "stripe-init: failed to ensure staging plan prices (non-fatal)");
     }
+    const stripeSync = await getStripeSync();
+    stripeSync
+      .syncBackfill()
+      .then(() => logger.info("stripe-init: staging backfill complete"))
+      .catch((err) => logger.warn({ err }, "stripe-init: staging backfill failed (non-fatal)"));
     return;
   }
-
-  await runMigrations({ databaseUrl });
-  logger.info("stripe-init: stripe schema ready");
 
   const stripeSync = await getStripeSync();
 

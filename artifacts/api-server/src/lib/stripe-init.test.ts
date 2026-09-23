@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const calls = vi.hoisted(() => ({
+  migrations: [] as string[],
+  backfills: 0,
   managedUrls: [] as string[],
   updatedUrls: [] as string[],
   readiness: [] as unknown[],
@@ -10,7 +12,10 @@ const calls = vi.hoisted(() => ({
 }));
 
 vi.mock("stripe-replit-sync", () => ({
-  runMigrations: vi.fn(),
+  runMigrations: ({ databaseUrl }: { databaseUrl: string }) => {
+    calls.migrations.push(databaseUrl);
+    return Promise.resolve();
+  },
 }));
 vi.mock("./billing", () => ({
   ensureAllPrices: vi.fn(),
@@ -26,7 +31,10 @@ vi.mock("./stripe-client", () => ({
         calls.managedUrls.push(url);
         return Promise.resolve({ id: "we_managed", url });
       },
-      syncBackfill: () => Promise.resolve(),
+      syncBackfill: () => {
+        calls.backfills += 1;
+        return Promise.resolve();
+      },
     }),
   getUncachableStripeClient: () =>
     Promise.resolve({
@@ -87,6 +95,8 @@ const originalDomains = process.env.REPLIT_DOMAINS;
 const originalDatabaseUrl = process.env.DATABASE_URL;
 
 afterEach(() => {
+  calls.migrations.length = 0;
+  calls.backfills = 0;
   calls.managedUrls.length = 0;
   calls.updatedUrls.length = 0;
   calls.readiness.length = 0;
@@ -136,6 +146,8 @@ describe("Stripe webhook registration at startup", () => {
 
     expect(calls.updatedUrls).toEqual(["https://staging.example/api/stripe/webhook"]);
     expect(calls.managedUrls).toEqual([]);
+    expect(calls.migrations).toEqual(["postgres://test-only"]);
+    expect(calls.backfills).toBe(1);
     expect(calls.readiness.at(-1)).toEqual({ available: true });
     expect(calls.customerCreates).toBe(1);
     expect(calls.customerDeletes).toBe(1);
