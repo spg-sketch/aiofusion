@@ -3,13 +3,23 @@ import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { assertReleaseEnvironment, assertReleaseEvidenceCurrent, getGitSourceState } from "./release-lib.mjs";
+import {
+  appendReleaseHistory,
+  assertReleaseEnvironment,
+  assertReleaseEvidenceCurrent,
+  getGitSourceState,
+} from "./release-lib.mjs";
 
 const DEFAULT_EVIDENCE_PATH = path.join("release-evidence", "latest.json");
 const MISMATCHED_REVISION = "0000000000000000000000000000000000000000";
+const GIT_REVISION_PATTERN = /^[0-9a-f]{40}$/i;
 
 function healthUrl(baseUrl) {
   return new URL("/api/healthz", baseUrl).toString();
+}
+
+function safeObservedRevision(value) {
+  return GIT_REVISION_PATTERN.test(value ?? "") ? value : "unavailable";
 }
 
 async function runGuardedPublisher(publisherArgs, {
@@ -42,16 +52,20 @@ async function waitForPublishedRevision(baseUrl, expectedRevision, {
       const response = await fetchImpl(endpoint, { headers: { accept: "application/json" } });
       const body = response.ok ? await response.json() : {};
       lastObserved = body.releaseRevision ?? `HTTP ${response.status}`;
-      if (body.status === "ok" && body.releaseRevision === expectedRevision) return body;
+      if (body.status === "ok" && body.releaseRevision === expectedRevision) {
+        return { health: body, observedRevision: body.releaseRevision };
+      }
     } catch (error) {
       lastObserved = error instanceof Error ? error.message : "request failed";
     }
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
-  throw new Error(
+  const error = new Error(
     `Staging did not report verified revision ${expectedRevision} at ${endpoint} `
     + `(last observed: ${lastObserved}).`,
   );
+  error.observedRevision = lastObserved;
+  throw error;
 }
 
 export async function verifyGuardedStagingPublication({
@@ -64,6 +78,8 @@ export async function verifyGuardedStagingPublication({
   getSourceState = () => getGitSourceState({ cwd }),
   runPublisher = (args, options) => runGuardedPublisher(args, options),
   verifyRevision = waitForPublishedRevision,
+  now = () => new Date(),
+  recordHistory = appendReleaseHistory,
 } = {}) {
   assertReleaseEnvironment(env);
   if (!env.RELEASE_BASE_URL) {
@@ -82,7 +98,44 @@ export async function verifyGuardedStagingPublication({
   if (publication.code !== 0) {
     throw new Error(`Guarded staging publication failed (${publication.code ?? publication.signal}).`);
   }
-  await verifyRevision(env.RELEASE_BASE_URL, evidence.gitRevision);
+  let observedRevision;
+  try {
+    const observation = await verifyRevision(env.RELEASE_BASE_URL, evidence.gitRevision);
+    observedRevision = safeObservedRevision(observation?.observedRevision
+      ?? observation?.releaseRevision
+      ?? evidence.gitRevision);
+  } catch (error) {
+    observedRevision = safeObservedRevision(error?.observedRevision);
+    await recordHistory({
+      gitRevision: evidence.gitRevision,
+      event: "staging-health",
+      status: "mismatched",
+      recordedAt: now().toISOString(),
+      historyRoot: path.join(path.dirname(evidencePath), "history"),
+      details: {
+        approvedRevision: evidence.gitRevision,
+        observedRevision,
+        revisionsMatch: false,
+      },
+    });
+    throw error;
+  }
+  const revisionsMatch = observedRevision === evidence.gitRevision;
+  await recordHistory({
+    gitRevision: evidence.gitRevision,
+    event: "staging-health",
+    status: revisionsMatch ? "matched" : "mismatched",
+    recordedAt: now().toISOString(),
+    historyRoot: path.join(path.dirname(evidencePath), "history"),
+    details: {
+      approvedRevision: evidence.gitRevision,
+      observedRevision,
+      revisionsMatch,
+    },
+  });
+  if (!revisionsMatch) {
+    throw new Error("Staging health revision did not match the approved release revision.");
+  }
 
   const staleRevision = evidence.gitRevision === MISMATCHED_REVISION
     ? "1111111111111111111111111111111111111111"

@@ -7,6 +7,7 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
+  appendReleaseHistory,
   assertReleaseEnvironment,
   assertReleaseEvidenceCurrent,
   getGitSourceState,
@@ -217,6 +218,28 @@ test("runs stages in order and records non-sensitive evidence", async () => {
   assert.match(evidence, new RegExp(`"gitRevision": "${MATCHING_SOURCE.gitRevision}"`));
   assert.match(evidence, /"sourceState": "clean"/);
   assert.doesNotMatch(evidence, /must-not-appear|SECRET_TOKEN/);
+  const historyDirectory = path.join(dir, "history", MATCHING_SOURCE.gitRevision);
+  const [historyName] = await import("node:fs/promises").then(({ readdir }) => readdir(historyDirectory));
+  const history = JSON.parse(await readFile(path.join(historyDirectory, historyName), "utf8"));
+  assert.equal(history.event, "release-candidate");
+  assert.equal(history.status, "passed");
+  assert.doesNotMatch(JSON.stringify(history), /must-not-appear|SECRET_TOKEN/);
+});
+
+test("release history uses immutable files for the same revision and UTC time", async () => {
+  const historyRoot = path.join(await mkdtemp(path.join(tmpdir(), "release-history-")), "history");
+  const entry = {
+    gitRevision: MATCHING_SOURCE.gitRevision,
+    event: "publication",
+    status: "succeeded",
+    recordedAt: "2026-09-23T12:00:00.000Z",
+    historyRoot,
+  };
+  const firstPath = await appendReleaseHistory(entry);
+  const secondPath = await appendReleaseHistory(entry);
+  assert.notEqual(firstPath, secondPath);
+  assert.equal(JSON.parse(await readFile(firstPath, "utf8")).recordedAt, entry.recordedAt);
+  assert.equal(JSON.parse(await readFile(secondPath, "utf8")).recordedAt, entry.recordedAt);
 });
 
 test("stops at the first failed stage and reports it", async () => {
@@ -332,6 +355,7 @@ test("publishes staging when latest evidence passed for the matching clean revis
   await writeFile(evidencePath, JSON.stringify({ status: "passed", ...MATCHING_SOURCE }));
   let publications = 0;
   let publicationMetadata;
+  const history = [];
 
   const result = await runStagingPublication({
     env: { RELEASE_ENVIRONMENT: "staging" },
@@ -341,6 +365,7 @@ test("publishes staging when latest evidence passed for the matching clean revis
       publications += 1;
       publicationMetadata = metadata;
     },
+    recordHistory: async (entry) => history.push(entry),
   });
 
   assert.equal(publications, 1);
@@ -349,6 +374,25 @@ test("publishes staging when latest evidence passed for the matching clean revis
     environment: "staging",
     gitRevision: MATCHING_SOURCE.gitRevision,
   });
+  assert.equal(history.length, 1);
+  assert.equal(history[0].status, "succeeded");
+  assert.equal(history[0].gitRevision, MATCHING_SOURCE.gitRevision);
+});
+
+test("records a non-sensitive publication rejection for an approved revision", async () => {
+  const history = [];
+  await assert.rejects(runStagingPublication({
+    env: { RELEASE_ENVIRONMENT: "staging" },
+    readEvidence: async () => ({ status: "passed", ...MATCHING_SOURCE }),
+    getSourceState: sourceState,
+    publish: async () => {
+      throw new Error("publisher exposed details that must not be copied");
+    },
+    recordHistory: async (entry) => history.push(entry),
+  }), /publisher exposed details/);
+  assert.equal(history.length, 1);
+  assert.equal(history[0].status, "rejected");
+  assert.doesNotMatch(JSON.stringify(history[0]), /exposed details/);
 });
 
 test("blocks staging publication for failed, stale, or dirty release evidence", async () => {
@@ -443,17 +487,23 @@ test("managed staging build passes only the approved revision to its build comma
 
 test("managed staging build never starts when release evidence is rejected", async () => {
   let spawned = false;
+  const history = [];
   await assert.rejects(runManagedStagingBuild({
     command: "pnpm",
     env: { RELEASE_ENVIRONMENT: "staging" },
     validateEvidence: async () => {
-      throw new Error("Release evidence is stale because it covers a different Git revision.");
+      const error = new Error("Release evidence is stale because it covers a different Git revision.");
+      error.releaseEvidence = { status: "passed", ...MATCHING_SOURCE };
+      throw error;
     },
     spawnProcess: () => {
       spawned = true;
     },
+    recordHistory: async (entry) => history.push(entry),
   }), /different Git revision/);
   assert.equal(spawned, false);
+  assert.equal(history[0].status, "rejected");
+  assert.equal(history[0].gitRevision, MATCHING_SOURCE.gitRevision);
 });
 
 test("reads current evidence through the shared release policy", async () => {
@@ -542,6 +592,55 @@ test("staging verification fails before publication for stale evidence", async (
     },
   }), /different Git revision/);
   assert.equal(publisherCalls, 0);
+});
+
+test("staging verification records the observed mismatched health revision", async () => {
+  const history = [];
+  const observedRevision = "fedcba9876543210fedcba9876543210fedcba98";
+  const error = new Error("staging revision mismatch");
+  error.observedRevision = observedRevision;
+  await assert.rejects(verifyGuardedStagingPublication({
+    publisherArgs: ["real-staging-publisher"],
+    evidencePath: path.join("release-evidence", "latest.json"),
+    env: {
+      RELEASE_ENVIRONMENT: "staging",
+      RELEASE_BASE_URL: "https://staging.aiofusion.ai",
+    },
+    read: async () => JSON.stringify({ status: "passed", ...MATCHING_SOURCE }),
+    getSourceState: sourceState,
+    runPublisher: async () => ({ code: 0, signal: null }),
+    verifyRevision: async () => {
+      throw error;
+    },
+    recordHistory: async (entry) => history.push(entry),
+  }), /staging revision mismatch/);
+  assert.equal(history.length, 1);
+  assert.deepEqual(history[0].details, {
+    approvedRevision: MATCHING_SOURCE.gitRevision,
+    observedRevision,
+    revisionsMatch: false,
+  });
+  assert.equal(history[0].status, "mismatched");
+});
+
+test("staging verification rejects a returned health response with the wrong revision", async () => {
+  const history = [];
+  const observedRevision = "fedcba9876543210fedcba9876543210fedcba98";
+  await assert.rejects(verifyGuardedStagingPublication({
+    publisherArgs: ["real-staging-publisher"],
+    evidencePath: path.join("release-evidence", "latest.json"),
+    env: {
+      RELEASE_ENVIRONMENT: "staging",
+      RELEASE_BASE_URL: "https://staging.aiofusion.ai",
+    },
+    read: async () => JSON.stringify({ status: "passed", ...MATCHING_SOURCE }),
+    getSourceState: sourceState,
+    runPublisher: async () => ({ code: 0, signal: null }),
+    verifyRevision: async () => ({ observedRevision }),
+    recordHistory: async (entry) => history.push(entry),
+  }), /did not match/);
+  assert.equal(history[0].details.observedRevision, observedRevision);
+  assert.equal(history[0].details.revisionsMatch, false);
 });
 
 test("fails the gate before stages when the initial source is dirty", async () => {

@@ -6,6 +6,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const GIT_REVISION_PATTERN = /^[0-9a-f]{40}$/i;
 
 export const RELEASE_STAGE_TIMEOUTS = Object.freeze({
   "release automation guard": 60_000,
@@ -91,6 +92,54 @@ export function assertReleaseEvidenceCurrent(evidence, currentSource) {
   return true;
 }
 
+function safeUtcKey(isoTime) {
+  return isoTime.replaceAll(":", "-");
+}
+
+export async function appendReleaseHistory({
+  gitRevision,
+  event,
+  status,
+  environment = "staging",
+  recordedAt = new Date().toISOString(),
+  historyRoot = path.join("release-evidence", "history"),
+  details = {},
+} = {}) {
+  if (!GIT_REVISION_PATTERN.test(gitRevision ?? "")) {
+    throw new Error("Release history requires a valid Git revision.");
+  }
+  if (!/^[a-z][a-z0-9-]*$/.test(event ?? "")) {
+    throw new Error("Release history requires a safe event name.");
+  }
+  if (!["passed", "failed", "succeeded", "rejected", "matched", "mismatched"].includes(status)) {
+    throw new Error("Release history requires a supported status.");
+  }
+
+  const directory = path.join(historyRoot, gitRevision.toLowerCase());
+  const basename = `${safeUtcKey(recordedAt)}-${event}`;
+  const record = {
+    schemaVersion: 1,
+    recordedAt,
+    environment,
+    gitRevision,
+    event,
+    status,
+    ...details,
+  };
+  await mkdir(directory, { recursive: true });
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const suffix = attempt === 0 ? "" : `-${attempt + 1}`;
+    const recordPath = path.join(directory, `${basename}${suffix}.json`);
+    try {
+      await writeFile(recordPath, `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+      return recordPath;
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+    }
+  }
+  throw new Error("Could not allocate an immutable release-history filename.");
+}
+
 export async function readCurrentReleaseEvidence({
   evidencePath = path.join("release-evidence", "latest.json"),
   getSourceState = getGitSourceState,
@@ -105,7 +154,12 @@ export async function readCurrentReleaseEvidence({
   }
 
   const currentSource = await getSourceState();
-  assertReleaseEvidenceCurrent(evidence, currentSource);
+  try {
+    assertReleaseEvidenceCurrent(evidence, currentSource);
+  } catch (error) {
+    error.releaseEvidence = evidence;
+    throw error;
+  }
   return { evidence, currentSource };
 }
 
@@ -115,22 +169,49 @@ export async function runStagingPublication({
   getSourceState = getGitSourceState,
   readEvidence = async (filePath) => JSON.parse(await readFile(filePath, "utf8")),
   publish,
+  now = () => new Date(),
+  recordHistory = appendReleaseHistory,
+  historyRoot = path.join(path.dirname(evidencePath), "history"),
 } = {}) {
   assertReleaseEnvironment(env);
   if (typeof publish !== "function") {
     throw new Error("A staging publication command is required.");
   }
 
-  const { evidence, currentSource } = await readCurrentReleaseEvidence({
-    evidencePath,
-    getSourceState,
-    readEvidence,
-  });
-  await publish({
-    environment: "staging",
-    gitRevision: evidence.gitRevision,
-  });
-  return { evidence, currentSource };
+  let evidence;
+  try {
+    evidence = await readEvidence(evidencePath);
+    const currentSource = await getSourceState();
+    assertReleaseEvidenceCurrent(evidence, currentSource);
+    await publish({
+      environment: "staging",
+      gitRevision: evidence.gitRevision,
+    });
+    await recordHistory({
+      gitRevision: evidence.gitRevision,
+      event: "publication",
+      status: "succeeded",
+      recordedAt: now().toISOString(),
+      historyRoot,
+    });
+    return { evidence, currentSource };
+  } catch (error) {
+    if (GIT_REVISION_PATTERN.test(evidence?.gitRevision ?? "")) {
+      await recordHistory({
+        gitRevision: evidence.gitRevision,
+        event: "publication",
+        status: "rejected",
+        recordedAt: now().toISOString(),
+        historyRoot,
+        details: { reason: "publication guard or publisher rejected the release" },
+      });
+    }
+    if (evidence === undefined) {
+      const detail = error instanceof SyntaxError ? "is not valid JSON" : "could not be read";
+      throw new Error(`Release evidence ${detail}: ${evidencePath}`, { cause: error });
+    }
+    throw error;
+  }
 }
 
 export async function runCommand(command, options = {}) {
@@ -174,6 +255,8 @@ export async function runReleaseGate({
   evidencePath = path.join("release-evidence", "latest.json"),
   defaultStageTimeoutMs = DEFAULT_STAGE_TIMEOUT_MS,
   getSourceState = getGitSourceState,
+  recordHistory = appendReleaseHistory,
+  historyRoot = path.join(path.dirname(evidencePath), "history"),
 } = {}) {
   const startedAt = now().toISOString();
   let environment;
@@ -236,6 +319,22 @@ export async function runReleaseGate({
     };
     await mkdir(path.dirname(evidencePath), { recursive: true });
     await writeFile(evidencePath, `${JSON.stringify(result, null, 2)}\n`, { mode: 0o600 });
+    if (GIT_REVISION_PATTERN.test(result.gitRevision ?? "")) {
+      await recordHistory({
+        gitRevision: result.gitRevision,
+        event: "release-candidate",
+        status: result.status,
+        recordedAt: result.finishedAt,
+        historyRoot,
+        details: {
+          sourceState: result.sourceState,
+          startedAt: result.startedAt,
+          finishedAt: result.finishedAt,
+          stages: result.stages,
+          ...(result.failedStage ? { failedStage: result.failedStage } : {}),
+        },
+      });
+    }
   }
   return result;
 }

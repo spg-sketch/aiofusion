@@ -2,7 +2,7 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { assertReleaseEnvironment, readCurrentReleaseEvidence } from "./release-lib.mjs";
+import { appendReleaseHistory, assertReleaseEnvironment, readCurrentReleaseEvidence } from "./release-lib.mjs";
 
 export async function runManagedStagingBuild({
   command,
@@ -12,29 +12,54 @@ export async function runManagedStagingBuild({
   validateEvidence = readCurrentReleaseEvidence,
   spawnProcess = spawn,
   stdio = "inherit",
+  now = () => new Date(),
+  recordHistory = appendReleaseHistory,
 } = {}) {
   assertReleaseEnvironment(env);
   if (!command) {
     throw new Error("Usage: node scripts/release-managed-build.mjs <build-command> [arguments...]");
   }
 
-  const { evidence } = await validateEvidence();
-  const result = await new Promise((resolve, reject) => {
-    const child = spawnProcess(command, args, {
-      cwd,
-      env: {
-        ...env,
-        RELEASE_GIT_REVISION: evidence.gitRevision,
-      },
-      stdio,
+  let evidence;
+  try {
+    ({ evidence } = await validateEvidence());
+    const result = await new Promise((resolve, reject) => {
+      const child = spawnProcess(command, args, {
+        cwd,
+        env: {
+          ...env,
+          RELEASE_GIT_REVISION: evidence.gitRevision,
+        },
+        stdio,
+      });
+      child.once("error", reject);
+      child.once("exit", (code, signal) => resolve({ code, signal }));
     });
-    child.once("error", reject);
-    child.once("exit", (code, signal) => resolve({ code, signal }));
-  });
-  if (result.code !== 0) {
-    throw new Error(`Managed staging build exited ${result.code ?? `by ${result.signal}`}.`);
+    if (result.code !== 0) {
+      throw new Error(`Managed staging build exited ${result.code ?? `by ${result.signal}`}.`);
+    }
+    await recordHistory({
+      gitRevision: evidence.gitRevision,
+      event: "managed-build",
+      status: "succeeded",
+      recordedAt: now().toISOString(),
+      historyRoot: path.join(cwd, "release-evidence", "history"),
+    });
+    return { gitRevision: evidence.gitRevision, environment: "staging" };
+  } catch (error) {
+    evidence ??= error?.releaseEvidence;
+    if (evidence?.gitRevision) {
+      await recordHistory({
+        gitRevision: evidence.gitRevision,
+        event: "managed-build",
+        status: "rejected",
+        recordedAt: now().toISOString(),
+        historyRoot: path.join(cwd, "release-evidence", "history"),
+        details: { reason: "managed build failed or rejected the release" },
+      });
+    }
+    throw error;
   }
-  return { gitRevision: evidence.gitRevision, environment: "staging" };
 }
 
 const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : "";

@@ -40,7 +40,9 @@ surviving the release check.
 
 ## Evidence and approval
 
-The gate writes `release-evidence/latest.json` with the UTC start/end time, target environment, exact Git revision, `clean` or `dirty` source-state marker, stage names, durations and pass/fail result. A failure or timeout includes `failedStage`; timed-out stage entries also include `timedOut: true`. It records no environment-variable values, repository credentials, request bodies or customer data. Attach or copy this non-sensitive summary to the change record.
+The gate writes `release-evidence/latest.json` with the UTC start/end time, target environment, exact Git revision, `clean` or `dirty` source-state marker, stage names, durations and pass/fail result. A failure or timeout includes `failedStage`; timed-out stage entries also include `timedOut: true`. The managed build guard continues to read this file.
+
+Every candidate also creates an immutable JSON summary under `release-evidence/history/<git-revision>/`, keyed by its UTC completion time. Guarded publisher and managed-build outcomes append separate success or rejection records. Staging verification appends the approved revision, the revision observed from `/api/healthz`, and whether they match. History files use exclusive creation and are never updated in place. These records contain no environment-variable values, repository credentials, request bodies, command arguments or customer data. Preserve the history directory with the release change record.
 
 The gate refuses to start from a dirty checkout. After every stage passes, it reads Git state again and fails if `HEAD` changed or any tracked or untracked source change appeared during the run.
 
@@ -64,7 +66,7 @@ RELEASE_BASE_URL=https://staging.aiofusion.ai \
 pnpm run release:verify-staging-publish -- <staging-publish-command> [arguments...]
 ```
 
-The verification publishes once through the guarded entry point, waits for staging `/api/healthz` to report the approved `releaseRevision`, then temporarily substitutes mismatched evidence and confirms the same publisher is blocked. It restores the original evidence file before exiting. The command refuses non-staging URLs and environments.
+The verification publishes once through the guarded entry point, waits for staging `/api/healthz` to report the approved `releaseRevision`, records the observed revision and comparison in immutable history, then temporarily substitutes mismatched evidence and confirms the same publisher is blocked. It restores the original evidence file before exiting. The command refuses non-staging URLs and environments.
 
 This command applies only when staging has a non-interactive publisher command. The Replit Publish button cannot be passed to the shell guard, so both managed artifact production builds run `scripts/release-managed-build.mjs` instead. That build entry point applies the same missing, failed, dirty and revision-mismatch checks before either artifact build starts. It also embeds the approved revision into the API bundle so `/api/healthz` reports the exact revision accepted by the managed build.
 
