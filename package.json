@@ -10,7 +10,8 @@
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
     "release:validate-automation": "node scripts/release-automation-guard.mjs",
     "release:check": "node scripts/release-gate.mjs",
-    "release:publish": "node scripts/release-publish.mjs"
+    "release:publish": "node scripts/release-publish.mjs",
+    "release:verify-staging-publish": "node scripts/release-staging-verification.mjs"
   },
   "private": true,
   "pnpm": {

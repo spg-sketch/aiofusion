@@ -56,6 +56,18 @@ This guarded command is the only supported staging publication entry point for o
 
 The guarded command reads `release-evidence/latest.json` and stops before invoking the publisher if the gate failed, the evidence covers another Git revision, the recorded source was dirty, or the current checkout is dirty. After validation, it supplies the verified revision to the staging publisher as `RELEASE_GIT_REVISION`. The staging publication command must preserve that environment value in the deployed API runtime. It does not replace reviewer approval. Production publication still requires the business owner and release owner approval in the cutover runbook.
 
+Before relying on a new or changed repository publication workflow, run the dedicated staging-only verification with current passing evidence and the real staging publisher:
+
+```bash
+RELEASE_ENVIRONMENT=staging \
+RELEASE_BASE_URL=https://staging.aiofusion.ai \
+pnpm run release:verify-staging-publish -- <staging-publish-command> [arguments...]
+```
+
+The verification publishes once through the guarded entry point, waits for staging `/api/healthz` to report the approved `releaseRevision`, then temporarily substitutes mismatched evidence and confirms the same publisher is blocked. It restores the original evidence file before exiting. The command refuses non-staging URLs and environments.
+
+This command applies only when staging has a non-interactive publisher command. The current Replit Publish button cannot be passed to the shell guard. Until the managed deployment build enforces the same evidence check, button-based publishing must be treated as an unguarded path and cannot satisfy this verification.
+
 ## Staging sign-off
 
 After publishing the approved candidate to staging:

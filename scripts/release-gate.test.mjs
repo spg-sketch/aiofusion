@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
   assertReleaseEnvironment,
   assertReleaseEvidenceCurrent,
@@ -15,6 +17,7 @@ import {
   assertGuardedStagingAutomation,
   validateReleaseAutomation,
 } from "./release-automation-guard.mjs";
+import { verifyGuardedStagingPublication } from "./release-staging-verification.mjs";
 
 const MATCHING_SOURCE = {
   gitRevision: "0123456789abcdef0123456789abcdef01234567",
@@ -22,6 +25,7 @@ const MATCHING_SOURCE = {
 };
 
 const sourceState = async () => MATCHING_SOURCE;
+const execFileAsync = promisify(execFile);
 
 test("keeps every release-blocking stage in the required order", () => {
   assert.deepEqual(RELEASE_STAGES.map(([name]) => name), [
@@ -385,6 +389,81 @@ test("blocks staging publication when latest evidence cannot be read", async () 
   }), /could not be read/);
   assert.equal(sourceReads, 0);
   assert.equal(publications, 0);
+});
+
+test("staging verification runs the real guarded entry point and invokes the publisher exactly once", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "release-staging-verification-"));
+  const evidencePath = path.join(cwd, "release-evidence", "latest.json");
+  const publisherPath = path.join(cwd, "publisher.mjs");
+  const callsPath = path.join(cwd, "publisher-calls.txt");
+  await mkdir(path.dirname(evidencePath), { recursive: true });
+  await writeFile(path.join(cwd, ".gitignore"), "release-evidence/\npublisher-calls.txt\n");
+  await writeFile(publisherPath, [
+    "#!/usr/bin/env node",
+    'import { appendFile } from "node:fs/promises";',
+    `await appendFile(${JSON.stringify(callsPath)}, \`\${process.env.RELEASE_GIT_REVISION}\\n\`);`,
+    "",
+  ].join("\n"));
+  await chmod(publisherPath, 0o755);
+  await execFileAsync("git", ["init"], { cwd });
+  await execFileAsync("git", ["config", "user.email", "release-verification@example.invalid"], { cwd });
+  await execFileAsync("git", ["config", "user.name", "Release Verification"], { cwd });
+  await execFileAsync("git", ["add", ".gitignore", "publisher.mjs"], { cwd });
+  await execFileAsync("git", ["commit", "-m", "verification fixture"], { cwd });
+  const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd });
+  const gitRevision = stdout.trim();
+  const evidence = `${JSON.stringify({
+    status: "passed",
+    environment: "staging",
+    gitRevision,
+    sourceState: "clean",
+  }, null, 2)}\n`;
+  await writeFile(evidencePath, evidence);
+  const verifiedRevisions = [];
+
+  const result = await verifyGuardedStagingPublication({
+    publisherArgs: [publisherPath],
+    cwd,
+    evidencePath,
+    env: {
+      ...process.env,
+      RELEASE_ENVIRONMENT: "staging",
+      RELEASE_BASE_URL: "https://staging.aiofusion.ai",
+    },
+    verifyRevision: async (baseUrl, revision) => {
+      verifiedRevisions.push({ baseUrl, revision });
+    },
+  });
+
+  assert.deepEqual(result, { environment: "staging", gitRevision });
+  assert.deepEqual((await readFile(callsPath, "utf8")).trim().split("\n"), [gitRevision]);
+  assert.deepEqual(verifiedRevisions, [{
+    baseUrl: "https://staging.aiofusion.ai",
+    revision: gitRevision,
+  }]);
+  assert.equal(await readFile(evidencePath, "utf8"), evidence);
+});
+
+test("staging verification fails before publication for stale evidence", async () => {
+  let publisherCalls = 0;
+  await assert.rejects(verifyGuardedStagingPublication({
+    publisherArgs: ["real-staging-publisher"],
+    env: {
+      RELEASE_ENVIRONMENT: "staging",
+      RELEASE_BASE_URL: "https://staging.aiofusion.ai",
+    },
+    read: async () => JSON.stringify({
+      status: "passed",
+      ...MATCHING_SOURCE,
+      gitRevision: "fedcba9876543210fedcba9876543210fedcba98",
+    }),
+    getSourceState: sourceState,
+    runPublisher: async () => {
+      publisherCalls += 1;
+      return { code: 0, signal: null };
+    },
+  }), /different Git revision/);
+  assert.equal(publisherCalls, 0);
 });
 
 test("fails the gate before stages when the initial source is dirty", async () => {
