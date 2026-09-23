@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   callCount: 0,
+  spentGbp: "0",
   multiplier: null as string | null,
   baseLimit: 50,
 }));
 
 const sendQuotaBreachAlert = vi.hoisted(() => vi.fn(async () => undefined));
+const sendSpendCapAlert = vi.hoisted(() => vi.fn(async () => undefined));
 
 vi.mock("@workspace/db", () => {
   const tokenUsageTable = {
@@ -30,6 +32,7 @@ vi.mock("@workspace/db", () => {
               };
             }
             if ("count" in selection) return Promise.resolve([{ count: state.callCount }]);
+            if ("spent" in selection) return Promise.resolve([{ spent: state.spentGbp }]);
             return Promise.resolve([]);
           },
           groupBy: () => [],
@@ -58,6 +61,7 @@ vi.mock("./billing", () => ({
 vi.mock("./notify-email", () => ({
   sendSpikeAlert: vi.fn(async () => undefined),
   sendQuotaBreachAlert,
+  sendSpendCapAlert,
 }));
 
 describe("fair usage enforcement", () => {
@@ -65,6 +69,7 @@ describe("fair usage enforcement", () => {
     vi.resetModules();
     vi.clearAllMocks();
     state.callCount = 0;
+    state.spentGbp = "0";
     state.multiplier = null;
     state.baseLimit = 50;
   });
@@ -86,7 +91,7 @@ describe("fair usage enforcement", () => {
     expect(sendQuotaBreachAlert).not.toHaveBeenCalled();
   });
 
-  it("allows the final action and blocks the next action when enforcement is enabled", async () => {
+  it("allows the final action and blocks the next action without sending email when enforcement is enabled", async () => {
     process.env.FAIR_USAGE_ENFORCEMENT_ENABLED = "true";
     const { checkFairUsage } = await import("./fair-usage");
 
@@ -103,11 +108,7 @@ describe("fair usage enforcement", () => {
       callCount: 50,
       limit: 50,
     });
-    expect(sendQuotaBreachAlert).toHaveBeenCalledWith({
-      slug: "staging-account",
-      callCount: 50,
-      limit: 50,
-    });
+    expect(sendQuotaBreachAlert).not.toHaveBeenCalled();
   });
 
   it("applies the account multiplier to the published project-tier allowance", async () => {
@@ -121,6 +122,23 @@ describe("fair usage enforcement", () => {
       allowed: true,
       callCount: 149,
       limit: 150,
+    });
+  });
+
+  it("keeps monthly spend-limit alert dispatch enabled", async () => {
+    state.spentGbp = "50";
+
+    const { checkMonthlySpendLimit } = await import("./fair-usage");
+    await expect(checkMonthlySpendLimit("spend-limit-account")).resolves.toEqual({
+      allowed: false,
+      spentGbp: 50,
+      limitGbp: 50,
+    });
+    expect(sendQuotaBreachAlert).not.toHaveBeenCalled();
+    expect(sendSpendCapAlert).toHaveBeenCalledWith({
+      slug: "spend-limit-account",
+      spendGbp: 50,
+      limitGbp: 50,
     });
   });
 });

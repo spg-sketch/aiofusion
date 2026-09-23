@@ -1,7 +1,7 @@
 import { db, tokenUsageTable, platformMetaTable } from "@workspace/db";
 import { and, gte, lt, sql, eq, inArray } from "drizzle-orm";
 import { logger } from "./logger";
-import { sendSpikeAlert, sendQuotaBreachAlert } from "./notify-email";
+import { sendSpikeAlert, sendSpendCapAlert } from "./notify-email";
 import { getProjectActionLimit } from "./billing";
 
 export const DEFAULT_FAIR_USAGE_LIMIT = 50;
@@ -19,9 +19,6 @@ export const DEFAULT_MONTHLY_SPEND_LIMIT_GBP = 50;
 // Cooldown: only send one spike email per account per hour (in-process)
 const spikeCooldown = new Map<string, number>();
 const SPIKE_COOLDOWN_MS = 60 * 60 * 1000;
-
-// Cooldown: only send one quota-breach email per account per hour (in-process)
-const quotaCooldown = new Map<string, number>();
 
 // Cooldown: only send one spend-limit email per account per calendar month (in-process)
 const spendLimitCooldown = new Map<string, number>();
@@ -111,12 +108,6 @@ export async function checkFairUsage(accountId: string, projectId?: string | nul
         { accountId, projectId, callCount, limit, multiplier },
         "fair-usage: project over 30-day action limit - returning 429",
       );
-      // Send breach email at most once per hour per account
-      const lastSent = quotaCooldown.get(accountId) ?? 0;
-      if (Date.now() - lastSent >= SPIKE_COOLDOWN_MS) {
-        quotaCooldown.set(accountId, Date.now());
-        void sendQuotaBreachAlert({ slug: accountId, callCount, limit });
-      }
     }
 
     return { allowed, callCount, limit };
@@ -167,10 +158,10 @@ export async function checkMonthlySpendLimit(accountId: string): Promise<{
       const lastSent = spendLimitCooldown.get(accountId) ?? 0;
       if (Date.now() - lastSent >= SPEND_LIMIT_COOLDOWN_MS) {
         spendLimitCooldown.set(accountId, Date.now());
-        void sendQuotaBreachAlert({
+        void sendSpendCapAlert({
           slug: accountId,
-          callCount: Math.round(spentGbp * 100),
-          limit: Math.round(limitGbp * 100),
+          spendGbp: spentGbp,
+          limitGbp,
         });
       }
     }
