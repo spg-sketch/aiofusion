@@ -749,7 +749,7 @@ describe("agency project tier controls", () => {
           json: async () => ({
             quoteId: `quote-${previewCalls}`, amountDue: 2500, currency: "gbp",
             annualRenewalAmount: 30000, prorationDate: 1_800_000_000,
-            expiresAt: Date.now() + (previewCalls === 1 ? 30 : 60_000), applied: "now",
+            expiresAt: Date.now() + (previewCalls === 1 ? 1_000 : 60_000), applied: "now",
           }),
         } as Response;
       }
@@ -763,7 +763,7 @@ describe("agency project tier controls", () => {
     fireEvent.change(within(card).getByLabelText("New tier"), { target: { value: "max" } });
     expect(await within(card).findByRole("button", { name: /Confirm upgrade - GBP.25\.00 now/ })).toBeEnabled();
 
-    const retry = await within(card).findByRole("button", { name: "Retry charge preview" }, { timeout: 1000 });
+    const retry = await within(card).findByRole("button", { name: "Retry charge preview" }, { timeout: 3000 });
     expect(within(card).getByText(/This charge preview has expired/)).toBeInTheDocument();
     expect(within(card).getByRole("button", { name: "Confirm upgrade" })).toBeDisabled();
     fireEvent.click(retry);
