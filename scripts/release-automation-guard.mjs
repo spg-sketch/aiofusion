@@ -7,7 +7,19 @@ export const REPOSITORY_PUBLICATION_CONFIGS = Object.freeze([
   ".replit",
   ".github/workflows",
   "package.json",
+  "scripts",
 ]);
+
+const PUBLICATION_HELPER_EXTENSIONS = new Set([
+  ".bash",
+  ".cjs",
+  ".js",
+  ".mjs",
+  ".sh",
+  ".ts",
+]);
+
+const IGNORED_HELPER_DIRECTORIES = new Set(["dist", "node_modules"]);
 
 const DIRECT_PUBLISHER_PATTERNS = [
   /\breplit\s+(?:deploy|publish)\b/i,
@@ -78,6 +90,39 @@ export function assertGuardedStagingAutomation(filePath, source) {
   }
 }
 
+function isRepositoryPublicationFile(relativePath) {
+  const normalizedPath = relativePath.split(path.sep).join("/");
+  if (normalizedPath.startsWith(".github/workflows/")) {
+    return /\.ya?ml$/i.test(normalizedPath);
+  }
+  if (normalizedPath.startsWith("scripts/")) {
+    const basename = path.basename(normalizedPath);
+    return PUBLICATION_HELPER_EXTENSIONS.has(path.extname(basename).toLowerCase())
+      && !/\.(?:test|spec)\.[^.]+$/i.test(basename);
+  }
+  return true;
+}
+
+async function validateDirectory({
+  cwd,
+  directory,
+  read,
+  readdir,
+}) {
+  const entries = await readdir(path.join(cwd, directory), { withFileTypes: true });
+  for (const entry of entries) {
+    const relativePath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (!IGNORED_HELPER_DIRECTORIES.has(entry.name)) {
+        await validateDirectory({ cwd, directory: relativePath, read, readdir });
+      }
+      continue;
+    }
+    if (!entry.isFile() || !isRepositoryPublicationFile(relativePath)) continue;
+    assertGuardedStagingAutomation(relativePath, await read(path.join(cwd, relativePath), "utf8"));
+  }
+}
+
 export async function validateReleaseAutomation({
   cwd = process.cwd(),
   read = readFile,
@@ -95,12 +140,7 @@ export async function validateReleaseAutomation({
 
     if (stat.isDirectory()) {
       const { readdir } = await import("node:fs/promises");
-      const entries = await readdir(target, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isFile() || !/\.ya?ml$/i.test(entry.name)) continue;
-        const relativePath = path.join(config, entry.name);
-        assertGuardedStagingAutomation(relativePath, await read(path.join(cwd, relativePath), "utf8"));
-      }
+      await validateDirectory({ cwd, directory: config, read, readdir });
     } else {
       assertGuardedStagingAutomation(config, await read(target, "utf8"));
     }

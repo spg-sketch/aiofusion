@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -110,6 +110,49 @@ test("accepts repository automation that invokes a publisher through the guard",
     ".github/workflows/publish-staging.yml",
     "run: RELEASE_ENVIRONMENT=staging pnpm run release:publish -- replit deploy --environment staging",
   ));
+});
+
+test("rejects a publisher hidden in a shell helper", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "release-automation-"));
+  await mkdir(path.join(cwd, "scripts", "release"), { recursive: true });
+  await writeFile(
+    path.join(cwd, "scripts", "release", "publish-staging.sh"),
+    "#!/bin/sh\nreplit deploy --environment staging\n",
+  );
+
+  await assert.rejects(
+    validateReleaseAutomation({ cwd, configs: ["scripts"] }),
+    /scripts[\\/]release[\\/]publish-staging\.sh:2/,
+  );
+});
+
+test("rejects a publisher hidden in a JavaScript helper", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "release-automation-"));
+  await mkdir(path.join(cwd, "scripts"), { recursive: true });
+  await writeFile(
+    path.join(cwd, "scripts", "publish-staging.mjs"),
+    'await run("replit publish --environment staging");\n',
+  );
+
+  await assert.rejects(
+    validateReleaseAutomation({ cwd, configs: ["scripts"] }),
+    /scripts[\\/]publish-staging\.mjs:1/,
+  );
+});
+
+test("accepts guarded helper publishers and unrelated deployment utilities", async () => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "release-automation-"));
+  await mkdir(path.join(cwd, "scripts"), { recursive: true });
+  await writeFile(
+    path.join(cwd, "scripts", "publish-staging.sh"),
+    "#!/bin/sh\npnpm run release:publish -- replit deploy --environment staging\n",
+  );
+  await writeFile(
+    path.join(cwd, "scripts", "inspect-deployments.mjs"),
+    'await inspectDeployment({ environment: "staging" });\n',
+  );
+
+  await validateReleaseAutomation({ cwd, configs: ["scripts"] });
 });
 
 test("current repository publication automation passes the guard", async () => {
