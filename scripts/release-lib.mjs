@@ -60,18 +60,20 @@ export function assertReleaseEnvironment(env = process.env) {
 
 export async function getGitSourceState({ cwd = process.cwd(), exec = execFileAsync } = {}) {
   const commandOptions = { cwd, encoding: "utf8" };
-  const { stdout: revisionBefore } = await exec("git", ["rev-parse", "HEAD"], commandOptions);
+  const revisionArgs = ["rev-parse", "HEAD", "HEAD^{tree}"];
+  const { stdout: before } = await exec("git", revisionArgs, commandOptions);
   const { stdout: status } = await exec("git", ["status", "--porcelain", "--untracked-files=normal"], commandOptions);
-  const { stdout: revisionAfter } = await exec("git", ["rev-parse", "HEAD"], commandOptions);
-  const gitRevision = revisionBefore.trim();
-  if (!/^[0-9a-f]{40}$/i.test(gitRevision)) {
-    throw new Error("Could not determine a valid Git revision for release evidence.");
+  const { stdout: after } = await exec("git", revisionArgs, commandOptions);
+  const [gitRevision, gitTree] = before.trim().split(/\s+/);
+  if (!GIT_REVISION_PATTERN.test(gitRevision ?? "") || !GIT_REVISION_PATTERN.test(gitTree ?? "")) {
+    throw new Error("Could not determine a valid Git revision and tree for release evidence.");
   }
-  if (gitRevision !== revisionAfter.trim()) {
-    throw new Error("Git revision changed while release source state was being captured.");
+  if (before.trim() !== after.trim()) {
+    throw new Error("Git revision or tree changed while release source state was being captured.");
   }
   return {
     gitRevision,
+    gitTree,
     sourceState: status.trim() ? "dirty" : "clean",
   };
 }
@@ -80,7 +82,14 @@ export function assertReleaseEvidenceCurrent(evidence, currentSource) {
   if (!evidence || evidence.status !== "passed") {
     throw new Error("Release evidence must show a passed gate.");
   }
-  if (!evidence.gitRevision || evidence.gitRevision !== currentSource?.gitRevision) {
+  // Replit records a successful publish as an empty commit. A matching Git tree
+  // is the same tracked source even when that bookkeeping commit changes HEAD.
+  // Older evidence without a tree retains the stricter revision-only rule.
+  const sameRevision = evidence.gitRevision && evidence.gitRevision === currentSource?.gitRevision
+    && (!evidence.gitTree || evidence.gitTree === currentSource?.gitTree);
+  const sameTree = GIT_REVISION_PATTERN.test(evidence.gitTree ?? "")
+    && evidence.gitTree === currentSource?.gitTree;
+  if (!sameRevision && !sameTree) {
     throw new Error("Release evidence is stale because it covers a different Git revision.");
   }
   if (evidence.sourceState !== "clean") {
@@ -295,6 +304,11 @@ export async function runReleaseGate({
     }
     safeguardFailure = "source revision safeguards";
     const finalSource = await getSourceState();
+    // A publish-record commit is acceptable between releases, not while a
+    // release check is running. Each stage must have seen this exact revision.
+    if (source.gitRevision !== finalSource.gitRevision || source.gitTree !== finalSource.gitTree) {
+      throw new Error("Git revision or tree changed while release stages were running.");
+    }
     assertReleaseEvidenceCurrent({ status: "passed", ...source }, finalSource);
     result = { status: "passed", environment, ...source, startedAt, finishedAt: now().toISOString(), stages: results };
   } catch (error) {

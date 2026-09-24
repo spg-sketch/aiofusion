@@ -25,6 +25,7 @@ import { runManagedStagingBuild } from "./release-managed-build.mjs";
 
 const MATCHING_SOURCE = {
   gitRevision: "0123456789abcdef0123456789abcdef01234567",
+  gitTree: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   sourceState: "clean",
 };
 
@@ -189,15 +190,15 @@ test("every managed artifact production build uses the release-evidence guard", 
 
 test("fails closed when HEAD changes while Git source state is captured", async () => {
   const outputs = [
-    `${MATCHING_SOURCE.gitRevision}\n`,
+    `${MATCHING_SOURCE.gitRevision}\n${MATCHING_SOURCE.gitTree}\n`,
     "",
-    "fedcba9876543210fedcba9876543210fedcba98\n",
+    `fedcba9876543210fedcba9876543210fedcba98\n${MATCHING_SOURCE.gitTree}\n`,
   ];
   await assert.rejects(
     getGitSourceState({
       exec: async () => ({ stdout: outputs.shift() }),
     }),
-    /revision changed while release source state was being captured/,
+    /revision or tree changed while release source state was being captured/,
   );
 });
 
@@ -330,6 +331,26 @@ test("rejects stale evidence for a different revision", () => {
   }, {
     ...MATCHING_SOURCE,
     gitRevision: "fedcba9876543210fedcba9876543210fedcba98",
+    gitTree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  }), /different Git revision/);
+});
+
+test("accepts an empty publication commit only when the tracked source is identical and clean", () => {
+  assert.equal(assertReleaseEvidenceCurrent({
+    status: "passed",
+    ...MATCHING_SOURCE,
+  }, {
+    ...MATCHING_SOURCE,
+    gitRevision: "fedcba9876543210fedcba9876543210fedcba98",
+  }), true);
+
+  assert.throws(() => assertReleaseEvidenceCurrent({
+    status: "passed",
+    gitRevision: MATCHING_SOURCE.gitRevision,
+    sourceState: "clean",
+  }, {
+    ...MATCHING_SOURCE,
+    gitRevision: "fedcba9876543210fedcba9876543210fedcba98",
   }), /different Git revision/);
 });
 
@@ -406,7 +427,11 @@ test("blocks staging publication for failed, stale, or dirty release evidence", 
     {
       name: "another revision",
       evidence: { status: "passed", ...MATCHING_SOURCE },
-      currentSource: { ...MATCHING_SOURCE, gitRevision: "fedcba9876543210fedcba9876543210fedcba98" },
+      currentSource: {
+        ...MATCHING_SOURCE,
+        gitRevision: "fedcba9876543210fedcba9876543210fedcba98",
+        gitTree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      },
       message: /different Git revision/,
     },
     {
@@ -584,6 +609,7 @@ test("staging verification fails before publication for stale evidence", async (
       status: "passed",
       ...MATCHING_SOURCE,
       gitRevision: "fedcba9876543210fedcba9876543210fedcba98",
+      gitTree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     }),
     getSourceState: sourceState,
     runPublisher: async () => {
