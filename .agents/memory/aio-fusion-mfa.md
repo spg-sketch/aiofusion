@@ -72,3 +72,18 @@ in the beta-backed staging app; no reset or disable event was recorded there.
 **How to apply:** Compare read-only MFA presence and enrollment audit timestamps
 on verified targets, never factor secrets or recovery values. Distinguish a
 first staging enrollment from a reset of an already enrolled personal factor.
+
+The staging deployment's database routing changed after an attended MFA setup:
+its startup now forces the beta database. The earlier MFA enrollment was found
+in the other configured database, while the beta-backed staging deployment
+recorded a fresh enrollment only after the switch. This is evidence of a
+target change, not evidence that the person used the production website.
+
+**Why:** Inferring the browser hostname from the database that held an MFA
+record incorrectly contradicted the user's firsthand account of using the
+staging domain. A source-control change and staging startup logs established
+the later routing change.
+
+**How to apply:** Before explaining a repeated MFA prompt, establish both
+the URL used and the database target *at that time*. Do not change routing
+or copy factors as a quick fix; the other target may contain live data.
