@@ -58,3 +58,17 @@ active.
 
 **How to apply:** Run the guarded migration dry-run first, confirm the target
 identity and schema, then apply only when the same staging fingerprint matches.
+
+Do not assume that a staging-tier verification connection is distinct from the
+production connection just because its variable has "staging" in the name.
+Check target equality without printing connection strings, and confirm which
+database the running staging app actually uses before attributing MFA history.
+
+**Why:** A later comparison found the staging-tier verification target equal to
+the production target while the beta target was separate. The same person's
+personal MFA had an earlier production enrollment and a later first enrollment
+in the beta-backed staging app; no reset or disable event was recorded there.
+
+**How to apply:** Compare read-only MFA presence and enrollment audit timestamps
+on verified targets, never factor secrets or recovery values. Distinguish a
+first staging enrollment from a reset of an already enrolled personal factor.
