@@ -4,21 +4,23 @@ export function bindStagingDatabaseTarget(env: DatabaseEnvironment): void {
   const deploymentEnv = env.DEPLOYMENT_ENV?.toLowerCase().trim();
   if (deploymentEnv !== "staging") return;
 
-  const betaDatabaseUrl = env.BETA_DATABASE_URL?.trim();
-  if (!betaDatabaseUrl) {
+  // This staging deployment uses this project's main published database.
+  // The separate beta site must never become its data source implicitly.
+  const mainDatabaseUrl = env.PRODUCTION_DATABASE_URL?.trim();
+  if (!mainDatabaseUrl) {
     throw new Error(
-      "BETA_DATABASE_URL is required when DEPLOYMENT_ENV=staging.",
+      "PRODUCTION_DATABASE_URL is required when DEPLOYMENT_ENV=staging.",
     );
   }
 
-  const productionDatabaseUrl = env.PRODUCTION_DATABASE_URL?.trim();
-  if (productionDatabaseUrl && betaDatabaseUrl === productionDatabaseUrl) {
+  const betaDatabaseUrl = env.BETA_DATABASE_URL?.trim();
+  if (betaDatabaseUrl && mainDatabaseUrl === betaDatabaseUrl) {
     throw new Error(
-      "BETA_DATABASE_URL must not equal PRODUCTION_DATABASE_URL.",
+      "PRODUCTION_DATABASE_URL must not equal BETA_DATABASE_URL.",
     );
   }
 
   // This must happen before importing index.ts because the database workspace
   // package creates its pool during module initialisation.
-  env.DATABASE_URL = betaDatabaseUrl;
+  env.DATABASE_URL = mainDatabaseUrl;
 }

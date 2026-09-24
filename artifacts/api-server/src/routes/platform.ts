@@ -3470,6 +3470,8 @@ router.get("/platform/auth/google/callback", (req: Request, res: Response) => {
 router.post("/platform/auth/google/callback", async (req: Request, res: Response) => {
   if (SCANNER_UA_RE.test(req.headers["user-agent"] ?? "")) { res.status(200).end(); return; }
   const origin = getFrontendOrigin(req);
+  // Fixed labels only: never log OAuth responses, identities or raw errors here.
+  let signInStep = "provider_exchange";
   try {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -3530,6 +3532,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       return;
     }
     const userInfo = await userInfoRes.json() as { email?: string; verified_email?: boolean; name?: string; given_name?: string; id?: string; picture?: string };
+    signInStep = "profile_validation";
     if (!userInfo.email) {
       res.redirect(`${origin}/?oauth_status=error&oauth_msg=no_email`);
       return;
@@ -3606,6 +3609,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
 
     // --- Team invite flow: attach this Google identity to the inviting
     // workspace instead of resolving/creating an account of their own.
+    signInStep = "invite_resolution";
     {
       const inviteRedirect = await handleSsoInvite(req, res, {
         email: userInfo.email,
@@ -3622,6 +3626,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
     // Only fresh, verified Google primary auth of an already-bound human can
     // start staging recovery. This runs before any linking/verification writes,
     // and after the separate delete/link/invite flows have returned.
+    signInStep = "mfa_recovery_check";
     if (!await isImpersonatedRequest(req)) {
       const recoveryToken = await issueGoogleLegacyRecovery({
         provider: "google", googleId, email: userInfo.email, emailVerified: userInfo.verified_email === true,
@@ -3637,6 +3642,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
     }
     // Step 1: resolve the human user by Google id (stable across email changes)
     // then fall back to email lookup in platform_users.
+    signInStep = "identity_resolution";
     let existingUser = googleId ? await getUserByGoogleId(googleId) : null;
     if (!existingUser) {
       existingUser = await getUserByEmail(userInfo.email);
@@ -3648,6 +3654,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
     // AIO Fusion staff use the existing Master workspace rather than creating
     // a customer workspace or entering account-type setup.
     if (userInfo.verified_email === true && isAioFusionStaffEmail(userInfo.email)) {
+      signInStep = "staff_login";
       const staff = await provisionAioFusionStaffMembership({
         email: userInfo.email,
         name: userInfo.name || userInfo.given_name || userInfo.email.split("@")[0],
@@ -3669,6 +3676,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
     // user → company association. The platform_accounts row is checked only for
     // status (active/suspended/pending) and is NOT used to pick the company.
     if (existingUser) {
+      signInStep = "existing_user_login";
       const displayName = userInfo.name || userInfo.given_name || userInfo.email.split("@")[0];
       const membership = await pickLoginMembership(existingUser.id);
       if (membership) {
@@ -3864,9 +3872,14 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       activeCompanyId: newActiveCompanyId,
       needsSetup: true,
     });
-  } catch {
+  } catch (err) {
     // Provider/DB errors may embed authentication material or recovery claims.
-    logger.warn("Google OAuth callback failed");
+    const code = (err as { cause?: { code?: unknown }; code?: unknown })?.cause?.code
+      ?? (err as { code?: unknown })?.code;
+    logger.warn({
+      signInStep,
+      ...(typeof code === "string" && /^[A-Z0-9]{5}$/.test(code) ? { sqlState: code } : {}),
+    }, "Google OAuth callback failed");
     res.redirect(`${origin}/?oauth_status=error&oauth_msg=unexpected`);
   }
 });

@@ -69,12 +69,11 @@ async function recoverDurableAudits(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Staging isolation guard
+// Staging database target guard
 // ---------------------------------------------------------------------------
-// bootstrap.ts binds staging DATABASE_URL to BETA_DATABASE_URL before this
-// module (and @workspace/db) loads. Verify that exact target here rather than
-// relying on hostname/name substring heuristics, which can become stale and
-// incorrectly classify the beta database as production.
+// bootstrap.ts binds staging DATABASE_URL to this project's main published
+// database before this module (and @workspace/db) loads. Verify the explicit
+// target here rather than relying on host/name substring heuristics.
 // ---------------------------------------------------------------------------
 const deploymentEnv = (
   process.env["DEPLOYMENT_ENV"] ??
@@ -90,25 +89,25 @@ assertCanonicalDomainIsSafeForDeployment();
 if (deploymentEnv === "staging") {
   const dbUrl = process.env["DATABASE_URL"] ?? "";
   const betaDbUrl = process.env["BETA_DATABASE_URL"]?.trim() ?? "";
-  const productionDbUrl = process.env["PRODUCTION_DATABASE_URL"]?.trim() ?? "";
+  const mainDbUrl = process.env["PRODUCTION_DATABASE_URL"]?.trim() ?? "";
 
-  if (!betaDbUrl || dbUrl !== betaDbUrl) {
+  if (!mainDbUrl || dbUrl !== mainDbUrl) {
     logger.error(
-      "FATAL: Staging DATABASE_URL is not bound to BETA_DATABASE_URL. " +
-        "Start the production bundle through bootstrap.ts and verify the beta secret.",
+      "FATAL: Staging DATABASE_URL is not bound to the verified main database. " +
+        "Start the production bundle through bootstrap.ts and verify the main secret.",
     );
     process.exit(1);
   }
 
-  if (productionDbUrl && dbUrl === productionDbUrl) {
+  if (betaDbUrl && dbUrl === betaDbUrl) {
     logger.error(
-      "FATAL: Staging BETA_DATABASE_URL equals PRODUCTION_DATABASE_URL. " +
+      "FATAL: Staging main database target equals the beta database. " +
         "Correct the protected database secrets before publishing.",
     );
     process.exit(1);
   }
 
-  logger.info("Staging database target confirmed");
+  logger.info("Staging main database target confirmed");
 }
 
 // ---------------------------------------------------------------------------
