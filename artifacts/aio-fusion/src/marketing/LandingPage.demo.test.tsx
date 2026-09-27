@@ -6,6 +6,7 @@ import LandingPage from "./LandingPage";
 describe("homepage demo enquiry", () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => [] }));
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -22,6 +23,20 @@ describe("homepage demo enquiry", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(screen.getAllByRole("button", { name: /book a demo/i })[0]!);
     expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("uses session storage when persistent storage is blocked", () => {
+    vi.stubGlobal("localStorage", {
+      getItem: () => { throw new Error("Blocked"); },
+      setItem: () => { throw new Error("Blocked"); },
+    });
+    const props = { onLogin: vi.fn(), onNavigate: vi.fn() };
+    const page = render(<LandingPage {...props} />);
+    expect(screen.getByRole("dialog", { name: /see your ai visibility/i })).toBeTruthy();
+    expect(sessionStorage.getItem("aio-demo-introduced")).toBe("1");
+    page.unmount();
+    render(<LandingPage {...props} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("sends enquiries through the existing contact endpoint and confirms success", async () => {

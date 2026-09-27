@@ -150,7 +150,7 @@ export default function ForAgentsPage(props: {
 
       <h2
         className="text-[11px] font-semibold uppercase tracking-[0.2em] mb-4"
-        style={{ color: vars.g400 }}
+        style={{ color: vars.g600 }}
       >
         The full toolset available in the platform
       </h2>

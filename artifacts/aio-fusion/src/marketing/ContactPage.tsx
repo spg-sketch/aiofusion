@@ -26,7 +26,7 @@ function Field({ label, id, required, children, hint }: FieldProps) {
         {required && <span style={{ color: RASPBERRY }}> *</span>}
       </label>
       {children}
-      {hint && <p className="text-[12px]" style={{ color: vars.g400 }}>{hint}</p>}
+      {hint && <p className="text-[12px]" style={{ color: vars.g600 }}>{hint}</p>}
     </div>
   );
 }
@@ -365,7 +365,7 @@ export default function ContactPage(props: { onLogin: () => void; onBack: () => 
       {...props}
     >
       <PageHead meta={PAGE_META.contact} />
-      <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
+      <p className="text-[16px] font-normal leading-[1.8] mb-10" style={{ color: vars.g600 }}>
         Book a demo or send us a message - we'd love to hear from you.
       </p>
 
@@ -400,7 +400,7 @@ export default function ContactPage(props: { onLogin: () => void; onBack: () => 
             <Mail size={20} color={vars.accent} />
           </div>
           <div className="flex-1">
-            <p className="text-[12px] font-semibold uppercase tracking-[0.18em]" style={{ color: vars.g400 }}>Email</p>
+            <p className="text-[12px] font-semibold uppercase tracking-[0.18em]" style={{ color: vars.g600 }}>Email</p>
             <p className="text-[16px] font-semibold" style={{ color: vars.navy }}>info@aiofusion.ai</p>
           </div>
           <ArrowUpRight size={18} color={vars.accent} />
@@ -417,7 +417,7 @@ export default function ContactPage(props: { onLogin: () => void; onBack: () => 
             <Users size={20} color={vars.accent} />
           </div>
           <div className="flex-1">
-            <p className="text-[12px] font-semibold uppercase tracking-[0.18em]" style={{ color: vars.g400 }}>LinkedIn</p>
+            <p className="text-[12px] font-semibold uppercase tracking-[0.18em]" style={{ color: vars.g600 }}>LinkedIn</p>
             <p className="text-[16px] font-semibold" style={{ color: vars.navy }}>Follow AIO Fusion</p>
           </div>
           <ArrowUpRight size={18} color={vars.accent} />
@@ -431,10 +431,10 @@ export default function ContactPage(props: { onLogin: () => void; onBack: () => 
             <BookOpen size={20} color={vars.accent} />
           </div>
           <div className="flex-1">
-            <p className="text-[12px] font-semibold uppercase tracking-[0.18em]" style={{ color: vars.g400 }}>Substack</p>
+            <p className="text-[12px] font-semibold uppercase tracking-[0.18em]" style={{ color: vars.g600 }}>Substack</p>
             <p className="text-[16px] font-semibold" style={{ color: vars.navy }}>
               Subscribe to insights{" "}
-              <span className="text-[12px] font-light italic" style={{ color: vars.g400 }}>(coming soon)</span>
+              <span className="text-[12px] font-normal italic" style={{ color: vars.g600 }}>(coming soon)</span>
             </p>
           </div>
         </div>

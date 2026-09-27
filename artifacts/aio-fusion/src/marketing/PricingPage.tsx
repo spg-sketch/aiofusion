@@ -170,10 +170,10 @@ export default function PricingPage({
                     <div className="flex items-baseline gap-1">
                       <span className="text-[13px] font-semibold" style={{ color: vars.g500 }}>£</span>
                       <span className="text-[48px] font-bold leading-none" style={{ color: ink }}>{plan.monthly}</span>
-                      <span className="text-[13px]" style={{ color: vars.g400 }}>/mo</span>
+                       <span className="text-[13px]" style={{ color: vars.g600 }}>/mo</span>
                     </div>
-                    <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>£{plan.annualTotal.toLocaleString()}/yr billed annually · {plan.projects}</p>
-                    <p className="text-[11px] mt-2 pt-2" style={{ color: vars.g400, borderTop: `1px solid ${vars.g100}` }}>
+                     <p className="text-[11px] mt-1" style={{ color: vars.g600 }}>£{plan.annualTotal.toLocaleString()}/yr billed annually · {plan.projects}</p>
+                     <p className="text-[11px] mt-2 pt-2" style={{ color: vars.g600, borderTop: `1px solid ${vars.g100}` }}>
                       Or <span className="font-semibold" style={{ color: ink }}>£{plan.quarterlyMonthly}/month · £{plan.quarterly.toLocaleString()}/yr</span> billed quarterly
                     </p>
                   </div>
@@ -189,7 +189,7 @@ export default function PricingPage({
                     {plan.includes.map((item, i) => (
                       <li key={i} className="flex items-start gap-2.5 text-[13px]">
                         {i === 0 && item.includes("Everything") ? (
-                          <span className="text-[12px] font-semibold italic" style={{ color: vars.g400 }}>{item}</span>
+                           <span className="text-[12px] font-semibold italic" style={{ color: vars.g600 }}>{item}</span>
                         ) : (
                           <>
                             <Check size={14} color={plan.color} strokeWidth={2.5} className="flex-shrink-0 mt-0.5" />
@@ -272,7 +272,7 @@ export default function PricingPage({
       {/* CTA */}
       <section className="py-16 px-4 sm:px-8 text-center" style={{ background: ink }}>
         <h2 className="text-3xl md:text-4xl mb-4" style={{ color: "#FBF6EC", fontFamily: "'Alice', Georgia, serif" }}>Ready to build AI authority?</h2>
-        <p className="text-[14px] font-light mb-8 max-w-md mx-auto" style={{ color: "rgba(251,246,236,0.7)" }}>Book a platform demo and see how AIO Fusion measures and improves your AI visibility.</p>
+        <p className="text-[14px] font-normal mb-8 max-w-md mx-auto text-white">Book a platform demo and see how AIO Fusion measures and improves your AI visibility.</p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <a
             href={`${base}contact`}
@@ -287,20 +287,20 @@ export default function PricingPage({
 
       <footer className="py-10 border-t" style={{ background: paper, borderColor: "rgba(16,43,54,0.1)" }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-[12px] font-light" style={{ color: "rgba(16,43,54,0.5)" }}>&copy; AIO Fusion. All rights reserved.</p>
+          <p className="text-[12px] font-normal" style={{ color: vars.g600 }}>&copy; AIO Fusion. All rights reserved.</p>
           <nav aria-label="Footer navigation" className="flex items-center gap-6 flex-wrap justify-center">
             {[{ l: "About", v: "about" }, { l: "Contact", v: "contact" }, { l: "Insights", v: "insights" }].map((it) => (
               <a
                 key={it.l}
                 href={`${base}${it.v}`}
                 onClick={(e) => { e.preventDefault(); onNavigate(it.v); }}
-                className="text-[12px] font-light hover:underline"
-                style={{ color: "rgba(16,43,54,0.7)" }}
+                className="text-[12px] font-normal hover:underline"
+                style={{ color: vars.g600 }}
               >
                 {it.l}
               </a>
             ))}
-            <a href="mailto:info@aiofusion.ai" className="text-[12px] font-light hover:underline" style={{ color: "rgba(16,43,54,0.7)" }}>info@aiofusion.ai</a>
+            <a href="mailto:info@aiofusion.ai" className="text-[12px] font-normal hover:underline" style={{ color: vars.g600 }}>info@aiofusion.ai</a>
           </nav>
         </div>
       </footer>

@@ -90,3 +90,4 @@
 - [Release browser gate integrity](aio-fusion-release-browser-gate.md) — release-critical auth and isolation journeys must use built code, a real temporary DB, and the actual UI, never mocked endpoints.
 - [Playwright browser runtime](playwright-browser-runtime.md) — a Playwright package update can leave release tests without the matching browser binary; install the pinned Chromium runtime before diagnosing app code.
 - [Replit button release guard](replit-button-release-guard.md) — managed builds require current clean-tree evidence; tracked generated files must be deterministic.
+- [AIO Fusion public platform captures](aio-fusion-public-platform-captures.md) — use real app screens from isolated synthetic workspaces; never expose customer data or label mocks as genuine.

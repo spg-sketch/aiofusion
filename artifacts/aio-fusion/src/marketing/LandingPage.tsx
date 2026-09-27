@@ -31,7 +31,8 @@ import { useLatestInsights } from "./useLatestInsights";
 import heroBgImg from "../assets/hero-bg.webp";
 import MarketingNav from "./MarketingNav";
 import DemoDialog from "./DemoDialog";
-import PlatformPreview from "./PlatformPreview";
+
+let demoIntroducedWithoutStorage = false;
 
 const llmEngines = [
   { name: "ChatGPT", logo: null },
@@ -68,14 +69,22 @@ export default function LandingPageC({
   const [menuOpen, setMenuOpen] = useState(false);
   const [demoOpen, setDemoOpen] = useState(false);
   useEffect(() => {
-    try {
-      if (localStorage.getItem("aio-demo-introduced") === "1") return;
-      localStorage.setItem("aio-demo-introduced", "1");
-    } catch {
-      // Storage may be unavailable in private browsing; keep the page usable.
-      return;
+    for (const kind of ["localStorage", "sessionStorage"] as const) {
+      try {
+        const storage = window[kind];
+        if (storage.getItem("aio-demo-introduced") === "1") return;
+        storage.setItem("aio-demo-introduced", "1");
+        setDemoOpen(true);
+        return;
+      } catch {
+        // Try session storage if persistent storage is blocked.
+      }
     }
-    setDemoOpen(true);
+    // With all browser storage disabled, show once per loaded document.
+    if (!demoIntroducedWithoutStorage) {
+      demoIntroducedWithoutStorage = true;
+      setDemoOpen(true);
+    }
   }, []);
   const { articles, loading: articlesLoading, error: articlesError } = useLatestInsights();
   const paper = "#F5F8F8";
@@ -136,8 +145,8 @@ export default function LandingPageC({
             </div>
             <div className="lg:col-span-5">
               <figure className="overflow-hidden rounded-2xl border border-[#1A647B]/25 bg-white shadow-[0_24px_60px_-20px_rgba(16,43,54,.3)]">
-                <img src={`${base}images/platform-entry-preview.jpg`} alt="Actual AIO Fusion platform entry screen showing the sign-in options, with no customer data" className="block w-full h-auto" />
-                <figcaption className="px-4 py-2 text-xs font-semibold text-[#102B36]">AIO Fusion platform entry · No customer data</figcaption>
+                <img src={`${base}images/platform-dashboard-sample.jpg`} alt="Actual AIO Fusion authority dashboard for an empty sample project, showing project setup and audit cards" className="block w-full h-auto" />
+                <figcaption className="px-4 py-2 text-xs font-semibold text-[#102B36]">AIO Fusion authority dashboard · Sample workspace, no customer data</figcaption>
               </figure>
             </div>
           </div>
@@ -178,7 +187,10 @@ export default function LandingPageC({
               <h3 className="text-3xl mt-3 mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>From insight to stronger content.</h3>
               <p className="leading-relaxed" style={{ color: ink }}>Work across research, planning and optimisation without losing sight of what matters: better visibility and measurable authority for your brand.</p>
             </div>
-            <PlatformPreview variant="workflow" />
+            <figure className="overflow-hidden rounded-2xl border border-[#1A647B]/25 bg-white shadow-[0_24px_60px_-20px_rgba(16,43,54,.2)]">
+              <img src={`${base}images/platform-optimiser-sample.jpg`} alt="Actual AIO Fusion Content Optimiser and Editor screen in an empty sample workspace" loading="lazy" className="block w-full h-auto" />
+              <figcaption className="px-4 py-2 text-xs font-semibold text-[#102B36]">Content Optimiser &amp; Editor · Sample workspace, no customer data</figcaption>
+            </figure>
           </div>
           <div className="grid md:grid-cols-3 gap-5 mt-5">
             {[
@@ -404,7 +416,7 @@ export default function LandingPageC({
               <a href={`${base}privacy-policy`} onClick={(e) => { e.preventDefault(); onNavigate("privacy-policy"); }} className="hover:opacity-60">Privacy Policy</a>
               <a href={`${base}terms-conditions`} onClick={(e) => { e.preventDefault(); onNavigate("terms-conditions"); }} className="hover:opacity-60">Terms &amp; Conditions</a>
             </nav>
-            <p className="text-[11px] font-light" style={{ color: vars.g400 }}>&copy; AIO Fusion 2026</p>
+            <p className="text-[11px] font-normal" style={{ color: vars.g600 }}>&copy; AIO Fusion 2026</p>
           </div>
         </div>
       </footer>

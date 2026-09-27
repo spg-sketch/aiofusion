@@ -17,7 +17,7 @@ export default function PrivacyPolicyPage(props: { onLogin: () => void; onBack: 
   return (
     <MarketingPage title="Privacy Policy" {...props}>
       <PageHead meta={PAGE_META["privacy-policy"]} />
-      <p className="text-[13px] font-light mb-8" style={{ color: vars.g400 }}>Last updated: 27 August 2026</p>
+      <p className="text-[13px] font-normal mb-8" style={{ color: vars.g600 }}>Last updated: 27 August 2026</p>
 
       <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
         This policy explains what personal data AIO Fusion Ltd collects, why, and the rights you have over it. It

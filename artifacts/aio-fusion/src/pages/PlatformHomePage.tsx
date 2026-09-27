@@ -411,7 +411,7 @@ function PlatformHomePage({
                     <h2 className="text-[26px] font-bold mb-2" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
                       Password updated
                     </h2>
-                    <p className="text-[15px] mb-6 leading-[1.7]" style={{ color: "rgba(255,255,255,0.8)" }}>
+                    <p className="text-[15px] mb-6 leading-[1.7]" style={{ color: "rgba(255,255,255,0.92)" }}>
                       Your password has been changed and you've been signed out everywhere.
                       Sign in with your new password to continue.
                     </p>
@@ -433,7 +433,7 @@ function PlatformHomePage({
                       <h2 className="text-[26px] font-bold mb-2" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
                         {isWelcomeLink ? "Set your password" : "Choose a new password"}
                       </h2>
-                      <p className="text-[14px] leading-[1.7]" style={{ color: "rgba(255,255,255,0.7)" }}>
+                      <p className="text-[14px] leading-[1.7]" style={{ color: "rgba(255,255,255,0.92)" }}>
                         {isWelcomeLink
                           ? "Choose a password for your account. Once saved, sign in with your new password."
                           : "Enter a new password for your account. Once saved, you'll be signed out of all devices and can sign in with the new password."}
@@ -485,7 +485,7 @@ function PlatformHomePage({
                       type="button"
                       onClick={() => { setResetToken(null); setResetError(null); }}
                       className="mt-5 text-[13px] hover:opacity-70 transition-opacity block mx-auto"
-                      style={{ color: "rgba(255,255,255,0.5)" }}
+                      style={{ color: "rgba(255,255,255,0.95)" }}
                     >
                       ← Back to sign in
                     </button>
@@ -507,7 +507,7 @@ function PlatformHomePage({
               <h2 className="text-[26px] font-bold mb-2" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
                 Signing you in
               </h2>
-              <p className="text-[15px] leading-[1.7]" style={{ color: "rgba(255,255,255,0.8)" }}>
+              <p className="text-[15px] leading-[1.7]" style={{ color: "rgba(255,255,255,0.92)" }}>
                 Confirming your account and setup details…
               </p>
             </div>
@@ -526,7 +526,7 @@ function PlatformHomePage({
                 </h2>
                 {forgotSent ? (
                   <>
-                    <p className="text-[15px] mb-6 leading-[1.7]" style={{ color: "rgba(255,255,255,0.8)" }}>
+                    <p className="text-[15px] mb-6 leading-[1.7]" style={{ color: "rgba(255,255,255,0.92)" }}>
                       If an account exists for <strong>{forgotEmail.trim()}</strong>, we've sent
                       a password reset link. It can be used once and expires in 1 hour - 
                       check your inbox (and spam folder).
@@ -535,14 +535,14 @@ function PlatformHomePage({
                       type="button"
                       onClick={() => { setShowForgotPassword(false); setForgotSent(false); setForgotEmail(""); }}
                       className="text-[13px] hover:opacity-70 transition-opacity block mx-auto"
-                      style={{ color: "rgba(255,255,255,0.5)" }}
+                      style={{ color: "rgba(255,255,255,0.95)" }}
                     >
                       ← Back to sign in
                     </button>
                   </>
                 ) : (
                   <>
-                    <p className="text-[14px] mb-6 leading-[1.7]" style={{ color: "rgba(255,255,255,0.7)" }}>
+                    <p className="text-[14px] mb-6 leading-[1.7]" style={{ color: "rgba(255,255,255,0.92)" }}>
                       Enter the email address for your account and we'll send you a link
                       to reset your password.
                     </p>
@@ -574,7 +574,7 @@ function PlatformHomePage({
                       type="button"
                       onClick={() => { setShowForgotPassword(false); setForgotEmail(""); }}
                       className="mt-5 text-[13px] hover:opacity-70 transition-opacity block mx-auto"
-                      style={{ color: "rgba(255,255,255,0.5)" }}
+                      style={{ color: "rgba(255,255,255,0.95)" }}
                     >
                       ← Back to sign in
                     </button>
@@ -654,13 +654,13 @@ function PlatformHomePage({
                     </div>
                     <div>
                       <h2 className="text-[22px] font-bold" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>Create an account</h2>
-                      <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.75)" }}>Fill in your details to get started straight away.</p>
+                      <p className="text-[14px] font-normal" style={{ color: "rgba(255,255,255,0.92)" }}>Fill in your details to get started straight away.</p>
                     </div>
                   </div>
                   <button
                     onClick={() => { setShowSignup(false); setSignupError(null); }}
                     className="text-[13px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity"
-                    style={{ color: "rgba(255,255,255,0.7)" }}
+                    style={{ color: "rgba(255,255,255,0.95)" }}
                   >
                     ← Sign in instead
                   </button>
@@ -738,14 +738,14 @@ function PlatformHomePage({
                     </div>
                   </div>
                   <div>
-                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: "white" }}>Company website <span className="font-normal normal-case tracking-normal text-[11px]" style={{ color: "rgba(255,255,255,0.5)" }}>e.g. https://www.aiofusion.ai</span></label>
+                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: "white" }}>Company website <span className="font-normal normal-case tracking-normal text-[11px]" style={{ color: "rgba(255,255,255,0.9)" }}>e.g. https://www.aiofusion.ai</span></label>
                     <div className="relative">
                       <Globe size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
                       <input type="text" inputMode="url" value={signupWebsite} onChange={(e) => setSignupWebsite(e.target.value)} placeholder="https://www.yourcompany.com" autoComplete="url" required className="w-full pl-10 pr-3 py-3 rounded-xl border text-[14px] focus:outline-none focus:ring-2" style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: accent }} />
                     </div>
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: "white" }}>Password <span className="font-normal normal-case tracking-normal text-[11px]" style={{ color: "rgba(255,255,255,0.5)" }}>(min 8 characters)</span></label>
+                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: "white" }}>Password <span className="font-normal normal-case tracking-normal text-[11px]" style={{ color: "rgba(255,255,255,0.9)" }}>(min 8 characters)</span></label>
                     <div className="relative">
                       <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
                       <input type="password" value={signupPassword} onChange={(e) => setSignupPassword(e.target.value)} placeholder="Choose a strong password" autoComplete="new-password" required className="w-full pl-10 pr-3 py-3 rounded-xl border text-[14px] focus:outline-none focus:ring-2" style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: accent }} />
@@ -899,7 +899,7 @@ function PlatformHomePage({
                       type="button"
                       onClick={() => { setShowForgotPassword(true); setLoginError(null); }}
                       className="text-[13px] hover:opacity-70 transition-opacity"
-                      style={{ color: "rgba(255,255,255,0.6)" }}
+                      style={{ color: "rgba(255,255,255,0.95)" }}
                     >
                       Forgot password?
                     </button>
@@ -960,17 +960,17 @@ function PlatformHomePage({
                         : session.role === "agency" ? "Agency Partner Account" : roleLabel(session.role)}
                     </span>
                   </div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1" style={{ color: "rgba(255,255,255,0.65)" }}>Signed in as</p>
+    <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1" style={{ color: "rgba(255,255,255,0.9)" }}>Signed in as</p>
                   <h2 className="text-[20px] font-bold break-words leading-tight" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
                     {getSessionIdentityLabels(session).signedInAs}
                   </h2>
                   <div className="mt-3.5 space-y-1.5 break-words text-[13px]" style={{ color: "rgba(255,255,255,0.85)" }}>
                     <p className="flex items-baseline gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-[0.16em] shrink-0 w-20" style={{ color: "rgba(255,255,255,0.65)" }}>Company:</span>
+                      <span className="text-[10px] font-bold uppercase tracking-[0.16em] shrink-0 w-20" style={{ color: "rgba(255,255,255,0.9)" }}>Company:</span>
                       <span className="font-medium">{getSessionIdentityLabels(session).companyName}</span>
                     </p>
                     <p className="flex items-baseline gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-[0.16em] shrink-0 w-20" style={{ color: "rgba(255,255,255,0.65)" }}>Access:</span>
+                      <span className="text-[10px] font-bold uppercase tracking-[0.16em] shrink-0 w-20" style={{ color: "rgba(255,255,255,0.9)" }}>Access:</span>
                       <span className="font-medium">{getSessionIdentityLabels(session).access}</span>
                     </p>
                   </div>

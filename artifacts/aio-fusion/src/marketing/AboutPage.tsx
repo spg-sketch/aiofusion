@@ -8,21 +8,21 @@ export default function AboutPage(props: { onLogin: () => void; onBack: () => vo
   return (
     <MarketingPage title="Designed by PR consultants. Built with deep tech expertise." eyebrow={<><Users size={12} /> About AIO Fusion</> as any} {...props}>
       <PageHead meta={PAGE_META.about} />
-      <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: vars.g500 }}>
+      <p className="text-[16px] font-normal leading-[1.8] mb-6" style={{ color: vars.g600 }}>
         AIO Fusion is a Generative Engine Optimisation (GEO) platform which measures in real time how visible your brand is to AI search engines such as ChatGPT and Claude.
       </p>
-      <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
+      <p className="text-[16px] font-normal leading-[1.8] mb-10" style={{ color: vars.g600 }}>
         The platform's suite of tools allows you to improve that visibility systematically through earned media and website content. Supporting PR and marketing strategy, media relations, measurement and reporting, AIO Fusion AI-optimises PR and marketing at scale, through one easy-to-use platform.
       </p>
 
       <h2 className="text-[24px] mb-4" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Built on decades of experience</h2>
-      <p className="text-[15px] font-light leading-[1.8] mb-4" style={{ color: vars.g500 }}>
+      <p className="text-[15px] font-normal leading-[1.8] mb-4" style={{ color: vars.g600 }}>
         AIO Fusion has been created by Patrick Barrett and Natalie Linder, building on decades of experience in PR and journalism.
       </p>
-      <p className="text-[15px] font-light leading-[1.8] mb-4" style={{ color: vars.g500 }}>
+      <p className="text-[15px] font-normal leading-[1.8] mb-4" style={{ color: vars.g600 }}>
         Designed specifically for PR and marketing professionals, AIO Fusion is the only integrated AI authority and PR platform built to enhance, elevate and streamline marketing and communication activities for both in-house and agency teams.
       </p>
-      <p className="text-[15px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
+      <p className="text-[15px] font-normal leading-[1.8] mb-10" style={{ color: vars.g600 }}>
         Blending human creativity with AI capabilities, AIO Fusion brings together AI authority, PR and marketing strategy across earned and owned channels to maximise brand visibility in the age of AI.
       </p>
 

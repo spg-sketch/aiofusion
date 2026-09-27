@@ -57,46 +57,46 @@ export default function MarketingPage({
 
       <footer style={{ background: cream, borderTop: "1px solid rgba(16,43,54,0.1)" }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-8 py-10 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-[12px] font-light" style={{ color: "rgba(16,43,54,0.5)" }}>
+          <p className="text-[12px] font-normal" style={{ color: "#334155" }}>
             &copy; AIO Fusion. All rights reserved.
           </p>
           <nav aria-label="Footer navigation" className="flex items-center gap-5 flex-wrap justify-center">
             <a
               href={`${base}trust-security`}
               onClick={(e) => { e.preventDefault(); onNavigate("trust-security"); }}
-              className="text-[12px] font-light hover:underline"
-              style={{ color: "rgba(16,43,54,0.7)" }}
+              className="text-[12px] font-normal hover:underline"
+              style={{ color: "#334155" }}
             >
               Trust &amp; Security
             </a>
             <a
               href={`${base}journalist-privacy`}
               onClick={(e) => { e.preventDefault(); onNavigate("journalist-privacy"); }}
-              className="text-[12px] font-light hover:underline"
-              style={{ color: "rgba(16,43,54,0.7)" }}
+              className="text-[12px] font-normal hover:underline"
+              style={{ color: "#334155" }}
             >
               Journalist privacy
             </a>
             <a
               href={`${base}privacy-policy`}
               onClick={(e) => { e.preventDefault(); onNavigate("privacy-policy"); }}
-              className="text-[12px] font-light hover:underline"
-              style={{ color: "rgba(16,43,54,0.7)" }}
+              className="text-[12px] font-normal hover:underline"
+              style={{ color: "#334155" }}
             >
               Privacy Policy
             </a>
             <a
               href={`${base}terms-conditions`}
               onClick={(e) => { e.preventDefault(); onNavigate("terms-conditions"); }}
-              className="text-[12px] font-light hover:underline"
-              style={{ color: "rgba(16,43,54,0.7)" }}
+              className="text-[12px] font-normal hover:underline"
+              style={{ color: "#334155" }}
             >
               Terms &amp; Conditions
             </a>
             <a
               href="mailto:info@aiofusion.ai"
-              className="text-[12px] font-light hover:underline"
-              style={{ color: "rgba(16,43,54,0.7)" }}
+              className="text-[12px] font-normal hover:underline"
+              style={{ color: "#334155" }}
             >
               info@aiofusion.ai
             </a>
