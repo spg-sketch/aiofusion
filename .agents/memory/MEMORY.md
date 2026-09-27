@@ -89,4 +89,4 @@
 - [Long media imports](aio-fusion-long-media-imports.md) — browser requests can time out while the server transaction continues; reconcile the batch before retrying.
 - [Release browser gate integrity](aio-fusion-release-browser-gate.md) — release-critical auth and isolation journeys must use built code, a real temporary DB, and the actual UI, never mocked endpoints.
 - [Playwright browser runtime](playwright-browser-runtime.md) — a Playwright package update can leave release tests without the matching browser binary; install the pinned Chromium runtime before diagnosing app code.
-- [Replit button release guard](replit-button-release-guard.md) — shell guards do not protect button-based publishing; enforce evidence in the managed build path.
+- [Replit button release guard](replit-button-release-guard.md) — managed builds require current clean-tree evidence; tracked generated files must be deterministic.

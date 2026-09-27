@@ -20,3 +20,9 @@ Replit may append a source-identical publication commit after a successful Publi
 **Why:** A guard that compares only commit IDs rejected the next publication immediately after a successful one, despite identical Git trees.
 
 **How to apply:** Accept prior passed release evidence across a clean, source-identical Git tree; reject any changed tree or dirty working copy. During the gate itself, still require the exact revision to remain fixed across every stage.
+
+Tracked generated files must be deterministic before a clean-tree release gate runs.
+
+**Why:** A running preview server reordered an otherwise unchanged generated component registry, making source state dirty. The release check recorded failed evidence, and the Publish-button build correctly rejected it before compilation.
+
+**How to apply:** Keep discovery/output ordering stable and verify a clean checkout after preview workflows start. Regenerate passing release evidence for the current source revision before publishing; do not bypass the managed build guard.
