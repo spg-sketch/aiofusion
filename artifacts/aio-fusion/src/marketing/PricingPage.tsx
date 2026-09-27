@@ -124,17 +124,10 @@ export default function PricingPage({
     <div className="font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
       <PageHead meta={PAGE_META.pricing} />
 
-      {/* Beta banner */}
-      <div className="fixed top-0 left-0 right-0 z-[60] flex items-center justify-center px-4 py-2 text-center" style={{ background: "#F59E0B", minHeight: "40px" }}>
-        <p className="text-[12px] font-semibold" style={{ color: "#78350F" }}>
-          AIO Fusion is in Beta - please note that all pricing is currently indicative
-        </p>
-      </div>
-
-      <MarketingNav onNavigate={onNavigate} onLogin={onLogin} isAuthed={isAuthed} offset={40} />
+      <MarketingNav onNavigate={onNavigate} onLogin={onLogin} isAuthed={isAuthed} />
 
       {/* Hero */}
-      <section className="pt-[155px] sm:pt-[170px] pb-8 sm:pb-10 px-4 sm:px-8">
+      <section className="pt-[115px] sm:pt-[130px] pb-8 sm:pb-10 px-4 sm:px-8">
         <div className="max-w-5xl mx-auto">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-5" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
             <Sparkles size={11} color={accent} />
