@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowUpRight, BookOpen } from "lucide-react";
 import MarketingPage from "./MarketingPage";
 import { PageHead } from "./PageHead";
-import { PAGE_META, type PageMeta } from "./pageMeta";
+import { HIDDEN_PUBLIC_INSIGHT_SLUGS, PAGE_META, type PageMeta } from "./pageMeta";
 import { vars } from "./vars";
 import ArticleDetailView from "./ArticleDetailView";
 import { NEW_ARTICLES, type Article, type ArticleSection } from "./articles-data";
@@ -30,6 +30,8 @@ export type PublicInsight = {
 declare global {
   var __AIO_PRERENDER_INSIGHTS__: PublicInsight[] | undefined;
 }
+
+const hiddenPublicInsightSlugs = new Set<string>(HIDDEN_PUBLIC_INSIGHT_SLUGS);
 
 const FALLBACK_INSIGHTS: PublicInsight[] = [
   ...NEW_ARTICLES.map((article) => ({
@@ -70,11 +72,15 @@ const FALLBACK_INSIGHTS: PublicInsight[] = [
     status: "published",
     pinned: false,
   },
-];
+].filter((article) => !hiddenPublicInsightSlugs.has(article.slug));
+
+function publicInsights(rows: PublicInsight[]): PublicInsight[] {
+  return rows.filter((article) => !hiddenPublicInsightSlugs.has(article.slug));
+}
 
 function initialInsights(): PublicInsight[] {
   return globalThis.__AIO_PRERENDER_INSIGHTS__?.length
-    ? globalThis.__AIO_PRERENDER_INSIGHTS__
+    ? publicInsights(globalThis.__AIO_PRERENDER_INSIGHTS__)
     : FALLBACK_INSIGHTS;
 }
 
@@ -137,7 +143,7 @@ export default function InsightsPage(props: {
         return response.json() as Promise<PublicInsight[]>;
       })
       .then((rows) => {
-        if (rows.length) setArticles(rows);
+        if (rows.length) setArticles(publicInsights(rows));
       })
       .catch(() => {});
     return () => controller.abort();
@@ -189,11 +195,7 @@ export default function InsightsPage(props: {
       </p>
       {!isGuidance && (
         <p className="text-[14px] font-light leading-[1.8] mb-6" style={{ color: vars.g500 }}>
-          New to GEO? Start with our{" "}
-          <a href={`${import.meta.env.BASE_URL}insights/seo-aio`} className="font-semibold underline underline-offset-4" style={{ color: vars.accent }}>
-            SEO to AIO transition playbook
-          </a>
-          , then explore the signals, earned media and measurement articles linked from it.
+          New to GEO? Explore our practical articles on AI visibility and measurement.
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2 mb-8">

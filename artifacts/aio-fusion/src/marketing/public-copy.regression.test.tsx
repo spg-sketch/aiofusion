@@ -14,7 +14,7 @@ import PricingPage from "./PricingPage";
 import InsightsPage, { type PublicInsight } from "./InsightsPage";
 import ForAgenciesPage from "./ForAgenciesPage";
 import ForAgentsPage from "./ForAgentsPage";
-import { ARTICLE_META, PAGE_META } from "./pageMeta";
+import { ARTICLE_META, HIDDEN_PUBLIC_INSIGHT_SLUGS, PAGE_META } from "./pageMeta";
 import { NEW_ARTICLES } from "./articles-data";
 
 function documentFrom(markup: string): Document {
@@ -38,13 +38,6 @@ const EXPECTED_ARTICLE_IDS = [
   "battle-b2b-ai-authority",
   "agentic-media-relations",
   "ai-changing-b2b-visibility",
-  "earned-media",
-  "geo-signals",
-  "seo-aio",
-  "setup-guide",
-  "authority-report",
-  "optimiser-guide",
-  "media-research-guide",
   "ai-proves-pr-drives-sales",
 ] as const;
 
@@ -184,13 +177,28 @@ describe("public metadata, discovery copy and article identity", () => {
   });
 
   it("preserves every article ID and canonical URL, including B2B slugs", () => {
-    expect(NEW_ARTICLES.map((article) => article.id)).toEqual(EXPECTED_ARTICLE_IDS);
-    expect(Object.keys(ARTICLE_META)).toHaveLength(EXPECTED_ARTICLE_IDS.length);
-    expect(Object.keys(ARTICLE_META)).toEqual(expect.arrayContaining([...EXPECTED_ARTICLE_IDS]));
+    const allIds = NEW_ARTICLES.map((article) => article.id);
+    expect(allIds.filter((id) => !HIDDEN_PUBLIC_INSIGHT_SLUGS.includes(id as typeof HIDDEN_PUBLIC_INSIGHT_SLUGS[number]))).toEqual(EXPECTED_ARTICLE_IDS);
+    expect(Object.keys(ARTICLE_META).sort()).toEqual([...allIds].sort());
 
-    for (const id of EXPECTED_ARTICLE_IDS) {
+    for (const id of allIds) {
       expect(ARTICLE_META[id].canonical).toBe(`https://aiofusion.ai/insights/${id}`);
     }
+  });
+
+  it("omits hidden stories from the checked-in Insights fallback while keeping other stories", () => {
+    globalThis.__AIO_PRERENDER_INSIGHTS__ = undefined;
+    const doc = documentFrom(
+      renderToStaticMarkup(<InsightsPage {...marketingProps} />),
+    );
+    const links = Array.from(doc.querySelectorAll('a[href^="/insights/"]'));
+    const hrefs = links.map((link) => link.getAttribute("href"));
+
+    for (const slug of HIDDEN_PUBLIC_INSIGHT_SLUGS) {
+      expect(hrefs).not.toContain(`/insights/${slug}`);
+    }
+    expect(hrefs).toContain("/insights/pr-professionals-not-threat");
+    expect(hrefs).toContain("/insights/ai-proves-pr-drives-sales");
   });
 
   it("allows only the approved factual B2B pullquotes to retain B2B wording", () => {

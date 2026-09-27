@@ -1,26 +1,8 @@
-import { useState } from "react";
-import { Sparkles, User, LogIn, X, Menu, Check, ChevronDown } from "lucide-react";
+import { Sparkles, Check } from "lucide-react";
 import { vars } from "./vars";
 import { PageHead } from "./PageHead";
 import { PAGE_META } from "./pageMeta";
-
-function navHref(v: string): string {
-  const base = import.meta.env.BASE_URL;
-  if (v === "landing") return base;
-  if (v === "landing#features") return `${base}#features`;
-  return `${base}${v}`;
-}
-
-const NAV_LINKS = [
-  { l: "Home", v: "landing" },
-  { l: "Features", v: "landing#features" },
-  { l: "For In-house", v: "for-inhouse" },
-  { l: "For PR Agencies", v: "for-agencies" },
-  { l: "Pricing", v: "pricing" },
-  { l: "Insights", v: "insights" },
-  { l: "Contact", v: "contact" },
-  { l: "About", v: "about" },
-];
+import MarketingNav from "./MarketingNav";
 
 export default function PricingPage({
   onLogin,
@@ -31,9 +13,7 @@ export default function PricingPage({
   onNavigate: (v: string) => void;
   isAuthed?: boolean;
 }) {
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const paper = "#FBF6EC";
+  const paper = "#F5F8F8";
   const ink = "#102B36";
   const accent = "#C8497A";
   const accentSoft = "#FBE3ED";
@@ -135,7 +115,7 @@ export default function PricingPage({
 
   function Cell({ v, agentic }: { v: string | boolean; agentic?: boolean }) {
     const color = agentic ? agenticGold : teal;
-    if (v === true) return <span className="flex justify-center"><span className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: `${color}22` }}><Check size={12} color={color} strokeWidth={2.5} /></span></span>;
+    if (v === true) return <span className="flex justify-center"><span className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: color }}><Check size={12} color="white" strokeWidth={3} /></span></span>;
     if (v === false) return <span className="flex justify-center text-[18px] font-light" style={{ color: vars.g300 }}>-</span>;
     return <span className="text-[12px] font-medium text-center block" style={{ color: ink }}>{v}</span>;
   }
@@ -151,83 +131,19 @@ export default function PricingPage({
         </p>
       </div>
 
-      <nav
-        aria-label="Main navigation"
-        className="fixed left-0 right-0 z-50 backdrop-blur-md"
-        style={{ top: "40px", background: "rgba(251,246,236,0.95)", borderBottom: "1px solid rgba(16,43,54,0.08)" }}
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-8 h-[64px] sm:h-[80px] flex items-center justify-between">
-          <a
-            href={base}
-            onClick={(e) => { e.preventDefault(); onNavigate("landing"); }}
-            className="flex items-center gap-3"
-          >
-            <img src={`${base}images/logo-color.png`} alt="AIO Fusion" className="h-12 sm:h-16" />
-          </a>
-          <div className="hidden md:flex items-center gap-6">
-            {NAV_LINKS.map((it) => (
-              <a
-                key={it.l}
-                href={navHref(it.v)}
-                onClick={(e) => { e.preventDefault(); onNavigate(it.v); }}
-                className="text-[12px] font-semibold uppercase tracking-[0.14em] hover:opacity-60 transition-opacity"
-                style={{ color: ink }}
-              >
-                {it.l}
-              </a>
-            ))}
-            <button
-              onClick={onLogin}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80"
-              style={{ background: ink, color: paper }}
-            >
-              {isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}
-            </button>
-          </div>
-          <button
-            className="md:hidden"
-            onClick={() => setMenuOpen(!menuOpen)}
-            style={{ color: ink }}
-            aria-label={menuOpen ? "Close menu" : "Open menu"}
-          >
-            {menuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
-        </div>
-        {menuOpen && (
-          <div className="md:hidden px-4 pb-5 flex flex-col gap-3 border-t" style={{ background: paper, borderColor: vars.g200 }}>
-            {NAV_LINKS.map((it) => (
-              <a
-                key={it.l}
-                href={navHref(it.v)}
-                onClick={(e) => { e.preventDefault(); setMenuOpen(false); onNavigate(it.v); }}
-                className="text-[12px] font-semibold uppercase tracking-[0.14em] py-2 text-left"
-                style={{ color: ink }}
-              >
-                {it.l}
-              </a>
-            ))}
-            <button
-              onClick={() => { setMenuOpen(false); onLogin(); }}
-              className="px-4 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.14em] flex items-center gap-2"
-              style={{ background: ink, color: paper }}
-            >
-              {isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}
-            </button>
-          </div>
-        )}
-      </nav>
+      <MarketingNav onNavigate={onNavigate} onLogin={onLogin} isAuthed={isAuthed} offset={40} />
 
       {/* Hero */}
-      <section className="pt-[150px] sm:pt-[170px] pb-12 sm:pb-16 px-4 sm:px-8">
+      <section className="pt-[155px] sm:pt-[170px] pb-8 sm:pb-10 px-4 sm:px-8">
         <div className="max-w-5xl mx-auto">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-5" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
             <Sparkles size={11} color={accent} />
             <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Transparent Pricing</span>
           </div>
-          <h1 className="text-4xl md:text-5xl lg:text-[3.5rem] leading-[1.1] mb-4 max-w-3xl" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+          <h1 className="text-4xl md:text-5xl lg:text-[3.25rem] leading-[1.1] mb-3 max-w-none lg:whitespace-nowrap" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
             Plans built for PR and marketing teams
           </h1>
-          <p className="text-[15px] font-light max-w-xl mb-4 leading-relaxed" style={{ color: vars.g600 }}>
+          <p className="text-[15px] font-normal max-w-xl mb-3 leading-relaxed" style={{ color: vars.g600 }}>
             Compare GEO software plans for in-house PR teams and multi-client agencies. Annual subscriptions, clear project capacity and no hidden costs. All prices exclude VAT.
           </p>
           <p className="text-[13px] font-light max-w-2xl leading-relaxed" style={{ color: vars.g500 }}>
@@ -240,9 +156,9 @@ export default function PricingPage({
       </section>
 
       {/* Pricing cards */}
-      <section className="pb-10 px-4 sm:px-8">
+      <section className="pb-8 px-4 sm:px-8">
         <div className="max-w-5xl mx-auto">
-          <div className="grid sm:grid-cols-2 gap-5 mb-8">
+          <div className="grid sm:grid-cols-2 gap-5 mb-6">
             {STANDARD_PLANS.map((plan) => (
               <div key={plan.key} className="rounded-2xl overflow-hidden flex flex-col" style={{ border: plan.key === "agency" ? `2px solid ${accent}` : `2px solid ${ink}`, background: "white", boxShadow: plan.key === "agency" ? `0 20px 48px -12px ${accent}30` : "0 20px 48px -12px rgba(16,43,54,0.15)" }}>
                 <div className="p-7 flex flex-col flex-1">
@@ -290,55 +206,49 @@ export default function PricingPage({
         </div>
       </section>
 
-       {/* Additional Project Workspaces */}
-      <section className="py-16 px-4 sm:px-8" style={{ background: "white" }}>
-        <div className="max-w-5xl mx-auto">
-          <div className="mb-10">
-             <h2 className="text-3xl md:text-4xl mb-5" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Additional Project Workspaces</h2>
-            <p className="text-[15px] font-light leading-[1.7] mb-4 max-w-2xl" style={{ color: vars.g600 }}>
-               Need another brand, client, or programme? Add an independent, self-contained project workspace to your plan with one of the packs below.
-            </p>
-            <p className="text-[15px] font-light leading-[1.7] mb-4 max-w-2xl" style={{ color: vars.g600 }}>
-               Each pack adds one separate project with its own Set-Up data, audits, content, comms plan, and monthly activity allowance. Each 'action' refers to the number of pieces of content you create and optimise and/or marketing and media intelligence searches run per month.
-            </p>
-            <p className="text-[15px] font-semibold mb-8" style={{ color: ink }}>
-              Choose the activity level to match your client or brand requirements:
-            </p>
-             <p className="text-[13px] font-light leading-[1.7] max-w-2xl" style={{ color: vars.g500 }}>
-               These packs are for additional project workspaces, not extra runtime capacity or parallel environments inside an existing project.
-             </p>
-          </div>
-          <div className="flex flex-col gap-4 max-w-2xl">
-            {ADDITIONAL_PROJECT_TIERS.map((tier) => (
-              <div key={tier.name} className="rounded-2xl p-6 flex items-center justify-between" style={{ border: `1.5px solid ${tier.color}30`, background: `${tier.color}08` }}>
-                <div className="flex items-center gap-5">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.2em] w-20 flex-shrink-0" style={{ color: tier.color }}>{tier.name}</span>
-                  <div>
+      {/* Additional Project Workspaces */}
+      <section className="pt-8 pb-6 sm:pt-10 sm:pb-6 px-4 sm:px-8" style={{ background: "white" }}>
+        <div className="max-w-5xl mx-auto rounded-2xl p-5 sm:p-8" style={{ border: `4px double ${ink}`, background: "white" }}>
+          <h2 className="text-3xl md:text-4xl mb-6" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Additional Project Pricing</h2>
+          <div className="grid md:grid-cols-[0.9fr_1.1fr] gap-6 md:gap-8 items-start">
+            <div>
+              <p className="text-[15px] font-normal leading-[1.7] mb-4" style={{ color: vars.g600 }}>
+                Need another brand, client, or programme? Add an independent project workspace, each with its own setup data, audits, content and communications plan.
+              </p>
+              <p className="text-[14px] font-normal leading-[1.7] mb-4" style={{ color: vars.g600 }}>
+                Every pack includes a monthly activity allowance. An action is a piece of content created or optimised, or a marketing and media intelligence search.
+              </p>
+              <p className="text-[13px] font-medium leading-[1.6]" style={{ color: ink }}>
+                Choose the activity level to suit each brand or client. Packs add workspaces, not runtime capacity or parallel environments within an existing project.
+              </p>
+            </div>
+            <div className="grid sm:grid-cols-3 gap-3">
+              {ADDITIONAL_PROJECT_TIERS.map((tier) => (
+                <div key={tier.name} className="rounded-xl p-4 flex flex-col justify-between min-h-[150px]" style={{ border: `1.5px solid ${ink}`, background: `${tier.color}0D` }}>
+                  <span className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: tier.color }}>{tier.name}</span>
+                  <div className="mt-4">
                     <div className="flex items-baseline gap-1">
-                      <span className="text-[13px] font-semibold" style={{ color: vars.g500 }}>£</span>
-                      <span className="text-[36px] font-bold leading-none" style={{ color: ink }}>{tier.price}</span>
-                      <span className="text-[13px]" style={{ color: vars.g400 }}>/yr per additional project</span>
+                      <span className="text-[12px] font-semibold" style={{ color: vars.g600 }}>£</span>
+                      <span className="text-[30px] font-bold leading-none" style={{ color: ink }}>{tier.price}</span>
                     </div>
+                    <p className="text-[11px] mt-1" style={{ color: vars.g500 }}>per year / project</p>
                   </div>
+                  <p className="text-[13px] font-bold mt-4" style={{ color: tier.color }}>×{tier.actions} <span className="text-[11px] font-medium" style={{ color: vars.g600 }}>actions / month</span></p>
                 </div>
-                <div className="text-right flex-shrink-0 ml-6">
-                  <span className="text-[22px] font-bold" style={{ color: tier.color }}>×{tier.actions}</span>
-                  <p className="text-[11px] font-medium mt-0.5" style={{ color: vars.g500 }}>actions/month</p>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
       {/* Feature comparison table */}
-      <section className="py-16 px-4 sm:px-8" style={{ background: "white" }}>
+      <section className="pt-4 pb-10 sm:pt-5 sm:pb-12 px-4 sm:px-8" style={{ background: "white" }}>
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-10">
             <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: accent }}>Full Comparison</span>
             <h2 className="text-3xl md:text-4xl mt-3" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Everything included, at a glance</h2>
           </div>
-          <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${vars.g200}` }}>
+          <div className="rounded-2xl overflow-hidden" style={{ border: `3px double ${ink}` }}>
             <div className="grid grid-cols-3" style={{ background: vars.g50, borderBottom: `1px solid ${vars.g200}` }}>
               <div className="p-4" />
               <div className="p-4 text-center">

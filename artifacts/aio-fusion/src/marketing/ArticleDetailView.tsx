@@ -137,15 +137,15 @@ export default function ArticleDetailView({
   const base = import.meta.env.BASE_URL;
   const relatedByArticle: Record<string, Array<{ href: string; label: string }>> = {
     "pr-professionals-not-threat": [
-      { href: "seo-aio", label: "From SEO to AIO: a transition playbook" },
+      { href: "thought-leadership-engine-ai-visibility", label: "Why thought leadership drives AI visibility" },
       { href: "../for-agencies", label: "GEO software for PR agencies" },
     ],
     "thought-leadership-engine-ai-visibility": [
-      { href: "earned-media", label: "Why earned media beats paid in the AI era" },
-      { href: "geo-signals", label: "The six GEO signals every brand should track" },
+      { href: "ai-proves-pr-drives-sales", label: "How AI can connect PR with sales visibility" },
+      { href: "battle-b2b-ai-authority", label: "The battle for AI authority" },
     ],
     "battle-b2b-ai-authority": [
-      { href: "geo-signals", label: "The six GEO signals every brand should track" },
+      { href: "thought-leadership-engine-ai-visibility", label: "Why thought leadership drives AI visibility" },
       { href: "../for-inhouse", label: "AI visibility software for in-house teams" },
     ],
     "agentic-media-relations": [
@@ -153,7 +153,7 @@ export default function ArticleDetailView({
       { href: "../for-agencies", label: "GEO software for PR agencies" },
     ],
     "ai-changing-b2b-visibility": [
-      { href: "seo-aio", label: "From SEO to AIO: a transition playbook" },
+      { href: "battle-b2b-ai-authority", label: "The battle for AI authority" },
       { href: "thought-leadership-engine-ai-visibility", label: "Why thought leadership drives AI visibility" },
     ],
     "earned-media": [
@@ -161,27 +161,27 @@ export default function ArticleDetailView({
       { href: "ai-proves-pr-drives-sales", label: "How AI can connect PR with sales visibility" },
     ],
     "geo-signals": [
-      { href: "seo-aio", label: "From SEO to AIO: a transition playbook" },
-      { href: "authority-report", label: "How to read an AIO Fusion Authority Report" },
+      { href: "battle-b2b-ai-authority", label: "The battle for AI authority" },
+      { href: "../for-inhouse", label: "AI visibility software for in-house teams" },
     ],
     "seo-aio": [
-      { href: "geo-signals", label: "The six GEO signals every brand should track" },
-      { href: "earned-media", label: "Why earned media beats paid in the AI era" },
+      { href: "ai-changing-b2b-visibility", label: "How AI is changing brand visibility" },
+      { href: "thought-leadership-engine-ai-visibility", label: "Why thought leadership drives AI visibility" },
     ],
     "setup-guide": [
-      { href: "authority-report", label: "How to read an AIO Fusion Authority Report" },
+      { href: "../for-inhouse", label: "AI visibility software for in-house teams" },
       { href: "../pricing", label: "Compare AIO Fusion plans" },
     ],
     "authority-report": [
-      { href: "geo-signals", label: "The six GEO signals every brand should track" },
-      { href: "setup-guide", label: "Set up your first AIO Fusion project" },
+      { href: "battle-b2b-ai-authority", label: "The battle for AI authority" },
+      { href: "../pricing", label: "Compare AIO Fusion plans" },
     ],
     "optimiser-guide": [
-      { href: "seo-aio", label: "From SEO to AIO: a transition playbook" },
+      { href: "ai-changing-b2b-visibility", label: "How AI is changing brand visibility" },
       { href: "../for-inhouse", label: "AI visibility software for in-house teams" },
     ],
     "media-research-guide": [
-      { href: "earned-media", label: "Why earned media beats paid in the AI era" },
+      { href: "thought-leadership-engine-ai-visibility", label: "Why thought leadership drives AI visibility" },
       { href: "../for-agencies", label: "GEO software for PR agencies" },
     ],
     "ai-proves-pr-drives-sales": [
@@ -190,7 +190,7 @@ export default function ArticleDetailView({
     ],
   };
   const related = relatedByArticle[article.id] ?? [
-    { href: "seo-aio", label: "From SEO to AIO: a transition playbook" },
+    { href: "thought-leadership-engine-ai-visibility", label: "Why thought leadership drives AI visibility" },
     { href: "../insights", label: "Browse all AIO Fusion Insights" },
   ];
 

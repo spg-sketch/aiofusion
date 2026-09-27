@@ -7,17 +7,17 @@ export default function ForAgenciesPage(props: { onLogin: () => void; onBack: ()
   return (
     <MarketingPage title="AIO and content marketing automation software for PR agencies" eyebrow={<><Users size={12} /> For PR Agencies</> as any} {...props}>
       <PageHead meta={PAGE_META["for-agencies"]} />
-      <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(16,43,54,0.75)" }}>
+      <p className="text-[17px] font-medium leading-[1.7] mb-5" style={{ color: "#102B36" }}>
         Elevate your agency capability for the AI era with tailored, measurable GEO strategies for each client. Our platform helps your team strengthen client services and harness the power of generative answer engines.
       </p>
-      <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(16,43,54,0.75)" }}>
+      <p className="text-[15px] font-normal leading-[1.8] mb-5" style={{ color: "rgba(16,43,54,0.78)" }}>
         Run every client programme on a single platform built for the AI age. Optimise every piece of content you develop from press releases to awards entries, speed up new content development, score AI authority across your programme, store all client content in one place and measure and predict the impact of your work.
       </p>
-      <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: "rgba(16,43,54,0.75)" }}>
+      <p className="text-[15px] font-normal leading-[1.8] mb-8" style={{ color: "rgba(16,43,54,0.78)" }}>
         Add AI visibility and automation to your agency fast without building your own tech stack or hiring new technical specialists.
       </p>
-      <h2 className="text-[20px] font-semibold mb-5" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>What it does for your agency</h2>
-      <div className="grid sm:grid-cols-2 gap-3 mb-10">
+      <h2 className="text-[22px] font-semibold mb-5" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>What it does for your agency</h2>
+      <div className="grid sm:grid-cols-2 gap-3 mb-8">
         {[
           { title: "Multi-client management", desc: "Separate workspaces per client with their own project data, content pipeline, and reporting." },
           { title: "AIO with human editing", desc: "Develop AI optimised pitches, press releases, articles and marketing content fast from raw briefing content and edit to deliver maximum quality." },
@@ -32,25 +32,23 @@ export default function ForAgenciesPage(props: { onLogin: () => void; onBack: ()
                 <Check size={11} color="#C8497A" />
               </div>
               <div>
-                <p className="text-[14px] font-semibold mb-0.5" style={{ color: "#102B36" }}>{it.title}</p>
-                <p className="text-[13px] font-light leading-relaxed" style={{ color: "rgba(16,43,54,0.6)" }}>{it.desc}</p>
+                <p className="text-[14px] font-semibold mb-1" style={{ color: "#102B36" }}>{it.title}</p>
+                <p className="text-[13px] font-normal leading-relaxed" style={{ color: "rgba(16,43,54,0.78)" }}>{it.desc}</p>
               </div>
             </div>
           </div>
         ))}
       </div>
-      <div className="p-6 rounded-2xl mb-10" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.25)" }}>
-        <p className="text-[13px] font-semibold uppercase tracking-[0.2em] mb-3" style={{ color: "#C8497A" }}>An AIO platform built by comms professionals</p>
-        <p className="text-[14px] font-light leading-[1.7] mb-3" style={{ color: "rgba(16,43,54,0.8)" }}>AIO Fusion was created by experts from the PR, business marketing and tech development worlds.</p>
-        <p className="text-[14px] font-light leading-[1.7] mb-3" style={{ color: "rgba(16,43,54,0.8)" }}>We've worked in agencies and we understand the pressures in-house PR and marketing professionals face every day. Our platform is designed with you in mind, to help you maximise the potential of your expertise and deliver measurable results that answer the communications challenges of the AI age.</p>
-        <p className="text-[14px] font-light leading-[1.7] mb-3" style={{ color: "rgba(16,43,54,0.8)" }}>It is the first end-to-end platform designed to automatically optimise and score your earned and owned media visibility with leading AI models such as ChatGPT and Claude.</p>
-        <p className="text-[14px] font-light leading-[1.7]" style={{ color: "rgba(16,43,54,0.8)" }}>We believe it will transform PR and marketing for good.</p>
+      <div className="p-6 rounded-2xl mb-8" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.25)" }}>
+        <p className="text-[13px] font-semibold uppercase tracking-[0.16em] mb-3" style={{ color: "#C8497A" }}>An AIO platform built by comms professionals</p>
+        <p className="text-[14px] font-normal leading-[1.7] mb-3" style={{ color: "rgba(16,43,54,0.88)" }}>AIO Fusion was created by experts from the PR, business marketing and tech development worlds.</p>
+        <p className="text-[14px] font-normal leading-[1.7] mb-3" style={{ color: "rgba(16,43,54,0.88)" }}>We've worked in agencies and we understand the pressures in-house PR and marketing professionals face every day. Our platform is designed with you in mind, to help you maximise the potential of your expertise and deliver measurable results that answer the communications challenges of the AI age.</p>
+        <p className="text-[14px] font-normal leading-[1.7] mb-3" style={{ color: "rgba(16,43,54,0.88)" }}>It is the first end-to-end platform designed to automatically optimise and score your earned and owned media visibility with leading AI models such as ChatGPT and Claude.</p>
+        <p className="text-[14px] font-normal leading-[1.7]" style={{ color: "rgba(16,43,54,0.88)" }}>We believe it will transform PR and marketing for good.</p>
       </div>
-      <aside className="mb-10 p-5 rounded-xl bg-white" style={{ border: "1px solid rgba(16,43,54,0.1)" }}>
+      <aside className="mb-8 p-5 rounded-xl bg-white" style={{ border: "1px solid rgba(16,43,54,0.1)" }}>
         <h2 className="text-[18px] font-semibold mb-3" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>Explore GEO for agency teams</h2>
         <div className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] font-semibold">
-          <a href={`${import.meta.env.BASE_URL}insights/seo-aio`} className="underline underline-offset-4" style={{ color: "#C8497A" }}>Read the SEO to AIO transition playbook</a>
-          <a href={`${import.meta.env.BASE_URL}insights/geo-signals`} className="underline underline-offset-4" style={{ color: "#C8497A" }}>Understand the six GEO signals</a>
           <a href={`${import.meta.env.BASE_URL}pricing`} className="underline underline-offset-4" style={{ color: "#C8497A" }}>Compare plans and project capacity</a>
         </div>
       </aside>

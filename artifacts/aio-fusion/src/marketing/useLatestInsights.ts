@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import type { PublicInsight } from "./InsightsPage";
+import { HIDDEN_PUBLIC_INSIGHT_SLUGS } from "./pageMeta";
+
+const hiddenSlugs = new Set<string>(HIDDEN_PUBLIC_INSIGHT_SLUGS);
 
 export function latestPublishedInsights(rows: PublicInsight[]): PublicInsight[] {
   const date = (value: string | null) => {
@@ -7,7 +10,7 @@ export function latestPublishedInsights(rows: PublicInsight[]): PublicInsight[] 
     return Number.isFinite(parsed) ? parsed : 0;
   };
   const published = rows
-    .filter((article) => article.status === "published")
+    .filter((article) => article.status === "published" && !hiddenSlugs.has(article.slug))
     .map((article, index) => ({ article, index }));
   const newestFirst = (a: typeof published[number], b: typeof published[number]) =>
     date(b.article.datePublished) - date(a.article.datePublished) || a.index - b.index;

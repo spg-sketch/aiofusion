@@ -10,6 +10,7 @@ import {
   PUBLIC_PAGE_DEFINITIONS,
   PUBLIC_ROUTES,
   ARTICLE_SLUGS,
+  HIDDEN_PUBLIC_INSIGHT_SLUGS,
   structuredDataFor,
 } from "./pageMeta";
 
@@ -68,6 +69,14 @@ describe("public page / prerender consistency", () => {
       expect(breadcrumbSchema).toBeTruthy();
       const crumbs = breadcrumbSchema?.itemListElement as Array<Record<string, unknown>>;
       expect(crumbs.at(-1)?.name).toBe(meta.articleTitle);
+    }
+  });
+
+  it("retains hidden article copy and metadata without exposing public routes", () => {
+    for (const slug of HIDDEN_PUBLIC_INSIGHT_SLUGS) {
+      expect(ARTICLE_META[slug], `retained metadata missing for "${slug}"`).toBeTruthy();
+      expect(NEW_ARTICLES.some((article) => article.id === slug)).toBe(true);
+      expect(ARTICLE_SLUGS).not.toContain(slug);
     }
   });
 

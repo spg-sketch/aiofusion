@@ -1,23 +1,4 @@
-import { User, LogIn } from "lucide-react";
-
-/** Map an internal view name to its public href. */
-function navHref(v: string): string {
-  const base = import.meta.env.BASE_URL; // ends with "/"
-  if (v === "landing") return base;
-  if (v === "landing#features") return `${base}#features`;
-  return `${base}${v}`;
-}
-
-const NAV_LINKS = [
-  { l: "Home", v: "landing" },
-  { l: "Features", v: "landing#features" },
-  { l: "For In-house", v: "for-inhouse" },
-  { l: "For PR Agencies", v: "for-agencies" },
-  { l: "Pricing", v: "pricing" },
-  { l: "Insights", v: "insights" },
-  { l: "Contact", v: "contact" },
-  { l: "About", v: "about" },
-];
+import MarketingNav from "./MarketingNav";
 
 export default function MarketingPage({
   title,
@@ -39,7 +20,7 @@ export default function MarketingPage({
   isAuthed?: boolean;
   showTitle?: boolean;
 }) {
-  const cream = "#FBF6EC";
+  const cream = "#F5F8F8";
   const ink = "#102B36";
   const raspberry = "#C8497A";
   const accentSoft = "#FBE3ED";
@@ -47,44 +28,9 @@ export default function MarketingPage({
 
   return (
     <div className="font-['Inter',sans-serif] min-h-screen" style={{ background: cream, color: ink }}>
-      <nav
-        aria-label="Main navigation"
-        className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md"
-        style={{ background: "rgba(251,246,236,0.92)", borderBottom: "1px solid rgba(16,43,54,0.08)" }}
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-8 h-[72px] sm:h-[96px] flex items-center justify-between">
-          {/* Logo links home */}
-          <a
-            href={base}
-            onClick={(e) => { e.preventDefault(); onBack(); }}
-            className="flex items-center gap-3"
-          >
-            <img src={`${base}images/logo-color.png`} alt="AIO Fusion" className="h-14 sm:h-20" />
-          </a>
+      <MarketingNav onNavigate={onNavigate} onLogin={onLogin} isAuthed={isAuthed} />
 
-          <div className="hidden md:flex items-center gap-8">
-            {NAV_LINKS.map((it) => (
-              <a
-                key={it.l}
-                href={navHref(it.v)}
-                onClick={(e) => { e.preventDefault(); onNavigate(it.v); }}
-                className="marketing-nav-link text-[13px] font-semibold uppercase tracking-[0.14em] transition-colors"
-              >
-                {it.l}
-              </a>
-            ))}
-            <button
-              onClick={onLogin}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-all hover:brightness-110"
-              style={{ background: ink }}
-            >
-              {isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}
-            </button>
-          </div>
-        </div>
-      </nav>
-
-      <section className="pt-[120px] sm:pt-[160px] pb-0 px-4 sm:px-8" style={{ background: cream }}>
+      <section className="pt-[120px] sm:pt-[144px] pb-0 px-4 sm:px-8" style={{ background: cream }}>
         <div className="max-w-4xl mx-auto">
           {eyebrow && (
             <div

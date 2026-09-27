@@ -30,6 +30,15 @@ const router = Router();
 const storage = new InsightObjectStorage();
 const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const MAX_CMS_IMAGE_BYTES = 6 * 1024 * 1024;
+const HIDDEN_PUBLIC_INSIGHT_SLUGS = new Set([
+  "earned-media",
+  "geo-signals",
+  "seo-aio",
+  "setup-guide",
+  "authority-report",
+  "optimiser-guide",
+  "media-research-guide",
+]);
 
 export function detectRasterBytes(bytes: Uint8Array): "image/png" | "image/jpeg" | "image/webp" | null {
   if (
@@ -126,10 +135,17 @@ router.get("/insights", async (_req, res) => {
     .from(insightArticlesTable)
     .where(eq(insightArticlesTable.status, "published"))
     .orderBy(desc(insightArticlesTable.datePublished), desc(insightArticlesTable.createdAt));
-  res.json(await serializeArticles(rows, pinnedIds));
+  res.json(await serializeArticles(
+    rows.filter((row) => !HIDDEN_PUBLIC_INSIGHT_SLUGS.has(row.slug)),
+    pinnedIds,
+  ));
 });
 
 router.get("/insights/:slug", async (req, res) => {
+  if (HIDDEN_PUBLIC_INSIGHT_SLUGS.has(req.params["slug"] ?? "")) {
+    res.status(404).json({ error: "Story not found" });
+    return;
+  }
   const pinnedIds = await readHomepagePinnedIds();
   const [row] = await db
     .select()

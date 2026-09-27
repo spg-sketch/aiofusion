@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Sparkles,
   LogIn,
@@ -29,6 +29,9 @@ import step4Img from "../assets/photos/photo-optimise.jpg";
 import step5Img from "../assets/photos/photo-measure.jpg";
 import { useLatestInsights } from "./useLatestInsights";
 import heroBgImg from "../assets/hero-bg.webp";
+import MarketingNav from "./MarketingNav";
+import DemoDialog from "./DemoDialog";
+import PlatformPreview from "./PlatformPreview";
 
 const llmEngines = [
   { name: "ChatGPT", logo: null },
@@ -63,8 +66,19 @@ export default function LandingPageC({
   isAuthed?: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(false);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("aio-demo-introduced") === "1") return;
+      localStorage.setItem("aio-demo-introduced", "1");
+    } catch {
+      // Storage may be unavailable in private browsing; keep the page usable.
+      return;
+    }
+    setDemoOpen(true);
+  }, []);
   const { articles, loading: articlesLoading, error: articlesError } = useLatestInsights();
-  const paper = "#FBF6EC";
+  const paper = "#F5F8F8";
   const ink = "#102B36";
   const accent = "#C8497A";
   const accentDark = "#A33860";
@@ -76,80 +90,22 @@ export default function LandingPageC({
     <div className="font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
       <PageHead meta={PAGE_META.landing} />
 
-      <nav
-        aria-label="Main navigation"
-        className="fixed top-0 left-0 right-0 z-50"
-        style={{ background: paper, borderBottom: `1px solid ${vars.g200}` }}
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-8 h-[64px] sm:h-[80px] flex items-center justify-between">
-          <a
-            href={base}
-            onClick={(e) => { e.preventDefault(); onNavigate("landing"); }}
-            className="flex items-center gap-3"
-          >
-            <img src={`${base}images/logo-color.png`} alt="AIO Fusion" className="h-12 sm:h-16" />
-          </a>
+      <MarketingNav onNavigate={onNavigate} onLogin={onLogin} isAuthed={isAuthed} />
+      {demoOpen && <DemoDialog onClose={() => setDemoOpen(false)} />}
 
-          <div className="hidden lg:flex items-center gap-7">
-            {NAV_LINKS.map((it) => (
-              <a
-                key={it.l}
-                href={navHref(it.v)}
-                onClick={(e) => { e.preventDefault(); onNavigate(it.v); }}
-                className="text-[12px] font-semibold uppercase tracking-[0.14em] hover:opacity-60 transition-opacity"
-                style={{ color: ink }}
-              >
-                {it.l}
-              </a>
-            ))}
-            <button
-              onClick={onLogin}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80"
-              style={{ background: ink, color: paper }}
-            >
-              {isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}
-            </button>
-          </div>
-
-          <button
-            className="lg:hidden"
-            style={{ color: ink }}
-            onClick={() => setMenuOpen(!menuOpen)}
-            aria-label={menuOpen ? "Close menu" : "Open menu"}
-          >
-            {menuOpen ? <X size={24} /> : <Menu size={24} />}
+      <section className="pt-[72px] sm:pt-[88px]" aria-label="Book a platform demo">
+        <div className="px-4 sm:px-8 py-5 sm:py-7 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 max-w-7xl mx-auto">
+          <p className="text-lg sm:text-xl font-semibold leading-snug max-w-3xl" style={{ color: ink }}>
+            Ready to win AI authority? Get in touch to book a platform demo and see how AIO Fusion measures and improves your AI visibility
+          </p>
+          <button type="button" onClick={() => setDemoOpen(true)} className="aio-button aio-button--primary marketing-emphasis !rounded-full !px-8 !py-4 text-sm uppercase tracking-wider shrink-0">
+            <Calendar size={18} /> Book a Demo <ArrowRight size={16} />
           </button>
         </div>
-
-        {menuOpen && (
-          <div
-            className="lg:hidden px-4 sm:px-8 pb-5 flex flex-col gap-4"
-            style={{ background: paper, borderTop: `1px solid ${vars.g200}` }}
-          >
-            {NAV_LINKS.map((it) => (
-              <a
-                key={it.l}
-                href={navHref(it.v)}
-                onClick={(e) => { e.preventDefault(); setMenuOpen(false); onNavigate(it.v); }}
-                className="text-[12px] font-semibold uppercase tracking-[0.14em] py-2 text-left"
-                style={{ color: ink }}
-              >
-                {it.l}
-              </a>
-            ))}
-            <button
-              onClick={() => { setMenuOpen(false); onLogin(); }}
-              className="px-4 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.14em] flex items-center gap-2"
-              style={{ background: ink, color: paper }}
-            >
-              {isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}
-            </button>
-          </div>
-        )}
-      </nav>
+      </section>
 
       {/* HERO */}
-      <section className="relative pt-[100px] sm:pt-[120px] pb-12 sm:pb-16 overflow-hidden">
+      <section className="relative pt-12 sm:pt-16 pb-12 sm:pb-16 overflow-hidden">
         <div className="absolute inset-0" aria-hidden="true">
           <img src={heroBgImg} alt="" className="w-full h-full object-cover" />
           <div className="absolute inset-0" style={{ background: `linear-gradient(120deg, ${paper} 0%, ${paper}EE 38%, ${paper}A8 62%, transparent 100%)` }} />
@@ -171,12 +127,18 @@ export default function LandingPageC({
               <div className="flex flex-wrap items-center gap-3">
                 <a
                   href="#features"
-                  className="flex items-center gap-2 px-7 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:bg-black/5"
-                  style={{ color: ink, border: `1.5px solid ${ink}30` }}
+                  className="aio-button aio-button--secondary marketing-emphasis !rounded-full !px-7 !py-3.5 text-[13px] uppercase tracking-[0.12em]"
+                  style={{ color: "white", border: `2px solid ${ink}` }}
                 >
                   Explore Features <ArrowRight size={14} />
                 </a>
               </div>
+            </div>
+            <div className="lg:col-span-5">
+              <figure className="overflow-hidden rounded-2xl border border-[#1A647B]/25 bg-white shadow-[0_24px_60px_-20px_rgba(16,43,54,.3)]">
+                <img src={`${base}images/platform-entry-preview.jpg`} alt="Actual AIO Fusion platform entry screen showing the sign-in options, with no customer data" className="block w-full h-auto" />
+                <figcaption className="px-4 py-2 text-xs font-semibold text-[#102B36]">AIO Fusion platform entry · No customer data</figcaption>
+              </figure>
             </div>
           </div>
         </div>
@@ -210,6 +172,14 @@ export default function LandingPageC({
               </div>
             ))}
           </div>
+          <div className="grid md:grid-cols-2 gap-8 items-center mt-8 rounded-2xl bg-white p-5 sm:p-8 border border-[#1A647B]/20">
+            <div>
+              <span className="text-xs font-bold uppercase tracking-widest" style={{ color: accent }}>Built around your workflow</span>
+              <h3 className="text-3xl mt-3 mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>From insight to stronger content.</h3>
+              <p className="leading-relaxed" style={{ color: ink }}>Work across research, planning and optimisation without losing sight of what matters: better visibility and measurable authority for your brand.</p>
+            </div>
+            <PlatformPreview variant="workflow" />
+          </div>
           <div className="grid md:grid-cols-3 gap-5 mt-5">
             {[
               { icon: Calendar, title: "Comms Planner", copy: "Plan and score your PR and marketing schedule for predicted AI authority impact.", accent: vars.teal },
@@ -230,8 +200,56 @@ export default function LandingPageC({
         </div>
       </section>
 
+      {/* KEY FEATURES */}
+      <section id="features" className="py-20 scroll-mt-[88px]" style={{ background: ink }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-8">
+          <div className="max-w-3xl mb-12">
+            <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: "#F4B4CD" }}>Key features</span>
+            <h2 className="text-4xl md:text-5xl mt-3 mb-4 text-white" style={{ fontFamily: "'Alice', Georgia, serif" }}>AIO for business PR and marketing.</h2>
+            <p className="text-[15px] leading-relaxed text-white/85">Designed to AI Optimise PR and marketing at scale.</p>
+            <p className="mt-5 text-sm font-bold text-white">Optimised for ChatGPT <span className="text-[#F4B4CD]">|</span> Claude</p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[
+              { icon: ShieldCheck, title: "Strategy & Audit", desc: "Build the foundations of your strategy and audit AI authority across earned and owned media.", accent: vars.teal },
+              { icon: Calendar, title: "Comms Planner", desc: "Plan and score your PR and marketing schedule for predicted AI authority impact.", accent: accent },
+              { icon: FileEdit, title: "Content Optimiser & Editor", desc: "Create, optimise and edit press releases, articles, events and awards content.", accent: vars.gold },
+              { icon: Sparkles, title: "Content Creator", desc: "Create optimised content from raw information for PR and marketing.", accent: vars.green },
+              { icon: Search, title: "Media Research", desc: "Fuel media relations with AI recommended journalist contacts.", accent: vars.accent },
+              { icon: Lightbulb, title: "Marketing Intelligence", desc: "Research and score potential marketing activities such as conferences and awards.", accent: accent },
+              { icon: LineChart, title: "Measure & Report", desc: "Measure and report your PR and marketing impact and business AI authority growth.", accent: vars.teal },
+              { icon: Archive, title: "Content Library", desc: "Store and curate all your PR and marketing content over time.", accent: vars.gold },
+              { icon: Globe, title: "Website Content GEO", desc: "Enhance your website content visibility for AI uplift.", accent: vars.green },
+              { icon: Code2, title: "Website Technical GEO", desc: "Back-end instructions to maximise the AI effectiveness of your website.", accent: vars.accent },
+              { icon: TrendingUp, title: "SEO Integration", desc: "Integrate SEO with AI optimisation for earned and owned media.", accent: accent, soon: true },
+            ].map((tool) => (
+              <div key={tool.title} className="p-5 rounded-xl bg-white transition-shadow hover:shadow-lg" style={{ border: `2px solid ${(tool as { accent: string }).accent}` }}>
+                <div className="flex items-center gap-2.5 mb-2">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${(tool as { accent: string }).accent}18` }}>
+                    <tool.icon size={14} color={(tool as { accent: string }).accent} />
+                  </div>
+                  <h4 className="text-[13px] font-bold uppercase tracking-[0.08em]" style={{ color: ink }}>{tool.title}</h4>
+                  {(tool as { soon?: boolean }).soon && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: `${(tool as { accent: string }).accent}18`, color: (tool as { accent: string }).accent }}>Soon</span>
+                  )}
+                </div>
+                <p className="text-[13px] leading-[1.7] font-light" style={{ color: vars.g600 }}>{tool.desc}</p>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-10 pt-10 mt-10 border-t" style={{ borderColor: `${vars.g300}` }}>
+            <p className="text-[30px] font-bold uppercase tracking-[0.22em] text-white">Optimised for</p>
+            {llmEngines.map((engine) => (
+              engine.logo
+                ? <img key={engine.name} src={engine.logo} alt={engine.name} className="h-[120px] object-contain" />
+                : <span key={engine.name} className="text-[39px] font-semibold text-white">{engine.name}</span>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* HOW IT WORKS */}
-      <section className="py-20 mt-12" style={{ background: "white" }}>
+      <section className="py-16" style={{ background: "white" }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
           <div className="max-w-3xl mb-12">
             <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: vars.teal }}>How it works</span>
@@ -256,53 +274,6 @@ export default function LandingPageC({
                   <p className="text-[13.5px] font-light leading-[1.7]" style={{ color: vars.g600 }}>{s.body}</p>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* KEY FEATURES */}
-      <section id="features" className="py-20" style={{ background: vars.creamDeep }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-8">
-          <div className="max-w-3xl mb-12">
-            <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: accent }}>Key features</span>
-            <h2 className="text-4xl md:text-5xl mt-3 mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>AIO for business PR and marketing.</h2>
-            <p className="text-[15px] font-light leading-relaxed" style={{ color: vars.g600 }}>Designed to AI Optimise PR and marketing at scale.</p>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[
-              { icon: ShieldCheck, title: "Strategy & Audit", desc: "Build the foundations of your strategy and audit AI authority across earned and owned media.", accent: vars.teal },
-              { icon: Calendar, title: "Comms Planner", desc: "Plan and score your PR and marketing schedule for predicted AI authority impact.", accent: accent },
-              { icon: FileEdit, title: "Content Optimiser & Editor", desc: "Create, optimise and edit press releases, articles, events and awards content.", accent: vars.gold },
-              { icon: Sparkles, title: "Content Creator", desc: "Create optimised content from raw information for PR and marketing.", accent: vars.green },
-              { icon: Search, title: "Media Research", desc: "Fuel media relations with AI recommended journalist contacts.", accent: vars.accent },
-              { icon: Lightbulb, title: "Marketing Intelligence", desc: "Research and score potential marketing activities such as conferences and awards.", accent: accent },
-              { icon: LineChart, title: "Measure & Report", desc: "Measure and report your PR and marketing impact and business AI authority growth.", accent: vars.teal },
-              { icon: Archive, title: "Content Library", desc: "Store and curate all your PR and marketing content over time.", accent: vars.gold },
-              { icon: Globe, title: "Website Content GEO", desc: "Enhance your website content visibility for AI uplift.", accent: vars.green },
-              { icon: Code2, title: "Website Technical GEO", desc: "Back-end instructions to maximise the AI effectiveness of your website.", accent: vars.accent },
-              { icon: TrendingUp, title: "SEO Integration", desc: "Integrate SEO with AI optimisation for earned and owned media.", accent: accent, soon: true },
-            ].map((tool) => (
-              <div key={tool.title} className="p-5 rounded-xl bg-white transition-shadow hover:shadow-md" style={{ border: `1px solid ${(tool as { accent: string }).accent}25` }}>
-                <div className="flex items-center gap-2.5 mb-2">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${(tool as { accent: string }).accent}18` }}>
-                    <tool.icon size={14} color={(tool as { accent: string }).accent} />
-                  </div>
-                  <h4 className="text-[13px] font-bold uppercase tracking-[0.08em]" style={{ color: ink }}>{tool.title}</h4>
-                  {(tool as { soon?: boolean }).soon && (
-                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: `${(tool as { accent: string }).accent}18`, color: (tool as { accent: string }).accent }}>Soon</span>
-                  )}
-                </div>
-                <p className="text-[13px] leading-[1.7] font-light" style={{ color: vars.g600 }}>{tool.desc}</p>
-              </div>
-            ))}
-          </div>
-          <div className="flex flex-wrap items-center justify-center gap-10 pt-10 mt-10 border-t" style={{ borderColor: `${vars.g300}` }}>
-            <p className="text-[30px] font-bold uppercase tracking-[0.22em]" style={{ color: vars.g500 }}>Optimised for</p>
-            {llmEngines.map((engine) => (
-              engine.logo
-                ? <img key={engine.name} src={engine.logo} alt={engine.name} className="h-[120px] object-contain" />
-                : <span key={engine.name} className="text-[39px] font-semibold" style={{ color: ink }}>{engine.name}</span>
             ))}
           </div>
         </div>
@@ -398,14 +369,13 @@ export default function LandingPageC({
               <p className="text-[15px] leading-relaxed font-light text-white/85 max-w-md">Get in touch to book a platform demo and find out about pricing.</p>
             </div>
             <div className="md:col-span-5 flex flex-col gap-3">
-              <a
-                href={`${base}contact`}
-                onClick={(e) => { e.preventDefault(); onNavigate("contact"); }}
+              <button type="button"
+                onClick={() => setDemoOpen(true)}
                 className="flex items-center justify-between gap-2.5 px-6 py-4 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-90"
                 style={{ background: "white", color: accent }}
               >
                 <span className="flex items-center gap-2"><Calendar size={16} /> Book a Demo</span> <ArrowRight size={14} />
-              </a>
+              </button>
               <a
                 href={`${base}contact`}
                 onClick={(e) => { e.preventDefault(); onNavigate("contact"); }}

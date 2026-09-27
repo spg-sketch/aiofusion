@@ -683,4 +683,20 @@ void everyPublicViewHasRouteDefinition;
 export const PUBLIC_ROUTES: Array<{ slug: string; priority: string }> =
   PUBLIC_PAGE_DEFINITIONS.map(({ slug, priority }) => ({ slug, priority }));
 
-export const ARTICLE_SLUGS = Object.keys(ARTICLE_META);
+/** Stories retained in the CMS and checked-in content, but omitted from public discovery. */
+export const HIDDEN_PUBLIC_INSIGHT_SLUGS = [
+  "earned-media",
+  "geo-signals",
+  "seo-aio",
+  "setup-guide",
+  "authority-report",
+  "optimiser-guide",
+  "media-research-guide",
+] as const;
+
+const hiddenPublicInsightSlugs = new Set<string>(HIDDEN_PUBLIC_INSIGHT_SLUGS);
+
+/** Public article routes used by prerender and sitemap generation. */
+export const ARTICLE_SLUGS = Object.keys(ARTICLE_META).filter(
+  (slug) => !hiddenPublicInsightSlugs.has(slug),
+);

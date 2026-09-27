@@ -37,7 +37,7 @@ const inputCls =
 const inputStyle = { borderColor: vars.g200, color: NAVY };
 const inputFocusCls = "focus:border-[#C8497A]";
 
-function BookDemoForm() {
+export function BookDemoForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [company, setCompany] = useState("");

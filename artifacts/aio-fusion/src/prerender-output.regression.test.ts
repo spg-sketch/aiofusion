@@ -2,7 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ARTICLE_META, ARTICLE_SLUGS } from "./marketing/pageMeta";
+import {
+  ARTICLE_META,
+  ARTICLE_SLUGS,
+  HIDDEN_PUBLIC_INSIGHT_SLUGS,
+} from "./marketing/pageMeta";
 import { runPrerender } from "./prerender-entry";
 import type { PublicInsight } from "./marketing/InsightsPage";
 
@@ -112,6 +116,9 @@ describe("controlled prerender output", () => {
         "A controlled visibility story",
         "A local fixture excerpt for the visibility route.",
       ),
+      ...HIDDEN_PUBLIC_INSIGHT_SLUGS.map((slug) =>
+        publishedFixture(slug, `Hidden ${slug}`, `This story is retained but not public: ${slug}.`),
+      ),
       {
         ...publishedFixture(
           "external-guide",
@@ -165,5 +172,15 @@ describe("controlled prerender output", () => {
     expect(sitemap).not.toContain(
       "https://aiofusion.ai/insights/pr-professionals-not-threat",
     );
+    for (const slug of HIDDEN_PUBLIC_INSIGHT_SLUGS) {
+      expect(result.articleSlugs).not.toContain(slug);
+      expect(sitemap).not.toContain(`https://aiofusion.ai/insights/${slug}`);
+      expect(fs.existsSync(path.join(directory, "insights", slug, "index.html"))).toBe(false);
+    }
+    const insightsIndex = readRoute(directory, "insights");
+    for (const slug of HIDDEN_PUBLIC_INSIGHT_SLUGS) {
+      expect(insightsIndex).not.toContain(`href="/insights/${slug}"`);
+      expect(insightsIndex).not.toContain(`Hidden ${slug}`);
+    }
   });
 });

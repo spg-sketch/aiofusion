@@ -362,9 +362,9 @@ function PlatformHomePage({
   const accentSoft = "#FBE3ED";
   return (
     <div data-testid="platform-home" className="min-h-screen min-w-0 max-w-full overflow-x-hidden font-['Inter',sans-serif]" style={{ background: "white", color: ink }}>
-      <header className="px-4 sm:px-10 py-4 sm:py-6 flex flex-wrap items-center justify-between gap-3 sm:gap-6" style={{ background: "#1A647B", borderBottom: `1px solid rgba(255,255,255,0.15)` }}>
+      <header className="px-4 sm:px-8 h-[72px] sm:h-[88px] flex flex-wrap items-center justify-between gap-3 sm:gap-6" style={{ background: "#1A647B", borderBottom: `1px solid rgba(255,255,255,0.15)` }}>
         <button onClick={onBackToLanding} className="flex min-w-0 items-center gap-3.5">
-          <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="h-14 sm:h-30 w-auto max-w-full" />
+          <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="h-14 sm:h-[72px] w-auto max-w-full object-contain" />
         </button>
         <div data-testid="platform-home-navigation" className="flex min-w-0 max-w-full flex-1 flex-wrap items-center justify-end gap-3 sm:flex-none sm:gap-6">
           {backToAgency}
@@ -777,16 +777,16 @@ function PlatformHomePage({
             ) : (
               /* --- SIGN-IN FORM --- */
               <>
-                <div className="flex items-start justify-between gap-3 mb-1">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
                   <h2 className="text-[24px] font-bold" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>Sign in</h2>
-                  <button
-                    type="button"
-                    onClick={() => { setShowSignup(true); setLoginError(null); }}
-                    className="flex items-center gap-2 text-[24px] font-bold hover:opacity-80 transition-opacity"
-                    style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}
-                  >
-                    Create an account <ArrowRight size={20} />
-                  </button>
+                  <div className="rounded-xl border border-white/40 bg-white/10 p-3 sm:p-4">
+                    <span className="block text-[13px] font-semibold mb-1 text-white">New to AIO Fusion?</span>
+                    <button type="button" onClick={() => { setShowSignup(true); setLoginError(null); }}
+                      className="flex items-center gap-2 text-[17px] font-bold text-white underline underline-offset-4 hover:text-[#F4B4CD] focus-visible:text-[#F4B4CD]"
+                      style={{ fontFamily: "'Alice', Georgia, serif" }}>
+                      Create an account <ArrowRight size={18} />
+                    </button>
+                  </div>
                 </div>
                 <p className="text-[14px] mb-6" style={{ color: "white" }}>
                   Welcome back - sign in to manage your projects.
@@ -929,15 +929,15 @@ function PlatformHomePage({
                   </button>
                 </form>
                 {onOpenGeorge && (
-                  <div className="mt-3 flex justify-center">
+                  <div className="mt-6 flex justify-center">
                     <button
                       type="button"
                       onClick={onOpenGeorge}
-                      className="flex items-center gap-1.5 text-[13px] hover:opacity-80 transition-opacity"
+                      className="flex items-center gap-2 rounded-lg border border-white/40 px-5 py-3 text-[14px] font-semibold hover:bg-white/10 transition-colors"
                       style={{ color: "white" }}
                     >
                       <HelpCircle size={14} />
-                      Need help? Ask GEOrge
+                      Need help? Ask George
                     </button>
                   </div>
                 )}

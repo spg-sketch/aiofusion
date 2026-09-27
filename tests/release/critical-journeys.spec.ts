@@ -3,6 +3,8 @@ import { expect, test } from "@playwright/test";
 test("public navigation serves the production-built application", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("h1")).toContainText("The AI Authority Platform");
+  await expect(page.getByRole("dialog", { name: /see your ai visibility/i })).toBeVisible();
+  await page.getByRole("button", { name: "Close demo enquiry" }).click();
   await page.goto("/about");
   await expect(page).toHaveURL(/\/about$/);
   await expect(page.locator("body")).not.toBeEmpty();
@@ -14,6 +16,7 @@ test("sign-in grants only the authorised workspace", async ({ page }) => {
   );
   await page.goto("/");
   await authority;
+  await page.getByRole("button", { name: "Close demo enquiry" }).click();
   await page.getByRole("button", { name: "Platform Login" }).click();
   await page.getByPlaceholder("Email or username").fill("release@example.invalid");
   await page.getByPlaceholder("Password").fill("release-harness-password");

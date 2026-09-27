@@ -301,7 +301,7 @@
 /* Marketing top-nav hover - clear visual feedback */
 .marketing-nav-link {
   position: relative;
-  color: rgba(16, 43, 54, 0.65);
+  color: #fff;
   padding-bottom: 4px;
 }
 .marketing-nav-link::after {
@@ -316,11 +316,20 @@
   transform-origin: left center;
   transition: transform 180ms ease;
 }
-.marketing-nav-link:hover {
+.marketing-nav-link:hover,
+.marketing-nav-link:focus-visible {
   color: #C8497A;
 }
-.marketing-nav-link:hover::after {
+.marketing-nav-link:hover::after,
+.marketing-nav-link:focus-visible::after {
   transform: scaleX(1);
+}
+.marketing-emphasis:hover:not(:disabled) {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px rgba(16,43,54,.25);
+}
+@media (prefers-reduced-motion: reduce) {
+  .marketing-emphasis:hover:not(:disabled) { transform: none; }
 }
 
 /*

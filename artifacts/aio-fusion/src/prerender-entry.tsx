@@ -39,6 +39,7 @@ import TermsConditionsPage from "./marketing/TermsConditionsPage";
 import {
   PAGE_META,
   ARTICLE_META,
+  HIDDEN_PUBLIC_INSIGHT_SLUGS,
   PUBLIC_PAGE_DEFINITIONS,
   PUBLIC_ROUTES,
   ARTICLE_SLUGS,
@@ -224,8 +225,11 @@ export async function runPrerender(options: PrerenderOptions = {}): Promise<Prer
     ?.replace(/^https?:\/\//, "")
     .replace(/\/+$/, "");
   const hasControlledSnapshot = Object.prototype.hasOwnProperty.call(options, "publishedInsights");
+  const hiddenPublicInsightSlugs = new Set<string>(HIDDEN_PUBLIC_INSIGHT_SLUGS);
   if (hasControlledSnapshot) {
-    publishedInsights = options.publishedInsights ?? [];
+    publishedInsights = (options.publishedInsights ?? []).filter(
+      (article) => !hiddenPublicInsightSlugs.has(article.slug),
+    );
     globalThis.__AIO_PRERENDER_INSIGHTS__ = publishedInsights;
   } else {
     delete globalThis.__AIO_PRERENDER_INSIGHTS__;
@@ -235,7 +239,9 @@ export async function runPrerender(options: PrerenderOptions = {}): Promise<Prer
           signal: AbortSignal.timeout(15_000),
         });
         if (response.ok) {
-          publishedInsights = await response.json() as PublicInsight[];
+          publishedInsights = (await response.json() as PublicInsight[]).filter(
+            (article) => !hiddenPublicInsightSlugs.has(article.slug),
+          );
           globalThis.__AIO_PRERENDER_INSIGHTS__ = publishedInsights;
           console.log(`  ✓  Loaded ${publishedInsights.length} published Insights stories`);
         }
@@ -246,7 +252,13 @@ export async function runPrerender(options: PrerenderOptions = {}): Promise<Prer
   }
 
   const articleSlugs = publishedInsights.length
-    ? publishedInsights.filter((article) => !article.externalUrl && article.body.length > 0).map((article) => article.slug)
+    ? publishedInsights
+        .filter((article) =>
+          !hiddenPublicInsightSlugs.has(article.slug) &&
+          !article.externalUrl &&
+          article.body.length > 0,
+        )
+        .map((article) => article.slug)
     : ARTICLE_SLUGS;
 
   let ok = 0;
