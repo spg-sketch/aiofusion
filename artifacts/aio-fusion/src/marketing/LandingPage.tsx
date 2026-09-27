@@ -36,7 +36,7 @@ let demoIntroducedWithoutStorage = false;
 
 const llmEngines = [
   { name: "ChatGPT", logo: null },
-  { name: "Claude", logo: `${import.meta.env.BASE_URL}images/logo-claude.png` },
+  { name: "Claude", logo: `${import.meta.env.BASE_URL}images/logo-claude-on-navy.png` },
 ];
 
 const NAV_LINKS = [
@@ -253,7 +253,7 @@ export default function LandingPageC({
             <p className="text-[30px] font-bold uppercase tracking-[0.22em] text-white">Optimised for</p>
             {llmEngines.map((engine) => (
               engine.logo
-                ? <img key={engine.name} src={engine.logo} alt={engine.name} className="h-[120px] object-contain" />
+                ? <img key={engine.name} src={engine.logo} alt={engine.name} className="h-10 sm:h-11 w-auto max-w-[200px] object-contain" />
                 : <span key={engine.name} className="text-[39px] font-semibold text-white">{engine.name}</span>
             ))}
           </div>
