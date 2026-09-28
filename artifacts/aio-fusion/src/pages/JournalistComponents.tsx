@@ -1,6 +1,6 @@
 import React from "react";
 import { vars } from "../marketing/vars";
-import { Mail, Phone, MapPin, Globe, ExternalLink, Linkedin, Twitter, Clock, Edit, Check, ThumbsDown, ThumbsUp, Database, Target, Award, Shield, FileText, Undo2, ChevronDown, ChevronRight, AlertCircle, Ban, Loader2 } from "lucide-react";
+import { Mail, Phone, MapPin, Globe, ExternalLink, Linkedin, Twitter, Clock, Edit, Check, Bookmark, ThumbsDown, ThumbsUp, Database, Target, Award, Shield, FileText, Undo2, ChevronDown, ChevronRight, AlertCircle, Ban, Loader2 } from "lucide-react";
 import { MiniDonut } from "./shared";
 
 export type Contact = {
@@ -241,9 +241,45 @@ function EnrichmentSections({
   );
 }
 
-function AssessmentSection({ assessment }: { assessment?: RecommendationAssessment }) {
+function AssessmentSection({ assessment, compact = false, suggestedAngle }: { assessment?: RecommendationAssessment; compact?: boolean; suggestedAngle?: string | null }) {
   const [factorsOpen, setFactorsOpen] = React.useState(false);
+  const compactFitScore = assessment?.fitScore;
   
+  if (compact) {
+    return (
+      <div className="mb-3" data-testid="editorial-assessment">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px]">
+          <span className="font-semibold text-slate-800">Editorial fit: {compactFitScore ?? "Not assessed"}{compactFitScore !== null && compactFitScore !== undefined ? "%" : ""}</span>
+          <span className="text-slate-600">Evidence confidence: <span className="font-medium capitalize">{assessment?.confidence || "Not assessed"}</span></span>
+        </div>
+        {assessment && <p className="text-[11px] text-slate-500 mt-1">Confidence reflects the quality and coverage of available evidence, not the likelihood of a placement.</p>}
+        {suggestedAngle && <p className="text-[12px] text-slate-700 mt-2"><span className="font-semibold">Suggested pitch angle:</span> {suggestedAngle}</p>}
+        {assessment && <>
+          <details className="mt-2 text-[12px] text-slate-600">
+            <summary className="cursor-pointer font-medium">Evidence and contact checks</summary>
+            <div className="mt-2 space-y-2">
+              <p>{assessment.evidence.length} cited source{assessment.evidence.length === 1 ? "" : "s"} checked. {assessment.evidenceCoverage} evidence coverage.</p>
+              {assessment.readiness.reasons.length > 0 && <p><span className="font-semibold">Contact checks:</span> {assessment.readiness.reasons.join(" ")}</p>}
+              {assessment.warnings.map((warning, index) => <p key={index} className="text-amber-700">{warning}</p>)}
+              {assessment.evidence.map((evidence, index) => (
+                <div key={`${evidence.url}-${index}`} className="rounded-md border border-slate-200 bg-white p-2">
+                  <a href={evidence.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{evidence.title}</a>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500 mt-1">
+                    {evidence.publishedAt && <span>Published: {new Date(evidence.publishedAt).toLocaleDateString()}</span>}
+                    <span>Checked: {new Date(evidence.checkedAt).toLocaleDateString()}</span>
+                    {evidence.authorMatched && <span className="text-emerald-700 font-medium">Author matched</span>}
+                    <span>{evidence.attribution === "page_checked" ? "Page checked" : "Search suggested"}</span>
+                  </div>
+                  {evidence.excerpt && <p className="mt-1">“{evidence.excerpt}”</p>}
+                </div>
+              ))}
+            </div>
+          </details>
+        </>}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 mb-4">
       {assessment ? (
@@ -371,6 +407,10 @@ export function RecommendationCard({
   onRefine,
   onToggleRestriction,
   sharedScoreCount = 1,
+  compact = false,
+  savedToDatabase = false,
+  onSaveToDatabase,
+  bookmarkLoading = false,
 }: {
   item: Recommendation;
   decision?: Decision;
@@ -390,6 +430,10 @@ export function RecommendationCard({
   onRefine?: (signal: "more" | "less" | null) => void;
   onToggleRestriction?: (contactId: number, restricted: boolean) => void;
   sharedScoreCount?: number;
+  compact?: boolean;
+  savedToDatabase?: boolean;
+  onSaveToDatabase?: () => void;
+  bookmarkLoading?: boolean;
 }) {
   const c = item.contact;
   const contactName = [c.firstName, c.lastName].map((part) => part?.trim()).filter(Boolean).join(" ");
@@ -403,6 +447,7 @@ export function RecommendationCard({
             <h3 className="text-[18px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
               {hasRecordedName ? contactName : "Contact name not recorded"}
             </h3>
+            {compact && <span className="text-[11px] font-semibold text-slate-500" data-testid={`text-recommendation-rank-${c.id}`}>Rank {item.rank}</span>}
             {c.linkedinUrl && (
               <a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800" title="LinkedIn">
                 <Linkedin size={16} />
@@ -447,15 +492,20 @@ export function RecommendationCard({
                 <span className="text-slate-600">{c.outletCountry}</span>
               </>
             )}
-            {c.outletReachBand && (
+            {c.outletReachBand && !compact && (
               <>
                 <span className="mx-2 text-slate-300">|</span>
                 <span className="text-slate-600">Reach: {c.outletReachBand}</span>
               </>
             )}
           </p>
+          {compact && <p className="text-[12px] text-slate-600 mb-2">
+            Source-provided publication reach: {c.publicationReach || c.outletReachBand || "Not available"} <span className="text-[11px] text-slate-500">(not a verified audience measurement)</span>
+            <span className="mx-2 text-slate-300">·</span>
+            Publication authority: {c.publicationAuthority !== undefined && c.publicationAuthority !== null && c.publicationAuthority !== "" ? c.publicationAuthority : "Not available"}
+          </p>}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-[13px] mb-4">
+          <div className={`grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-[13px] ${compact ? "mb-2" : "mb-4"}`}>
             {c.email && (
               <div className="flex items-center gap-2" style={{ color: vars.g600 }}>
                 <Mail size={14} className="text-slate-400" />
@@ -501,7 +551,7 @@ export function RecommendationCard({
             </div>
           ) : null}
 
-          {item.reasons && item.reasons.length > 0 && (
+          {!compact && item.reasons && item.reasons.length > 0 && (
             <div className="p-3 rounded-lg bg-indigo-50 border border-indigo-100 mb-4">
               <div className="flex items-start gap-2">
                 <Target size={14} className="text-indigo-600 mt-0.5" />
@@ -514,18 +564,28 @@ export function RecommendationCard({
               </div>
             </div>
           )}
-          <PhraseAttributionSections attributions={item.phraseAttributions} />
+          {compact && item.phraseAttributions?.length ? (
+            <details className="mb-3 text-[12px]">
+              <summary className="cursor-pointer font-medium text-indigo-800">Story phrase matches</summary>
+              <div className="mt-2"><PhraseAttributionSections attributions={item.phraseAttributions} /></div>
+            </details>
+          ) : null}
+          {!compact && <PhraseAttributionSections attributions={item.phraseAttributions} />}
 
-          <EnrichmentSections
+          {!compact && <EnrichmentSections
             recentBylines={c.recentBylines || latestDiscovery?.recentBylines}
             journalistInterests={c.journalistInterests || latestDiscovery?.journalistInterests}
             mediaOpportunities={c.mediaOpportunities || latestDiscovery?.mediaOpportunities}
             legacyMediaOpportunity={latestDiscovery?.mediaOpportunity}
-          />
+          />}
           
-          <AssessmentSection assessment={item.assessment} />
+          <AssessmentSection
+            assessment={item.assessment}
+            compact={compact}
+            suggestedAngle={item.assessment?.suggestedAngle || item.phraseAttributions?.[0]?.suggestedPlacementAngle || c.mediaOpportunities?.[0]?.angle || latestDiscovery?.mediaOpportunities?.[0]?.angle}
+          />
 
-          {c.notes && (
+          {!compact && c.notes && (
             <div className="p-3 rounded-lg bg-amber-50 border border-amber-100 mb-4">
               <div className="flex items-start gap-2">
                 <FileText size={14} className="text-amber-600 mt-0.5" />
@@ -540,7 +600,7 @@ export function RecommendationCard({
         </div>
 
         <div className="flex flex-col items-end gap-3 min-w-[140px]">
-          {showMatchScore !== false && <div className="flex flex-col items-center p-3 rounded-xl border border-slate-100 bg-white shadow-sm w-full">
+          {!compact && showMatchScore !== false && <div className="flex flex-col items-center p-3 rounded-xl border border-slate-100 bg-white shadow-sm w-full">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
               {sharedScoreCount > 1 ? "Shared Match Score" : "Match Score"}
             </span>
@@ -552,10 +612,10 @@ export function RecommendationCard({
             )}
           </div>}
           
-          <div className="flex flex-wrap gap-2 justify-end w-full">
-            {c.publicationReach && (
+          {!compact && <div className="flex flex-wrap gap-2 justify-end w-full">
+             {c.publicationReach && (
               <div className="flex flex-col items-center p-2 rounded-lg bg-slate-50 border border-slate-100 flex-1 min-w-[70px]">
-                 <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wide">Pub Reach</span>
+                 <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wide" title="Source-provided value; not a verified audience measurement">Source reach</span>
                  <span className="text-[13px] font-bold text-slate-700">{c.publicationReach}</span>
               </div>
             )}
@@ -587,14 +647,38 @@ export function RecommendationCard({
                  <span className="text-[11px] font-medium text-emerald-700">{new Date(c.lastVerifiedAt).toLocaleDateString()}</span>
               </div>
             )}
-          </div>
+          </div>}
         </div>
       </div>
 
-      {(!isShortlist && onAccept && onDecline) || onToggleRestriction ? (
+      {(!isShortlist && onAccept) || onToggleRestriction || onSaveToDatabase ? (
         <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-4 border-t" style={{ borderColor: vars.g100 }}>
           <div className="flex flex-wrap items-center gap-3">
-            {!isShortlist && onAccept && onDecline && (
+            {onSaveToDatabase && (
+              <button
+                type="button"
+                data-testid={`button-save-media-contact-${c.id}`}
+                onClick={onSaveToDatabase}
+                disabled={bookmarkLoading}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold border transition-colors ${savedToDatabase ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-white hover:bg-slate-50 text-slate-700"}`}
+              >
+                {bookmarkLoading ? <Loader2 size={14} className="animate-spin" /> : savedToDatabase ? <Check size={14} /> : <Bookmark size={14} />}
+                {bookmarkLoading ? "Saving..." : savedToDatabase ? "Saved to My Media Database" : "Save to My Media Database"}
+              </button>
+            )}
+            {compact && !isShortlist && onAccept && (
+              <button
+                type="button"
+                data-testid={`button-plan-story-outreach-${c.id}`}
+                onClick={onAccept}
+                disabled={actionLoading}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
+              >
+                {actionLoading ? <Loader2 size={14} className="animate-spin" /> : decision?.decision === "shortlisted" ? <Check size={14} /> : <Target size={14} />}
+                {actionLoading ? "Saving..." : decision?.decision === "shortlisted" ? "Added to story shortlist" : "Plan outreach for this story"}
+              </button>
+            )}
+            {!compact && !isShortlist && onAccept && onDecline && (
               <>
                 <button 
                   type="button"

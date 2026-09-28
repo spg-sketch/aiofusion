@@ -120,6 +120,10 @@ export async function ensureMediaSchema(): Promise<void> {
       ADD COLUMN IF NOT EXISTS source_check_failure_count integer,
       ADD COLUMN IF NOT EXISTS updated_at timestamptz
   `);
+  await db.execute(sql`
+    ALTER TABLE media_outlets
+      ADD COLUMN IF NOT EXISTS linkedin_url text NOT NULL DEFAULT ''
+  `);
 
   await db.execute(sql`
     UPDATE media_contacts
@@ -284,6 +288,31 @@ export async function ensureMediaSchema(): Promise<void> {
       created_by varchar NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     )
+  `);
+  // Saved media are account-owned references to canonical records, never
+  // copies. This additive table preserves the source records and their history.
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS media_bookmarks (
+      id serial PRIMARY KEY,
+      account_id varchar NOT NULL,
+      contact_id integer REFERENCES media_contacts(id) ON DELETE CASCADE,
+      outlet_id integer REFERENCES media_outlets(id) ON DELETE CASCADE,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      CONSTRAINT media_bookmarks_exactly_one_target
+        CHECK ((contact_id IS NOT NULL) <> (outlet_id IS NOT NULL))
+    )
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS media_bookmarks_account_contact_unique
+      ON media_bookmarks (account_id, contact_id) WHERE contact_id IS NOT NULL
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS media_bookmarks_account_outlet_unique
+      ON media_bookmarks (account_id, outlet_id) WHERE outlet_id IS NOT NULL
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS media_bookmarks_account_created
+      ON media_bookmarks (account_id, created_at DESC)
   `);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS media_contact_correction_reports (

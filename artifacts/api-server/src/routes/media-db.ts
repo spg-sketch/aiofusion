@@ -1,6 +1,6 @@
 import { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaDiscoveriesTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaContactStatusEventsTable, mediaContactCorrectionReportsTable, mediaSuppressionsTable, mediaImportBatchesTable, mediaImportJobsTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, mediaOutreachTable, mediaOutreachActivitiesTable, mediaPlacementsTable, projectsTable, archiveItemsTable, platformAccountsTable, platformMetaTable, platformUsersTable, tokenUsageTable, type MediaOutreachStatus } from "@workspace/db";
+import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaBookmarksTable, mediaDiscoveriesTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaContactStatusEventsTable, mediaContactCorrectionReportsTable, mediaSuppressionsTable, mediaImportBatchesTable, mediaImportJobsTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, mediaOutreachTable, mediaOutreachActivitiesTable, mediaPlacementsTable, projectsTable, archiveItemsTable, platformAccountsTable, platformMetaTable, platformUsersTable, tokenUsageTable, type MediaOutreachStatus } from "@workspace/db";
 import { and, asc, count, desc, eq, ilike, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { inAssignedScope, memberProjectGate } from "../lib/member-guards";
@@ -180,14 +180,10 @@ function visibleAccountsFromHierarchy(
   req: Request,
   rows: Array<{ username: string; parent: string | null }>,
 ): string[] | null {
-  // Authentication normalises non-Master rows with a legacy `admin` role to an
-  // agency, but keep this boundary defensive for legacy sessions and tests:
-  // only the canonical Master workspace gets the unrestricted visibility list.
-  if (req.account?.role === "admin" && normUsername(req.account.username) !== DEFAULT_ADMIN_USERNAME) {
-    return [normUsername(req.account.username)];
-  }
-  if (req.account?.role === "admin") return null;
-  const start = normUsername(req.account!.username);
+  // This helper is only for a project/story permission recheck. Media data
+  // itself is always filtered separately to the active account below.
+  if (!req.account || req.account.role === "admin") return null;
+  const start = normUsername(req.account.username);
   const childrenByParent = new Map<string, string[]>();
   let accountParent: string | null = null;
   for (const row of rows) {
@@ -214,13 +210,9 @@ function visibleAccountsFromHierarchy(
 }
 
 async function visibleAccounts(req: Request): Promise<string[] | null> {
-  // Authentication normalises non-Master rows with a legacy `admin` role to an
-  // agency, but keep this boundary defensive for legacy sessions and tests:
-  // only the canonical Master workspace gets the unrestricted visibility list.
-  if (req.account?.role === "admin" && normUsername(req.account.username) !== DEFAULT_ADMIN_USERNAME) {
-    return [normUsername(req.account.username)];
-  }
-  return getVisibleUsernames(req.account!);
+  // Private media is strictly active-account scoped. The canonical shared
+  // collection remains visible through the accountId IS NULL predicates.
+  return req.account ? [normUsername(req.account.username)] : [];
 }
 
 function isMasterWorkspace(req: Request): boolean {
@@ -385,6 +377,190 @@ router.get(
     }
   },
 );
+
+// Account-private reusable references. The target media row remains canonical
+// and is never copied or modified by bookmarking.
+router.get("/store/media-db/bookmarks", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const workspaceId = normUsername(req.account!.username);
+    const page = positivePage(req.query.page);
+    const pageSize = Math.max(1, Math.min(100, Number(req.query.pageSize) || 50));
+    const rows = await db.select({
+      bookmark: mediaBookmarksTable,
+      contact: mediaContactsTable,
+      contactOutlet: mediaOutletsTable,
+      publication: mediaOutletsTable,
+    }).from(mediaBookmarksTable)
+      .leftJoin(mediaContactsTable, eq(mediaBookmarksTable.contactId, mediaContactsTable.id))
+      .leftJoin(mediaOutletsTable, eq(
+        sql`CASE WHEN ${mediaBookmarksTable.contactId} IS NOT NULL THEN ${mediaContactsTable.outletId} ELSE ${mediaBookmarksTable.outletId} END`,
+        mediaOutletsTable.id,
+      ))
+      .where(eq(mediaBookmarksTable.accountId, workspaceId))
+      .orderBy(desc(mediaBookmarksTable.createdAt), desc(mediaBookmarksTable.id));
+    const visible = await visibleAccounts(req);
+    const matcher = await createSuppressionMatcher(workspaceId);
+    const activeContactIds = rows.flatMap(({ contact }) => contact && !contact.deletedAt ? [contact.id] : []);
+    const departed = await departedContactIds(activeContactIds, workspaceId);
+    const sourceChecks = activeContactIds.length
+      ? await db.select().from(mediaContactSourceChecksTable).where(inArray(mediaContactSourceChecksTable.contactId, activeContactIds))
+        .orderBy(desc(mediaContactSourceChecksTable.checkedAt), desc(mediaContactSourceChecksTable.id))
+      : [];
+    const latestChecks = new Map<string, typeof sourceChecks[number]>();
+    for (const check of sourceChecks) if (!latestChecks.has(`${check.contactId}\0${check.sourceUrl}`)) latestChecks.set(`${check.contactId}\0${check.sourceUrl}`, check);
+    const safe: Array<{
+      id: number;
+      bookmarkId: number;
+      targetId: number;
+      contactId: number | null;
+      outletId: number | null;
+      type: "contact" | "publication";
+      createdAt: Date;
+      contact: (typeof mediaContactsTable.$inferSelect & {
+        outletName: string | null; outletCategory: string | null; outletWebsite: string;
+        outletCountry: string | null; outletReachBand: string | null;
+      }) | null;
+      publication: (typeof mediaOutletsTable.$inferSelect & { website: string }) | null;
+    }> = [];
+    for (const { bookmark, contact, contactOutlet, publication } of rows) {
+      if (bookmark.contactId !== null) {
+        if (!contact || contact.deletedAt || departed.has(contact.id)
+            || isFormerJournalistStatus(contact.editorialStatus)
+            || latestChecks.get(`${contact.id}\0${contact.sourceUrl}`)?.outcome === "unavailable") continue;
+        const allowedOutlet = contactOutlet && outletVisible(contactOutlet.accountId, visible) && !contactOutlet.deletedAt ? contactOutlet : null;
+        if (matcher({
+          name: `${contact.firstName} ${contact.lastName}`,
+          email: contact.email,
+          linkedinUrl: contact.linkedinUrl,
+          outlet: contactOutlet?.name ?? "",
+        })) continue;
+        safe.push({
+          id: contact.id, bookmarkId: bookmark.id, targetId: contact.id, contactId: contact.id, outletId: null,
+          type: "contact" as const, createdAt: bookmark.createdAt,
+          contact: { ...contact, outletName: allowedOutlet?.name ?? null, outletCategory: allowedOutlet?.category ?? null, outletWebsite: safePublicationWebsite(allowedOutlet?.website), outletCountry: allowedOutlet?.country ?? null, outletReachBand: allowedOutlet?.reachBand ?? null },
+          publication: null,
+        });
+        continue;
+      }
+      if (!publication || publication.deletedAt || !outletVisible(publication.accountId, visible)) continue;
+      safe.push({
+        id: publication.id, bookmarkId: bookmark.id, targetId: publication.id, contactId: null, outletId: publication.id,
+        type: "publication", createdAt: bookmark.createdAt, contact: null,
+        publication: { ...publication, website: safePublicationWebsite(publication.website), linkedinUrl: safePublicationLinkedinUrl(publication.linkedinUrl) },
+      });
+    }
+    const start = (page - 1) * pageSize;
+    res.json({ bookmarks: safe.slice(start, start + pageSize), total: safe.length, page, pageSize });
+  } catch (error) {
+    req.log.error({ err: error }, "Failed to load saved media bookmarks");
+    res.status(500).json({ error: "Failed to load saved media" });
+  }
+});
+
+async function saveMediaBookmark(req: Request, res: Response, type: unknown, id: number): Promise<void> {
+  if ((type !== "contact" && type !== "publication") || !Number.isInteger(id) || id < 1) {
+    res.status(400).json({ error: "type must be contact or publication and id must be a positive integer." });
+    return;
+  }
+  if (type !== "contact" && type !== "publication") return;
+  const workspaceId = normUsername(req.account!.username);
+  const visible = await visibleAccounts(req);
+  if (type === "contact") {
+    const [contact] = await db.select().from(mediaContactsTable).where(and(eq(mediaContactsTable.id, id), isNull(mediaContactsTable.deletedAt))).limit(1);
+    if (!contact || (contact.accountId !== null && !visible?.includes(contact.accountId))) {
+      res.status(404).json({ error: "Contact not found in this account." });
+      return;
+    }
+    const [outlet] = contact.outletId
+      ? await db.select().from(mediaOutletsTable).where(and(eq(mediaOutletsTable.id, contact.outletId), isNull(mediaOutletsTable.deletedAt))).limit(1)
+      : [];
+    if (await isSuppressed({ ...contact, outlet: outlet?.name ?? "", accountId: workspaceId })) {
+      res.status(409).json({ error: "This contact is unavailable for processing." });
+      return;
+    }
+    if ((await departedContactIds([contact.id], workspaceId)).has(contact.id)) {
+      res.status(409).json({ error: "Former or departed contacts cannot be saved as current media." });
+      return;
+    }
+    if (isFormerJournalistStatus(contact.editorialStatus)) {
+      res.status(409).json({ error: "Former or departed contacts cannot be saved as current media." });
+      return;
+    }
+    const [latestSourceCheck] = contact.sourceUrl ? await db.select().from(mediaContactSourceChecksTable)
+      .where(and(eq(mediaContactSourceChecksTable.contactId, contact.id), eq(mediaContactSourceChecksTable.sourceUrl, contact.sourceUrl)))
+      .orderBy(desc(mediaContactSourceChecksTable.checkedAt), desc(mediaContactSourceChecksTable.id)).limit(1) : [];
+    if (latestSourceCheck?.outcome === "unavailable") {
+      res.status(409).json({ error: "This contact's source is currently marked unavailable." });
+      return;
+    }
+  } else {
+    const [publication] = await db.select({ id: mediaOutletsTable.id, accountId: mediaOutletsTable.accountId }).from(mediaOutletsTable)
+      .where(and(eq(mediaOutletsTable.id, id), isNull(mediaOutletsTable.deletedAt))).limit(1);
+    if (!publication || (publication.accountId !== null && !visible?.includes(publication.accountId))) {
+      res.status(404).json({ error: "Publication not found in this account." });
+      return;
+    }
+  }
+  const [bookmark] = await db.insert(mediaBookmarksTable).values({
+    accountId: workspaceId,
+    contactId: type === "contact" ? id : null,
+    outletId: type === "publication" ? id : null,
+  }).onConflictDoNothing().returning();
+  const existing = bookmark ?? (type === "contact"
+    ? (await db.select().from(mediaBookmarksTable).where(and(eq(mediaBookmarksTable.accountId, workspaceId), eq(mediaBookmarksTable.contactId, id))).limit(1))[0]
+    : (await db.select().from(mediaBookmarksTable).where(and(eq(mediaBookmarksTable.accountId, workspaceId), eq(mediaBookmarksTable.outletId, id))).limit(1))[0]);
+  if (!existing) {
+    res.status(500).json({ error: "Could not save this media reference." });
+    return;
+  }
+  res.json({ ok: true, bookmark: { id: existing.id, type, targetId: id, createdAt: existing.createdAt } });
+}
+
+router.post("/store/media-db/bookmarks", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  await saveMediaBookmark(req, res, req.body?.type, Number(req.body?.id));
+});
+
+router.put("/store/media-db/bookmarks/:type/:id", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  await saveMediaBookmark(req, res, req.params.type, Number(req.params.id));
+});
+
+router.delete("/store/media-db/bookmarks/:id", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) {
+    res.status(400).json({ error: "Invalid bookmark id." });
+    return;
+  }
+  const removed = await db.delete(mediaBookmarksTable).where(and(
+    eq(mediaBookmarksTable.id, id),
+    eq(mediaBookmarksTable.accountId, normUsername(req.account!.username)),
+  )).returning({ id: mediaBookmarksTable.id });
+  if (!removed.length) {
+    res.status(404).json({ error: "Saved media not found." });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+router.delete("/store/media-db/bookmarks/:type/:id", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  const { type } = req.params;
+  const id = Number(req.params.id);
+  if ((type !== "contact" && type !== "publication") || !Number.isInteger(id) || id < 1) {
+    res.status(400).json({ error: "type must be contact or publication and id must be a positive integer." });
+    return;
+  }
+  const targetPredicate = type === "contact"
+    ? eq(mediaBookmarksTable.contactId, id)
+    : eq(mediaBookmarksTable.outletId, id);
+  const removed = await db.delete(mediaBookmarksTable).where(and(
+    eq(mediaBookmarksTable.accountId, normUsername(req.account!.username)),
+    targetPredicate,
+  )).returning({ id: mediaBookmarksTable.id });
+  if (!removed.length) {
+    res.status(404).json({ error: "Saved media not found." });
+    return;
+  }
+  res.json({ ok: true });
+});
 
 // Distinct category/industry labels used by the contact category filter.  This
 // is deliberately derived from visible contacts rather than the custom
@@ -1363,15 +1539,27 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const visible = await visibleAccounts(req);
-      const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
-      const category = typeof req.query.category === "string" ? req.query.category.trim() : "";
-      const page = Math.max(1, Number(req.query.page) || 1);
+      const workspaceId = normUsername(req.account!.username);
+      const q = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 200) : "";
+      const category = typeof req.query.category === "string" ? req.query.category.trim().slice(0, 200) : "";
+      const location = typeof req.query.location === "string" ? req.query.location.trim().slice(0, 200) : "";
+      const scope = req.query.scope === undefined ? "all" : req.query.scope;
+      if (scope !== "all" && scope !== "added" && scope !== "saved") {
+        res.status(400).json({ error: "scope must be all, added, or saved." });
+        return;
+      }
+      const page = positivePage(req.query.page);
       const pageSize = Math.max(1, Math.min(200, Number(req.query.pageSize) || (q ? 50 : 25)));
+      const scopePredicate = scope === "added"
+        ? eq(mediaOutletsTable.accountId, workspaceId)
+        : scope === "saved"
+          ? sql`EXISTS (SELECT 1 FROM media_bookmarks saved WHERE saved.account_id = ${workspaceId} AND saved.outlet_id = ${mediaOutletsTable.id})`
+          : visible === null ? undefined : visible.length
+            ? or(isNull(mediaOutletsTable.accountId), inArray(mediaOutletsTable.accountId, visible))
+            : isNull(mediaOutletsTable.accountId);
       const predicate = and(
         isNull(mediaOutletsTable.deletedAt),
-        visible === null ? undefined : visible.length
-          ? or(isNull(mediaOutletsTable.accountId), inArray(mediaOutletsTable.accountId, visible))
-          : isNull(mediaOutletsTable.accountId),
+        scopePredicate,
         q ? or(
           ilike(mediaOutletsTable.name, `%${q}%`),
           ilike(mediaOutletsTable.category, `%${q}%`),
@@ -1379,6 +1567,7 @@ router.get(
           ilike(mediaOutletsTable.country, `%${q}%`),
         ) : undefined,
         category ? ilike(mediaOutletsTable.category, `%${category}%`) : undefined,
+        location ? ilike(mediaOutletsTable.country, `%${location}%`) : undefined,
       );
       const [{ total }] = await db.select({ total: count() }).from(mediaOutletsTable).where(predicate);
       const rows = await db
@@ -1388,7 +1577,22 @@ router.get(
         .orderBy(asc(mediaOutletsTable.name), asc(mediaOutletsTable.id))
         .limit(pageSize)
         .offset((page - 1) * pageSize);
-      res.json({ outlets: rows, total: Number(total), page, pageSize });
+      const journalists = await eligibleLinkedJournalists(rows.map((outlet) => outlet.id), normUsername(req.account!.username), visible);
+      res.json({
+        outlets: rows.map((outlet) => {
+          const linked = journalists.get(outlet.id) ?? [];
+          return {
+            ...outlet,
+            website: safePublicationWebsite(outlet.website),
+            linkedinUrl: safePublicationLinkedinUrl(outlet.linkedinUrl),
+            journalists: linked,
+            linkedJournalists: linked,
+            journalistsTotal: linked.length,
+            journalistsNote: linked.length ? null : "No eligible linked journalists are currently known.",
+          };
+        }),
+        total: Number(total), page, pageSize,
+      });
     } catch {
       res.status(500).json({ error: "Failed to load outlets" });
     }
@@ -1400,9 +1604,15 @@ router.post(
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
-      const { name, category, website, description, country, reachBand } = req.body ?? {};
+      const { name, category, website, description, country, reachBand, linkedinUrl } = req.body ?? {};
       if (!name || typeof name !== "string" || !name.trim()) {
         res.status(400).json({ error: "Missing outlet name" });
+        return;
+      }
+      const suppliedLinkedinUrl = typeof linkedinUrl === "string" ? linkedinUrl.trim() : "";
+      const safeLinkedinUrl = safePublicationLinkedinUrl(suppliedLinkedinUrl);
+      if (suppliedLinkedinUrl && !safeLinkedinUrl) {
+        res.status(400).json({ error: "Publication LinkedIn URL must use an HTTPS linkedin.com address." });
         return;
       }
       if (isMasterWorkspace(req) && !isWritableMaster(req)) {
@@ -1421,10 +1631,11 @@ router.post(
           description: typeof description === "string" ? description.trim() : "",
           country: typeof country === "string" ? country.trim() : "",
           reachBand: typeof reachBand === "string" ? reachBand.trim() : "",
+          linkedinUrl: safeLinkedinUrl,
           accountId,
         })
         .returning();
-      res.json({ ok: true, outlet: created });
+      res.json({ ok: true, outlet: { ...created, website: safePublicationWebsite(created.website), linkedinUrl: safePublicationLinkedinUrl(created.linkedinUrl) } });
     } catch {
       res.status(500).json({ error: "Failed to create outlet" });
     }
@@ -1457,7 +1668,13 @@ router.put(
         res.status(403).json({ error: "You can only edit your own outlets" });
         return;
       }
-      const { name, category, website, description, country, reachBand } = req.body ?? {};
+      const { name, category, website, description, country, reachBand, linkedinUrl } = req.body ?? {};
+      const suppliedLinkedinUrl = typeof linkedinUrl === "string" ? linkedinUrl.trim() : "";
+      const safeLinkedinUrl = safePublicationLinkedinUrl(suppliedLinkedinUrl);
+      if (suppliedLinkedinUrl && !safeLinkedinUrl) {
+        res.status(400).json({ error: "Publication LinkedIn URL must use an HTTPS linkedin.com address." });
+        return;
+      }
       const [updated] = await db
         .update(mediaOutletsTable)
         .set({
@@ -1467,10 +1684,11 @@ router.put(
           description: typeof description === "string" ? description.trim() : row.description,
           country: typeof country === "string" ? country.trim() : row.country,
           reachBand: typeof reachBand === "string" ? reachBand.trim() : row.reachBand,
+          linkedinUrl: typeof linkedinUrl === "string" ? safeLinkedinUrl : row.linkedinUrl,
         })
         .where(eq(mediaOutletsTable.id, numId))
         .returning();
-      res.json({ ok: true, outlet: updated });
+      res.json({ ok: true, outlet: { ...updated, website: safePublicationWebsite(updated.website), linkedinUrl: safePublicationLinkedinUrl(updated.linkedinUrl) } });
     } catch {
       res.status(500).json({ error: "Failed to update outlet" });
     }
@@ -1556,6 +1774,7 @@ function searchTokens(query: string): string[][] {
   const tokens: string[] = query.match(/[a-z0-9-]+/g) ?? [];
   return tokens
     .filter((token) => token.length > 1 && !SEARCH_STOP_WORDS.has(token))
+    .slice(0, 30)
     .map((token) => SEARCH_EXPANSIONS[token] ?? [token]);
 }
 
@@ -1576,6 +1795,45 @@ function normalisedOutletDomain(value: string): string {
   }
 }
 
+/**
+ * Stored source fields are retained verbatim for stewardship, but a website
+ * is only exposed as a link when it is a real HTTP(S) hostname. This masks
+ * source-mapping artifacts such as "345" without rewriting imported history.
+ */
+function safePublicationWebsite(value: string | null | undefined): string {
+  const source = typeof value === "string" ? value.trim() : "";
+  if (!source || /^\d+(?:[.:/]\d+)*$/.test(source)) return "";
+  try {
+    const url = new URL(/^https?:\/\//i.test(source) ? source : `https://${source}`);
+    if (!["http:", "https:"].includes(url.protocol) || !url.hostname.includes(".")
+        || /^\d+(?:\.\d+){1,3}$/.test(url.hostname)) return "";
+    return source;
+  } catch {
+    return "";
+  }
+}
+
+function safePublicationLinkedinUrl(value: string | null | undefined): string {
+  const supplied = (value ?? "").trim();
+  if (!supplied) return "";
+  try {
+    const url = new URL(/^https?:\/\//i.test(supplied) ? supplied : `https://${supplied}`);
+    if (url.protocol !== "https:" || !/(^|\.)linkedin\.com$/i.test(url.hostname)) return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+function positivePage(value: unknown): number {
+  const page = Number(value);
+  return Number.isSafeInteger(page) && page > 0 ? page : 1;
+}
+
+function isFormerJournalistStatus(value: string | null | undefined): boolean {
+  return /\b(former|departed|inactive|left|retired|no longer)\b/i.test(value ?? "");
+}
+
 function inferredOutletCountry(geography: string): string {
   const value = geography.toLowerCase();
   if (/\b(us|usa|united states|american|new york|washington|california|chicago|boston|texas)\b/.test(value)) return "United States";
@@ -1586,7 +1844,7 @@ function inferredOutletCountry(geography: string): string {
 const SEARCH_FIELDS = ["phrase", "topic", "location", "category"] as const;
 
 function cleanSearchValue(value: unknown): string {
-  return typeof value === "string" ? value.trim().slice(0, 500) : "";
+  return typeof value === "string" ? value.trim().slice(0, 200) : "";
 }
 
 function authorityNumber(value: string | null | undefined): number {
@@ -1632,6 +1890,75 @@ function sqlSearchGroups(groups: string[][], fields: ReturnType<typeof sql>[]): 
   ))));
 }
 
+async function eligibleLinkedJournalists(
+  outletIds: number[],
+  workspaceId: string,
+  visible: string[] | null,
+): Promise<Map<number, Array<Record<string, unknown>>>> {
+  const byOutlet = new Map<number, Array<Record<string, unknown>>>();
+  if (!outletIds.length) return byOutlet;
+  const testSuppressionFallback = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
+  const rows = await db.select({
+    contact: mediaContactsTable,
+    outletName: mediaOutletsTable.name,
+    outletCategory: mediaOutletsTable.category,
+    outletWebsite: mediaOutletsTable.website,
+    outletCountry: mediaOutletsTable.country,
+    outletReachBand: mediaOutletsTable.reachBand,
+  }).from(mediaContactsTable).innerJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
+    .where(and(
+      inArray(mediaContactsTable.outletId, outletIds),
+      isNull(mediaContactsTable.deletedAt),
+      isNull(mediaOutletsTable.deletedAt),
+      visible === null ? undefined : or(isNull(mediaContactsTable.accountId), inArray(mediaContactsTable.accountId, visible)),
+      testSuppressionFallback ? undefined : notSuppressedSql(workspaceId, mediaContactsTable.firstName, mediaContactsTable.lastName, mediaContactsTable.email, mediaContactsTable.linkedinUrl, mediaOutletsTable.name),
+    ));
+  if (!rows.length) return byOutlet;
+  const contactIds = rows.map(({ contact }) => contact.id);
+  const [statuses, checks, corrections] = await Promise.all([
+    db.select().from(mediaContactStatusEventsTable).where(and(
+      eq(mediaContactStatusEventsTable.accountId, workspaceId),
+      inArray(mediaContactStatusEventsTable.contactId, contactIds),
+    )).orderBy(desc(mediaContactStatusEventsTable.createdAt), desc(mediaContactStatusEventsTable.id)),
+    db.select().from(mediaContactSourceChecksTable).where(inArray(mediaContactSourceChecksTable.contactId, contactIds))
+      .orderBy(desc(mediaContactSourceChecksTable.checkedAt), desc(mediaContactSourceChecksTable.id)),
+    db.select({ contactId: mediaContactCorrectionReportsTable.contactId }).from(mediaContactCorrectionReportsTable).where(and(
+      eq(mediaContactCorrectionReportsTable.accountId, workspaceId),
+      eq(mediaContactCorrectionReportsTable.status, "pending"),
+      inArray(mediaContactCorrectionReportsTable.contactId, contactIds),
+    )),
+  ]);
+  const latestStatuses = new Map<number, typeof statuses[number]>();
+  for (const status of statuses) if (!latestStatuses.has(status.contactId)) latestStatuses.set(status.contactId, status);
+  const latestChecks = new Map<string, typeof checks[number]>();
+  for (const check of checks) if (!latestChecks.has(`${check.contactId}\0${check.sourceUrl}`)) latestChecks.set(`${check.contactId}\0${check.sourceUrl}`, check);
+  const pendingCorrectionIds = new Set(corrections.map((row) => row.contactId));
+  const matcher = testSuppressionFallback ? await createSuppressionMatcher(workspaceId) : null;
+  for (const { contact, outletName, outletCategory, outletWebsite, outletCountry, outletReachBand } of rows) {
+    const lifecycleStatus = latestStatuses.get(contact.id)?.status ?? "active";
+    const sourceCheck = latestChecks.get(`${contact.id}\0${contact.sourceUrl}`) ?? null;
+    if (lifecycleStatus === "departed"
+        || isFormerJournalistStatus(contact.editorialStatus)
+        || sourceCheck?.outcome === "unavailable"
+        || matcher?.({ name: `${contact.firstName} ${contact.lastName}`, email: contact.email, linkedinUrl: contact.linkedinUrl, outlet: outletName })) continue;
+    const journalists = byOutlet.get(contact.outletId!) ?? [];
+    journalists.push({
+      ...contact,
+      outletName,
+      outletCategory,
+      outletWebsite: safePublicationWebsite(outletWebsite),
+      outletCountry,
+      outletReachBand,
+      sourceCheck,
+      sourceStatus: !contact.sourceUrl ? "unverified" : !sourceCheck ? "due" : sourceCheck.outcome,
+      lifecycleStatus,
+      hasPendingCorrection: pendingCorrectionIds.has(contact.id),
+    });
+    byOutlet.set(contact.outletId!, journalists);
+  }
+  return byOutlet;
+}
+
 router.get(
   "/store/media-db/search",
   requirePlatformAuth,
@@ -1641,7 +1968,17 @@ router.get(
       const workspaceId = normUsername(req.account!.username);
       const interpretation = Object.fromEntries(SEARCH_FIELDS.map((field) => [field, cleanSearchValue(req.query[field])])) as Record<typeof SEARCH_FIELDS[number], string>;
       const minimumAuthority = Math.max(0, Math.min(100, Number(req.query.authority) || 0));
-      const page = Math.max(1, Number(req.query.page) || 1);
+      const resultType = req.query.type === undefined ? "all" : req.query.type;
+      const scope = req.query.scope === undefined ? "all" : req.query.scope;
+      if (resultType !== "all" && resultType !== "contacts" && resultType !== "publications") {
+        res.status(400).json({ error: "type must be contacts or publications." });
+        return;
+      }
+      if (scope !== "all" && scope !== "added" && scope !== "saved") {
+        res.status(400).json({ error: "scope must be all, added, or saved." });
+        return;
+      }
+      const page = positivePage(req.query.page);
       const pageSize = Math.max(1, Math.min(100, Number(req.query.pageSize) || 25));
       const testSuppressionFallback = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
       // Search predicates are pushed into SQL; enrichment below is intentionally
@@ -1649,6 +1986,11 @@ router.get(
       const visibility = visible === null ? undefined : visible.length
         ? or(isNull(mediaContactsTable.accountId), inArray(mediaContactsTable.accountId, visible))
         : isNull(mediaContactsTable.accountId);
+      const contactScope = scope === "added"
+        ? eq(mediaContactsTable.accountId, workspaceId)
+        : scope === "saved"
+          ? sql`EXISTS (SELECT 1 FROM media_bookmarks saved WHERE saved.account_id = ${workspaceId} AND saved.contact_id = ${mediaContactsTable.id})`
+          : visibility;
       const phrase = interpretation.phrase.toLowerCase();
       const topic = interpretation.topic.toLowerCase();
       const category = interpretation.category.toLowerCase();
@@ -1668,7 +2010,8 @@ router.get(
         sql`${mediaOutletsTable.website}`, sql`${mediaOutletsTable.category}`,
       ];
       const contactPredicate = and(
-        isNull(mediaContactsTable.deletedAt), visibility,
+        isNull(mediaContactsTable.deletedAt), contactScope,
+        resultType === "publications" ? sql`false` : undefined,
         sqlSearchGroups(phraseGroups, contactSearchFields),
         sqlSearchGroups(topicGroups, [sql`array_to_string(${mediaContactsTable.beats}, ' ')`, sql`array_to_string(${mediaContactsTable.sectors}, ' ')`, sql`${mediaOutletsTable.description}`]),
         category ? or(ilike(mediaOutletsTable.category, `%${category}%`), sql`array_to_string(${mediaContactsTable.sectors}, ' ') ILIKE ${`%${category}%`}`) : undefined,
@@ -1686,7 +2029,13 @@ router.get(
       const outletVisibility = visible === null ? undefined : visible.length
         ? or(isNull(mediaOutletsTable.accountId), inArray(mediaOutletsTable.accountId, visible))
         : isNull(mediaOutletsTable.accountId);
-      const outletPredicate = and(isNull(mediaOutletsTable.deletedAt), outletVisibility,
+      const outletScope = scope === "added"
+        ? eq(mediaOutletsTable.accountId, workspaceId)
+        : scope === "saved"
+          ? sql`EXISTS (SELECT 1 FROM media_bookmarks saved WHERE saved.account_id = ${workspaceId} AND saved.outlet_id = ${mediaOutletsTable.id})`
+          : outletVisibility;
+      const outletPredicate = and(isNull(mediaOutletsTable.deletedAt), outletScope,
+        resultType === "contacts" ? sql`false` : undefined,
         sqlSearchGroups(phraseGroups, outletSearchFields),
         sqlSearchGroups(topicGroups, [sql`${mediaOutletsTable.description}`, sql`${mediaOutletsTable.category}`]),
         category ? ilike(mediaOutletsTable.category, `%${category}%`) : undefined,
@@ -1754,7 +2103,27 @@ router.get(
       const boundedOutlets = selectedOutletIds.length
         ? await db.select().from(mediaOutletsTable).where(inArray(mediaOutletsTable.id, selectedOutletIds))
         : [];
-      const ids = boundedContacts.map(({ contact }) => contact.id);
+      // Publications are useful only when their complete, currently eligible
+      // journalist set is available alongside the publication card. This query
+      // is bounded to the requested publication page and to the active account
+      // plus the shared collection; it never traverses other client accounts.
+      const linkedContactsRaw = selectedOutletIds.length ? await db.select({
+        contact: mediaContactsTable,
+        outletName: mediaOutletsTable.name,
+        outletCategory: mediaOutletsTable.category,
+        outletWebsite: mediaOutletsTable.website,
+        outletCountry: mediaOutletsTable.country,
+        outletReachBand: mediaOutletsTable.reachBand,
+      }).from(mediaContactsTable).innerJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
+        .where(and(
+          inArray(mediaContactsTable.outletId, selectedOutletIds),
+          isNull(mediaContactsTable.deletedAt),
+          isNull(mediaOutletsTable.deletedAt),
+          visible === null ? undefined : or(isNull(mediaContactsTable.accountId), inArray(mediaContactsTable.accountId, visible)),
+          testSuppressionFallback ? undefined : notSuppressedSql(workspaceId, mediaContactsTable.firstName, mediaContactsTable.lastName, mediaContactsTable.email, mediaContactsTable.linkedinUrl, mediaOutletsTable.name),
+        )) : [];
+      const linkedIds = linkedContactsRaw.map(({ contact }) => contact.id);
+      const ids = [...new Set([...boundedContacts.map(({ contact }) => contact.id), ...linkedIds])];
       const [checks, statuses, corrections] = await Promise.all([
         ids.length ? db.select().from(mediaContactSourceChecksTable).where(inArray(mediaContactSourceChecksTable.contactId, ids)).orderBy(desc(mediaContactSourceChecksTable.checkedAt)) : Promise.resolve([]),
         ids.length ? db.select().from(mediaContactStatusEventsTable).where(and(eq(mediaContactStatusEventsTable.accountId, workspaceId), inArray(mediaContactStatusEventsTable.contactId, ids))).orderBy(desc(mediaContactStatusEventsTable.createdAt)) : Promise.resolve([]),
@@ -1763,14 +2132,65 @@ router.get(
       const latestChecks = new Map<string, typeof checks[number]>(); for (const check of checks) if (!latestChecks.has(`${check.contactId}\0${check.sourceUrl}`)) latestChecks.set(`${check.contactId}\0${check.sourceUrl}`, check);
       const latestStatuses = new Map<number, typeof statuses[number]>(); for (const status of statuses) if (!latestStatuses.has(status.contactId)) latestStatuses.set(status.contactId, status);
       const pending = new Set(corrections.map((row) => row.contactId));
+      const suppressionMatcher = testSuppressionFallback ? await createSuppressionMatcher(workspaceId) : null;
+      const linkedJournalistsByOutlet = new Map<number, Array<Record<string, unknown>>>();
+      for (const { contact, outletName, outletCategory, outletWebsite, outletCountry, outletReachBand } of linkedContactsRaw) {
+        const lifecycleStatus = latestStatuses.get(contact.id)?.status ?? "active";
+        const sourceCheck = latestChecks.get(`${contact.id}\0${contact.sourceUrl}`) ?? null;
+        const sourceStatus = !contact.sourceUrl ? "unverified" : !sourceCheck ? "due" : sourceCheck.outcome;
+        if (lifecycleStatus === "departed" || isFormerJournalistStatus(contact.editorialStatus) || sourceCheck?.outcome === "unavailable") continue;
+        if (suppressionMatcher?.({
+          name: `${contact.firstName} ${contact.lastName}`,
+          email: contact.email,
+          linkedinUrl: contact.linkedinUrl,
+          outlet: outletName,
+        })) continue;
+        const journalists = linkedJournalistsByOutlet.get(contact.outletId!) ?? [];
+        journalists.push({
+          ...contact,
+          outletName,
+          outletCategory,
+          outletWebsite: safePublicationWebsite(outletWebsite),
+          outletCountry,
+          outletReachBand,
+          sourceCheck,
+          sourceStatus,
+          lifecycleStatus,
+          hasPendingCorrection: pending.has(contact.id),
+        });
+        linkedJournalistsByOutlet.set(contact.outletId!, journalists);
+      }
       const contactResults = boundedContacts.flatMap(({ contact, outletName, outletCategory, outletWebsite, outletCountry, outletReachBand, outletAccountId }) => {
         const allowed = outletVisible(outletAccountId ?? null, visible);
         const sourceCheck = latestChecks.get(`${contact.id}\0${contact.sourceUrl}`) ?? null;
         const due = mediaSourceNextDueAt(sourceCheck, contact.sourceCheckFailureCount);
         const matchedPhrases = phrase ? [phrase] : [];
-        return [{ type: "contact" as const, id: contact.id, contact: { ...contact, outletName: allowed ? outletName : null, outletCategory: allowed ? outletCategory : null, outletWebsite: allowed ? outletWebsite : null, outletCountry: allowed ? outletCountry : null, outletReachBand: allowed ? outletReachBand : null, sourceCheck, sourceStatus: !contact.sourceUrl ? "unverified" : !sourceCheck ? "due" : sourceCheck.outcome, sourceReviewDueAt: due, sourceCheckQueued: Boolean(contact.sourceCheckClaimedAt), lifecycleStatus: latestStatuses.get(contact.id)?.status ?? "active", hasPendingCorrection: pending.has(contact.id) }, matchedFields: (topic || phrase) ? ["topic"] : ["name"], matchedPhrases, reasons: phrase ? [`Contains the exact phrase "${interpretation.phrase}".`] : ["Matched search criteria."], authority: Math.max(authorityNumber(contact.journalistAuthority), authorityNumber(contact.publicationAuthority)) }];
+        return [{ type: "contact" as const, id: contact.id, contact: { ...contact, outletName: allowed ? outletName : null, outletCategory: allowed ? outletCategory : null, outletWebsite: allowed ? safePublicationWebsite(outletWebsite) : null, outletCountry: allowed ? outletCountry : null, outletReachBand: allowed ? outletReachBand : null, sourceCheck, sourceStatus: !contact.sourceUrl ? "unverified" : !sourceCheck ? "due" : sourceCheck.outcome, sourceReviewDueAt: due, sourceCheckQueued: Boolean(contact.sourceCheckClaimedAt), lifecycleStatus: latestStatuses.get(contact.id)?.status ?? "active", hasPendingCorrection: pending.has(contact.id) }, matchedFields: (topic || phrase) ? ["topic"] : ["name"], matchedPhrases, reasons: phrase ? [`Contains the exact phrase "${interpretation.phrase}".`] : ["Matched search criteria."], authority: Math.max(authorityNumber(contact.journalistAuthority), authorityNumber(contact.publicationAuthority)) }];
       });
-      const outletResults = boundedOutlets.map((outlet) => ({ type: "outlet" as const, id: outlet.id, outlet, matchedFields: ["publication"], matchedPhrases: phrase ? [phrase] : [], reasons: ["Matched search criteria."], authority: 0 }));
+      const outletResults = boundedOutlets.map((outlet) => {
+        const journalists = linkedJournalistsByOutlet.get(outlet.id) ?? [];
+        return {
+          type: "outlet" as const,
+          id: outlet.id,
+          outlet: {
+            ...outlet,
+            website: safePublicationWebsite(outlet.website),
+            linkedinUrl: safePublicationLinkedinUrl(outlet.linkedinUrl),
+            journalists,
+            linkedJournalists: journalists,
+            journalistsTotal: journalists.length,
+            journalistsNote: journalists.length ? null : "No eligible linked journalists are currently known.",
+          },
+          journalists,
+          linkedJournalists: journalists,
+          journalistsTotal: journalists.length,
+          journalistsNote: journalists.length ? null : "No eligible linked journalists are currently known.",
+          matchedFields: ["publication"],
+          matchedPhrases: phrase ? [phrase] : [],
+          reasons: ["Matched search criteria."],
+          authority: 0,
+        };
+      });
       const contactById = new Map(contactResults.map((result) => [result.id, result]));
       const outletById = new Map(outletResults.map((result) => [result.id, result]));
       type RankedResult = typeof contactResults[number] | typeof outletResults[number];
@@ -2093,11 +2513,11 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const visible = await visibleAccounts(req);
-      const query = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
-      const category = typeof req.query.category === "string" ? req.query.category.trim().toLowerCase() : "";
-      const country = typeof req.query.country === "string" ? req.query.country.trim().toLowerCase() : "";
+      const query = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase().slice(0, 200) : "";
+      const category = typeof req.query.category === "string" ? req.query.category.trim().toLowerCase().slice(0, 200) : "";
+      const country = typeof req.query.country === "string" ? req.query.country.trim().toLowerCase().slice(0, 100) : "";
       const outletId = typeof req.query.outletId === "string" && /^\d+$/.test(req.query.outletId) ? Number(req.query.outletId) : null;
-      const page = Math.max(1, Math.min(100000, Number(req.query.page) || 1));
+      const page = Math.max(1, Math.min(10_000, Number(req.query.page) || 1));
       const pageSize = Math.max(1, Math.min(200, Number(req.query.pageSize) || 50));
       const testSuppressionFallback = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
       const terms = searchTokens(query).flat();
@@ -2158,7 +2578,7 @@ router.get(
         const sourceCheck = latest.get(`${contact.id}\0${contact.sourceUrl}`) ?? null;
         const due = mediaSourceNextDueAt(sourceCheck, contact.sourceCheckFailureCount);
         const allowed = outletVisible(outletAccountId ?? null, visible);
-        return { ...contact, outletName: allowed ? outletName : null, outletCategory: allowed ? outletCategory : null, outletWebsite: allowed ? outletWebsite : null, outletCountry: allowed ? outletCountry : null, outletReachBand: allowed ? outletReachBand : null, sourceCheck, sourceStatus: !contact.sourceUrl ? "unverified" : !sourceCheck || (due && due.getTime() <= now) ? "due" : sourceCheck.outcome, sourceReviewDueAt: due, sourceCheckQueued: Boolean(contact.sourceCheckClaimedAt), lifecycleStatus: latestStatus.get(contact.id)?.status ?? "active", hasPendingCorrection: pending.has(contact.id) };
+        return { ...contact, outletName: allowed ? outletName : null, outletCategory: allowed ? outletCategory : null, outletWebsite: allowed ? safePublicationWebsite(outletWebsite) : null, outletCountry: allowed ? outletCountry : null, outletReachBand: allowed ? outletReachBand : null, sourceCheck, sourceStatus: !contact.sourceUrl ? "unverified" : !sourceCheck || (due && due.getTime() <= now) ? "due" : sourceCheck.outcome, sourceReviewDueAt: due, sourceCheckQueued: Boolean(contact.sourceCheckClaimedAt), lifecycleStatus: latestStatus.get(contact.id)?.status ?? "active", hasPendingCorrection: pending.has(contact.id) };
       });
       res.json({ contacts, page, pageSize, total: Number(total) });
       return;
@@ -2608,7 +3028,7 @@ router.delete(
 
 async function assertProjectVisible(req: Request, projectId: string): Promise<boolean> {
   if (!inAssignedScope(req, projectId)) return false;
-  const visible = await visibleAccounts(req);
+  const visible = await getVisibleUsernames(req.account!);
   const project = await db.select({ owner: projectsTable.owner, deletedAt: projectsTable.deletedAt })
     .from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
   return !!project[0] && !project[0].deletedAt
@@ -2617,7 +3037,7 @@ async function assertProjectVisible(req: Request, projectId: string): Promise<bo
 
 async function visibleProjectOwner(req: Request, projectId: string): Promise<string | null> {
   if (!inAssignedScope(req, projectId)) return null;
-  const visible = await visibleAccounts(req);
+  const visible = await getVisibleUsernames(req.account!);
   const [project] = await db.select({ owner: projectsTable.owner, deletedAt: projectsTable.deletedAt }).from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
   if (!project || project.deletedAt || !project.owner || (visible !== null && !visible.includes(project.owner))) return null;
   return project.owner;
@@ -3117,7 +3537,7 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
           ...contact,
           outletName: outlet?.name ?? null,
           outletCategory: outlet?.category ?? null,
-          outletWebsite: outlet?.website ?? null,
+          outletWebsite: safePublicationWebsite(outlet?.website),
           outletCountry: outlet?.country ?? null,
           outletReachBand: outlet?.reachBand ?? null,
         },
@@ -3149,6 +3569,7 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
             parent: platformAccountsTable.parent,
           }).from(platformAccountsTable).for("share");
       const currentVisible = visibleAccountsFromHierarchy(req, currentHierarchy);
+      const currentMediaAccounts = req.account ? [normUsername(req.account.username)] : [];
       const [currentProject] = await tx.select({
         owner: projectsTable.owner,
       }).from(projectsTable).where(and(
@@ -3184,7 +3605,7 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
           )).for("update")
         : [];
       const currentVisibleContacts = currentContacts.filter(
-        (contact) => contact.accountId === null || currentVisible === null || currentVisible.includes(contact.accountId),
+        (contact) => contact.accountId === null || currentMediaAccounts.includes(contact.accountId),
       );
       const currentOutletIds = [...new Set(currentVisibleContacts.flatMap((contact) => contact.outletId ? [contact.outletId] : []))];
       const currentOutlets = currentOutletIds.length
@@ -3195,7 +3616,7 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
         : [];
       const currentOutletById = new Map(
         currentOutlets
-          .filter((outlet) => outletVisible(outlet.accountId, currentVisible))
+          .filter((outlet) => outletVisible(outlet.accountId, currentMediaAccounts))
           .map((outlet) => [outlet.id, outlet]),
       );
       const currentRankedCandidates = currentVisibleContacts.map((contact) => {
@@ -3226,7 +3647,7 @@ router.post("/store/media-db/recommendations", requirePlatformAuth, async (req: 
             ...contact,
             outletName: outlet?.name ?? null,
             outletCategory: outlet?.category ?? null,
-            outletWebsite: outlet?.website ?? null,
+            outletWebsite: safePublicationWebsite(outlet?.website),
             outletCountry: outlet?.country ?? null,
             outletReachBand: outlet?.reachBand ?? null,
           },
@@ -3771,11 +4192,11 @@ router.get("/store/media-db/recommendations", requirePlatformAuth, async (req: R
   const items = visibleRows.map((row) => {
     const canSeeOutlet = !row.outletDeletedAt && outletVisible(row.outletAccountId, visible);
     const outletFields = canSeeOutlet
-      ? { outletName: row.outletName, outletCategory: row.outletCategory, outletWebsite: row.outletWebsite, outletCountry: row.outletCountry, outletReachBand: row.outletReachBand }
+      ? { outletName: row.outletName, outletCategory: row.outletCategory, outletWebsite: safePublicationWebsite(row.outletWebsite), outletCountry: row.outletCountry, outletReachBand: row.outletReachBand }
       : { outletName: null, outletCategory: null, outletWebsite: null, outletCountry: null, outletReachBand: null };
     const baseAssessment = assessEditorialFit({
       contact: row.contact,
-      outlet: canSeeOutlet ? { name: row.outletName, category: row.outletCategory, website: row.outletWebsite, country: row.outletCountry, reachBand: row.outletReachBand } : {},
+      outlet: canSeeOutlet ? { name: row.outletName, category: row.outletCategory, website: safePublicationWebsite(row.outletWebsite), country: row.outletCountry, reachBand: row.outletReachBand } : {},
     brief: savedBrief ?? emptyTargetingBrief(criteria.terms ?? [], criteria.targetPhrases ?? []),
       terms: criteria.terms,
       targetPhrases: criteria.targetPhrases,
@@ -3903,6 +4324,7 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
             parent: platformAccountsTable.parent,
           }).from(platformAccountsTable).for("share");
       const currentVisible = visibleAccountsFromHierarchy(req, currentHierarchy);
+      const currentMediaAccounts = req.account ? [normUsername(req.account.username)] : [];
       const [currentProject] = await tx.select({
         owner: projectsTable.owner,
       }).from(projectsTable).where(and(
@@ -3965,10 +4387,10 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
         .where(eq(mediaRecommendationItemsTable.recommendationSetId, set.id))
         .orderBy(mediaRecommendationItemsTable.rank);
       const currentEligibleRows = currentRows.filter((row) => (
-        (row.contact.accountId === null || currentVisible === null || currentVisible.includes(row.contact.accountId))
+        (row.contact.accountId === null || currentMediaAccounts.includes(row.contact.accountId))
         && (
           !row.contact.outletId
-          || (!!row.outlet && outletVisible(row.outlet.accountId, currentVisible))
+          || (!!row.outlet && outletVisible(row.outlet.accountId, currentMediaAccounts))
         )
       ));
       for (const row of currentEligibleRows) {
@@ -4081,7 +4503,7 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
             ...row.contact,
             outletName: row.outlet?.name ?? null,
             outletCategory: row.outlet?.category ?? null,
-            outletWebsite: row.outlet?.website ?? null,
+            outletWebsite: safePublicationWebsite(row.outlet?.website),
             outletCountry: row.outlet?.country ?? null,
             outletReachBand: row.outlet?.reachBand ?? null,
           },
@@ -4144,6 +4566,7 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
             parent: platformAccountsTable.parent,
           }).from(platformAccountsTable).for("share");
       const finalVisible = visibleAccountsFromHierarchy(req, finalHierarchy);
+      const finalMediaAccounts = req.account ? [normUsername(req.account.username)] : [];
       const [finalProject] = await tx.select({ owner: projectsTable.owner })
         .from(projectsTable).where(and(
           eq(projectsTable.id, projectId),
@@ -4180,8 +4603,8 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
       const items = [];
       for (const contact of finalContacts) {
         const outlet = contact.outletId ? finalOutletById.get(contact.outletId) : undefined;
-        if (contact.accountId !== null && finalVisible !== null && !finalVisible.includes(contact.accountId)) continue;
-        if (contact.outletId && (!outlet || !outletVisible(outlet.accountId, finalVisible))) continue;
+        if (contact.accountId !== null && !finalMediaAccounts.includes(contact.accountId)) continue;
+        if (contact.outletId && (!outlet || !outletVisible(outlet.accountId, finalMediaAccounts))) continue;
         if (await isSuppressedWithDb(tx, {
           name: `${contact.firstName} ${contact.lastName}`.trim(),
           email: contact.email,
@@ -4197,7 +4620,7 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
             ...contact,
             outletName: outlet?.name ?? null,
             outletCategory: outlet?.category ?? null,
-            outletWebsite: outlet?.website ?? null,
+            outletWebsite: safePublicationWebsite(outlet?.website),
             outletCountry: outlet?.country ?? null,
             outletReachBand: outlet?.reachBand ?? null,
           },
@@ -4248,8 +4671,11 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
   const suppressedDecisionContacts = decisionContactIds.length ? await db.select().from(mediaContactsTable).where(inArray(mediaContactsTable.id, decisionContactIds)) : [];
   const decisionOutletNames = new Map((await db.select({ id: mediaOutletsTable.id, name: mediaOutletsTable.name }).from(mediaOutletsTable)).map((o) => [o.id, o.name]));
   const suppressedDecisionIds = new Set((await Promise.all(suppressedDecisionContacts.map(async (c) => await isContactSuppressed({ ...c, outlet: c.outletId ? decisionOutletNames.get(c.outletId) : "", accountId }) ? c.id : null))).filter((id): id is number => id !== null));
-  const safeDecisions = decisions.filter((d) => !suppressedDecisionIds.has(d.contactId));
-  const safeFeedback = feedback.filter((f) => !suppressedDecisionIds.has(f.contactId));
+  const visibleDecisionIds = new Set(suppressedDecisionContacts
+    .filter((contact) => contact.accountId === null || visible !== null && visible.includes(contact.accountId))
+    .map((contact) => contact.id));
+  const safeDecisions = decisions.filter((d) => visibleDecisionIds.has(d.contactId) && !suppressedDecisionIds.has(d.contactId));
+  const safeFeedback = feedback.filter((f) => visibleDecisionIds.has(f.contactId) && !suppressedDecisionIds.has(f.contactId));
   const recommendationCriteria = (sets[0]?.criteria ?? {}) as RecommendationCriteria;
   const candidateItems = sets.length ? await db.select({ id: mediaRecommendationItemsTable.id, recommendationSetId: mediaRecommendationItemsTable.recommendationSetId, score: mediaRecommendationItemsTable.score, rank: mediaRecommendationItemsTable.rank, reasons: mediaRecommendationItemsTable.reasons, phraseAttributions: mediaRecommendationItemsTable.phraseAttributions, contact: mediaContactsTable, outletName: mediaOutletsTable.name, outletCategory: mediaOutletsTable.category, outletWebsite: mediaOutletsTable.website, outletCountry: mediaOutletsTable.country, outletReachBand: mediaOutletsTable.reachBand, outletAccountId: mediaOutletsTable.accountId, outletDeletedAt: mediaOutletsTable.deletedAt })
     .from(mediaRecommendationItemsTable)
@@ -4271,7 +4697,7 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
     const outletFields = canSeeOutlet ? {
       outletName: item.outletName,
       outletCategory: item.outletCategory,
-      outletWebsite: item.outletWebsite,
+      outletWebsite: safePublicationWebsite(item.outletWebsite),
       outletCountry: item.outletCountry,
       outletReachBand: item.outletReachBand,
     } : {
@@ -4290,7 +4716,7 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
       assessment: {
         ...assessEditorialFit({
           contact: item.contact,
-          outlet: canSeeOutlet ? { name: item.outletName, category: item.outletCategory, website: item.outletWebsite, country: item.outletCountry, reachBand: item.outletReachBand } : {},
+      outlet: canSeeOutlet ? { name: item.outletName, category: item.outletCategory, website: safePublicationWebsite(item.outletWebsite), country: item.outletCountry, reachBand: item.outletReachBand } : {},
           brief: recommendationCriteria.brief ?? emptyTargetingBrief(recommendationCriteria.terms ?? [], recommendationCriteria.targetPhrases ?? []),
           terms: recommendationCriteria.terms,
           targetPhrases: recommendationCriteria.targetPhrases,
@@ -4328,7 +4754,7 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
     const outletFields = canSeeOutlet ? {
       outletName: row.outletName,
       outletCategory: row.outletCategory,
-      outletWebsite: row.outletWebsite,
+      outletWebsite: safePublicationWebsite(row.outletWebsite),
       outletCountry: row.outletCountry,
       outletReachBand: row.outletReachBand,
     } : {
@@ -4340,7 +4766,7 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
     };
     const baseAssessment = assessEditorialFit({
       contact: row.contact,
-      outlet: canSeeOutlet ? { name: row.outletName, category: row.outletCategory, website: row.outletWebsite, country: row.outletCountry, reachBand: row.outletReachBand } : {},
+      outlet: canSeeOutlet ? { name: row.outletName, category: row.outletCategory, website: safePublicationWebsite(row.outletWebsite), country: row.outletCountry, reachBand: row.outletReachBand } : {},
       brief: recommendationCriteria.brief ?? emptyTargetingBrief(recommendationCriteria.terms ?? [], recommendationCriteria.targetPhrases ?? []),
       terms: recommendationCriteria.terms,
       targetPhrases: recommendationCriteria.targetPhrases,

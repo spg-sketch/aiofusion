@@ -1,5 +1,6 @@
-import { index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import { check, index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
+import { sql } from "drizzle-orm";
 import { z } from "zod/v4";
 
 export const mediaCategoriesTable = pgTable("media_categories", {
@@ -17,6 +18,7 @@ export const mediaOutletsTable = pgTable("media_outlets", {
   description: text("description").notNull().default(""),
   country: text("country").notNull().default(""),
   reachBand: text("reach_band").notNull().default(""),
+  linkedinUrl: text("linkedin_url").notNull().default(""),
   accountId: varchar("account_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -66,6 +68,26 @@ export const mediaContactsTable = pgTable("media_contacts", {
   index("media_contacts_live_account_name").on(table.accountId, table.deletedAt, table.lastName, table.firstName),
   index("media_contacts_live_outlet").on(table.outletId, table.deletedAt),
 ]);
+
+/**
+ * A reusable, account-private reference to a canonical contact or publication.
+ * Bookmarks never duplicate or transfer ownership of their target record.
+ */
+export const mediaBookmarksTable = pgTable("media_bookmarks", {
+  id: serial("id").primaryKey(),
+  accountId: varchar("account_id").notNull(),
+  contactId: integer("contact_id").references(() => mediaContactsTable.id, { onDelete: "cascade" }),
+  outletId: integer("outlet_id").references(() => mediaOutletsTable.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("media_bookmarks_account_contact_unique").on(table.accountId, table.contactId),
+  uniqueIndex("media_bookmarks_account_outlet_unique").on(table.accountId, table.outletId),
+  index("media_bookmarks_account_created").on(table.accountId, table.createdAt),
+  check("media_bookmarks_exactly_one_target", sql`(${table.contactId} IS NOT NULL) <> (${table.outletId} IS NOT NULL)`),
+]);
+export const insertMediaBookmarkSchema = createInsertSchema(mediaBookmarksTable).omit({ id: true, createdAt: true });
+export type InsertMediaBookmark = z.infer<typeof insertMediaBookmarkSchema>;
+export type MediaBookmarkRow = typeof mediaBookmarksTable.$inferSelect;
 
 /**
  * An immutable, workspace/project-scoped snapshot of a public search result.

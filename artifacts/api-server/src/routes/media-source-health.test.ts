@@ -14,7 +14,8 @@ vi.mock("@workspace/db", async () => {
     CREATE TABLE media_outlets (
       id serial PRIMARY KEY, name text NOT NULL DEFAULT '', category text NOT NULL DEFAULT '',
       website text NOT NULL DEFAULT '', description text NOT NULL DEFAULT '', country text NOT NULL DEFAULT '',
-      reach_band text NOT NULL DEFAULT '', account_id varchar, created_at timestamptz NOT NULL DEFAULT now(), deleted_at timestamptz
+       reach_band text NOT NULL DEFAULT '', linkedin_url text NOT NULL DEFAULT '',
+       account_id varchar, created_at timestamptz NOT NULL DEFAULT now(), deleted_at timestamptz
     );
     CREATE TABLE media_contacts (
       id serial PRIMARY KEY, outlet_id integer, first_name text NOT NULL DEFAULT '', last_name text NOT NULL DEFAULT '',

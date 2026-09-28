@@ -22,15 +22,6 @@ const featureState = vi.hoisted(() => ({
   restricted: false,
   enrich: false,
 }));
-const delayedDecision = vi.hoisted(() => ({
-  pending: false,
-  resolve: null as null | (() => void),
-}));
-const delayedDecisionGets = vi.hoisted(() => ({
-  pending: false,
-  calls: 0,
-  resolves: [] as (() => void)[],
-}));
 const delayedRequests = vi.hoisted(() => ({
   recommendations: false,
   live: false,
@@ -160,30 +151,45 @@ describe("MediaResearchPage live discovery", () => {
     expect(sanitizeResearchSpreadsheetCell("=HYPERLINK(\"https://bad.example\")")).toBe("'=HYPERLINK(\"https://bad.example\")");
   });
 
-  let requests: { url: string; body?: Record<string, unknown> }[] = [];
+  let requests: { url: string; method?: string; body?: Record<string, unknown> }[] = [];
   beforeEach(() => {
     requests = [];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
-      requests.push({ url, body });
+      requests.push({ url, method: init?.method, body });
+      if (url.split("?")[0].endsWith("/store/media-db/bookmarks") && !init?.method) {
+        return new Response(JSON.stringify({ bookmarks: [] }), { status: 200 });
+      }
+      if (url.endsWith("/store/media-db/categories")) {
+        return new Response(JSON.stringify({ categories: ["Energy", "Technology", "Finance"] }), { status: 200 });
+      }
+      if (url.includes("/store/media-db/bookmarks/contact/") && ["PUT", "DELETE"].includes(init?.method || "")) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (url.includes("/recommendations/decisions") && init?.method === "PUT") {
+        const savedDecision = {
+          contactId: Number(body?.contactId),
+          decision: body?.decision,
+          note: typeof body?.note === "string" ? body.note : "",
+        };
+        decisionState.payload = {
+          decisions: [savedDecision],
+          items: [],
+          decisionContacts: [{
+            contactId: savedDecision.contactId,
+            contact: {
+              id: savedDecision.contactId, firstName: "Decision", lastName: "Contact", role: "Energy editor",
+              email: "", phone: "", notes: "", beats: ["energy"], sectors: ["Energy"],
+              outletName: "Current Energy Daily", outletCategory: "Energy",
+            },
+          }],
+        };
+        return new Response(JSON.stringify({ ok: true, decision: savedDecision }), { status: 200 });
+      }
       if (url.includes("/recommendations/decisions")) {
-        if (init?.method === "PUT") {
-          if (delayedDecision.pending) {
-            return new Promise<Response>((resolve) => {
-              delayedDecision.resolve = () => resolve(new Response(JSON.stringify({ ok: true, decision: { contactId: 91, decision: "shortlisted", note: "" } }), { status: 200 }));
-            });
-          }
-          return new Response(JSON.stringify({ ok: true, decision: { contactId: 91, decision: "shortlisted", note: "" } }), { status: 200 });
-        }
         if (decisionLoadFailure.kind === "network") throw new Error("Decision service unavailable");
         if (decisionLoadFailure.kind === "json") return new Response("not json", { status: 200 });
-        if (delayedDecisionGets.pending) {
-          delayedDecisionGets.calls += 1;
-          return new Promise<Response>((resolve) => {
-            delayedDecisionGets.resolves.push(() => resolve(new Response(JSON.stringify(decisionState.payload), { status: 200 })));
-          });
-        }
         return new Response(JSON.stringify(decisionState.payload), { status: 200 });
       }
       if (url.includes("/brief")) {
@@ -319,6 +325,7 @@ describe("MediaResearchPage live discovery", () => {
       if (url.includes("/store/media-db/discoveries")) {
         return new Response(JSON.stringify({ ok: true, discovery: { id: 10, status: "pending" } }), { status: 201 });
       }
+      if (url.includes("/store/media-db/outreach?")) return new Response(JSON.stringify({ outreach: [] }), { status: 200 });
       return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
     }));
   });
@@ -337,11 +344,6 @@ describe("MediaResearchPage live discovery", () => {
     featureState.recommendationGetFailure = false;
     featureState.restricted = false;
     featureState.enrich = false;
-    delayedDecision.pending = false;
-    delayedDecision.resolve = null;
-    delayedDecisionGets.pending = false;
-    delayedDecisionGets.calls = 0;
-    delayedDecisionGets.resolves = [];
     delayedRequests.recommendations = false;
     delayedRequests.live = false;
     delayedRequests.recommendationCalls = [];
@@ -402,6 +404,40 @@ describe("MediaResearchPage live discovery", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /submitted for review/i })).toBeDisabled());
   });
 
+  it("saves and removes a reusable database bookmark without adding a story shortlist decision", async () => {
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByText("Decision Contact")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /decline|more like this|less like this/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save to My Media Database" }));
+    expect(await screen.findByRole("button", { name: "Saved to My Media Database" })).toBeTruthy();
+    expect(requests.some((request) => request.url.endsWith("/bookmarks/contact/91") && request.method === "PUT" && request.body === undefined)).toBe(true);
+    expect(screen.getByText(/saving it to My Media Database alone does not mark it as pitched/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Saved to My Media Database" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save to My Media Database" })).toBeTruthy());
+    expect(requests.filter((request) => request.url.endsWith("/bookmarks/contact/91")).map((request) => request.method)).toEqual(["PUT", "DELETE"]);
+  });
+
+  it("separately adds a fresh recommendation to this story shortlist and makes outreach planning available", async () => {
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByText("Decision Contact")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /plan outreach to Decision Contact/i })).toBeNull();
+
+    fireEvent.click(screen.getByTestId("button-plan-story-outreach-91"));
+    await waitFor(() => expect(requests.some((request) =>
+      request.url.endsWith("/recommendations/decisions")
+      && request.method === "PUT"
+      && request.body?.decision === "shortlisted"
+      && request.body?.contactId === 91,
+    )).toBe(true));
+    expect(await screen.findByRole("button", { name: "Plan outreach to Decision Contact" })).toBeTruthy();
+    expect(requests.some((request) => request.url.endsWith("/store/media-db/outreach") && request.method === "POST")).toBe(false);
+    expect(screen.queryByRole("button", { name: /decline|more like this|less like this/i })).toBeNull();
+  });
+
   it("explains that live email addresses must come from the cited public source", () => {
     render(<MediaResearchPage />);
     expect(screen.getByText(/sends the selected article excerpt.*to OpenAI/i)).toBeTruthy();
@@ -431,6 +467,20 @@ describe("MediaResearchPage live discovery", () => {
     render(<MediaResearchPage />);
     expect((screen.getByTestId("select-research-article") as HTMLSelectElement).value).toBe("story-1");
     await screen.findByText("Decision Contact");
+  });
+
+  it("keeps the brief concise, uses database-backed media sectors, and retains exact article phrases", async () => {
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    const sectors = await screen.findByRole("listbox", { name: "Media sectors" }) as HTMLSelectElement;
+    await waitFor(() => expect(Array.from(sectors.options).map((option) => option.value)).toEqual(["Energy", "Technology", "Finance"]));
+    expect(screen.queryByLabelText("Audience")).toBeNull();
+    expect(screen.queryByLabelText("Why now")).toBeNull();
+    expect(screen.getByText("clean energy platform")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Global" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "UK" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "US" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Europe" })).toBeNull();
   });
 
   it("does not carry a remembered article into another project", async () => {
@@ -469,7 +519,7 @@ describe("MediaResearchPage live discovery", () => {
     expect(requests.some((request) => request.url.includes("/content/media-discover"))).toBe(false);
   });
 
-  it("infers an unambiguous UK, Europe or US default from canonical intake locations", async () => {
+  it("infers a UK or US default from canonical intake locations and uses Global for other regions", async () => {
     recommendationState.brief = null;
     intakeState.data = { formData: { "4.5": "Manchester and Leeds, UK" }, duals: {}, dualLists: {}, stringLists: {} };
     render(<MediaResearchPage />);
@@ -487,10 +537,10 @@ describe("MediaResearchPage live discovery", () => {
     intakeState.data = { formData: { "4.5": "France, Germany and the Netherlands" }, duals: {}, dualLists: {}, stringLists: {} };
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
-    await waitFor(() => expect(screen.getByRole("button", { name: "Europe" }).className).toContain("bg-slate-800"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Global" }).className).toContain("bg-slate-800"));
   });
 
-  it("keeps a persisted shortlisted contact in Accepted shortlist when newest recommendations omit it", async () => {
+  it("keeps a persisted story shortlist contact when newest recommendations omit it", async () => {
     recommendationState.includeContact = false;
     const acceptedContact = {
       id: 91,
@@ -622,8 +672,12 @@ describe("MediaResearchPage live discovery", () => {
     expect(await screen.findByText("Decision Contact")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Check top 5 recent coverage" }));
     expect(await screen.findByText("Enriched Contact")).toBeTruthy();
+    fireEvent.click(screen.getByText("Evidence and contact checks"));
     expect(screen.getByText("Recent energy coverage")).toBeTruthy();
     expect(screen.getByText("Author matched")).toBeTruthy();
+    expect(screen.getByText("Page checked")).toBeTruthy();
+    expect(screen.getByText(/Checked:/)).toBeTruthy();
+    expect(screen.getByText(/Energy transition/)).toBeTruthy();
   });
 
   it("restores recommendation readiness after removing a contact restriction", async () => {
@@ -634,50 +688,6 @@ describe("MediaResearchPage live discovery", () => {
     expect(await screen.findByRole("button", { name: "Remove restriction" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Remove restriction" }));
     expect(await screen.findByRole("button", { name: "Do not contact" })).toBeTruthy();
-  });
-
-  it("does not apply an old decision-save response after switching articles", async () => {
-    delayedDecision.pending = true;
-    render(<MediaResearchPage />);
-    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
-    await waitFor(() => expect(screen.getAllByDisplayValue("Clean energy").length).toBeGreaterThan(0));
-    await waitFor(() => expect(screen.getByRole("button", { name: "US" })).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "US" }));
-    await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).not.toBeDisabled());
-    fireEvent.click(screen.getByTestId("button-recommend-contacts"));
-    expect(await screen.findByText("Decision Contact")).toBeTruthy();
-    fireEvent.click(screen.getByTestId("button-accept-91"));
-    await act(async () => { await new Promise(r => setTimeout(r, 0)); });
-    await act(async () => {
-      fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-2" } });
-    });
-    await waitFor(() => expect(screen.getByText("New retail energy briefing published")).toBeTruthy());
-    delayedDecision.resolve?.();
-    await waitFor(() => expect(screen.queryByText("Decision Contact")).toBeNull());
-  });
-
-  it("does not let a pre-save decision GET replace the successful shortlist", async () => {
-    delayedDecisionGets.pending = true;
-    render(<MediaResearchPage />);
-    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
-    await waitFor(() => expect(screen.getAllByDisplayValue("Clean energy").length).toBeGreaterThan(0));
-    await waitFor(() => expect(delayedDecisionGets.calls).toBeGreaterThan(0));
-    await waitFor(() => expect(screen.getByRole("button", { name: "US" })).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "US" }));
-    await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).not.toBeDisabled());
-    fireEvent.click(screen.getByTestId("button-recommend-contacts"));
-    
-    // DEBUG
-    await waitFor(() => {
-      if (!requests.some(r => r.url.endsWith("/store/media-db/recommendations"))) throw new Error("POST recommendations never called");
-    });
-    
-    expect(await screen.findByText("Decision Contact")).toBeTruthy();
-    fireEvent.click(screen.getByTestId("button-accept-91"));
-    await waitFor(() => expect(screen.getAllByText("Decision Contact")).toHaveLength(2));
-
-    delayedDecisionGets.resolves.forEach((resolve) => resolve());
-    await waitFor(() => expect(screen.getAllByText("Decision Contact")).toHaveLength(2));
   });
 
   it("ignores delayed A-to-B-to-A database responses by invocation identity", async () => {
@@ -731,6 +741,8 @@ describe("MediaResearchPage live discovery", () => {
     await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).toBeTruthy());
     fireEvent.click(screen.getByTestId("button-discover-live"));
     await waitFor(() => expect(delayedRequests.liveCalls).toHaveLength(1));
+    expect(screen.getByTestId("status-live-discovery").textContent).toContain("Finding sources");
+    expect(screen.getByTestId("status-live-discovery").textContent).toContain("Elapsed this session:");
     await act(async () => { await new Promise(r => setTimeout(r, 0)); });
     fireEvent.change(selector, { target: { value: "story-2" } });
     await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).toBeTruthy());
@@ -823,8 +835,7 @@ describe("MediaResearchPage recommendation refinement", () => {
   beforeEach(() => localStorage.clear());
   afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals(); });
 
-  it("reranks after feedback, supports undo and reset, and keeps shortlist state", async () => {
-    let signal: "more" | "less" | null = null;
+  it("keeps recommendation actions focused on reusable saves, not legacy feedback controls", async () => {
     const contact = { id: 10, outletId: 1, firstName: "Jane", lastName: "Reporter", role: "Energy correspondent", email: "", phone: "", notes: "", accountId: null, beats: ["energy"], sectors: ["technology"] };
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -832,21 +843,13 @@ describe("MediaResearchPage recommendation refinement", () => {
         if (init?.method === "PUT") return new Response(JSON.stringify({ brief: JSON.parse(init.body as string).brief }), { status: 200 });
         return new Response(JSON.stringify({ brief: { topic: "Clean energy", angle: "Launch", audience: "B2B", regions: ["UK"], publicationTypes: [], whyNow: "" } }), { status: 200 });
       }
-      if (url.includes("/recommendations/feedback") && init?.method === "PUT") {
-        const body = JSON.parse(String(init.body));
-        expect(body).toEqual({ projectId: "project-1", storyKey: "story-1", contactId: 10, signal: "more" });
-        signal = body.signal;
-        return new Response(JSON.stringify({ ok: true }));
-      }
-      if (url.includes("/recommendations/feedback") && init?.method === "DELETE") {
-        signal = null;
-        return new Response(JSON.stringify({ ok: true }));
-      }
+      if (url.split("?")[0].endsWith("/store/media-db/bookmarks")) return new Response(JSON.stringify({ bookmarks: [] }), { status: 200 });
+      if (url.includes("/store/media-db/bookmarks/contact/10")) return new Response(JSON.stringify({ ok: true }), { status: 200 });
       if (url.includes("/store/media-db/recommendations?")) {
         return new Response(JSON.stringify({
           ok: true,
           recommendationSet: { id: "saved-set-refinement" },
-          items: [{ rank: 1, score: signal ? 88 : 70, reasons: signal ? ["Marked More like this"] : ["Coverage profile matches energy"], contact }],
+          items: [{ rank: 1, score: 70, reasons: ["Coverage profile matches energy"], contact }],
           brief: { topic: "Clean energy", angle: "Launch", audience: "B2B", regions: ["UK"], publicationTypes: [], whyNow: "" },
           evaluation: { evaluated: 1, shortlisted: 1, contacted: 0, responded: 0, placed: 0 },
         }), { status: 200 });
@@ -854,25 +857,22 @@ describe("MediaResearchPage recommendation refinement", () => {
       if (url.endsWith("/store/media-db/recommendations") && init?.method === "POST") {
         return new Response(JSON.stringify({
           ok: true,
-          items: [{ rank: 1, score: signal ? 88 : 70, reasons: signal ? ["Marked More like this"] : ["Coverage profile matches energy"], contact }],
+          items: [{ rank: 1, score: 70, reasons: ["Coverage profile matches energy"], contact }],
         }));
       }
       if (url.includes("/recommendations/decisions")) return new Response(JSON.stringify({
-        decisions: [{ contactId: 10, decision: "shortlisted", note: "Keep note" }],
+        decisions: [],
         decisionContacts: [{ contactId: 10, contact }],
-        feedback: signal ? [{ contactId: 10, signal }] : [],
-        items: [{ rank: 1, score: signal ? 88 : 70, reasons: signal ? ["Marked More like this"] : ["Coverage profile matches energy"], contact }],
+        feedback: [{ contactId: 10, signal: "more" }],
+        items: [{ rank: 1, score: 70, reasons: ["Coverage profile matches energy"], contact }],
       }));
       return new Response("{}", { status: 404 });
     }));
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
     expect((await screen.findAllByText("Jane Reporter")).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByRole("button", { name: "Less like this" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "More like this" }));
-    expect((await screen.findAllByText("Marked More like this")).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByRole("button", { name: "Undo More like this" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Reset refinement" }));
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Reset refinement" })).toBeNull());
+    expect(screen.queryByRole("button", { name: /decline|more like this|less like this/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Save to My Media Database" })).toBeTruthy();
+    expect(screen.getByText("Story outreach planning")).toBeTruthy();
   });
 });

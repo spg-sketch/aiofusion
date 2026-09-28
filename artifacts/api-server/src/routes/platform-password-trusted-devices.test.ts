@@ -151,6 +151,7 @@ vi.mock("@workspace/db", async () => {
     CREATE TABLE IF NOT EXISTS media_outlets (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       name varchar NOT NULL,
+      linkedin_url text NOT NULL DEFAULT '',
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS media_contacts (

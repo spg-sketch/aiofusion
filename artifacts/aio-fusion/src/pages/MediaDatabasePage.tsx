@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
   TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
-  MessagesSquare, Download, AlertTriangle, CheckCircle2, XCircle, Info, Globe, Tag, User, ChevronDown,
+  MessagesSquare, Download, AlertTriangle, CheckCircle2, XCircle, Info, Globe, User,
   Plus, Minus, MessageSquare, BookOpen, Scroll, Award, Radio, Mic2, PenLine, ClipboardList, ArrowUpRight,
   Lightbulb, ClipboardPaste, Upload, Calendar, Check, Save, Circle, Zap, Mail, Shield, Eye, Building2,
   ArrowLeft, LogOut, Trash2, KeyRound, Users, Activity, Play, ChevronUp, Menu, X, LogIn,
@@ -105,7 +105,7 @@ import { RecommendationCard } from "./JournalistComponents";
 
 type CollectionScope = "shared" | "workspace";
 type CollectionOwnedItem = { accountId: string | null; collectionScope?: CollectionScope; owner?: string | null };
-type Outlet = { id: number; name: string; category: string; website: string; description: string; country: string; reachBand: string } & CollectionOwnedItem;
+type Outlet = { id: number; name: string; category: string; website: string; description: string; country: string; reachBand: string; linkedinUrl?: string | null; verifiedAuthority?: string | number | null; journalists?: Contact[]; linkedJournalists?: Contact[] } & CollectionOwnedItem;
 type UnifiedResult =
   | { type: "contact"; id: number; contact: Contact; matchedFields: string[]; matchedPhrases: string[]; reasons: string[]; authority: number }
   | { type: "outlet"; id: number; outlet: Outlet; matchedFields: string[]; matchedPhrases: string[]; reasons: string[]; authority: number };
@@ -193,6 +193,13 @@ type ImportJob = {
 
 type ImportInventoryValue = string | number | boolean | null | { [key: string]: ImportInventoryValue };
 
+const MEDIA_BOOKMARK_PAGE_SIZE = 100;
+const MEDIA_BOOKMARK_MAX_PAGES = 100;
+const MEDIA_BOOKMARK_MAX_COUNT = MEDIA_BOOKMARK_PAGE_SIZE * MEDIA_BOOKMARK_MAX_PAGES;
+const MEDIA_SEARCH_EXPORT_PAGE_SIZE = 100;
+const MEDIA_SEARCH_EXPORT_MAX_PAGES = 100;
+const MEDIA_SEARCH_EXPORT_MAX_COUNT = MEDIA_SEARCH_EXPORT_PAGE_SIZE * MEDIA_SEARCH_EXPORT_MAX_PAGES;
+
 export function importOutcomesWithErrors(
   outcomes: ImportRowOutcome[] | undefined,
   errors: Array<{ row: number; message: string; sheetName?: string }> | undefined,
@@ -223,6 +230,11 @@ export const CONTACT_EXPORT_COLUMNS = [
   "Confidence", "Last Verified", "Source Status", "Lifecycle Status", "Notes", "Review Notes",
 ] as const;
 
+export const PUBLICATION_EXPORT_COLUMNS = [
+  "Publication", "Sector", "Region", "Description", "Website", "LinkedIn URL",
+  "Source reach value", "Verified authority", "Linked journalist names", "Linked journalist emails",
+] as const;
+
 /**
  * Prefix values that spreadsheet applications may evaluate as formulas.  The
  * apostrophe is intentionally part of the exported cell text and keeps
@@ -237,6 +249,23 @@ function csvCell(value: unknown): string {
   return `"${sanitizeSpreadsheetCell(value).replace(/"/g, '""')}"`;
 }
 
+export function publicationExportRow(outlet: Outlet): string[] {
+  const journalists = (outlet.linkedJournalists ?? outlet.journalists ?? [])
+    .filter((journalist) => journalist.lifecycleStatus !== "departed");
+  return [
+    outlet.name,
+    outlet.category,
+    outlet.country,
+    outlet.description,
+    publicationWebsiteHref(outlet.website) || "",
+    outlet.linkedinUrl || "",
+    outlet.reachBand ? `Source reach value: ${outlet.reachBand}` : "",
+    outlet.verifiedAuthority ?? "",
+    journalists.map((journalist) => `${journalist.firstName} ${journalist.lastName}`.trim()).filter(Boolean).join("; "),
+    journalists.map((journalist) => journalist.email).filter((email) => email && isSendableContactEmail(email)).join("; "),
+  ].map((value) => String(value ?? ""));
+}
+
 function contactEmailStatus(contact: Contact): string {
   if (!contact.email) return "";
   return isSendableContactEmail(contact.email) ? "Sendable format" : "Review - not sendable";
@@ -246,6 +275,18 @@ function exportDate(value: string | null | undefined): string {
   if (!value) return "";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "" : date.toISOString().split("T")[0];
+}
+
+export function publicationWebsiteHref(value: string | null | undefined): string | null {
+  const candidate = value?.trim();
+  if (!candidate || /^\d+(?:[.,]\d+)?$/.test(candidate)) return null;
+  try {
+    const url = new URL(/^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`);
+    if (!/^https?:$/.test(url.protocol) || !/[a-z]/i.test(url.hostname)) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 export function contactExportRow(contact: Contact): string[] {
@@ -309,6 +350,10 @@ function isSharedCollection(item: CollectionOwnedItem): boolean {
   return item.collectionScope === "shared" || (item.collectionScope === undefined && item.accountId === null);
 }
 
+function isCurrentWorkspaceItem(item: CollectionOwnedItem, username?: string | null): boolean {
+  return Boolean(username && item.accountId && item.accountId.toLowerCase() === username.toLowerCase());
+}
+
 function canManageCollectionItem(item: CollectionOwnedItem, isMaster: boolean, canWrite: boolean, username?: string | null): boolean {
   if (!canWrite) return false;
   if (isSharedCollection(item)) return isMaster;
@@ -366,7 +411,11 @@ function MediaDatabasePage() {
   const [searchCounts, setSearchCounts] = useState({ contacts: 0, outlets: 0 });
   const [searchPage, setSearchPage] = useState(1);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
+  const [searchType, setSearchType] = useState<"contacts" | "publications">("contacts");
+  const [searchScope, setSearchScope] = useState<"all" | "added" | "saved">("all");
+  const [savedMedia, setSavedMedia] = useState<Set<string>>(new Set());
+  const [bookmarkError, setBookmarkError] = useState("");
+  const [bookmarkBusy, setBookmarkBusy] = useState<string | null>(null);
   const [statusBusyId, setStatusBusyId] = useState<number | null>(null);
   const [correctionContact, setCorrectionContact] = useState<Contact | null>(null);
   const [correctionFields, setCorrectionFields] = useState<string[]>([]);
@@ -380,7 +429,7 @@ function MediaDatabasePage() {
 
   const [showOutletModal, setShowOutletModal] = useState(false);
   const [editingOutlet, setEditingOutlet] = useState<Outlet | null>(null);
-  const [outletForm, setOutletForm] = useState({ name: "", category: "", website: "", description: "", country: "", reachBand: "" });
+  const [outletForm, setOutletForm] = useState({ name: "", category: "", website: "", description: "", country: "", reachBand: "", linkedinUrl: "" });
   const [outletSaving, setOutletSaving] = useState(false);
   const [deletingOutletId, setDeletingOutletId] = useState<number | null>(null);
 
@@ -465,6 +514,14 @@ function MediaDatabasePage() {
       const categoryData = catR.ok ? await catR.json() : null;
       const outletData = outR ? await outR.json() : null;
       const contactData = conR ? await conR.json() : null;
+      // Category metadata is independent of the requested record page. A
+      // concurrent browse/search can make this list request stale; still
+      // hydrate the shared filter options from its successful response.
+      if (catR.ok && categoryData) {
+        const custom: string[] = (categoryData.custom ?? []).map((c: { name: string }) => c.name);
+        const merged = Array.from(new Set([...(categoryData.standard ?? TRADE_MEDIA_CATEGORIES), ...custom])).sort((a, b) => a.localeCompare(b));
+        setAllCategories(merged);
+      }
       if (sequence !== loadRequestSequence.current) return;
       if (outletData) {
         setOutlets(outletData.outlets ?? []);
@@ -474,11 +531,7 @@ function MediaDatabasePage() {
         setContacts(contactData.contacts ?? []);
         setContactTotal(contactData.total ?? contactData.contacts?.length ?? 0);
       }
-      if (catR.ok && categoryData) {
-        const custom: string[] = (categoryData.custom ?? []).map((c: { name: string }) => c.name);
-        const merged = Array.from(new Set([...(categoryData.standard ?? TRADE_MEDIA_CATEGORIES), ...custom])).sort((a, b) => a.localeCompare(b));
-        setAllCategories(merged);
-      } else if (sequence === loadRequestSequence.current) {
+      if (!catR.ok || !categoryData) {
         setLoadError("Filters are temporarily unavailable. You can still search or browse.");
       }
       if (requestedMode === "search") setResultRefreshToken((value) => value + 1);
@@ -507,6 +560,108 @@ function MediaDatabasePage() {
       loadControllerRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    setSavedMedia(new Set());
+    setBookmarkError("");
+    void (async () => {
+      try {
+        const saved = new Set<string>();
+        let total: number | null = null;
+        let loaded = 0;
+        for (let page = 1; page <= MEDIA_BOOKMARK_MAX_PAGES; page += 1) {
+          const params = new URLSearchParams({ page: String(page), pageSize: String(MEDIA_BOOKMARK_PAGE_SIZE) });
+          const response = await fetch(`${apiBase()}/api/store/media-db/bookmarks?${params}`, {
+            credentials: "include",
+            signal: controller.signal,
+          });
+          let data: unknown;
+          try {
+            data = await response.json();
+          } catch {
+            throw new Error("The saved media response could not be read.");
+          }
+          if (!response.ok) {
+            const message = typeof data === "object" && data !== null && "error" in data && typeof data.error === "string"
+              ? data.error
+              : "Could not load saved media.";
+            throw new Error(message);
+          }
+          if (cancelled) return;
+          const envelope = !Array.isArray(data) && typeof data === "object" && data !== null
+            ? data as Record<string, unknown>
+            : null;
+          const bookmarks = Array.isArray(data)
+            ? data
+            : Array.isArray(envelope?.bookmarks)
+              ? envelope.bookmarks
+              : Array.isArray(envelope?.items)
+                ? envelope.items
+                : null;
+          if (!bookmarks) throw new Error("The saved media response was not recognized.");
+          if (envelope && Object.prototype.hasOwnProperty.call(envelope, "total")) {
+            const pageTotal = envelope.total;
+            if (!Number.isSafeInteger(pageTotal) || Number(pageTotal) < 0) {
+              throw new Error("The saved media response contained an invalid total.");
+            }
+            if (total !== null && total !== pageTotal) {
+              throw new Error("The saved media list changed while it was loading. Try again.");
+            }
+            total = Number(pageTotal);
+            if (total > MEDIA_BOOKMARK_MAX_COUNT) {
+              throw new Error(`Your saved media exceeds the safe loading limit of ${MEDIA_BOOKMARK_MAX_COUNT.toLocaleString()} items. Narrow your saved collection and try again.`);
+            }
+          }
+          if (bookmarks.length > MEDIA_BOOKMARK_PAGE_SIZE) {
+            throw new Error("The saved media response exceeded the requested page size.");
+          }
+          for (const row of bookmarks) {
+            if (typeof row !== "object" || row === null) {
+              throw new Error("The saved media response contained an invalid bookmark.");
+            }
+            const bookmark = row as Record<string, unknown>;
+            if (bookmark.type !== "contact" && bookmark.type !== "publication") {
+              throw new Error("The saved media response contained an unsupported record type.");
+            }
+            const rawId = bookmark.targetId ?? bookmark.id;
+            const id = typeof rawId === "number"
+              ? rawId
+              : typeof rawId === "string" && /^\d+$/.test(rawId)
+                ? Number(rawId)
+                : Number.NaN;
+            if (!Number.isSafeInteger(id) || id < 1) {
+              throw new Error("The saved media response contained an invalid target ID.");
+            }
+            saved.add(`${bookmark.type}:${id}`);
+          }
+          loaded += bookmarks.length;
+          if (total !== null) {
+            if (loaded > total) throw new Error("The saved media response contained more items than its total.");
+            if (loaded === total) break;
+            if (bookmarks.length === 0) throw new Error("The saved media response ended before all items were loaded.");
+          } else if (bookmarks.length < MEDIA_BOOKMARK_PAGE_SIZE) {
+            break;
+          }
+          if (page === MEDIA_BOOKMARK_MAX_PAGES) {
+            throw new Error(`The saved media list may exceed the safe loading limit of ${MEDIA_BOOKMARK_MAX_COUNT.toLocaleString()} items. Narrow your saved collection and try again.`);
+          }
+        }
+        if (cancelled) return;
+        setSavedMedia(saved);
+        setBookmarkError("");
+      } catch (error) {
+        if (!cancelled && !controller.signal.aborted) {
+          setBookmarkError(error instanceof Error ? error.message : "Saved media could not be loaded. Try again.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [session?.username]);
 
   useEffect(() => {
     const savedJobId = localStorage.getItem(importJobStorageKey);
@@ -595,6 +750,8 @@ function MediaDatabasePage() {
     const timeout = window.setTimeout(() => { timedOut = true; controller.abort(); }, 10_000);
     const params = new URLSearchParams({ page: String(searchPage), pageSize: "25" });
     if (searchPhrase.trim()) params.set("phrase", searchPhrase.trim());
+    params.set("type", searchType);
+    params.set("scope", searchScope);
     if (searchTopic.trim()) params.set("topic", searchTopic.trim());
     if (searchLocation.trim()) params.set("location", searchLocation.trim());
     if (searchCategory) params.set("category", searchCategory);
@@ -617,7 +774,7 @@ function MediaDatabasePage() {
       })
       .finally(() => { window.clearTimeout(timeout); if (sequence === loadRequestSequence.current) setSearchLoading(false); });
     return () => { controller.abort(); window.clearTimeout(timeout); };
-  }, [searchActive, searchPage, resultRefreshToken]);
+  }, [searchActive, searchPage, resultRefreshToken, searchType, searchScope]);
 
   const browseResults = (tab: "outlets" | "contacts" = activeTab === "outlets" ? "outlets" : "contacts") => {
     setResultMode("browse");
@@ -777,13 +934,13 @@ function MediaDatabasePage() {
   const openAddOutlet = () => {
     if (!canWriteMediaDatabase) return;
     setEditingOutlet(null);
-    setOutletForm({ name: "", category: "", website: "", description: "", country: "", reachBand: "" });
+    setOutletForm({ name: "", category: "", website: "", description: "", country: "", reachBand: "", linkedinUrl: "" });
     setShowOutletModal(true);
   };
   const openEditOutlet = (o: Outlet) => {
     if (!canManageCollectionItem(o, isMaster, canWriteMediaDatabase, session?.username)) return;
     setEditingOutlet(o);
-    setOutletForm({ name: o.name, category: o.category, website: o.website, description: o.description, country: o.country, reachBand: o.reachBand });
+    setOutletForm({ name: o.name, category: o.category, website: o.website, description: o.description, country: o.country, reachBand: o.reachBand, linkedinUrl: o.linkedinUrl || "" });
     setShowOutletModal(true);
   };
   const saveOutlet = async () => {
@@ -923,6 +1080,31 @@ function MediaDatabasePage() {
     } finally { setStatusBusyId(null); }
   };
 
+  const toggleBookmark = async (type: "contact" | "publication", id: number) => {
+    const key = `${type}:${id}`;
+    if (bookmarkBusy === key) return;
+    setBookmarkBusy(key);
+    setBookmarkError("");
+    const isSaved = savedMedia.has(key);
+    try {
+      const response = await fetch(`${apiBase()}/api/store/media-db/bookmarks/${type}/${id}`, {
+        method: isSaved ? "DELETE" : "PUT",
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Could not update your saved media.");
+      setSavedMedia((current) => {
+        const next = new Set(current);
+        if (isSaved) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+    } catch (error) {
+      setBookmarkError(error instanceof Error ? error.message : "Could not update your saved media.");
+    } finally {
+      setBookmarkBusy(null);
+    }
+  };
+
   const submitCorrection = async () => {
     if (!correctionContact || !canManageCollectionItem(correctionContact, isMaster, canWriteMediaDatabase, session?.username) || !correctionFields.length || !correctionDetails.trim()) return;
     setCorrectionBusy(true);
@@ -986,7 +1168,11 @@ function MediaDatabasePage() {
     };
     const status = contact.sourceStatus ?? (contact.sourceUrl ? "due" : "unverified");
     return <div className="mt-1">
-      <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold" style={colors[status]}>
+      <span
+        className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold"
+        style={colors[status]}
+        title={status === "due" ? "A saved public source is due for a human review. This is not evidence that the stored details have changed." : undefined}
+      >
         {contact.sourceCheckQueued ? "Check queued" : labels[status]}
       </span>
       {contact.sourceUrl && contact.sourceReviewDueAt && (
@@ -1013,6 +1199,7 @@ function MediaDatabasePage() {
         style={completeness >= 80
           ? { color: "#166534", background: "#ECFDF5" }
           : { color: "#92400E", background: "#FEF3C7" }}
+        title="Completeness counts how many of ten useful information groups are filled in. It does not measure correctness or verification."
       >
         {completeness >= 80 ? `Complete (${completeness}%)` : `${completeness}% complete`}
       </span>
@@ -1052,29 +1239,71 @@ function MediaDatabasePage() {
       : all;
   };
 
-  const fetchAllSearchContactsForExport = async (): Promise<Contact[]> => {
-    const pageSize = 100;
-    const all: Contact[] = [];
+  const fetchAllSearchResultsForExport = async (): Promise<UnifiedResult[]> => {
+    const all: UnifiedResult[] = [];
     let page = 1;
-    let total = Number.POSITIVE_INFINITY;
-    while (all.length < total && page <= 1000) {
-      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    let total: number | null = null;
+    while (page <= MEDIA_SEARCH_EXPORT_MAX_PAGES) {
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(MEDIA_SEARCH_EXPORT_PAGE_SIZE),
+        type: searchType,
+        scope: searchScope,
+      });
       if (searchPhrase.trim()) params.set("phrase", searchPhrase.trim());
       if (searchTopic.trim()) params.set("topic", searchTopic.trim());
       if (searchLocation.trim()) params.set("location", searchLocation.trim());
       if (searchCategory) params.set("category", searchCategory);
       if (searchAuthority) params.set("authority", searchAuthority);
       const response = await fetch(`${apiBase()}/api/store/media-db/search?${params}`, { credentials: "include" });
-      if (!response.ok) throw new Error("Could not prepare the search export.");
-      const data = await response.json() as { results?: UnifiedResult[]; total?: number };
-      const pageRows = (Array.isArray(data.results) ? data.results : [])
-        .flatMap((result) => result.type === "contact" ? [result.contact] : []);
+      if (!response.ok) throw new Error(`Search export stopped on page ${page}: the server returned ${response.status}. Try again or refine your filters.`);
+      let data: { results?: UnifiedResult[]; total?: number };
+      try {
+        data = await response.json() as { results?: UnifiedResult[]; total?: number };
+      } catch {
+        throw new Error(`Search export stopped on page ${page}: the response could not be read.`);
+      }
+      if (!Array.isArray(data.results)) {
+        throw new Error(`Search export stopped on page ${page}: the response did not contain results.`);
+      }
+      const pageRows = data.results;
+      if (pageRows.some((result) => !result || (searchType === "contacts" ? result.type !== "contact" : result.type !== "outlet"))) {
+        throw new Error(`Search export stopped on page ${page}: the server returned a record outside the selected type.`);
+      }
+      if (data.total !== undefined) {
+        if (!Number.isSafeInteger(data.total) || data.total < 0) {
+          throw new Error(`Search export stopped on page ${page}: the server returned an invalid result total.`);
+        }
+        if (total !== null && total !== data.total) {
+          throw new Error("The search results changed while exporting. Try again.");
+        }
+        total = data.total;
+        if (total > MEDIA_SEARCH_EXPORT_MAX_COUNT) {
+          throw new Error(`The matching result set exceeds the safe export limit of ${MEDIA_SEARCH_EXPORT_MAX_COUNT.toLocaleString()} records. Refine your filters and try again.`);
+        }
+      }
+      if (pageRows.length > MEDIA_SEARCH_EXPORT_PAGE_SIZE) {
+        throw new Error(`Search export stopped on page ${page}: the server exceeded the requested page size.`);
+      }
       all.push(...pageRows);
-      total = Number.isFinite(Number(data.total)) ? Number(data.total) : all.length;
-      if (pageRows.length === 0) break;
+      if (all.length > MEDIA_SEARCH_EXPORT_MAX_COUNT) {
+        throw new Error(`The matching result set exceeds the safe export limit of ${MEDIA_SEARCH_EXPORT_MAX_COUNT.toLocaleString()} records. Refine your filters and try again.`);
+      }
+      if (total !== null) {
+        if (all.length > total) throw new Error("The search export received more records than the server-reported total.");
+        if (all.length === total) return all;
+        if (pageRows.length === 0) {
+          throw new Error(`Search export stopped on page ${page}: the server ended before all matching records were received.`);
+        }
+      } else if (pageRows.length < MEDIA_SEARCH_EXPORT_PAGE_SIZE) {
+        return all;
+      }
+      if (page === MEDIA_SEARCH_EXPORT_MAX_PAGES) {
+        throw new Error(`The search export may exceed the safe limit of ${MEDIA_SEARCH_EXPORT_MAX_COUNT.toLocaleString()} records. Refine your filters and try again.`);
+      }
       page += 1;
     }
-    return all;
+    throw new Error("The search export could not be completed within the page limit. Refine your filters and try again.");
   };
 
   // Export contacts. Filtered exports deliberately fetch every matching API
@@ -1120,7 +1349,8 @@ function MediaDatabasePage() {
     setExportBusy(true);
     setExportError("");
     try {
-      const rows = await fetchAllSearchContactsForExport();
+      const results = await fetchAllSearchResultsForExport();
+      const rows = results.flatMap((result) => result.type === "contact" ? [result.contact] : []);
       // Search exports use the same rich schema and sanitisation as database
       // exports while retaining the exact filtered result set.
       if (format === "xlsx") {
@@ -1152,8 +1382,33 @@ function MediaDatabasePage() {
     }
   };
 
+  const exportSearchPublications = async () => {
+    setExportBusy(true);
+    setExportError("");
+    try {
+      const results = await fetchAllSearchResultsForExport();
+      const rows = results.flatMap((result) => result.type === "outlet" ? [result.outlet] : []);
+      const csvContent = [PUBLICATION_EXPORT_COLUMNS, ...rows.map(publicationExportRow)]
+        .map((row) => row.map(csvCell).join(",")).join("\r\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "Media Publications.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Could not prepare the publication export.");
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
   const outletOptions = outlets.map((o) => ({ id: o.id, name: o.name })).sort((a, b) => a.name.localeCompare(b.name));
   const showCollectionTools = activeTab === "outlets" || activeTab === "contacts";
+  const visibleSearchResults = searchResults.filter((result) => searchType === "contacts"
+    ? result.type === "contact"
+    : result.type === "outlet");
 
   return (
     <div className="min-h-screen p-6 max-w-6xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
@@ -1163,7 +1418,7 @@ function MediaDatabasePage() {
           <Database size={24} color="#ffffff" />
           <h1 className="text-[28px] font-semibold mb-1" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Media Database</h1>
         </div>
-         <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>Search publications and journalists from the shared Master collection or your private workspace collection.</p>
+         <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>Search contacts and publications in the shared collection, your team's additions, or your saved media.</p>
       </div>
       {loadError && <div role="alert" className="mb-4 rounded-xl border bg-white px-4 py-3 text-[13px]" style={{ borderColor: "#FECACA", color: vars.red }}>
         {loadError} <button onClick={() => void loadData()} className="ml-2 font-semibold underline">Try again</button>
@@ -1171,69 +1426,123 @@ function MediaDatabasePage() {
 
       {showCollectionTools && <section className="mb-5 rounded-2xl border bg-white shadow-sm" style={{ borderColor: vars.g200 }}>
         <div className="p-4 sm:p-5">
-          <label htmlFor="media-primary-search" className="block text-[12px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: vars.navy }}>Search contacts and publications</label>
+          <label htmlFor="media-primary-search" className="block text-[12px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: vars.navy }}>Search the media database</label>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Search
+              <select data-testid="select-search-record-type" aria-label="Search record type" value={searchType} onChange={(event) => { setSearchType(event.target.value as "contacts" | "publications"); setSearchPage(1); }} className="ml-2 rounded-lg border bg-white px-3 py-2 text-[12px]" style={{ borderColor: vars.g200 }}>
+                <option value="contacts">Contacts</option><option value="publications">Publications</option>
+              </select>
+            </label>
+            <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Collection
+              <select data-testid="select-media-collection-scope" aria-label="Media collection scope" value={searchScope} onChange={(event) => { setSearchScope(event.target.value as "all" | "added" | "saved"); setSearchPage(1); }} className="ml-2 rounded-lg border bg-white px-3 py-2 text-[12px]" style={{ borderColor: vars.g200 }}>
+                <option value="all">All</option><option value="added">Added</option><option value="saved">Saved</option>
+              </select>
+            </label>
+          </div>
+          <p className="mt-2 text-[11px]" style={{ color: vars.g500 }}>All searches the shared AIO Fusion collection and this account's additions. Added shows this account's private records; Saved shows its private bookmarks. Saving never copies a shared record.</p>
           <div className="flex items-center gap-2 rounded-xl border px-3" style={{ borderColor: vars.g200 }}>
             <Search size={18} color={vars.g400} />
-            <input id="media-primary-search" value={searchPhrase} onChange={(event) => { setSearchPhrase(event.target.value); setSearchPage(1); }} placeholder="Enter an exact LLM phrase, journalist or publication" className="w-full py-3 text-[14px] outline-none" />
-            {searchPhrase && <button aria-label="Clear search phrase" onClick={() => setSearchPhrase("")}><X size={16} color={vars.g400} /></button>}
-            <button onClick={runSearch} className="rounded-lg px-3 py-2 text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Search</button>
+            <input data-testid="input-media-search" id="media-primary-search" value={searchPhrase} onChange={(event) => { setSearchPhrase(event.target.value); setSearchPage(1); }} onKeyDown={(event) => { if (event.key === "Enter") runSearch(); }} placeholder={searchType === "contacts" ? "Search people, roles, publications or topics" : "Search publication names or topics"} className="w-full py-3 text-[14px] outline-none" />
+            <button data-testid="button-search-media" onClick={runSearch} className="rounded-lg px-3 py-2 text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Search</button>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button aria-expanded={showFilters} onClick={() => setShowFilters((value) => !value)} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>
-              <Tag size={13} /> Refine interpretation <ChevronDown size={13} className={showFilters ? "rotate-180" : ""} />
-            </button>
-            {[searchTopic && `Topic: ${searchTopic}`, searchLocation && `Location: ${searchLocation}`, searchCategory && `Category: ${searchCategory}`, searchAuthority && `Authority: ${searchAuthority}+`].filter(Boolean).map((label) => <span key={label as string} className="rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ background: vars.g100, color: vars.navy }}>{label}</span>)}
-            {searchActive && <button onClick={() => { setSearchPhrase(""); setSearchTopic(""); setSearchLocation(""); setSearchCategory(""); setSearchAuthority(""); setSearchPage(1); }} className="text-[12px] font-semibold underline" style={{ color: vars.g500 }}>Clear all</button>}
+            <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Sector
+              <select data-testid="select-media-sector" aria-label="Sector filter" value={searchCategory} onChange={(event) => { setSearchCategory(event.target.value); setSearchPage(1); }} className="ml-2 rounded-lg border bg-white px-3 py-2 text-[12px]" style={{ borderColor: vars.g200 }}>
+                <option value="">All sectors</option>{allCategories.map((category) => <option key={category}>{category}</option>)}
+              </select>
+            </label>
+            <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Region
+              <select data-testid="select-media-region" aria-label="Region filter" value={searchLocation} onChange={(event) => { setSearchLocation(event.target.value); setSearchPage(1); }} className="ml-2 rounded-lg border bg-white px-3 py-2 text-[12px]" style={{ borderColor: vars.g200 }}>
+                <option value="">All regions</option><option value="UK">UK</option><option value="US">US</option><option value="Europe">Europe</option><option value="Global">Global</option>
+              </select>
+            </label>
+            <button data-testid="button-clear-media-search" onClick={() => { setSearchPhrase(""); setSearchTopic(""); setSearchLocation(""); setSearchCategory(""); setSearchAuthority(""); setSearchType("contacts"); setSearchScope("all"); setSearchPage(1); setResultMessage(""); setResultRefreshToken((value) => value + 1); }} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Clear</button>
+            {bookmarkError && <span role="alert" className="text-[11px]" style={{ color: vars.red }}>{bookmarkError}</span>}
           </div>
-          {showFilters && <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 rounded-xl p-3" style={{ background: vars.g50 }}>
-            <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Topic<input value={searchTopic} onChange={(e) => { setSearchTopic(e.target.value); setSearchPage(1); }} placeholder="e.g. fintech" className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-[13px] font-normal" style={{ borderColor: vars.g200 }} /></label>
-            <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Location<input value={searchLocation} onChange={(e) => { setSearchLocation(e.target.value); setSearchPage(1); }} placeholder="e.g. London or UK" className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-[13px] font-normal" style={{ borderColor: vars.g200 }} /></label>
-            <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Category<select value={searchCategory} onChange={(e) => { setSearchCategory(e.target.value); setSearchPage(1); }} className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-[13px] font-normal" style={{ borderColor: vars.g200 }}><option value="">Any category</option>{allCategories.map((category) => <option key={category}>{category}</option>)}</select></label>
-            <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Minimum authority<input type="number" min="0" max="100" value={searchAuthority} onChange={(e) => { setSearchAuthority(e.target.value); setSearchPage(1); }} placeholder="0-100" className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-[13px] font-normal" style={{ borderColor: vars.g200 }} /></label>
-          </div>}
-        </div>
-        <div className="border-t px-4 py-3 flex flex-wrap gap-2 justify-between" style={{ borderColor: vars.g100, background: vars.g50 }}>
-          <span className="text-[11px]" style={{ color: vars.g500 }}>Database management</span>
-          <div className="flex flex-wrap gap-2">
-            {canWriteMediaDatabase && <>
-              <button onClick={openAddContact} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.accent }}><Plus size={13} /> Add contact</button>
-              <button onClick={openAddOutlet} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}><Building2 size={13} /> Add publication</button>
-              <button onClick={openImport} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}><Upload size={13} /> Import</button>
-            </>}
-          </div>
+          <details className="mt-4 border-t pt-3" style={{ borderColor: vars.g100 }}>
+            <summary className="cursor-pointer text-[12px] font-semibold" style={{ color: vars.g600 }}>Advanced search and database management</summary>
+            <div className="mt-3 rounded-xl p-3" style={{ background: vars.g50 }}>
+              <p className="mb-3 text-[11px] leading-relaxed" style={{ color: vars.g500 }}>
+                Shared Collection records are centrally maintained and read-only to customer accounts. Added records belong to this workspace; Saved records are private bookmarks, not copies. Complete (%) counts ten populated information groups, not accuracy. Due for Review means a saved public source needs a human check; it does not mean a detail has changed. Edit and save updates the existing record. Delete soft-removes it from active results while retaining its audit history.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {canWriteMediaDatabase && <>
+                  <button onClick={openAddContact} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.accent }}><Plus size={13} /> Add contact</button>
+                  <button onClick={openAddOutlet} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}><Building2 size={13} /> Add publication</button>
+                  <button onClick={openImport} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}><Upload size={13} /> Import</button>
+                </>}
+              </div>
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Topic<input value={searchTopic} onChange={(event) => { setSearchTopic(event.target.value); setSearchPage(1); }} placeholder="e.g. fintech" className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-[13px] font-normal" style={{ borderColor: vars.g200 }} /></label>
+                <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Minimum authority<input type="number" min="0" max="100" value={searchAuthority} onChange={(event) => { setSearchAuthority(event.target.value); setSearchPage(1); }} placeholder="0-100" className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-[13px] font-normal" style={{ borderColor: vars.g200 }} /></label>
+                <button onClick={runSearch} className="self-end rounded-lg px-3 py-2 text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Apply advanced filters</button>
+              </div>
+            </div>
+          </details>
         </div>
       </section>}
 
       {showCollectionTools && searchActive && <section className="mb-6">
         <div className="flex items-center justify-between gap-3 mb-3">
-          <p className="text-[13px]" style={{ color: vars.g500 }}>{searchLoading ? "Searching..." : resultMessage || `${searchTotal} results: ${searchCounts.contacts} contacts and ${searchCounts.outlets} publications`}</p>
-           {searchResults.some((result) => result.type === "contact") && <button disabled={exportBusy} onClick={() => void exportSearchContacts("xlsx")} className="inline-flex items-center gap-1.5 text-[12px] font-semibold disabled:opacity-50" style={{ color: vars.navy }}><Download size={13} /> Export all matches</button>}
+          <p className="text-[13px]" style={{ color: vars.g500 }}>{searchLoading ? "Searching..." : resultMessage || `${searchType === "contacts" ? searchCounts.contacts : searchCounts.outlets} ${searchType} found`}</p>
+           {visibleSearchResults.length > 0 && <button disabled={exportBusy} onClick={() => void (searchType === "contacts" ? exportSearchContacts("xlsx") : exportSearchPublications())} className="inline-flex items-center gap-1.5 text-[12px] font-semibold disabled:opacity-50" style={{ color: vars.navy }}><Download size={13} /> {exportBusy ? "Preparing export…" : "Export all matches"}</button>}
          </div>
          {exportError && <p className="mb-3 rounded-lg bg-white px-3 py-2 text-[12px]" style={{ color: vars.red }}>{exportError}</p>}
          {resultMessage && !searchLoading && <button onClick={runSearch} className="mb-3 text-[12px] font-semibold underline" style={{ color: vars.accent }}>Retry search</button>}
          <div className="space-y-3" aria-live="polite">
-          {searchResults.map((result) => {
+           {visibleSearchResults.map((result) => {
             const isContact = result.type === "contact";
             const contact = isContact ? result.contact : null;
             const outlet = !isContact ? result.outlet : null;
-            return <article key={`${result.type}-${result.id}`} className="rounded-2xl border bg-white p-4 sm:p-5" style={{ borderColor: contact?.lifecycleStatus === "departed" ? "#F59E0B" : vars.g200 }}>
+             const linkedJournalists = (outlet?.linkedJournalists ?? outlet?.journalists ?? []).filter((journalist) => journalist.lifecycleStatus !== "departed");
+             const bookmarkType = isContact ? "contact" : "publication";
+             const bookmarkKey = `${bookmarkType}:${result.id}`;
+             const isSaved = savedMedia.has(bookmarkKey);
+             const outletWebsite = publicationWebsiteHref(outlet?.website || contact?.outletWebsite);
+             return <article data-testid={`card-media-${bookmarkType}-${result.id}`} key={`${result.type}-${result.id}`} className="rounded-2xl border bg-white p-4 sm:p-5" style={{ borderColor: contact?.lifecycleStatus === "departed" ? "#F59E0B" : vars.g200 }}>
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2 mb-1">
                     <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide" style={{ background: isContact ? "rgba(31,116,143,0.1)" : "rgba(201,160,78,0.18)", color: isContact ? vars.accent : "#7A5E25" }}>{isContact ? "Contact" : "Publication"}</span>
+                     <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: vars.g100, color: vars.g600 }}>{isSharedCollection(contact || outlet!) ? "AIO Fusion collection" : isCurrentWorkspaceItem(contact || outlet!, session?.username) ? "Added by your team" : "Private workspace record"}</span>
                     {contact?.lifecycleStatus === "departed" && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">Departed</span>}
                     {contact?.hasPendingCorrection && <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-800">Correction pending</span>}
                   </div>
                   <h2 className="text-[18px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{contact ? `${contact.firstName} ${contact.lastName}`.trim() : outlet?.name}</h2>
-                  <p className="mt-1 text-[13px]" style={{ color: vars.g600 }}>{contact ? [contact.role || "Editorial contact", contact.outletName].filter(Boolean).join(" at ") : [outlet?.category, outlet?.country].filter(Boolean).join(" · ")}</p>
+                   <p className="mt-1 text-[13px]" style={{ color: vars.g600 }}>{contact ? [contact.role || "Role not available", contact.outletName || "Publication not available"].join(" · ") : [outlet?.category || "Sector not available", outlet?.country || "Region not available"].join(" · ")}</p>
+                   {contact && <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px]" style={{ color: vars.g500 }}>
+                     {contact.email && isSendableContactEmail(contact.email) ? <a href={`mailto:${contact.email}`} className="underline" style={{ color: vars.accent }}>{contact.email}</a> : <span>Valid email not available</span>}
+                     {contact.outletName && (outletWebsite
+                       ? <a href={outletWebsite} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>Publication website</a>
+                       : <span>{contact.outletWebsite ? "Publication website value needs review" : "Publication website not available"}</span>)}
+                     {(contact.publicationReach || contact.outletReachBand) && <span>Source reach value: {contact.publicationReach || contact.outletReachBand}</span>}
+                   </div>}
+                   {contact?.linkedinUrl && <a className="mt-1 inline-block text-[12px] underline" href={contact.linkedinUrl} target="_blank" rel="noreferrer" style={{ color: vars.accent }}>LinkedIn profile</a>}
+                   {outlet && <div className="mt-1 flex flex-wrap gap-3 text-[12px]" style={{ color: vars.g500 }}>
+                     {outletWebsite ? <a href={outletWebsite} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>Visit publication website</a> : <span>{outlet.website ? "Stored website value needs review" : "Website not available"}</span>}
+                     <span>Source reach value: {outlet.reachBand || "Not available"}</span>
+                     <span>Verified authority: {outlet.verifiedAuthority ?? "Not available"}</span>
+                     {outlet.linkedinUrl && <a href={outlet.linkedinUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>LinkedIn</a>}
+                   </div>}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {result.authority > 0 && <span className="rounded-lg border px-2.5 py-1.5 text-[11px] font-bold" style={{ borderColor: vars.g200, color: vars.navy }}>Authority {result.authority}</span>}
+                   {contact && result.authority > 0 && <span className="rounded-lg border px-2.5 py-1.5 text-[11px] font-bold" style={{ borderColor: vars.g200, color: vars.navy }}>Recorded authority score {result.authority}</span>}
                    {contact && recordVerificationBadge(contact)}
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">{result.matchedFields.map((field) => <span key={field} className="rounded-md bg-yellow-100 px-2 py-1 text-[11px] font-semibold text-yellow-900">Matched {field}</span>)}{result.matchedPhrases.map((phrase) => <span key={phrase} className="rounded-md bg-indigo-100 px-2 py-1 text-[11px] font-semibold text-indigo-900">Exact phrase: “{phrase}”</span>)}</div>
+               {result.matchedFields.length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{result.matchedFields.map((field) => <span key={field} className="rounded-md bg-yellow-100 px-2 py-1 text-[11px] font-semibold text-yellow-900">Matched {field}</span>)}{result.matchedPhrases.map((phrase) => <span key={phrase} className="rounded-md bg-indigo-100 px-2 py-1 text-[11px] font-semibold text-indigo-900">Exact phrase: “{phrase}”</span>)}</div>}
               <ul className="mt-3 space-y-1 text-[12px]" style={{ color: vars.g600 }}>{result.reasons.map((reason) => <li key={reason} className="flex gap-2"><Check size={13} className="mt-0.5 shrink-0" color={vars.accent} />{reason}</li>)}</ul>
+               {outlet && <section className="mt-3 rounded-xl border p-3" style={{ borderColor: vars.g100 }}>
+                 <h3 className="text-[12px] font-semibold" style={{ color: vars.navy }}>Currently linked journalists ({linkedJournalists.length})</h3>
+                 {linkedJournalists.length > 0
+                   ? <ul className="mt-2 space-y-2">{linkedJournalists.map((journalist) => <li key={journalist.id} className="text-[12px]" style={{ color: vars.g600 }}>
+                     <span className="font-semibold" style={{ color: vars.navy }}>{`${journalist.firstName} ${journalist.lastName}`.trim() || "Name not available"}</span>
+                     {journalist.role && ` · ${journalist.role}`}
+                     {journalist.email && isSendableContactEmail(journalist.email) ? <> · <a href={`mailto:${journalist.email}`} className="underline" style={{ color: vars.accent }}>{journalist.email}</a></> : " · Valid email not available"}
+                     {journalist.linkedinUrl && <> · <a href={journalist.linkedinUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>LinkedIn</a></>}
+                   </li>)}</ul>
+                   : <p className="mt-1 text-[11px]" style={{ color: vars.g500 }}>No eligible linked journalists are available in this search result.</p>}
+               </section>}
               <div className="mt-4 pt-3 border-t flex flex-wrap gap-2" style={{ borderColor: vars.g100 }}>
                 {contact && <><button onClick={() => setShowContactProfile(contact)} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>View profile</button>
                   {canManageCollectionItem(contact, isMaster, canWriteMediaDatabase, session?.username) && <>
@@ -1241,20 +1550,23 @@ function MediaDatabasePage() {
                     <button onClick={() => { setCorrectionContact(contact); setCorrectionFields([]); setCorrectionDetails(""); }} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.g600 }}>Flag incorrect details</button>
                   </>}
                 </>}
-                {outlet?.website && <a href={outlet.website.startsWith("http") ? outlet.website : `https://${outlet.website}`} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Visit publication</a>}
+                 {outletWebsite && <a href={outletWebsite} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Visit publication</a>}
+                 <button data-testid={`button-save-media-${bookmarkType}-${result.id}`} disabled={bookmarkBusy === bookmarkKey} onClick={() => void toggleBookmark(bookmarkType, result.id)} className="px-3 py-2 rounded-lg border text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>{bookmarkBusy === bookmarkKey ? "Saving…" : isSaved ? "Saved by your team" : "Save to My Media Database"}</button>
               </div>
             </article>;
           })}
-          {!searchLoading && !resultMessage && searchResults.length === 0 && <div className="rounded-2xl border bg-white py-12 text-center" style={{ borderColor: vars.g200 }}><Search size={28} className="mx-auto mb-2" color={vars.g300} /><p className="font-semibold" style={{ color: vars.navy }}>No matching contacts or publications</p><p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Clear a filter or broaden the topic.</p></div>}
+          {!searchLoading && !resultMessage && visibleSearchResults.length === 0 && <div className="rounded-2xl border bg-white py-12 text-center" style={{ borderColor: vars.g200 }}><Search size={28} className="mx-auto mb-2" color={vars.g300} /><p className="font-semibold" style={{ color: vars.navy }}>No matching {searchType}</p><p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Clear a filter or broaden the search.</p></div>}
         </div>
         {searchTotal > 25 && <div className="flex justify-end items-center gap-3 mt-3 text-[12px]" style={{ color: vars.navy }}><button disabled={searchPage === 1} onClick={() => setSearchPage((page) => page - 1)} className="px-3 py-1 border rounded disabled:opacity-40">Previous</button><span>Page {searchPage} of {Math.ceil(searchTotal / 25)}</span><button disabled={searchPage * 25 >= searchTotal} onClick={() => setSearchPage((page) => page + 1)} className="px-3 py-1 border rounded disabled:opacity-40">Next</button></div>}
       </section>}
 
-      {(!searchActive || !showCollectionTools) && <>
+      {(!searchActive || !showCollectionTools) && <details className="mb-5 rounded-2xl border bg-white p-4" style={{ borderColor: vars.g200 }}>
+       <summary className="cursor-pointer text-[13px] font-semibold" style={{ color: vars.navy }}>Advanced management: imports, corrections, discoveries and record editing</summary>
+      <div className="mt-4">
       {/* Tabs */}
       <div className="flex gap-1 mb-6 p-1 rounded-xl inline-flex" style={{ background: vars.g100 }}>
         {([
-          { id: "outlets" as const, label: `Outlets (${outlets.length})` },
+          { id: "outlets" as const, label: `Publications (${outlets.length})` },
           { id: "contacts" as const, label: `Contacts (${contacts.length})` },
           ...(canSeeDiscoveries ? [{ id: "discoveries" as const, label: "Discoveries" }] : []),
           ...(isMaster && canWriteMediaDatabase ? [{ id: "corrections" as const, label: `Corrections (${correctionReports.length})` }] : []),
@@ -1332,7 +1644,7 @@ function MediaDatabasePage() {
                <Search size={16} className="text-slate-400" />
                <input value={outletSearch} onChange={(e) => { setOutletSearch(e.target.value); setOutletPage(1); }} placeholder="Search outlets by name or category..." className="px-3 py-2 rounded-lg border text-[13px] w-full outline-none focus:border-slate-400" style={{ borderColor: vars.g200 }} />
             </div>
-            <select value={outletCatFilter} onChange={(e) => { setOutletCatFilter(e.target.value); setOutletPage(1); }} className="px-3 py-2 rounded-lg border text-[13px] outline-none bg-white" style={{ borderColor: vars.g200, color: outletCatFilter ? vars.navy : "inherit" }}>
+            <select aria-label="Publication sector filter" value={outletCatFilter} onChange={(e) => { setOutletCatFilter(e.target.value); setOutletPage(1); }} className="px-3 py-2 rounded-lg border text-[13px] outline-none bg-white" style={{ borderColor: vars.g200, color: outletCatFilter ? vars.navy : "inherit" }}>
               <option value="">All categories</option>
               {allCategories.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -1360,9 +1672,9 @@ function MediaDatabasePage() {
                 <thead>
                   <tr style={{ background: vars.g50 }}>
                     <th className="text-left px-4 py-3 font-semibold" style={{ color: vars.navy }}>Publication</th>
-                    <th className="text-left px-4 py-3 font-semibold hidden sm:table-cell" style={{ color: vars.navy }}>Category</th>
-                    <th className="text-left px-4 py-3 font-semibold hidden md:table-cell" style={{ color: vars.navy }}>Country</th>
-                    <th className="text-left px-4 py-3 font-semibold hidden lg:table-cell" style={{ color: vars.navy }}>Reach</th>
+                    <th className="text-left px-4 py-3 font-semibold hidden sm:table-cell" style={{ color: vars.navy }}>Sector</th>
+                    <th className="text-left px-4 py-3 font-semibold hidden md:table-cell" style={{ color: vars.navy }}>Region</th>
+                    <th className="text-left px-4 py-3 font-semibold hidden lg:table-cell" style={{ color: vars.navy }}>Source reach value</th>
                     <th className="text-left px-4 py-3 font-semibold hidden lg:table-cell" style={{ color: vars.navy }}>Website</th>
                     <th className="px-4 py-3" style={{ color: vars.navy }}></th>
                   </tr>
@@ -1374,12 +1686,22 @@ function MediaDatabasePage() {
                         <p className="font-semibold" style={{ color: vars.navy }}>{o.name}</p>
                         {o.description && <p className="text-[11px] font-light mt-0.5" style={{ color: vars.g500 }}>{o.description.slice(0, 80)}{o.description.length > 80 ? "…" : ""}</p>}
                         {isSharedCollection(o) && <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded" style={{ background: "rgba(31,116,143,0.1)", color: vars.accent }}>Shared collection</span>}
+                        {Array.isArray(o.linkedJournalists) || Array.isArray(o.journalists)
+                          ? <div className="mt-2 text-[10px]" style={{ color: vars.g500 }}>
+                            <p className="font-semibold">Currently linked journalists ({(o.linkedJournalists ?? o.journalists ?? []).filter((journalist) => journalist.lifecycleStatus !== "departed").length})</p>
+                            <ul className="mt-1 space-y-1">{(o.linkedJournalists ?? o.journalists ?? []).filter((journalist) => journalist.lifecycleStatus !== "departed").map((journalist) => <li key={journalist.id}>
+                              {`${journalist.firstName} ${journalist.lastName}`.trim() || "Name not available"}{journalist.role ? ` · ${journalist.role}` : ""}
+                              {journalist.email && isSendableContactEmail(journalist.email) ? ` · ${journalist.email}` : ""}
+                              {journalist.linkedinUrl && <> · <a href={journalist.linkedinUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>LinkedIn</a></>}
+                            </li>)}</ul>
+                          </div>
+                          : <p className="mt-2 text-[10px]" style={{ color: vars.g500 }}>Linked journalist details are not available in this publication list.</p>}
                       </td>
-                      <td className="px-4 py-3 hidden sm:table-cell" style={{ color: vars.g600 }}>{o.category}</td>
-                      <td className="px-4 py-3 hidden md:table-cell" style={{ color: vars.g600 }}>{o.country}</td>
-                      <td className="px-4 py-3 hidden lg:table-cell" style={{ color: vars.g600 }}>{o.reachBand}</td>
+                      <td className="px-4 py-3 hidden sm:table-cell" style={{ color: vars.g600 }}>{o.category || "Not available"}</td>
+                      <td className="px-4 py-3 hidden md:table-cell" style={{ color: vars.g600 }}>{o.country || "Not available"}</td>
+                      <td className="px-4 py-3 hidden lg:table-cell" style={{ color: vars.g600 }}>{o.reachBand ? `Source value: ${o.reachBand}` : "Not available"}</td>
                       <td className="px-4 py-3 hidden lg:table-cell">
-                        {o.website && <a href={o.website.startsWith("http") ? o.website : `https://${o.website}`} target="_blank" rel="noopener noreferrer" className="text-[11px] underline" style={{ color: vars.accent }}>{o.website.replace(/^https?:\/\//, "").slice(0, 30)}</a>}
+                        {publicationWebsiteHref(o.website) ? <a href={publicationWebsiteHref(o.website)!} target="_blank" rel="noopener noreferrer" className="text-[11px] underline" style={{ color: vars.accent }}>{o.website.replace(/^https?:\/\//, "").slice(0, 30)}</a> : o.website ? <span title="Stored value is retained for review but is not a valid website link.">Website value needs review</span> : "Not available"}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 justify-end">
@@ -1408,21 +1730,21 @@ function MediaDatabasePage() {
                <button onClick={() => { setActiveTab("contacts"); browseResults("contacts"); }} className="rounded-lg border px-3 py-2 text-[12px] font-semibold whitespace-nowrap" style={{ borderColor: vars.accent, color: vars.accent }}>Browse contacts</button>
             </div>
             <div className="flex flex-wrap items-center gap-2 w-full">
-              <select value={contactCategoryFilter} onChange={(e) => { setContactCategoryFilter(e.target.value); setContactPage(1); }} className="px-3 py-2 rounded-lg border text-[13px] bg-white outline-none" style={{ borderColor: vars.g200 }}>
+              <select aria-label="Contact sector filter" value={contactCategoryFilter} onChange={(e) => { setContactCategoryFilter(e.target.value); setContactPage(1); }} className="px-3 py-2 rounded-lg border text-[13px] bg-white outline-none" style={{ borderColor: vars.g200 }}>
                 <option value="">All categories</option>{allCategories.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
-              <select value={contactCountryFilter} onChange={(e) => { setContactCountryFilter(e.target.value); setContactPage(1); }} className="px-3 py-2 rounded-lg border text-[13px] bg-white outline-none" style={{ borderColor: vars.g200 }}>
+              <select aria-label="Contact region filter" value={contactCountryFilter} onChange={(e) => { setContactCountryFilter(e.target.value); setContactPage(1); }} className="px-3 py-2 rounded-lg border text-[13px] bg-white outline-none" style={{ borderColor: vars.g200 }}>
                 <option value="">All locations</option>
                 <option value="UK">United Kingdom</option>
                 <option value="US">United States</option>
                 <option value="EU">Europe</option>
                 <option value="Global">Global</option>
               </select>
-              <select value={contactOutletFilter} onChange={(e) => setContactOutletFilter(e.target.value)} className="px-3 py-2 rounded-lg border text-[13px] bg-white outline-none" style={{ borderColor: vars.g200, color: contactOutletFilter ? vars.navy : "inherit" }}>
+              <select aria-label="Contact publication filter" value={contactOutletFilter} onChange={(e) => setContactOutletFilter(e.target.value)} className="px-3 py-2 rounded-lg border text-[13px] bg-white outline-none" style={{ borderColor: vars.g200, color: contactOutletFilter ? vars.navy : "inherit" }}>
                 <option value="">All outlets</option>
                 {outletOptions.map((o) => <option key={o.id} value={String(o.id)}>{o.name}</option>)}
               </select>
-              <select value={`${contactSort}:${contactDirection}`} onChange={(e) => { const [sort, direction] = e.target.value.split(":"); setContactSort(sort); setContactDirection(direction as "asc" | "desc"); setContactPage(1); }} className="px-3 py-2 rounded-lg border text-[13px] bg-white outline-none" style={{ borderColor: vars.g200 }}>
+              <select aria-label="Contact sort order" value={`${contactSort}:${contactDirection}`} onChange={(e) => { const [sort, direction] = e.target.value.split(":"); setContactSort(sort); setContactDirection(direction as "asc" | "desc"); setContactPage(1); }} className="px-3 py-2 rounded-lg border text-[13px] bg-white outline-none" style={{ borderColor: vars.g200 }}>
                 <option value="lastName:asc">Name A-Z</option><option value="lastName:desc">Name Z-A</option><option value="outletName:asc">Outlet A-Z</option><option value="createdAt:desc">Newest</option>
               </select>
               {(contactSearch || contactCategoryFilter || contactCountryFilter || contactOutletFilter) && <button onClick={() => { setContactSearch(""); setContactCategoryFilter(""); setContactCountryFilter(""); setContactOutletFilter(""); setContactPage(1); }} className="px-3 py-2 rounded-lg text-[12px] font-medium text-slate-500 hover:text-slate-700 transition-colors">Clear filters</button>}
@@ -1475,7 +1797,7 @@ function MediaDatabasePage() {
                          {isSharedCollection(c) && <span className="inline-flex text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded" style={{ background: "rgba(31,116,143,0.1)", color: vars.accent }}>Shared collection</span>}
                          {recordVerificationBadge(c)}
                          {(c.beats?.length || c.sectors?.length || c.seniority || c.editorialStatus) && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>{[c.beats?.length ? `Beats: ${c.beats.join(", ")}` : "", c.sectors?.length ? `Sectors: ${c.sectors.join(", ")}` : "", c.seniority, c.editorialStatus].filter(Boolean).join(" · ")}</p>}
-                         {(c.reach || c.reachBand || c.authority !== undefined || c.authorityScore !== undefined || c.confidence || c.confidenceLevel) && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>{[c.reach || c.reachBand ? `Reach: ${c.reach || c.reachBand}` : "", c.authority ?? c.authorityScore !== undefined ? `Authority: ${c.authority ?? c.authorityScore}` : "", c.confidence || c.confidenceLevel ? `Confidence: ${c.confidence || c.confidenceLevel}` : ""].filter(Boolean).join(" · ")}</p>}
+                          {(c.reach || c.reachBand || c.authority !== undefined || c.authorityScore !== undefined || c.confidence || c.confidenceLevel) && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>{[c.reach || c.reachBand ? `Source reach value: ${c.reach || c.reachBand}` : "", c.authority ?? c.authorityScore !== undefined ? `Recorded authority score: ${c.authority ?? c.authorityScore}` : "", c.confidence || c.confidenceLevel ? `Confidence: ${c.confidence || c.confidenceLevel}` : ""].filter(Boolean).join(" · ")}</p>}
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell" style={{ color: vars.g600 }}>{c.role}</td>
                       <td className="px-4 py-3 hidden md:table-cell" style={{ color: vars.g600 }}>{c.outletName}</td>
@@ -1511,7 +1833,8 @@ function MediaDatabasePage() {
            {contactTotal > 50 && <div className="flex justify-end items-center gap-3 mt-3 text-[12px]" style={{ color: vars.navy }}><button disabled={contactPage === 1} onClick={() => setContactPage((page) => page - 1)} className="px-3 py-1 border rounded disabled:opacity-40">Previous</button><span>Page {contactPage} of {Math.ceil(contactTotal / 50)}</span><button disabled={contactPage * 50 >= contactTotal} onClick={() => setContactPage((page) => page + 1)} className="px-3 py-1 border rounded disabled:opacity-40">Next</button></div>}
         </div>
       )}
-      </>}
+      </div>
+      </details>}
 
       {showCollectionTools && correctionContact && <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setCorrectionContact(null)} onKeyDown={(event) => { if (event.key === "Escape") setCorrectionContact(null); }}>
         <div role="dialog" aria-modal="true" aria-labelledby="correction-title" className="bg-white rounded-2xl max-w-lg w-full max-h-[calc(100dvh-1.5rem)] overflow-y-auto p-5" onClick={(event) => event.stopPropagation()}>
@@ -1794,6 +2117,7 @@ function MediaDatabasePage() {
                 { label: "Website", key: "website", placeholder: "e.g. prweek.com" },
                 { label: "Country", key: "country", placeholder: "e.g. United Kingdom" },
                 { label: "Reach / audience size", key: "reachBand", placeholder: "e.g. 50k–100k, National, Niche" },
+                { label: "LinkedIn URL (optional)", key: "linkedinUrl", placeholder: "Enter a manually verified publication LinkedIn URL" },
                 { label: "Description", key: "description", placeholder: "Brief description of the publication" },
               ].map(({ label, key, placeholder }) => (
                 <div key={key}>

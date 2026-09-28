@@ -15,7 +15,7 @@ vi.mock("@workspace/db", async () => {
     CREATE TABLE media_outlets (
       id serial PRIMARY KEY, name text NOT NULL, category text NOT NULL DEFAULT '',
       website text NOT NULL DEFAULT '', description text NOT NULL DEFAULT '',
-      country text NOT NULL DEFAULT '', reach_band text NOT NULL DEFAULT '',
+      country text NOT NULL DEFAULT '', reach_band text NOT NULL DEFAULT '', linkedin_url text NOT NULL DEFAULT '',
       account_id varchar, created_at timestamptz NOT NULL DEFAULT now(), deleted_at timestamptz
     );
     CREATE TABLE media_contacts (
@@ -53,6 +53,14 @@ vi.mock("@workspace/db", async () => {
       id serial PRIMARY KEY, contact_id integer NOT NULL REFERENCES media_contacts(id) ON DELETE CASCADE,
       account_id varchar NOT NULL, status varchar(20) NOT NULL, note text NOT NULL DEFAULT '',
       created_by varchar NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE media_bookmarks (
+      id serial PRIMARY KEY, account_id varchar NOT NULL,
+      contact_id integer REFERENCES media_contacts(id) ON DELETE CASCADE,
+      outlet_id integer REFERENCES media_outlets(id) ON DELETE CASCADE,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      CHECK ((contact_id IS NOT NULL) <> (outlet_id IS NOT NULL)),
+      UNIQUE(account_id, contact_id), UNIQUE(account_id, outlet_id)
     );
     CREATE TABLE media_contact_correction_reports (
       id serial PRIMARY KEY, contact_id integer NOT NULL REFERENCES media_contacts(id) ON DELETE CASCADE,
@@ -157,7 +165,9 @@ vi.mock("@workspace/db", async () => {
 import {
   db,
   mediaContactsTable,
+  mediaBookmarksTable,
   mediaContactFieldOverridesTable,
+  mediaContactStatusEventsTable,
   mediaImportBatchesTable,
   mediaImportJobsTable,
   mediaOutletsTable,
@@ -714,6 +724,109 @@ describe("media import route regressions", () => {
     expect(await db.select().from(mediaContactFieldOverridesTable).where(eq(mediaContactFieldOverridesTable.accountId, "__global_admin__")))
       .toEqual(expect.arrayContaining([expect.objectContaining({ contactId: sharedContact!.id, fieldName: "role" })]));
     expect((await mediaRequest("DELETE", `/api/store/media-db/contacts/${sharedContact!.id}`, "admin", undefined, "owner", "admin")).status).toBe(200);
+  });
+
+  it("keeps private media and reusable bookmarks inside the active account and includes only eligible linked journalists", async () => {
+    await db.insert(platformAccountsTable).values([
+      { username: "media-parent-430", passwordHash: "", role: "agency", parent: null },
+      { username: "media-child-430", passwordHash: "", role: "client", parent: "media-parent-430" },
+      { username: "media-other-430", passwordHash: "", role: "agency", parent: null },
+    ]);
+    const [publication] = await db.insert(mediaOutletsTable).values({
+      name: "Bounded Journalists Publication 430", category: "Technology", country: "United Kingdom", website: "345", accountId: null,
+    }).returning();
+    const [sharedJournalist, suppressedJournalist, parentJournalist, childJournalist, otherJournalist] = await db.insert(mediaContactsTable).values([
+      { outletId: publication!.id, firstName: "Shared", lastName: "Journalist", email: "shared-430@example.test", accountId: null },
+      { outletId: publication!.id, firstName: "Private", lastName: "Suppressed", email: "suppressed-430@example.test", accountId: null },
+      { outletId: publication!.id, firstName: "Parent", lastName: "Journalist", email: "parent-430@example.test", accountId: "media-parent-430" },
+      { outletId: publication!.id, firstName: "Child", lastName: "Journalist", email: "child-430@example.test", accountId: "media-child-430" },
+      { outletId: publication!.id, firstName: "Other", lastName: "Journalist", email: "other-430@example.test", accountId: "media-other-430" },
+    ]).returning();
+    await db.insert(mediaSuppressionsTable).values({
+      scope: "shared", emailHash: privacyHash(suppressedJournalist!.email), reason: "privacy request",
+    });
+    await db.insert(mediaContactStatusEventsTable).values({
+      contactId: parentJournalist!.id, accountId: "media-parent-430", status: "departed", createdBy: "test",
+    });
+
+    const parentSearch = await mediaRequest("GET", "/api/store/media-db/search?phrase=Bounded%20Journalists%20Publication%20430", "media-parent-430");
+    const childSearch = await mediaRequest("GET", "/api/store/media-db/search?phrase=Bounded%20Journalists%20Publication%20430", "media-child-430", undefined, "owner", "client");
+    const parentPublication = parentSearch.json.results.find((result: any) => result.type === "outlet");
+    const childPublication = childSearch.json.results.find((result: any) => result.type === "outlet");
+    expect(parentPublication.journalists.map((contact: any) => contact.id)).toEqual([sharedJournalist!.id]);
+    expect(parentPublication.outlet.website).toBe("");
+    expect(parentPublication.journalistsTotal).toBe(1);
+    expect(parentPublication.journalistsNote).toBeNull();
+    expect(parentPublication.outlet.linkedJournalists.map((contact: any) => contact.id)).toEqual([sharedJournalist!.id]);
+    expect(childPublication.journalists.map((contact: any) => contact.id).sort()).toEqual([sharedJournalist!.id, childJournalist!.id].sort());
+    expect(parentPublication.journalists.map((contact: any) => contact.email)).not.toContain(suppressedJournalist!.email);
+    expect(childPublication.journalists.map((contact: any) => contact.email)).not.toContain(otherJournalist!.email);
+    const outletList = await mediaRequest("GET", "/api/store/media-db/outlets?q=Bounded%20Journalists%20Publication%20430", "media-parent-430");
+    expect(outletList.json.outlets[0].website).toBe("");
+    expect(outletList.json.outlets[0].linkedJournalists.map((contact: any) => contact.id)).toEqual([sharedJournalist!.id]);
+
+    const contactsOnly = await mediaRequest("GET", "/api/store/media-db/search?type=contacts&scope=all&category=Technology&location=UK", "media-parent-430");
+    expect(contactsOnly.json.results.every((result: any) => result.type === "contact")).toBe(true);
+    expect(contactsOnly.json.counts.contacts).toBeGreaterThan(0);
+    expect(contactsOnly.json.counts.outlets).toBe(0);
+    const publicationsOnly = await mediaRequest("GET", "/api/store/media-db/search?type=publications&scope=all&category=Technology", "media-parent-430");
+    expect(publicationsOnly.json.results.every((result: any) => result.type === "outlet")).toBe(true);
+    expect(publicationsOnly.json.counts.contacts).toBe(0);
+    const addedOnly = await mediaRequest("GET", "/api/store/media-db/search?type=contacts&scope=added", "media-parent-430");
+    expect(addedOnly.json.results.map((result: any) => result.id)).toEqual([parentJournalist!.id]);
+
+    const parentContactList = await mediaRequest("GET", "/api/store/media-db/contacts?q=Journalist", "media-parent-430");
+    const parentContactIds = parentContactList.json.contacts.map((contact: any) => contact.id);
+    expect(parentContactIds).toContain(sharedJournalist!.id);
+    expect(parentContactIds).not.toContain(childJournalist!.id);
+    expect(parentContactIds).not.toContain(otherJournalist!.id);
+
+    const savedContact = await mediaRequest("POST", "/api/store/media-db/bookmarks", "media-parent-430", {
+      type: "contact", id: sharedJournalist!.id,
+    });
+    const savedPublication = await mediaRequest("POST", "/api/store/media-db/bookmarks", "media-parent-430", {
+      type: "publication", id: publication!.id,
+    });
+    const duplicateContactSave = await mediaRequest("POST", "/api/store/media-db/bookmarks", "media-parent-430", {
+      type: "contact", id: sharedJournalist!.id,
+    });
+    const putContactSave = await mediaRequest("PUT", `/api/store/media-db/bookmarks/contact/${sharedJournalist!.id}`, "media-parent-430");
+    expect(savedContact.status).toBe(200);
+    expect(savedPublication.status).toBe(200);
+    expect(duplicateContactSave.json.bookmark.id).toBe(savedContact.json.bookmark.id);
+    expect(putContactSave.status).toBe(200);
+    expect((await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, sharedJournalist!.id))).length).toBe(1);
+    const parentBookmarks = await mediaRequest("GET", "/api/store/media-db/bookmarks", "media-parent-430");
+    const childBookmarks = await mediaRequest("GET", "/api/store/media-db/bookmarks", "media-child-430", undefined, "owner", "client");
+    expect(parentBookmarks.json.total).toBe(2);
+    expect(childBookmarks.json.total).toBe(0);
+    expect(parentBookmarks.json.bookmarks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "contact", id: sharedJournalist!.id, targetId: sharedJournalist!.id }),
+      expect.objectContaining({ type: "publication", id: publication!.id, targetId: publication!.id }),
+    ]));
+    const savedSearch = await mediaRequest("GET", "/api/store/media-db/search?type=contacts&scope=saved", "media-parent-430");
+    expect(savedSearch.json.results.every((result: any) => result.type === "contact")).toBe(true);
+    expect(savedSearch.json.results.map((result: any) => result.id)).toEqual([sharedJournalist!.id]);
+    const savedPublications = await mediaRequest("GET", "/api/store/media-db/search?type=publications&scope=saved", "media-parent-430");
+    expect(savedPublications.json.results.map((result: any) => result.id)).toEqual([publication!.id]);
+    expect(savedPublications.json.counts.contacts).toBe(0);
+    const deleteBookmark = await mediaRequest("DELETE", `/api/store/media-db/bookmarks/contact/${sharedJournalist!.id}`, "media-parent-430");
+    expect(deleteBookmark.status).toBe(200);
+    const manualPublication = await mediaRequest("POST", "/api/store/media-db/outlets", "media-parent-430", {
+      name: "Manually LinkedIn Publication", linkedinUrl: "https://www.linkedin.com/company/manual-entry",
+    });
+    expect(manualPublication.json.outlet.linkedinUrl).toBe("https://www.linkedin.com/company/manual-entry");
+    const updatedManualPublication = await mediaRequest("PUT", `/api/store/media-db/outlets/${manualPublication.json.outlet.id}`, "media-parent-430", {
+      linkedinUrl: "www.linkedin.com/company/manual-update",
+    });
+    expect(updatedManualPublication.json.outlet.linkedinUrl).toBe("https://www.linkedin.com/company/manual-update");
+    expect((await mediaRequest("POST", "/api/store/media-db/bookmarks", "media-child-430", {
+      type: "contact", id: parentJournalist!.id,
+    })).status).toBe(404);
+    expect((await mediaRequest("POST", "/api/store/media-db/bookmarks", "media-parent-430", {
+      type: "contact", id: sharedJournalist!.id,
+    }, "viewer")).status).toBe(403);
+    expect(await db.select().from(mediaBookmarksTable).where(eq(mediaBookmarksTable.accountId, "media-parent-430"))).toHaveLength(1);
   });
 
   it("returns shared contacts to agency and client search/recommendations without unrelated private records", async () => {

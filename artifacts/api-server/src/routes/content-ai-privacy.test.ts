@@ -10,7 +10,7 @@ const { db, client } = await vi.hoisted(async () => {
     CREATE TABLE media_outlets (
       id serial PRIMARY KEY, name text NOT NULL, category text NOT NULL DEFAULT '',
       website text NOT NULL DEFAULT '', description text NOT NULL DEFAULT '',
-      country text NOT NULL DEFAULT '', reach_band text NOT NULL DEFAULT '',
+      country text NOT NULL DEFAULT '', reach_band text NOT NULL DEFAULT '', linkedin_url text NOT NULL DEFAULT '',
       account_id varchar, created_at timestamptz NOT NULL DEFAULT now(), deleted_at timestamptz
     );
     CREATE TABLE media_contacts (

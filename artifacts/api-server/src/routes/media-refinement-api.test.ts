@@ -776,7 +776,7 @@ describe("media recommendation refinement API", () => {
       name: "Child Workspace Confidential",
       category: "Trade press",
       website: "https://child-private.test",
-      accountId: "workspace-child",
+      accountId: "workspace-a",
     }).returning();
     const [contact] = await db.insert(mediaContactsTable).values({
       outletId: outlet.id,
@@ -821,6 +821,7 @@ describe("media recommendation refinement API", () => {
     });
     await started;
     await db.execute(sql`UPDATE platform_accounts SET parent = NULL WHERE username = 'workspace-child'`);
+    await db.execute(sql`UPDATE media_outlets SET account_id = 'workspace-child' WHERE id = ${outlet.id}`);
     releaseProvider();
 
     const response = await enriching;

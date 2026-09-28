@@ -53,7 +53,7 @@ const { db, tables, client } = await (async () => {
       reason varchar(32) NOT NULL, active integer NOT NULL DEFAULT 1, created_at timestamptz NOT NULL DEFAULT now(), revoked_at timestamptz,
       UNIQUE (request_id, scope, account_id, email_hash, name_hash, linkedin_hash, outlet_hash)
     );
-    CREATE TABLE media_outlets (id serial PRIMARY KEY, account_id varchar, name text NOT NULL);
+    CREATE TABLE media_outlets (id serial PRIMARY KEY, account_id varchar, name text NOT NULL, linkedin_url text NOT NULL DEFAULT '');
     CREATE TABLE media_contact_field_overrides (id serial PRIMARY KEY, contact_id integer NOT NULL, account_id varchar NOT NULL, field_name varchar(80) NOT NULL, value text NOT NULL);
     CREATE TABLE media_contact_source_checks (id serial PRIMARY KEY, contact_id integer NOT NULL, account_id varchar NOT NULL DEFAULT 'workspace-a', source_url text NOT NULL DEFAULT '', outcome varchar NOT NULL DEFAULT 'current', checked_at timestamptz NOT NULL DEFAULT now(), observed_evidence jsonb NOT NULL DEFAULT '{}', differences jsonb NOT NULL DEFAULT '[]', error_message text NOT NULL DEFAULT '');
     CREATE TABLE media_contact_status_events (id serial PRIMARY KEY, contact_id integer NOT NULL, account_id varchar NOT NULL, status varchar NOT NULL, note text NOT NULL DEFAULT '', created_by varchar NOT NULL, created_at timestamptz NOT NULL DEFAULT now());

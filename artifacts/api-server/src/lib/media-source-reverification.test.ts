@@ -28,7 +28,8 @@ vi.mock("@workspace/db", async () => {
     );
     CREATE TABLE media_outlets (
       id serial PRIMARY KEY,
-      name text NOT NULL DEFAULT ''
+      name text NOT NULL DEFAULT '',
+      linkedin_url text NOT NULL DEFAULT ''
     );
     CREATE TABLE media_contact_source_checks (
       id serial PRIMARY KEY,

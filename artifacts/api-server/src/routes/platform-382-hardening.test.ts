@@ -145,6 +145,7 @@ vi.mock("@workspace/db", async () => {
       description text NOT NULL DEFAULT '',
       country text NOT NULL DEFAULT '',
       reach_band text NOT NULL DEFAULT '',
+      linkedin_url text NOT NULL DEFAULT '',
       deleted_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
