@@ -1,11 +1,32 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, Sparkles, Search, FileEdit, LineChart } from "lucide-react";
 import { BookDemoForm } from "./ContactPage";
+import { DEMO_OPT_OUT_KEY } from "./demoPreference";
 
 export default function DemoDialog({ onClose }: { onClose: () => void }) {
   const dialog = useRef<HTMLDivElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
+  const [doNotShowAgain, setDoNotShowAgain] = useState(() => {
+    try {
+      return window.localStorage.getItem(DEMO_OPT_OUT_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [preferenceError, setPreferenceError] = useState(false);
+
+  function updatePreference(checked: boolean) {
+    try {
+      if (checked) window.localStorage.setItem(DEMO_OPT_OUT_KEY, "1");
+      else window.localStorage.removeItem(DEMO_OPT_OUT_KEY);
+      setDoNotShowAgain(checked);
+      setPreferenceError(false);
+    } catch {
+      setPreferenceError(true);
+    }
+  }
+
   useEffect(() => {
     returnFocus.current = document.activeElement as HTMLElement;
     const previousOverflow = document.body.style.overflow;
@@ -46,6 +67,11 @@ export default function DemoDialog({ onClose }: { onClose: () => void }) {
             <p className="text-xs font-bold uppercase tracking-widest text-[#A33860] mb-3">Let's talk</p>
             <h3 className="text-2xl mb-6 text-[#102B36]" style={{ fontFamily: "'Alice', Georgia, serif" }}>Book your platform demo</h3>
             <BookDemoForm />
+            <label className="mt-5 flex items-center gap-3 text-sm text-[#102B36] cursor-pointer">
+              <input type="checkbox" checked={doNotShowAgain} onChange={(e) => updatePreference(e.target.checked)} className="h-4 w-4 accent-[#C8497A]" />
+              Don't show this again
+            </label>
+            {preferenceError && <p role="alert" className="mt-2 text-sm text-[#A33860]">Your browser couldn't save this preference. Please enable browser storage and try again.</p>}
           </div>
         </div>
       </div>

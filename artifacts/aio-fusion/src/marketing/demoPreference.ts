@@ -1,0 +1,1 @@
+export const DEMO_OPT_OUT_KEY = "aio-demo-opt-out";

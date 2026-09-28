@@ -34,6 +34,25 @@ describe("homepage demo enquiry", () => {
     expect(screen.getByRole("dialog", { name: /see your ai visibility/i })).toBeTruthy();
   });
 
+  it("respects the opt-out on later visits but still lets visitors reopen and undo it", () => {
+    const props = { onLogin: vi.fn(), onNavigate: vi.fn() };
+    const page = render(<LandingPage {...props} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: /don't show this again/i }));
+    expect(localStorage.getItem("aio-demo-opt-out")).toBe("1");
+    page.unmount();
+
+    const returnVisit = render(<LandingPage {...props} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: /book a demo/i })[0]!);
+    expect(screen.getByRole<HTMLInputElement>("checkbox", { name: /don't show this again/i }).checked).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: /don't show this again/i }));
+    expect(localStorage.getItem("aio-demo-opt-out")).toBeNull();
+    returnVisit.unmount();
+
+    render(<LandingPage {...props} />);
+    expect(screen.getByRole("dialog", { name: /see your ai visibility/i })).toBeTruthy();
+  });
+
   it("sends enquiries through the existing contact endpoint and confirms success", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) });
     vi.stubGlobal("fetch", fetchMock);

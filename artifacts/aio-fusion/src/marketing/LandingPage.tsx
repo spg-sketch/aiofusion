@@ -31,6 +31,7 @@ import { useLatestInsights } from "./useLatestInsights";
 import heroBgImg from "../assets/hero-bg.webp";
 import MarketingNav from "./MarketingNav";
 import DemoDialog from "./DemoDialog";
+import { DEMO_OPT_OUT_KEY } from "./demoPreference";
 
 const llmEngines = [
   { name: "ChatGPT", logo: null },
@@ -67,6 +68,11 @@ export default function LandingPageC({
   const [menuOpen, setMenuOpen] = useState(false);
   const [demoOpen, setDemoOpen] = useState(false);
   useEffect(() => {
+    try {
+      if (window.localStorage.getItem(DEMO_OPT_OUT_KEY) === "1") return;
+    } catch {
+      // No saved preference is available when browser storage is blocked.
+    }
     setDemoOpen(true);
   }, []);
   const { articles, loading: articlesLoading, error: articlesError } = useLatestInsights();
