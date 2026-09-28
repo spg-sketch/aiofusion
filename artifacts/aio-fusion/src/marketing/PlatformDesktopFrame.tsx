@@ -1,19 +1,56 @@
-export function PlatformDesktopFrame({ src, alt, title }: { src: string; alt: string; title: string }) {
+type PlatformDesktopFrameProps = {
+  src: string;
+  alt: string;
+  title: string;
+  angled?: boolean;
+  fit?: "fill" | "cover";
+  priority?: boolean;
+};
+
+export function PlatformDesktopFrame({
+  src,
+  alt,
+  title,
+  angled = false,
+  fit = "cover",
+  priority = false,
+}: PlatformDesktopFrameProps) {
   return (
-    <figure className="w-full">
-      <div className="overflow-hidden rounded-t-xl border-[5px] border-b-0 border-[#183642] bg-white shadow-[0_24px_60px_-20px_rgba(16,43,54,.3)]">
-        <div className="flex h-7 items-center gap-1.5 border-b border-white/10 bg-[#183642] px-3" aria-hidden="true">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#F4B4CD]" />
-          <span className="h-1.5 w-1.5 rounded-full bg-[#EFD49B]" />
-          <span className="h-1.5 w-1.5 rounded-full bg-[#9DD6E8]" />
-          <span className="mx-auto rounded bg-white/10 px-5 text-[9px] tracking-wide text-white/75">AIO Fusion platform</span>
+    <figure className={`w-full ${angled ? "-rotate-[3deg]" : ""}`}>
+      <div className="relative aspect-[1280/1030] w-full drop-shadow-[0_22px_22px_rgba(20,47,58,0.2)]">
+        <div
+          className="absolute overflow-hidden bg-[#1E647C]"
+          style={{ left: "4.3%", top: "5.5%", width: "90.7%", height: "63.2%" }}
+        >
+          <div className="flex h-[8%] min-h-3 items-center gap-[0.7%] border-b border-[#CBD1D5] bg-[#E9EDF0] px-[2%]" aria-hidden="true">
+            <span className="aspect-square h-[24%] rounded-full bg-[#EF6A66]" />
+            <span className="aspect-square h-[24%] rounded-full bg-[#F0BD58]" />
+            <span className="aspect-square h-[24%] rounded-full bg-[#6CC58A]" />
+            <span className="ml-[3%] flex h-[70%] w-[58%] items-center rounded-t-[5px] bg-white px-[2%] text-[clamp(4px,0.65vw,9px)] font-medium text-[#3F5660]">
+              AIO Fusion
+            </span>
+            <span className="ml-auto flex h-[64%] w-[18%] items-center justify-center rounded-[4px] bg-white/80 text-[clamp(3px,0.5vw,8px)] text-[#7C8991]">
+              aiofusion.ai
+            </span>
+          </div>
+          <img
+            src={src}
+            alt={alt}
+            loading={priority ? "eager" : "lazy"}
+            fetchPriority={priority ? "high" : undefined}
+            decoding="async"
+            className={`block h-[92%] w-full object-top ${fit === "fill" ? "object-fill" : "object-cover"}`}
+          />
         </div>
-        <img src={src} alt={alt} loading="lazy" className="block w-full h-auto" />
+        <img
+          src={`${import.meta.env.BASE_URL}images/platform-imac-frame.png`}
+          alt=""
+          aria-hidden="true"
+          loading={priority ? "eager" : "lazy"}
+          className="pointer-events-none absolute inset-0 h-full w-full"
+        />
       </div>
-      <div className="h-3 rounded-b-[50%] border border-t-0 border-[#183642]/30 bg-gradient-to-b from-[#D6E1E3] to-[#B9C9CC]" aria-hidden="true" />
-      <figcaption className="mt-2 text-center text-[11px] font-medium text-[#475569]">
-        {title} · Illustrative platform view
-      </figcaption>
+      <figcaption className="sr-only">{title}</figcaption>
     </figure>
   );
 }

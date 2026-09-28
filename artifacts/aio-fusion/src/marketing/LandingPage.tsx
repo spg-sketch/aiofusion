@@ -113,7 +113,7 @@ export default function LandingPageC({
         </div>
         <div className="relative max-w-7xl mx-auto px-4 sm:px-8">
           <div className="grid lg:grid-cols-12 gap-8 lg:gap-12 items-center">
-            <div className="lg:col-span-8">
+            <div className="lg:col-span-7">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-5" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
                 <Sparkles size={12} color={accent} />
                 <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Generative Engine Optimisation</span>
@@ -134,11 +134,13 @@ export default function LandingPageC({
                 </a>
               </div>
             </div>
-            <div className="lg:col-span-4">
+            <div className="lg:col-span-5 lg:scale-[1.08] lg:origin-left">
               <PlatformDesktopFrame
-                src={`${base}images/platform-dashboard-sample.jpg`}
-                alt="AIO Fusion authority dashboard for an empty example project, showing project setup and audit cards"
+                src={`${base}images/platform-dashboard-real.webp`}
+                alt="AIO Fusion project dashboard showing setup progress, visibility audits and content activity"
                 title="Authority dashboard"
+                fit="fill"
+                priority
               />
             </div>
           </div>
@@ -180,9 +182,10 @@ export default function LandingPageC({
               <p className="leading-relaxed" style={{ color: ink }}>Work across research, planning and optimisation without losing sight of what matters: better visibility and measurable authority for your brand.</p>
             </div>
             <PlatformDesktopFrame
-              src={`${base}images/platform-optimiser-sample.jpg`}
-              alt="AIO Fusion Content Optimiser and Editor screen in an empty example project"
+              src={`${base}images/platform-optimiser-real.webp`}
+              alt="AIO Fusion Content Optimiser and Editor showing the content setup form"
               title="Content Optimiser & Editor"
+              angled
             />
           </div>
           <div className="grid md:grid-cols-3 gap-5 mt-5">
