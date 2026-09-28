@@ -66,8 +66,9 @@ export async function streamContent(
   onProgress?: (chars: number) => void,
 ): Promise<Record<string, unknown>> {
   const controller = new AbortController();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   const expiresAt = Date.now() + CONTENT_AI_TIMEOUT_MS;
-  const timeoutError = new Error("This is taking longer than expected and timed out. Your source notes are still available; please try again.");
+  const timeoutError = new Error("This is taking longer than expected and timed out. Your original copy is unchanged. Please try again.");
   let rejectTimeout: (reason: Error) => void = () => {};
   const timeout = new Promise<never>((_, reject) => { rejectTimeout = reject; });
   let timedOut = false;
@@ -76,6 +77,7 @@ export async function streamContent(
     timedOut = true;
     rejectTimeout(timeoutError);
     controller.abort();
+    void reader?.cancel().catch(() => {});
   };
   const checkDeadline = () => { if (Date.now() >= expiresAt) expire(); };
   const timer = setTimeout(expire, CONTENT_AI_TIMEOUT_MS);
@@ -95,13 +97,14 @@ export async function streamContent(
       throw new Error((data && (data as { error?: string }).error) || "The request could not be completed right now. Please try again.");
     }
     if (!resp.body) throw new Error("The response stream could not be read. Please try again.");
-    const reader = resp.body.getReader();
+    reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
     let result: Record<string, unknown> | null = null;
     let errorMsg: string | null = null;
     for (;;) {
       const { done, value } = await reader.read();
+      if (timedOut) throw timeoutError;
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       let sep: number;
@@ -117,7 +120,7 @@ export async function streamContent(
         if (!dataStr) continue;
         let parsed: Record<string, unknown>;
         try { parsed = JSON.parse(dataStr); } catch { continue; }
-        if (event === "progress") onProgress?.(typeof parsed.chars === "number" ? parsed.chars : 0);
+        if (event === "progress" && !timedOut) onProgress?.(typeof parsed.chars === "number" ? parsed.chars : 0);
         else if (event === "result") {
           result = parsed;
           void reader.cancel().catch(() => {});

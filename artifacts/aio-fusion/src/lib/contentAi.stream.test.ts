@@ -1,12 +1,49 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CONTENT_AI_TIMEOUT_MS, streamContent } from "./contentAi";
 
-afterEach(() => {
-  vi.useRealTimers();
-  vi.unstubAllGlobals();
+const event = (kind: string, value: unknown) => `event: ${kind}\ndata: ${JSON.stringify(value)}\n\n`;
+const response = (body: ReadableStream<Uint8Array>) => new Response(body, {
+  headers: { "content-type": "text/event-stream" },
 });
+const encoded = (text: string) => new TextEncoder().encode(text);
 
-describe("content AI stream", () => {
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+describe("content stream", () => {
+  it("returns a complete result across chunks", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoded(event("progress", { chars: 40 })));
+        controller.enqueue(encoded(event("result", { headline: "News", bodyCopy: "Editable pitch" })));
+        controller.close();
+      },
+    }))));
+    const progress = vi.fn();
+    expect(await streamContent("/api/content/generate", {}, progress)).toMatchObject({ bodyCopy: "Editable pitch" });
+    expect(progress).toHaveBeenCalledWith(40);
+  });
+
+  it("fails an incomplete or malformed stream without applying a result", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => response(new ReadableStream({
+      start(controller) { controller.enqueue(encoded('event: result\ndata: {"bodyCopy": invalid}\n\n')); controller.close(); },
+    }))));
+    await expect(streamContent("/api/content/generate", {})).rejects.toThrow(/ended before it finished/);
+  });
+
+  it("stops waiting for a stalled read and ignores a late result", async () => {
+    vi.useFakeTimers();
+    const progress = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async () => response(new ReadableStream({
+      pull: () => new Promise(() => {}),
+    }))));
+    const pending = streamContent("/api/content/generate", {}, progress);
+    const assertion = expect(pending).rejects.toThrow(/timed out/);
+    await vi.advanceTimersByTimeAsync(CONTENT_AI_TIMEOUT_MS + 1);
+    await assertion;
+    expect(progress).not.toHaveBeenCalled();
+  });
+
   it("returns the final result even if the transport does not close", async () => {
     const progress = vi.fn();
     const body = new ReadableStream<Uint8Array>({

@@ -9,6 +9,7 @@ export type AiRunScope = {
 };
 
 export type AiRun<TInput = unknown, TResult = unknown> = {
+  id: number;
   key: string;
   scope: AiRunScope;
   operation: string;
@@ -37,6 +38,7 @@ type StartOptions<TInput, TResult> = {
 const runs = new Map<string, AiRun>();
 const listeners = new Set<() => void>();
 let activeIdentity = "";
+let nextRunId = 0;
 
 function emit(): void {
   listeners.forEach((listener) => listener());
@@ -109,12 +111,13 @@ export function startAiRun<TInput, TResult>(
   if (existing?.status === "running") return existing;
 
   const run: AiRun<TInput, TResult> = {
+    id: ++nextRunId,
     key: options.key,
     scope: { ...options.scope },
     operation: options.operation,
     subjectId: options.subjectId || "default",
     input: structuredClone(options.input),
-    startedAt: Date.now(),
+    startedAt: Math.max(Date.now(), (existing?.startedAt ?? 0) + 1),
     estimateSeconds: Math.max(1, Math.round(options.estimateSeconds)),
     status: "running",
     progress: 0,
@@ -124,7 +127,7 @@ export function startAiRun<TInput, TResult>(
 
   void options.execute((value) => {
     const current = runs.get(options.key);
-    if (!current || current.startedAt !== run.startedAt || current.status !== "running") return;
+    if (!current || current.id !== run.id || current.status !== "running") return;
     const updated = {
       ...current,
       progress: Number.isFinite(value) ? Math.max(0, value) : 0,
@@ -133,10 +136,10 @@ export function startAiRun<TInput, TResult>(
     emit();
   }).then(async (result) => {
     const current = runs.get(options.key) as AiRun<TInput, TResult> | undefined;
-    if (!current || current.startedAt !== run.startedAt || identityFor(current.scope) !== activeIdentity) return;
+    if (!current || current.status !== "running" || current.id !== run.id || identityFor(current.scope) !== activeIdentity) return;
     await options.onSuccess?.(result, current);
     const latest = runs.get(options.key) as AiRun<TInput, TResult> | undefined;
-    if (!latest || latest.startedAt !== run.startedAt || identityFor(latest.scope) !== activeIdentity) return;
+    if (!latest || latest.status !== "running" || latest.id !== run.id || identityFor(latest.scope) !== activeIdentity) return;
     const completed: AiRun<TInput, TResult> = {
       ...latest,
       result,
@@ -147,7 +150,7 @@ export function startAiRun<TInput, TResult>(
     emit();
   }).catch((error: unknown) => {
     const current = runs.get(options.key) as AiRun<TInput, TResult> | undefined;
-    if (!current || current.startedAt !== run.startedAt || identityFor(current.scope) !== activeIdentity) return;
+    if (!current || current.id !== run.id || identityFor(current.scope) !== activeIdentity) return;
     const failed: AiRun<TInput, TResult> = {
       ...current,
       status: "failed",

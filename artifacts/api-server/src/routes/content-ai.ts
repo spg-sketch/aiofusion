@@ -1,4 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
+import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { logger } from "../lib/logger";
@@ -223,7 +224,7 @@ async function mapWithConcurrency<T, R>(
 // long body copy, which is invalid JSON and makes JSON.parse fail. We walk the
 // text tracking string boundaries (respecting escapes) so we only touch chars
 // inside strings and never disturb the structural whitespace between tokens.
-const extractJson = extractContentJson;
+export const extractJson = extractContentJson;
 
 function asString(v: unknown, cap = MAX_FIELD_CHARS): string {
   return typeof v === "string" ? v.slice(0, cap) : "";
@@ -347,18 +348,18 @@ function sse(res: Response, event: string, data: unknown): void {
   res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
 }
 
-type TimeoutError = Error & { isTimeout?: boolean };
+type TimeoutError = Error & { isTimeout?: boolean; isDisconnect?: boolean; outputLength?: number };
 
 // Streams a single-prompt completion, emitting `progress` events with the
 // running character count, and returns the full accumulated text plus usage
 // figures from the Anthropic API. Aborts and throws a timeout-flagged error
 // if the model runs past STREAM_TIMEOUT_MS.
-async function streamModelText(
+export async function streamModelText(
   res: Response,
   client: Anthropic,
   prompt: string,
   maxTokens = 8192,
-): Promise<{ text: string; inputTokens: number; outputTokens: number; stopReason: string | null }> {
+): Promise<{ text: string; inputTokens: number; outputTokens: number; stopReason: string }> {
   let acc = "";
   let lastSent = 0;
   const stream = client.messages.stream({
@@ -368,32 +369,57 @@ async function streamModelText(
     messages: [{ role: "user", content: prompt }],
   });
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      const error: TimeoutError = new Error("model stream timed out");
-      error.isTimeout = true;
-      reject(error);
-      try { stream.abort(); } catch { /* Deadline is already rejected. */ }
-    }, STREAM_TIMEOUT_MS);
-  });
+  let timedOut = false;
+  let onClose: (() => void) | undefined;
   stream.on("text", (delta: string) => {
     acc += delta;
     if (acc.length - lastSent >= 60) {
       lastSent = acc.length;
-      sse(res, "progress", { chars: acc.length });
+      if (!res.destroyed && !res.writableEnded) sse(res, "progress", { chars: acc.length });
     }
   });
   let finalMsg: Awaited<ReturnType<typeof stream.finalMessage>> | null = null;
   try {
-    finalMsg = await Promise.race([stream.finalMessage(), deadline]);
+    finalMsg = await Promise.race([
+      stream.finalMessage(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          timedOut = true;
+          const error: TimeoutError = new Error("model stream timed out");
+          error.isTimeout = true;
+          error.outputLength = acc.length;
+          reject(error);
+          try { stream.abort(); } catch { /* The deadline has already settled. */ }
+        }, STREAM_TIMEOUT_MS);
+      }),
+      new Promise<never>((_, reject) => {
+        onClose = () => {
+          if (res.writableEnded) return;
+          stream.abort();
+          const error: TimeoutError = new Error("client disconnected");
+          error.isDisconnect = true;
+          error.outputLength = acc.length;
+          reject(error);
+        };
+        res.once("close", onClose);
+      }),
+    ]);
+  } catch (err) {
+    if (timedOut) {
+      const e: TimeoutError = new Error("model stream timed out");
+      e.isTimeout = true;
+      throw e;
+    }
+    throw err;
   } finally {
-    clearTimeout(timer);
+    if (timer) clearTimeout(timer);
+    if (onClose) res.off("close", onClose);
   }
   return {
     text:         acc,
     inputTokens:  finalMsg?.usage?.input_tokens  ?? 0,
     outputTokens: finalMsg?.usage?.output_tokens ?? 0,
-    stopReason: finalMsg?.stop_reason ?? null,
+    stopReason: finalMsg?.stop_reason ?? "unknown",
   };
 }
 
@@ -664,7 +690,7 @@ const GEN_LENGTH_2: Record<string, string> = {
 // (headline, standfirst, changeLog, supportingData) on top of the body text.
 // At ~1.3 tokens/word: 900 w ≈ 1,170 body tokens + ~600 JSON overhead = ~1,770
 // → rounded up with extra safety margin.
-const GEN_MAX_TOKENS: Record<string, number> = {
+export const GEN_MAX_TOKENS: Record<string, number> = {
   "Press release": 3500,
   "Case study": 3500,
   "Speaker submission": 2500,
@@ -675,7 +701,7 @@ const GEN_MAX_TOKENS: Record<string, number> = {
   Whitepaper: 6000,
   "Blog post": 3000,
   "Social post": 2000,
-  "Article Media Pitch": 3500,
+  "Article Media Pitch": 4000,
 };
 
 const GEN_OBJECTIVES_1 =
@@ -853,29 +879,40 @@ contentAiRouter.post(
 
     const maxTokens = GEN_MAX_TOKENS[contentType] ?? 3000;
 
+    const requestId = randomUUID();
+    const startedAt = Date.now();
+    let outputLength = 0;
+    let stopReason = "error";
+    let tokenLimit = false;
+    res.setHeader("X-Content-Request-Id", requestId);
     initSse(res);
     try {
-      const { text: raw, inputTokens, outputTokens, stopReason } = await streamModelText(res, client, prompt, maxTokens);
+      const completion = await streamModelText(res, client, prompt, maxTokens);
+      const { text: raw, inputTokens, outputTokens } = completion;
+      outputLength = raw.length;
+      stopReason = completion.stopReason;
+      tokenLimit = stopReason === "max_tokens";
+      if (res.destroyed || res.writableEnded) return;
       const projectIdOpt = typeof req.body?.projectId === "string" ? req.body.projectId.trim().slice(0, 200) : null;
       if (req.account) {
         void logTokenUsage(req.account.username, "content-generate", MODEL, inputTokens, outputTokens, projectIdOpt);
       }
-      if (stopReason === "max_tokens") {
-        req.log.warn({ contentType, outputTokens, maxTokens, responseLength: raw.length, stopReason }, "content-ai: generation reached output limit");
-        sse(res, "error", { error: "The AI draft was incomplete. Please try again with shorter source notes." });
+      const parsed = extractJson(raw);
+      if (!parsed) {
+        sse(res, "error", { error: tokenLimit
+          ? "The draft exceeded the AI output limit. Your original copy is unchanged. Please shorten the source notes and try again."
+          : "The AI returned an incomplete draft. Your original copy is unchanged. Please try again." });
         res.end();
         return;
       }
-      const parsed = extractJson(raw);
-      if (!parsed) {
-        req.log.warn({ contentType, outputTokens, maxTokens, responseLength: raw.length, stopReason }, "content-ai: generated response could not be parsed");
-        sse(res, "error", { error: "The AI draft could not be read. Your source notes are still available; please try again." });
+      if (tokenLimit) {
+        sse(res, "error", { error: "The AI stopped before finishing the draft. Your original copy is unchanged. Please shorten the source notes and try again." });
         res.end();
         return;
       }
       const outBody = typeof parsed.bodyCopy === "string" ? parsed.bodyCopy.trim() : "";
-      if (!outBody) {
-        sse(res, "error", { error: "The AI did not return a usable draft. Please try again." });
+      if (!outBody || typeof parsed.headline !== "string" || !parsed.headline.trim() || typeof parsed.standfirst !== "string" || !parsed.standfirst.trim()) {
+        sse(res, "error", { error: "The AI returned an incomplete draft. Your original copy is unchanged. Please try again." });
         res.end();
         return;
       }
@@ -895,8 +932,12 @@ contentAiRouter.post(
       });
       res.end();
     } catch (err) {
-      logger.error({ err }, "content-ai: generate call failed");
+      const reason = err as TimeoutError;
+      outputLength = typeof reason?.outputLength === "number" ? reason.outputLength : outputLength;
+      stopReason = reason?.isTimeout ? "timeout" : reason?.isDisconnect ? "disconnect" : "error";
       sseFail(res, err, "The draft could not be generated right now. Please try again.");
+    } finally {
+      logger.info({ requestId, durationMs: Date.now() - startedAt, stopReason, outputLength, tokenLimit }, "content-ai: generate finished");
     }
   },
 );

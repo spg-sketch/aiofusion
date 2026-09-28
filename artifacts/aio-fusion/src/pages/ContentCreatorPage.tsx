@@ -1124,6 +1124,8 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
             chars={generateChars}
             accent={vars.coral}
             textColor="#ffffff"
+            startedAt={draftRun?.startedAt}
+            durationSeconds={draftRun?.estimateSeconds}
           />
         </div>
       )}

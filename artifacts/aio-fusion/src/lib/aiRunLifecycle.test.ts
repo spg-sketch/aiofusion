@@ -115,4 +115,28 @@ describe("AI run lifecycle", () => {
     expect(getAiRun(articleAKey)).toMatchObject({ status: "succeeded", result: { bodyCopy: "Improved article A" } });
     expect(getAiRun(articleBKey)).toBeNull();
   });
+
+  it("does not apply a late completion from a failed attempt after a same-tick retry", async () => {
+    const scope = { sessionId: "person", workspaceId: "workspace", projectId: "project" };
+    setAiRunIdentity(scope.sessionId, scope.workspaceId);
+    const key = aiRunKey(scope, "content-draft", "article");
+    let resolveLate!: (value: { bodyCopy: string }) => void;
+    const first = startAiRun({
+      key, scope, operation: "content-draft", input: {}, estimateSeconds: 30,
+      execute: () => new Promise((resolve) => { resolveLate = resolve; }),
+    });
+    // Simulate the transport's terminal failure while its old callback is still pending.
+    // A retry must get a distinct identity even when Date.now() has not advanced.
+    clearAiRuns();
+    setAiRunIdentity(scope.sessionId, scope.workspaceId);
+    const retry = startAiRun({
+      key, scope, operation: "content-draft", input: {}, estimateSeconds: 30,
+      execute: async () => ({ bodyCopy: "New draft" }),
+    });
+    resolveLate({ bodyCopy: "Stale draft" });
+    await vi.runAllTimersAsync();
+    expect(first.startedAt).toBe(retry.startedAt);
+    expect(first.id).not.toBe(retry.id);
+    expect(getAiRun(key)?.result).toEqual({ bodyCopy: "New draft" });
+  });
 });
