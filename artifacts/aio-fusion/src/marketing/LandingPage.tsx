@@ -32,8 +32,6 @@ import heroBgImg from "../assets/hero-bg.webp";
 import MarketingNav from "./MarketingNav";
 import DemoDialog from "./DemoDialog";
 
-let demoIntroducedWithoutStorage = false;
-
 const llmEngines = [
   { name: "ChatGPT", logo: null },
   { name: "Claude", logo: `${import.meta.env.BASE_URL}images/logo-claude-on-navy.png` },
@@ -69,22 +67,7 @@ export default function LandingPageC({
   const [menuOpen, setMenuOpen] = useState(false);
   const [demoOpen, setDemoOpen] = useState(false);
   useEffect(() => {
-    for (const kind of ["localStorage", "sessionStorage"] as const) {
-      try {
-        const storage = window[kind];
-        if (storage.getItem("aio-demo-introduced") === "1") return;
-        storage.setItem("aio-demo-introduced", "1");
-        setDemoOpen(true);
-        return;
-      } catch {
-        // Try session storage if persistent storage is blocked.
-      }
-    }
-    // With all browser storage disabled, show once per loaded document.
-    if (!demoIntroducedWithoutStorage) {
-      demoIntroducedWithoutStorage = true;
-      setDemoOpen(true);
-    }
+    setDemoOpen(true);
   }, []);
   const { articles, loading: articlesLoading, error: articlesError } = useLatestInsights();
   const paper = "#F5F8F8";

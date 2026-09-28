@@ -11,7 +11,7 @@ describe("homepage demo enquiry", () => {
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-  it("opens only on the first visit, dismisses with Escape and reopens on request", () => {
+  it("opens on every homepage visit, dismisses with Escape and reopens on request", () => {
     const props = { onLogin: vi.fn(), onNavigate: vi.fn() };
     const page = render(<LandingPage {...props} />);
     expect(screen.getByRole("dialog", { name: /see your ai visibility/i })).toBeTruthy();
@@ -20,23 +20,18 @@ describe("homepage demo enquiry", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     page.unmount();
     render(<LandingPage {...props} />);
+    expect(screen.getByRole("dialog", { name: /see your ai visibility/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /close demo enquiry/i }));
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(screen.getAllByRole("button", { name: /book a demo/i })[0]!);
     expect(screen.getByRole("dialog")).toBeTruthy();
   });
 
-  it("uses session storage when persistent storage is blocked", () => {
-    vi.stubGlobal("localStorage", {
-      getItem: () => { throw new Error("Blocked"); },
-      setItem: () => { throw new Error("Blocked"); },
-    });
+  it("opens even if an earlier visit left the old storage flag", () => {
+    localStorage.setItem("aio-demo-introduced", "1");
     const props = { onLogin: vi.fn(), onNavigate: vi.fn() };
-    const page = render(<LandingPage {...props} />);
-    expect(screen.getByRole("dialog", { name: /see your ai visibility/i })).toBeTruthy();
-    expect(sessionStorage.getItem("aio-demo-introduced")).toBe("1");
-    page.unmount();
     render(<LandingPage {...props} />);
-    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("dialog", { name: /see your ai visibility/i })).toBeTruthy();
   });
 
   it("sends enquiries through the existing contact endpoint and confirms success", async () => {
