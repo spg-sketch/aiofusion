@@ -726,6 +726,79 @@ describe("media import route regressions", () => {
     expect((await mediaRequest("DELETE", `/api/store/media-db/contacts/${sharedContact!.id}`, "admin", undefined, "owner", "admin")).status).toBe(200);
   });
 
+  it("keeps unnamed source rows out of Contacts cards and pagination without exposing another workspace's people", async () => {
+    await db.insert(platformAccountsTable).values([
+      { username: "person-search-workspace", passwordHash: "", role: "agency", parent: null },
+      { username: "person-search-other", passwordHash: "", role: "agency", parent: null },
+    ]);
+    const [publication] = await db.insert(mediaOutletsTable).values({
+      name: "Person Search Publication", category: "Cybersecurity", accountId: null,
+    }).returning();
+    const [namedContact, unnamedContact, otherWorkspaceContact] = await db.insert(mediaContactsTable).values([
+      { outletId: publication!.id, firstName: "Riley", lastName: "Reporter", role: "Editor", accountId: null },
+      { outletId: publication!.id, firstName: "  ", lastName: "", accountId: null },
+      { outletId: publication!.id, firstName: "Private", lastName: "Reporter", accountId: "person-search-other" },
+    ]).returning();
+
+    const firstPage = await mediaRequest(
+      "GET",
+      "/api/store/media-db/search?type=contacts&scope=all&category=Cybersecurity&page=1&pageSize=1",
+      "person-search-workspace",
+    );
+    expect(firstPage.status).toBe(200);
+    expect(firstPage.json.total).toBe(1);
+    expect(firstPage.json.counts).toEqual({ contacts: 1, outlets: 0 });
+    expect(firstPage.json.results).toHaveLength(1);
+    expect(firstPage.json.results[0]).toMatchObject({
+      type: "contact",
+      id: namedContact!.id,
+      contact: { firstName: "Riley", lastName: "Reporter", role: "Editor" },
+    });
+    expect(firstPage.json.results[0].contact.firstName.trim()).not.toBe("");
+
+    const secondPage = await mediaRequest(
+      "GET",
+      "/api/store/media-db/search?type=contacts&scope=all&category=Cybersecurity&page=2&pageSize=1",
+      "person-search-workspace",
+    );
+    expect(secondPage.json.total).toBe(1);
+    expect(secondPage.json.counts.contacts).toBe(1);
+    expect(secondPage.json.results).toEqual([]);
+
+    const publications = await mediaRequest(
+      "GET",
+      "/api/store/media-db/search?type=publications&scope=all&category=Cybersecurity",
+      "person-search-workspace",
+    );
+    expect(publications.json.results[0].outlet.journalists.map((contact: any) => contact.id)).toEqual([namedContact!.id]);
+    expect(publications.json.results[0].outlet.journalists.map((contact: any) => contact.id)).not.toContain(unnamedContact!.id);
+    const outletBrowse = await mediaRequest(
+      "GET",
+      "/api/store/media-db/outlets?q=Person%20Search%20Publication",
+      "person-search-workspace",
+    );
+    expect(outletBrowse.json.outlets[0].linkedJournalists.map((contact: any) => contact.id)).toEqual([namedContact!.id]);
+    expect(outletBrowse.json.outlets[0].journalistsTotal).toBe(1);
+
+    const otherWorkspaceSearch = await mediaRequest(
+      "GET",
+      "/api/store/media-db/search?type=contacts&scope=all&category=Cybersecurity",
+      "person-search-other",
+    );
+    expect(otherWorkspaceSearch.json.results.map((result: any) => result.id)).toEqual([
+      namedContact!.id,
+      otherWorkspaceContact!.id,
+    ]);
+    expect(otherWorkspaceSearch.json.results.map((result: any) => result.id)).not.toContain(unnamedContact!.id);
+    expect(await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, unnamedContact!.id))).toHaveLength(1);
+    const stewardContacts = await mediaRequest(
+      "GET",
+      `/api/store/media-db/contacts?outletId=${publication!.id}`,
+      "person-search-workspace",
+    );
+    expect(stewardContacts.json.contacts.map((contact: any) => contact.id)).toContain(unnamedContact!.id);
+  });
+
   it("keeps private media and reusable bookmarks inside the active account and includes only eligible linked journalists", async () => {
     await db.insert(platformAccountsTable).values([
       { username: "media-parent-430", passwordHash: "", role: "agency", parent: null },

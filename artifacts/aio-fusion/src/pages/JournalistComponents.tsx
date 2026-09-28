@@ -1,6 +1,6 @@
 import React from "react";
 import { vars } from "../marketing/vars";
-import { Mail, Phone, MapPin, Globe, ExternalLink, Linkedin, Twitter, Clock, Edit, Check, Bookmark, ThumbsDown, ThumbsUp, Database, Target, Award, Shield, FileText, Undo2, ChevronDown, ChevronRight, AlertCircle, Ban, Loader2 } from "lucide-react";
+import { Mail, Phone, MapPin, Globe, ExternalLink, Linkedin, Twitter, Clock, Edit, Check, Bookmark, Database, Target, Award, Shield, FileText, ChevronDown, ChevronRight, AlertCircle, Ban, Loader2 } from "lucide-react";
 import { MiniDonut } from "./shared";
 
 export type Contact = {
@@ -83,6 +83,21 @@ export type MediaOpportunity = { title: string; angle: string; rationale?: strin
 export function isSendableContactEmail(value: unknown): value is string {
   return typeof value === "string"
     && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function safeExternalHttpUrl(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    if ((url.protocol !== "http:" && url.protocol !== "https:")
+      || !url.hostname
+      || !/[a-z]/i.test(url.hostname)
+      || url.username
+      || url.password) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
 }
 
 export type AssessmentFactor = {
@@ -289,7 +304,7 @@ function AssessmentSection({ assessment, compact = false, suggestedAngle }: { as
               <span className="text-[12px] font-bold text-slate-700 block mb-1">Editorial fit</span>
               <div className="flex items-center gap-2">
                 <span className="text-xl font-bold text-slate-800">{assessment.fitScore ?? "?"}%</span>
-                <span className="text-[11px] px-2 py-0.5 bg-slate-200 text-slate-700 rounded-full font-medium">Confidence: {assessment.confidence}</span>
+                <span className="text-[11px] px-2 py-0.5 bg-slate-200 text-slate-700 rounded-full font-medium">Evidence confidence: {assessment.confidence}</span>
               </div>
             </div>
             <div>
@@ -392,7 +407,6 @@ export function RecommendationCard({
   item,
   decision,
   onAccept,
-  onDecline,
   onReject,
   noteFor,
   setNoteFor,
@@ -401,10 +415,7 @@ export function RecommendationCard({
   isShortlist = false,
   onEdit,
   showMatchScore = true,
-  refinement,
-  refinementLoading = false,
   actionLoading = false,
-  onRefine,
   onToggleRestriction,
   sharedScoreCount = 1,
   compact = false,
@@ -526,11 +537,19 @@ export function RecommendationCard({
                 <span>{c.geography}</span>
               </div>
             )}
-            {(c.sourceUrl || c.outletWebsite) && (
+            {safeExternalHttpUrl(c.outletWebsite) && (
               <div className="flex items-center gap-2" style={{ color: vars.g600 }}>
                 <Globe size={14} className="text-slate-400" />
-                <a href={c.sourceUrl || c.outletWebsite || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline text-blue-600 flex items-center gap-1">
-                  {c.sourceUrl ? "View source" : "Outlet website"} <ExternalLink size={12} />
+                <a href={safeExternalHttpUrl(c.outletWebsite)!} target="_blank" rel="noopener noreferrer" className="hover:underline text-blue-600 flex items-center gap-1">
+                  Outlet website <ExternalLink size={12} />
+                </a>
+              </div>
+            )}
+            {safeExternalHttpUrl(c.sourceUrl) && (
+              <div className="flex items-center gap-2" style={{ color: vars.g600 }}>
+                <Globe size={14} className="text-slate-400" />
+                <a href={safeExternalHttpUrl(c.sourceUrl)!} target="_blank" rel="noopener noreferrer" className="hover:underline text-blue-600 flex items-center gap-1">
+                  View source <ExternalLink size={12} />
                 </a>
               </div>
             )}
@@ -600,7 +619,7 @@ export function RecommendationCard({
         </div>
 
         <div className="flex flex-col items-end gap-3 min-w-[140px]">
-          {!compact && showMatchScore !== false && <div className="flex flex-col items-center p-3 rounded-xl border border-slate-100 bg-white shadow-sm w-full">
+          {!compact && !isShortlist && !item.assessment && showMatchScore !== false && <div className="flex flex-col items-center p-3 rounded-xl border border-slate-100 bg-white shadow-sm w-full">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
               {sharedScoreCount > 1 ? "Shared Match Score" : "Match Score"}
             </span>
@@ -633,7 +652,7 @@ export function RecommendationCard({
                  <span className="text-[13px] font-bold text-slate-700">{c.journalistAuthority}</span>
               </div>
             ) : null}
-             {(c.confidence || c.confidenceLevel) && (
+              {!item.assessment && (c.confidence || c.confidenceLevel) && (
                <div className="flex flex-col items-center p-2 rounded-lg bg-indigo-50 border border-indigo-100 flex-1 min-w-[70px]">
                   <Shield size={14} className="text-indigo-500 mb-1" />
                   <span className="text-[10px] uppercase text-indigo-600 font-semibold tracking-wide">Confidence</span>
@@ -677,39 +696,6 @@ export function RecommendationCard({
                 {actionLoading ? <Loader2 size={14} className="animate-spin" /> : decision?.decision === "shortlisted" ? <Check size={14} /> : <Target size={14} />}
                 {actionLoading ? "Saving..." : decision?.decision === "shortlisted" ? "Added to story shortlist" : "Plan outreach for this story"}
               </button>
-            )}
-            {!compact && !isShortlist && onAccept && onDecline && (
-              <>
-                <button 
-                  type="button"
-                  data-testid={`button-accept-${c.id}`} 
-                  onClick={onAccept} 
-                  disabled={actionLoading}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors" 
-                  style={{ background: "#3D9B6B", boxShadow: "0 1px 2px rgba(61,155,107,0.3)" }}
-                >
-                  {actionLoading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                  {actionLoading ? "Saving..." : decision?.decision === "shortlisted" ? "Added to shortlist" : "Add to shortlist"}
-                </button>
-                <button 
-                  type="button"
-                  data-testid={`button-decline-${c.id}`} 
-                  onClick={onDecline} 
-                  disabled={actionLoading}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold border transition-colors bg-white hover:bg-slate-50" 
-                  style={{ borderColor: vars.g200, color: vars.g600 }}
-                >
-                  <ThumbsDown size={14} /> Decline
-                </button>
-                {onRefine && <>
-                  <button type="button" disabled={refinementLoading} aria-pressed={refinement === "more"} onClick={() => onRefine(refinement === "more" ? null : "more")} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-semibold border ${refinement === "more" ? "bg-emerald-50 border-emerald-300 text-emerald-800" : "bg-white border-slate-200 text-slate-600"}`}>
-                    {refinementLoading ? <Loader2 size={14} className="animate-spin" /> : refinement === "more" ? <Undo2 size={14} /> : <ThumbsUp size={14} />} {refinement === "more" ? "Undo More like this" : "More like this"}
-                  </button>
-                  <button type="button" disabled={refinementLoading} aria-pressed={refinement === "less"} onClick={() => onRefine(refinement === "less" ? null : "less")} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-semibold border ${refinement === "less" ? "bg-rose-50 border-rose-300 text-rose-800" : "bg-white border-slate-200 text-slate-600"}`}>
-                    {refinementLoading ? <Loader2 size={14} className="animate-spin" /> : refinement === "less" ? <Undo2 size={14} /> : <ThumbsDown size={14} />} {refinement === "less" ? "Undo Less like this" : "Less like this"}
-                  </button>
-                </>}
-              </>
             )}
           </div>
           {onToggleRestriction && (

@@ -626,6 +626,148 @@ describe("MediaResearchPage live discovery", () => {
     expect(screen.getByTestId("shared-score-note").textContent).toMatch(/34 contacts.*order is not a quality difference/i);
   });
 
+  it("shows the publication website separately from source evidence in compact recommendations", () => {
+    render(
+      <RecommendationCard
+        compact
+        item={{
+          rank: 1,
+          score: 78,
+          reasons: [],
+          assessment: {
+            version: "editorial-v1",
+            fitScore: 78,
+            confidence: "high",
+            evidenceCoverage: 100,
+            factors: [],
+            readiness: { status: "ready", reasons: [] },
+            evidence: [],
+            warnings: [],
+            suggestedAngle: null,
+          },
+          contact: {
+            id: 93,
+            outletId: 5,
+            firstName: "Alex",
+            lastName: "Editor",
+            role: "Editor",
+            email: "",
+            phone: "",
+            notes: "",
+            accountId: null,
+            outletWebsite: "https://publication.example",
+            sourceUrl: "https://publication.example/about/alex",
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: /outlet website/i })).toHaveAttribute("href", "https://publication.example/");
+    expect(screen.getByRole("link", { name: /view source/i })).toHaveAttribute("href", "https://publication.example/about/alex");
+    expect(screen.getByText("Editorial fit: 78%")).toBeTruthy();
+    expect(screen.getByText(/Evidence confidence:/i)).toBeTruthy();
+  });
+
+  it("does not create website links for numeric or malicious publication values", () => {
+    render(
+      <RecommendationCard
+        compact
+        item={{
+          rank: 1,
+          score: 50,
+          reasons: [],
+          contact: {
+            id: 94,
+            outletId: 5,
+            firstName: "Sam",
+            lastName: "Writer",
+            role: "Writer",
+            email: "",
+            phone: "",
+            notes: "",
+            accountId: null,
+            outletWebsite: "123456",
+            sourceUrl: "javascript:alert(1)",
+          },
+        }}
+      />,
+    );
+
+    expect(screen.queryByRole("link", { name: /outlet website|view source/i })).toBeNull();
+    expect(screen.queryByText(/123456/)).toBeNull();
+  });
+
+  it("uses one editorial assessment instead of a duplicate match donut and confidence card", () => {
+    const item = {
+      rank: 1,
+      score: 74,
+      reasons: [],
+      assessment: {
+        version: "editorial-v1" as const,
+        fitScore: 74,
+        confidence: "low" as const,
+        evidenceCoverage: 20,
+        factors: [],
+        readiness: { status: "needs_check" as const, reasons: [] },
+        evidence: [],
+        warnings: [],
+        suggestedAngle: null,
+      },
+      contact: {
+        id: 95,
+        outletId: 5,
+        firstName: "Taylor",
+        lastName: "Reporter",
+        role: "Reporter",
+        email: "",
+        phone: "",
+        notes: "",
+        accountId: null,
+        confidence: "High",
+      },
+    };
+    render(
+      <RecommendationCard
+        item={item}
+        onAccept={() => undefined}
+        onDecline={() => undefined}
+        onRefine={() => undefined}
+      />,
+    );
+
+    expect(screen.queryByText("Match Score")).toBeNull();
+    expect(screen.getByText(/Evidence confidence: low/i)).toBeTruthy();
+    expect(screen.queryByText(/^Confidence$/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /decline|more like this|less like this/i })).toBeNull();
+  });
+
+  it("does not present an unassessed story selection's legacy match score as editorial fit", () => {
+    render(
+      <RecommendationCard
+        isShortlist
+        item={{
+          rank: 1,
+          score: 74,
+          reasons: [],
+          contact: {
+            id: 96,
+            outletId: 5,
+            firstName: "Morgan",
+            lastName: "Reporter",
+            role: "Reporter",
+            email: "",
+            phone: "",
+            notes: "",
+            accountId: null,
+          },
+        }}
+      />,
+    );
+
+    expect(screen.queryByText(/match score/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /decline|more like this|less like this/i })).toBeNull();
+  });
+
   it("orders every recommendation response by strongest match with stable ties", () => {
     const recommendation = (id: number, score: number, rank: number) => ({
       rank,

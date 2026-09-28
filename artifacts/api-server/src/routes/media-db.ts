@@ -1910,6 +1910,10 @@ async function eligibleLinkedJournalists(
       inArray(mediaContactsTable.outletId, outletIds),
       isNull(mediaContactsTable.deletedAt),
       isNull(mediaOutletsTable.deletedAt),
+      or(
+        sql`NULLIF(BTRIM(${mediaContactsTable.firstName}), '') IS NOT NULL`,
+        sql`NULLIF(BTRIM(${mediaContactsTable.lastName}), '') IS NOT NULL`,
+      ),
       visible === null ? undefined : or(isNull(mediaContactsTable.accountId), inArray(mediaContactsTable.accountId, visible)),
       testSuppressionFallback ? undefined : notSuppressedSql(workspaceId, mediaContactsTable.firstName, mediaContactsTable.lastName, mediaContactsTable.email, mediaContactsTable.linkedinUrl, mediaOutletsTable.name),
     ));
@@ -2009,8 +2013,14 @@ router.get(
         sql`${mediaOutletsTable.name}`, sql`${mediaOutletsTable.description}`,
         sql`${mediaOutletsTable.website}`, sql`${mediaOutletsTable.category}`,
       ];
+      // Unified Contacts search is person-led: outlet-only source rows remain
+      // stored and manageable, but do not become empty person cards.
+      const hasPersonName = or(
+        sql`NULLIF(BTRIM(${mediaContactsTable.firstName}), '') IS NOT NULL`,
+        sql`NULLIF(BTRIM(${mediaContactsTable.lastName}), '') IS NOT NULL`,
+      );
       const contactPredicate = and(
-        isNull(mediaContactsTable.deletedAt), contactScope,
+        isNull(mediaContactsTable.deletedAt), contactScope, hasPersonName,
         resultType === "publications" ? sql`false` : undefined,
         sqlSearchGroups(phraseGroups, contactSearchFields),
         sqlSearchGroups(topicGroups, [sql`array_to_string(${mediaContactsTable.beats}, ' ')`, sql`array_to_string(${mediaContactsTable.sectors}, ' ')`, sql`${mediaOutletsTable.description}`]),
@@ -2118,6 +2128,7 @@ router.get(
         .where(and(
           inArray(mediaContactsTable.outletId, selectedOutletIds),
           isNull(mediaContactsTable.deletedAt),
+          hasPersonName,
           isNull(mediaOutletsTable.deletedAt),
           visible === null ? undefined : or(isNull(mediaContactsTable.accountId), inArray(mediaContactsTable.accountId, visible)),
           testSuppressionFallback ? undefined : notSuppressedSql(workspaceId, mediaContactsTable.firstName, mediaContactsTable.lastName, mediaContactsTable.email, mediaContactsTable.linkedinUrl, mediaOutletsTable.name),
