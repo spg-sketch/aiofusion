@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { logger } from "../lib/logger";
+import { extractContentJson, sanitiseJsonControlChars } from "../lib/content-json";
 import { contentAiLimiter } from "../middleware/rate-limit";
 import { deepStripEmDashes } from "../lib/text-sanitise";
 import { fetchSiteContent, fetchSiteContentWithSubpages } from "../lib/safe-fetch";
@@ -222,71 +223,7 @@ async function mapWithConcurrency<T, R>(
 // long body copy, which is invalid JSON and makes JSON.parse fail. We walk the
 // text tracking string boundaries (respecting escapes) so we only touch chars
 // inside strings and never disturb the structural whitespace between tokens.
-function sanitiseJsonControlChars(s: string): string {
-  let out = "";
-  let inStr = false;
-  let escaped = false;
-  for (let i = 0; i < s.length; i++) {
-    const ch = s[i];
-    if (inStr) {
-      if (escaped) {
-        out += ch;
-        escaped = false;
-        continue;
-      }
-      if (ch === "\\") {
-        out += ch;
-        escaped = true;
-        continue;
-      }
-      if (ch === '"') {
-        out += ch;
-        inStr = false;
-        continue;
-      }
-      if (ch === "\n") {
-        out += "\\n";
-        continue;
-      }
-      if (ch === "\r") {
-        out += "\\r";
-        continue;
-      }
-      if (ch === "\t") {
-        out += "\\t";
-        continue;
-      }
-      const code = ch.charCodeAt(0);
-      if (code < 0x20) {
-        out += "\\u" + code.toString(16).padStart(4, "0");
-        continue;
-      }
-      out += ch;
-    } else {
-      if (ch === '"') inStr = true;
-      out += ch;
-    }
-  }
-  return out;
-}
-
-function extractJson(text: string): any | null {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1] : text;
-  const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start === -1 || end === -1 || end < start) return null;
-  const slice = candidate.slice(start, end + 1);
-  try {
-    return JSON.parse(slice);
-  } catch {
-    try {
-      return JSON.parse(sanitiseJsonControlChars(slice));
-    } catch {
-      return null;
-    }
-  }
-}
+const extractJson = extractContentJson;
 
 function asString(v: unknown, cap = MAX_FIELD_CHARS): string {
   return typeof v === "string" ? v.slice(0, cap) : "";
@@ -421,20 +358,24 @@ async function streamModelText(
   client: Anthropic,
   prompt: string,
   maxTokens = 8192,
-): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
+): Promise<{ text: string; inputTokens: number; outputTokens: number; stopReason: string | null }> {
   let acc = "";
   let lastSent = 0;
-  let timedOut = false;
   const stream = client.messages.stream({
     model: MODEL,
     max_tokens: maxTokens,
     temperature: 0,
     messages: [{ role: "user", content: prompt }],
   });
-  const timer = setTimeout(() => {
-    timedOut = true;
-    stream.abort();
-  }, STREAM_TIMEOUT_MS);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const error: TimeoutError = new Error("model stream timed out");
+      error.isTimeout = true;
+      reject(error);
+      try { stream.abort(); } catch { /* Deadline is already rejected. */ }
+    }, STREAM_TIMEOUT_MS);
+  });
   stream.on("text", (delta: string) => {
     acc += delta;
     if (acc.length - lastSent >= 60) {
@@ -444,14 +385,7 @@ async function streamModelText(
   });
   let finalMsg: Awaited<ReturnType<typeof stream.finalMessage>> | null = null;
   try {
-    finalMsg = await stream.finalMessage();
-  } catch (err) {
-    if (timedOut) {
-      const e: TimeoutError = new Error("model stream timed out");
-      e.isTimeout = true;
-      throw e;
-    }
-    throw err;
+    finalMsg = await Promise.race([stream.finalMessage(), deadline]);
   } finally {
     clearTimeout(timer);
   }
@@ -459,12 +393,14 @@ async function streamModelText(
     text:         acc,
     inputTokens:  finalMsg?.usage?.input_tokens  ?? 0,
     outputTokens: finalMsg?.usage?.output_tokens ?? 0,
+    stopReason: finalMsg?.stop_reason ?? null,
   };
 }
 
 // Sends a friendly `error` event and ends the stream. Distinguishes timeouts so
 // the user gets a clear "taking too long" message.
 function sseFail(res: Response, err: unknown, fallback: string): void {
+  if (res.destroyed || res.writableEnded) return;
   const timedOut = err instanceof Error && (err as TimeoutError).isTimeout === true;
   sse(res, "error", {
     error: timedOut
@@ -739,7 +675,7 @@ const GEN_MAX_TOKENS: Record<string, number> = {
   Whitepaper: 6000,
   "Blog post": 3000,
   "Social post": 2000,
-  "Article Media Pitch": 2000,
+  "Article Media Pitch": 3500,
 };
 
 const GEN_OBJECTIVES_1 =
@@ -919,14 +855,21 @@ contentAiRouter.post(
 
     initSse(res);
     try {
-      const { text: raw, inputTokens, outputTokens } = await streamModelText(res, client, prompt, maxTokens);
+      const { text: raw, inputTokens, outputTokens, stopReason } = await streamModelText(res, client, prompt, maxTokens);
       const projectIdOpt = typeof req.body?.projectId === "string" ? req.body.projectId.trim().slice(0, 200) : null;
       if (req.account) {
         void logTokenUsage(req.account.username, "content-generate", MODEL, inputTokens, outputTokens, projectIdOpt);
       }
+      if (stopReason === "max_tokens") {
+        req.log.warn({ contentType, outputTokens, maxTokens, responseLength: raw.length, stopReason }, "content-ai: generation reached output limit");
+        sse(res, "error", { error: "The AI draft was incomplete. Please try again with shorter source notes." });
+        res.end();
+        return;
+      }
       const parsed = extractJson(raw);
       if (!parsed) {
-        sse(res, "error", { error: "The AI response could not be read. Please try again." });
+        req.log.warn({ contentType, outputTokens, maxTokens, responseLength: raw.length, stopReason }, "content-ai: generated response could not be parsed");
+        sse(res, "error", { error: "The AI draft could not be read. Your source notes are still available; please try again." });
         res.end();
         return;
       }

@@ -10,7 +10,7 @@ export default function MarketingPage({
   isAuthed,
   showTitle = true,
 }: {
-  title: string;
+  title: React.ReactNode;
   eyebrow?: React.ReactNode;
   children: React.ReactNode;
   onLogin: () => void;

@@ -1,43 +1,21 @@
 ---
 name: AIO Fusion content generation token limits
-description: GEN_MAX_TOKENS in content-ai.ts must be generous or extractJson fails on truncated JSON
+description: Generated JSON needs wrapper headroom; incomplete drafts must fail visibly within one bounded request
 ---
 
 # Content generation token limits
 
 ## The rule
-`GEN_MAX_TOKENS` in `content-ai.ts` must include headroom for the full JSON wrapper
-(headline + standfirst + bodyCopy + changeLog + supportingData) not just the body word count.
+Generation limits must include headroom for the full JSON wrapper, not just the body word count. Treat an incomplete model response as a visible failure while retaining the user's source notes. Do not automatically retry an expensive generation inside the same request.
 
-**Why:** At the old Article cap of 2500 tokens, Claude's JSON output was being truncated mid-body.
-`extractJson` uses `{` / `}` bracket finding — a truncated JSON string causes it to return null,
-and the endpoint emits `sse(res, "error", { error: "The AI response could not be read..." })`.
-This affected real users, not just the demo script.
+**Why:** An earlier low Article cap truncated Claude's JSON mid-body and real users saw unreadable drafts. A later Article Media Pitch failure had the same user-visible error, although its exact cause was not confirmed from logs. Automatic retries can outlive the browser deadline and incur another model call without delivering a usable result.
 
-**How to apply:** When raising word targets or adding new content types, add at least 1,500 tokens
-of JSON-wrapper overhead on top of the estimated body token count (≈1.3 tokens/word).
+**How to apply:** When raising word targets or adding content types, allow wrapper overhead above the body estimate. Log safe metadata such as stop reason and output length, never source notes or model text. Keep transport and model deadlines bounded so errors appear while the user can still retry.
 
-Current caps (as of 2026-06-30):
-- Article: 4500
-- Press release: 3500
-- Case study: 3500
-- Blog post: 3000
-- Speaker/Award submission: 2500
-- Social post / Article Media Pitch: 2000
-- Directory entry: 2000
-- Whitepaper: 6000
+# Intake data in scripts
 
-# Demo-run intake field mapping
+Outside the request lifecycle, do not assume a top-level company name or sector from a raw intake blob. Read its structured form data or use the server's DB-backed helpers where appropriate.
 
-`formData` keys (in project intake blob) for reading client data in scripts:
-- `"4.1"` — company name
-- `"4.4"` — sector (semicolon-separated tags, take first for single-string sector)
-- `"1.1"` — full company descriptor (very long, slice to 2000 chars)
-- `"4.5"` — geography (semicolon-separated, take first for single value)
-- `"1.7"` — comma-separated keywords
-- `"2.5"` — ICP / brand positioning summary
+**Why:** The store API returns a raw blob rather than a flattened company profile, so demo scripts can silently send incomplete authority context if they guess its shape.
 
-**Why:** The store API at `/api/store/projects/:id/intake` returns the raw intake blob which
-has no top-level `sector` or `companyName` fields — those live inside `formData` with numeric
-section keys. Reading from the DB directly with drizzle-orm is more reliable than the store API
-for scripts that run outside the request lifecycle.
+**How to apply:** Inspect the current intake schema before constructing synthetic generation requests; never use real client data for diagnostic calls.

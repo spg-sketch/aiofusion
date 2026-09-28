@@ -26,7 +26,7 @@ export default function ForAgenciesPage(props: { onLogin: () => void; onBack: ()
           { title: "Marketing Intelligence", desc: "Research media contacts and future events and awards tailored to each client project, score activity for AI and audience reach." },
           { title: "Report and Content Library", desc: "Combine AI authority scores across earned and owned media with PR reporting and access all your client content in one dedicated, searchable content library." },
         ].map((it) => (
-          <div key={it.title} className="p-4 rounded-xl bg-white" style={{ border: "1px solid rgba(16,43,54,0.08)" }}>
+          <div key={it.title} className="p-4 rounded-xl bg-white" style={{ border: "2px solid #102B36" }}>
             <div className="flex items-start gap-3">
               <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "#FBE3ED" }}>
                 <Check size={11} color="#C8497A" />
@@ -53,8 +53,8 @@ export default function ForAgenciesPage(props: { onLogin: () => void; onBack: ()
         </div>
       </aside>
       <div className="flex flex-wrap gap-3">
-        <button onClick={() => props.onNavigate("contact")} className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: "#C8497A" }}>
-          <Calendar size={16} /> Book a Demo
+        <button onClick={() => props.onNavigate("contact")} className="inline-flex items-center gap-3 px-10 py-4 rounded-full text-[14px] font-bold uppercase tracking-[0.12em] text-white shadow-md transition-all hover:-translate-y-0.5 hover:shadow-lg" style={{ background: "#C8497A" }}>
+          <Calendar size={18} /> Book a Demo
         </button>
       </div>
     </MarketingPage>

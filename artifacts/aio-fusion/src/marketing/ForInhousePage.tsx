@@ -5,10 +5,13 @@ import { PAGE_META } from "./pageMeta";
 
 export default function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
   return (
-    <MarketingPage title="The AI visibility and GEO software for in-house PR teams" eyebrow={<><Globe size={12} /> For In-house Teams</> as any} {...props}>
+    <MarketingPage title={<>The AI visibility and GEO software for <span className="whitespace-nowrap">in-house</span> PR teams</>} eyebrow={<><Globe size={12} /> For In-house Teams</> as any} {...props}>
       <PageHead meta={PAGE_META["for-inhouse"]} />
+      <p className="text-[17px] font-medium leading-[1.7] mb-2" style={{ color: "#102B36" }}>
+        When an AI looks at your industry, do they see your business?
+      </p>
       <p className="text-[17px] font-medium leading-[1.7] mb-5" style={{ color: "#102B36" }}>
-        When an AI looks at your industry, do they see your business? With AI now playing a key role in business visibility and purchase vetting, AIO Fusion helps you measure visibility across ChatGPT and Claude and puts you in control of your AI authority.
+        With AI now playing a key role in business visibility and purchase vetting, AIO Fusion helps you measure visibility across ChatGPT and Claude and puts you in control of your AI authority.
       </p>
       <p className="text-[15px] font-normal leading-[1.8] mb-8" style={{ color: "rgba(16,43,54,0.78)" }}>
         Make your communications work harder, build optimised plans and content fast, and measure your AI visibility as it grows over time without needing a separate monitoring platform.
@@ -21,7 +24,7 @@ export default function ForInhousePage(props: { onLogin: () => void; onBack: () 
           { title: "One cost-effective platform", desc: "All your optimised communications content managed and measured in one place delivering consistent, measurable outcomes from PR and marketing investment." },
           { title: "Measure your AI authority over time", desc: "See how each piece of content and marketing activity moves the needle on AI citation and recommendation." },
         ].map((it) => (
-          <div key={it.title} className="p-4 rounded-xl bg-white" style={{ border: "1px solid rgba(16,43,54,0.08)" }}>
+          <div key={it.title} className="p-4 rounded-xl bg-white" style={{ border: "2px solid #102B36" }}>
             <div className="flex items-start gap-3">
               <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "#FBE3ED" }}>
                 <Check size={11} color="#C8497A" />
@@ -47,8 +50,8 @@ export default function ForInhousePage(props: { onLogin: () => void; onBack: () 
           <a href={`${import.meta.env.BASE_URL}pricing`} className="underline underline-offset-4" style={{ color: "#C8497A" }}>Compare in-house plans</a>
         </div>
       </aside>
-      <button onClick={() => props.onNavigate("contact")} className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: "#C8497A" }}>
-        <Calendar size={16} /> Book a Demo
+      <button onClick={() => props.onNavigate("contact")} className="inline-flex items-center gap-3 px-10 py-4 rounded-full text-[14px] font-bold uppercase tracking-[0.12em] text-white shadow-md transition-all hover:-translate-y-0.5 hover:shadow-lg" style={{ background: "#C8497A" }}>
+        <Calendar size={18} /> Book a Demo
       </button>
     </MarketingPage>
   );

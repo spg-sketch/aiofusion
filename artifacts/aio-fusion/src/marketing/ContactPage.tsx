@@ -330,7 +330,7 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border bg-white overflow-hidden" style={{ borderColor: vars.g200 }}>
+    <div className="rounded-2xl border-2 bg-white overflow-hidden" style={{ borderColor: NAVY }}>
       <div className="px-8 pt-8 pb-6 border-b" style={{ borderColor: vars.g100 }}>
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
@@ -392,8 +392,8 @@ export default function ContactPage(props: { onLogin: () => void; onBack: () => 
       <div className="space-y-3">
         <a
           href="mailto:info@aiofusion.ai"
-          className="flex items-center gap-4 p-5 rounded-2xl border bg-white transition-all hover:shadow-md"
-          style={{ borderColor: vars.g200 }}
+          className="flex items-center gap-4 p-5 rounded-2xl border-2 bg-white transition-all hover:shadow-md"
+          style={{ borderColor: NAVY }}
         >
           <div className="w-12 h-12 rounded-xl flex items-center justify-center"
                style={{ background: "rgba(31,116,143,0.08)" }}>
@@ -409,8 +409,8 @@ export default function ContactPage(props: { onLogin: () => void; onBack: () => 
           href="https://www.linkedin.com/company/aio-fusion"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-4 p-5 rounded-2xl border bg-white transition-all hover:shadow-md"
-          style={{ borderColor: vars.g200 }}
+          className="flex items-center gap-4 p-5 rounded-2xl border-2 bg-white transition-all hover:shadow-md"
+          style={{ borderColor: NAVY }}
         >
           <div className="w-12 h-12 rounded-xl flex items-center justify-center"
                style={{ background: "rgba(31,116,143,0.08)" }}>
@@ -423,8 +423,8 @@ export default function ContactPage(props: { onLogin: () => void; onBack: () => 
           <ArrowUpRight size={18} color={vars.accent} />
         </a>
         <div
-          className="flex items-center gap-4 p-5 rounded-2xl border bg-white"
-          style={{ borderColor: vars.g200 }}
+          className="flex items-center gap-4 p-5 rounded-2xl border-2 bg-white"
+          style={{ borderColor: NAVY }}
         >
           <div className="w-12 h-12 rounded-xl flex items-center justify-center"
                style={{ background: "rgba(31,116,143,0.08)" }}>

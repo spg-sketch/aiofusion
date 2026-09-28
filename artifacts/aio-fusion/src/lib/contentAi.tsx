@@ -66,8 +66,23 @@ export async function streamContent(
   onProgress?: (chars: number) => void,
 ): Promise<Record<string, unknown>> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), CONTENT_AI_TIMEOUT_MS);
+  const expiresAt = Date.now() + CONTENT_AI_TIMEOUT_MS;
+  const timeoutError = new Error("This is taking longer than expected and timed out. Your source notes are still available; please try again.");
+  let rejectTimeout: (reason: Error) => void = () => {};
+  const timeout = new Promise<never>((_, reject) => { rejectTimeout = reject; });
+  let timedOut = false;
+  const expire = () => {
+    if (timedOut) return;
+    timedOut = true;
+    rejectTimeout(timeoutError);
+    controller.abort();
+  };
+  const checkDeadline = () => { if (Date.now() >= expiresAt) expire(); };
+  const timer = setTimeout(expire, CONTENT_AI_TIMEOUT_MS);
+  window.addEventListener("focus", checkDeadline);
+  document.addEventListener("visibilitychange", checkDeadline);
   try {
+    const readResponse = async (): Promise<Record<string, unknown>> => {
     const resp = await fetch(`${apiBase()}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -103,20 +118,29 @@ export async function streamContent(
         let parsed: Record<string, unknown>;
         try { parsed = JSON.parse(dataStr); } catch { continue; }
         if (event === "progress") onProgress?.(typeof parsed.chars === "number" ? parsed.chars : 0);
-        else if (event === "result") result = parsed;
+        else if (event === "result") {
+          result = parsed;
+          void reader.cancel().catch(() => {});
+          return result;
+        }
         else if (event === "error") errorMsg = typeof parsed.error === "string" ? parsed.error : "Something went wrong. Please try again.";
       }
     }
     if (errorMsg) throw new Error(errorMsg);
     if (!result) throw new Error("The response ended before it finished. Please try again.");
     return result;
+    };
+    return await Promise.race([readResponse(), timeout]);
   } catch (err) {
+    if (timedOut) throw timeoutError;
     if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error("This is taking longer than expected and timed out. Please try again in a moment.");
+      throw timeoutError;
     }
     throw err;
   } finally {
     clearTimeout(timer);
+    window.removeEventListener("focus", checkDeadline);
+    document.removeEventListener("visibilitychange", checkDeadline);
   }
 }
 

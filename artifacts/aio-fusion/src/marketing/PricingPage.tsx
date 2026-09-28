@@ -136,14 +136,16 @@ export default function PricingPage({
           <h1 className="text-4xl md:text-5xl lg:text-[3.25rem] leading-[1.1] mb-3 max-w-none lg:whitespace-nowrap" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
             Plans built for PR and marketing teams
           </h1>
-          <p className="text-[15px] font-normal max-w-xl mb-3 leading-relaxed" style={{ color: vars.g600 }}>
-            Compare GEO software plans for in-house PR teams and multi-client agencies. Annual subscriptions, clear project capacity and no hidden costs. All prices exclude VAT.
+          <p className="text-[15px] font-normal mb-3 leading-relaxed" style={{ color: vars.g600 }}>
+            <span className="block">Compare GEO software plans for in-house PR teams and multi-client agencies.</span>
+            <span className="block">Annual subscriptions, clear project capacity and no hidden costs.</span>
+            <span className="block">All prices exclude VAT.</span>
           </p>
           <p className="text-[13px] font-light max-w-2xl leading-relaxed" style={{ color: vars.g500 }}>
             Choosing for a team? See how AIO Fusion supports{" "}
             <a href={`${base}for-inhouse`} className="font-semibold underline underline-offset-4" style={{ color: accent }}>in-house PR and marketing</a>
             {" "}or{" "}
-            <a href={`${base}for-agencies`} className="font-semibold underline underline-offset-4" style={{ color: accent }}>PR agencies managing multiple clients</a>.
+            <a href={`${base}for-agencies`} className="font-semibold underline underline-offset-4" style={{ color: accent }}>PR agencies managing <span className="whitespace-nowrap">multiple clients</span></a>.
           </p>
         </div>
       </section>

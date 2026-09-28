@@ -32,6 +32,7 @@ import heroBgImg from "../assets/hero-bg.webp";
 import MarketingNav from "./MarketingNav";
 import DemoDialog from "./DemoDialog";
 import { DEMO_OPT_OUT_KEY } from "./demoPreference";
+import { PlatformDesktopFrame } from "./PlatformDesktopFrame";
 
 const llmEngines = [
   { name: "ChatGPT", logo: null },
@@ -94,7 +95,8 @@ export default function LandingPageC({
       <section className="pt-[72px] sm:pt-[88px]" aria-label="Book a platform demo">
         <div className="px-4 sm:px-8 py-5 sm:py-7 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 max-w-7xl mx-auto">
           <p className="text-lg sm:text-xl font-semibold leading-snug max-w-3xl" style={{ color: ink }}>
-            Ready to win AI authority? Get in touch to book a platform demo and see how AIO Fusion measures and improves your AI visibility
+            <span className="block">Ready to win AI authority?</span>
+            <span className="block mt-1 text-base sm:text-lg font-normal">Get in touch to book a platform demo and see how AIO Fusion measures and improves your AI visibility</span>
           </p>
           <button type="button" onClick={() => setDemoOpen(true)} className="aio-button aio-button--primary marketing-emphasis !rounded-full !px-8 !py-4 text-sm uppercase tracking-wider shrink-0">
             <Calendar size={18} /> Book a Demo <ArrowRight size={16} />
@@ -111,12 +113,12 @@ export default function LandingPageC({
         </div>
         <div className="relative max-w-7xl mx-auto px-4 sm:px-8">
           <div className="grid lg:grid-cols-12 gap-8 lg:gap-12 items-center">
-            <div className="lg:col-span-7">
+            <div className="lg:col-span-8">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-5" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
                 <Sparkles size={12} color={accent} />
                 <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Generative Engine Optimisation</span>
               </div>
-              <h1 className="text-5xl md:text-6xl lg:text-[4.5rem] leading-[1.04] mb-8" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+              <h1 className="text-5xl md:text-6xl lg:text-[2.7rem] xl:text-[3.4rem] leading-[1.04] mb-8" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
                 The AI Authority Platform<br />for <span style={{ color: accent }}>PR & Marketing Teams</span>
               </h1>
               <p className="text-[15px] md:text-base max-w-xl leading-[1.7] font-light mb-8" style={{ color: vars.g600 }}>
@@ -132,11 +134,12 @@ export default function LandingPageC({
                 </a>
               </div>
             </div>
-            <div className="lg:col-span-5">
-              <figure className="overflow-hidden rounded-2xl border border-[#1A647B]/25 bg-white shadow-[0_24px_60px_-20px_rgba(16,43,54,.3)]">
-                <img src={`${base}images/platform-dashboard-sample.jpg`} alt="Actual AIO Fusion authority dashboard for an empty sample project, showing project setup and audit cards" className="block w-full h-auto" />
-                <figcaption className="px-4 py-2 text-xs font-semibold text-[#102B36]">AIO Fusion authority dashboard · Sample workspace, no customer data</figcaption>
-              </figure>
+            <div className="lg:col-span-4">
+              <PlatformDesktopFrame
+                src={`${base}images/platform-dashboard-sample.jpg`}
+                alt="AIO Fusion authority dashboard for an empty example project, showing project setup and audit cards"
+                title="Authority dashboard"
+              />
             </div>
           </div>
         </div>
@@ -145,10 +148,10 @@ export default function LandingPageC({
       {/* FEATURE PANELS */}
       <section className="pb-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-8 mb-10">
-          <div className="max-w-3xl">
+          <div>
             <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: accent }}>The Platform</span>
-            <h2 className="text-4xl md:text-5xl mt-3 mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Everything you need to win AI visibility.</h2>
-            <p className="text-lg font-light leading-relaxed" style={{ color: vars.g600 }}>From diagnosis through to delivery, the full GEO, PR and marketing content workflow in one platform.</p>
+            <h2 className="text-3xl md:text-4xl lg:text-[2.5rem] xl:text-5xl lg:whitespace-nowrap mt-3 mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Everything you need to win AI visibility.</h2>
+            <p className="text-base xl:text-lg font-light leading-relaxed lg:whitespace-nowrap" style={{ color: vars.g600 }}>From diagnosis through to delivery, the full GEO, PR and marketing content workflow in one platform.</p>
           </div>
         </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
@@ -176,10 +179,11 @@ export default function LandingPageC({
               <h3 className="text-3xl mt-3 mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>From insight to stronger content.</h3>
               <p className="leading-relaxed" style={{ color: ink }}>Work across research, planning and optimisation without losing sight of what matters: better visibility and measurable authority for your brand.</p>
             </div>
-            <figure className="overflow-hidden rounded-2xl border border-[#1A647B]/25 bg-white shadow-[0_24px_60px_-20px_rgba(16,43,54,.2)]">
-              <img src={`${base}images/platform-optimiser-sample.jpg`} alt="Actual AIO Fusion Content Optimiser and Editor screen in an empty sample workspace" loading="lazy" className="block w-full h-auto" />
-              <figcaption className="px-4 py-2 text-xs font-semibold text-[#102B36]">Content Optimiser &amp; Editor · Sample workspace, no customer data</figcaption>
-            </figure>
+            <PlatformDesktopFrame
+              src={`${base}images/platform-optimiser-sample.jpg`}
+              alt="AIO Fusion Content Optimiser and Editor screen in an empty example project"
+              title="Content Optimiser & Editor"
+            />
           </div>
           <div className="grid md:grid-cols-3 gap-5 mt-5">
             {[
@@ -224,7 +228,7 @@ export default function LandingPageC({
               { icon: Code2, title: "Website Technical GEO", desc: "Back-end instructions to maximise the AI effectiveness of your website.", accent: vars.accent },
               { icon: TrendingUp, title: "SEO Integration", desc: "Integrate SEO with AI optimisation for earned and owned media.", accent: accent, soon: true },
             ].map((tool) => (
-              <div key={tool.title} className="p-5 rounded-xl bg-white transition-shadow hover:shadow-lg" style={{ border: `2px solid ${(tool as { accent: string }).accent}` }}>
+              <div key={tool.title} className="p-5 rounded-xl bg-white transition-all duration-200 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-[0_18px_36px_-12px_rgba(0,0,0,.35)]" style={{ border: `2px solid ${(tool as { accent: string }).accent}` }}>
                 <div className="flex items-center gap-2.5 mb-2">
                   <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${(tool as { accent: string }).accent}18` }}>
                     <tool.icon size={14} color={(tool as { accent: string }).accent} />
