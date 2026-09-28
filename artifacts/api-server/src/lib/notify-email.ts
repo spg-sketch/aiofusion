@@ -13,6 +13,12 @@ const ALERT_RECIPIENTS = [
   "spg@bluhalo.com",
 ];
 
+const CONTACT_FORM_RECIPIENTS = [
+  "natalie@aiofusion.ai",
+  "patrick@aiofusion.ai",
+  "info@aiofusion.ai",
+];
+
 export async function sendStripeWebhookFailureAlert(opts: {
   environment: string;
   failureClass: "signature_verification" | "event_processing";
@@ -1135,8 +1141,7 @@ export async function sendBookDemoInternalAlert(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({}, "notify-email: RESEND_API_KEY not set - book demo internal alert not sent");
-    return;
+    throw new Error("RESEND_API_KEY is not set - book demo internal alert not sent");
   }
 
   const subject = `[AIO Fusion] Demo request - ${opts.company || opts.name}`;
@@ -1163,13 +1168,14 @@ export async function sendBookDemoInternalAlert(opts: {
     cta: { text: "Reply to enquiry", href: `mailto:${opts.email}` },
   });
 
-  await resend.emails.send({
+  const { error } = await resend.emails.send({
     from: fromAddress(),
-    to: ["info@aiofusion.ai"],
+    to: CONTACT_FORM_RECIPIENTS,
     subject,
     text,
     html,
   });
+  if (error) throw new Error(`Book demo alert delivery failed: ${error.message}`);
   logger.info({ email: opts.email }, "notify-email: book demo internal alert sent");
 }
 
@@ -1179,8 +1185,7 @@ export async function sendBookDemoConfirmation(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - book demo confirmation not sent");
-    return;
+    throw new Error("RESEND_API_KEY is not set - book demo confirmation not sent");
   }
 
   const subject = `We've received your demo request - AIO Fusion`;
@@ -1214,7 +1219,8 @@ export async function sendBookDemoConfirmation(opts: {
     cta: { text: "Visit AIO Fusion", href: getAppBaseUrl() },
   });
 
-  await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+  const { error } = await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+  if (error) throw new Error(`Book demo confirmation delivery failed: ${error.message}`);
   logger.info({ toEmail: opts.toEmail }, "notify-email: book demo confirmation sent");
 }
 
@@ -1227,8 +1233,7 @@ export async function sendEnquiryInternalAlert(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({}, "notify-email: RESEND_API_KEY not set - enquiry internal alert not sent");
-    return;
+    throw new Error("RESEND_API_KEY is not set - enquiry internal alert not sent");
   }
 
   const emailSubject = `[AIO Fusion] Enquiry - ${opts.subject}`;
@@ -1263,13 +1268,14 @@ export async function sendEnquiryInternalAlert(opts: {
     cta: { text: "Reply to enquiry", href: `mailto:${opts.email}` },
   });
 
-  await resend.emails.send({
+  const { error } = await resend.emails.send({
     from: fromAddress(),
-    to: ["info@aiofusion.ai"],
+    to: CONTACT_FORM_RECIPIENTS,
     subject: emailSubject,
     text,
     html,
   });
+  if (error) throw new Error(`Enquiry alert delivery failed: ${error.message}`);
   logger.info({ email: opts.email }, "notify-email: enquiry internal alert sent");
 }
 
@@ -1527,7 +1533,7 @@ export async function sendContactFormFailedAlert(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: ALERT_RECIPIENTS, subject, text, html });
+    await resend.emails.send({ from: fromAddress(), to: CONTACT_FORM_RECIPIENTS, subject, text, html });
     logger.info({ submissionId: opts.submissionId }, "notify-email: contact form failed alert sent");
   } catch (err) {
     logger.warn({ err, submissionId: opts.submissionId }, "notify-email: failed to send contact form failed alert");
@@ -1540,8 +1546,7 @@ export async function sendEnquiryConfirmation(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - enquiry confirmation not sent");
-    return;
+    throw new Error("RESEND_API_KEY is not set - enquiry confirmation not sent");
   }
 
   const subject = `We've received your message - AIO Fusion`;
@@ -1573,7 +1578,8 @@ export async function sendEnquiryConfirmation(opts: {
     cta: { text: "Visit AIO Fusion", href: getAppBaseUrl() },
   });
 
-  await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+  const { error } = await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+  if (error) throw new Error(`Enquiry confirmation delivery failed: ${error.message}`);
   logger.info({ toEmail: opts.toEmail }, "notify-email: enquiry confirmation sent");
 }
 
