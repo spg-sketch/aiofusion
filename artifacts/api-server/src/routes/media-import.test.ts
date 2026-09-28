@@ -1425,7 +1425,7 @@ describe("media import route regressions", () => {
   // Completion validation can run this suite alongside the full release gate,
   // which runs the API suite again. Allow the real 3 MB workbook reconciliation
   // enough headroom under that deliberate CPU and database contention.
-  }, 300_000);
+  }, 600_000);
 
   it("conflicts same-email rows when names or outlets differ instead of merging them", async () => {
     const rows = [

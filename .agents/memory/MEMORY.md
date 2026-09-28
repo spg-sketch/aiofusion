@@ -92,3 +92,4 @@
 - [Replit button release guard](replit-button-release-guard.md) — managed builds require current clean-tree evidence; tracked generated files must be deterministic.
 - [AIO Fusion public platform captures](aio-fusion-public-platform-captures.md) — use real app screens from isolated synthetic workspaces; never expose customer data or label mocks as genuine.
 - [Media collection ownership](aio-fusion-media-collection-ownership.md) — shared media stays canonical; account additions and bookmarks stay private to the active workspace, never pooled through agency hierarchy.
+- [Marketing browser verification](marketing-browser-verification.md) — auto-open demo dialog appears after hydration; wait for it before testing hover or links beneath it.

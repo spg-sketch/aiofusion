@@ -12,6 +12,6 @@ export default defineConfig({
     // Completion validation runs tests alongside workspace typechecking.
     // Cap forked workers so PGlite-heavy suites do not lose an IPC child under
     // concurrent load before any tests execute.
-    maxWorkers: 4,
+    maxWorkers: 2,
   },
 });

@@ -50,7 +50,7 @@ export default function ForInhousePage(props: { onLogin: () => void; onBack: () 
           <a href={`${import.meta.env.BASE_URL}pricing`} className="underline underline-offset-4" style={{ color: "#C8497A" }}>Compare in-house plans</a>
         </div>
       </aside>
-      <button onClick={() => props.onNavigate("contact")} className="inline-flex items-center gap-3 px-10 py-4 rounded-full text-[14px] font-bold uppercase tracking-[0.12em] text-white shadow-md transition-all hover:-translate-y-0.5 hover:shadow-lg" style={{ background: "#C8497A" }}>
+      <button type="button" onClick={() => props.onNavigate("contact")} className="flex w-full max-w-sm items-center justify-center gap-3 py-4 rounded-xl text-[14px] font-bold uppercase tracking-[0.12em] text-white shadow-md transition-all hover:opacity-90 hover:shadow-lg" style={{ background: "#C8497A" }}>
         <Calendar size={18} /> Book a Demo
       </button>
     </MarketingPage>
