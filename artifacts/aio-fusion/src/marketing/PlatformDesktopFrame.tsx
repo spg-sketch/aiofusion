@@ -15,6 +15,8 @@ export function PlatformDesktopFrame({
   fit = "cover",
   priority = false,
 }: PlatformDesktopFrameProps) {
+  const frameSrc = `${import.meta.env.BASE_URL}images/platform-imac-frame.png`;
+
   return (
     <figure className="w-full">
       <div
@@ -52,11 +54,24 @@ export function PlatformDesktopFrame({
           />
         </div>
         <img
-          src={`${import.meta.env.BASE_URL}images/platform-imac-frame.png`}
+          src={frameSrc}
           alt=""
           aria-hidden="true"
           loading={priority ? "eager" : "lazy"}
           className="pointer-events-none absolute inset-0 h-full w-full"
+          style={{ clipPath: "inset(0 0 14% 0)" }}
+        />
+        <img
+          src={frameSrc}
+          alt=""
+          aria-hidden="true"
+          loading={priority ? "eager" : "lazy"}
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          style={{
+            clipPath: "inset(85.5% 0 0 0)",
+            transform: perspective === "hero" ? "rotateZ(-3.2deg)" : "rotateZ(-1.3deg)",
+            transformOrigin: "50% 85%",
+          }}
         />
       </div>
       <figcaption className="sr-only">{title}</figcaption>
