@@ -2,7 +2,7 @@ type PlatformDesktopFrameProps = {
   src: string;
   alt: string;
   title: string;
-  angled?: boolean;
+  perspective?: "hero" | "subtle";
   fit?: "fill" | "cover";
   priority?: boolean;
 };
@@ -11,13 +11,22 @@ export function PlatformDesktopFrame({
   src,
   alt,
   title,
-  angled = false,
+  perspective = "hero",
   fit = "cover",
   priority = false,
 }: PlatformDesktopFrameProps) {
   return (
-    <figure className={`w-full ${angled ? "-rotate-[3deg]" : ""}`}>
-      <div className="relative aspect-[1280/1030] w-full drop-shadow-[0_22px_22px_rgba(20,47,58,0.2)]">
+    <figure className="w-full">
+      <div
+        className="relative aspect-[1280/1030] w-full"
+        style={{
+          transform: perspective === "hero"
+            ? "perspective(1100px) rotateY(-12deg) rotateX(1.5deg) rotateZ(1.2deg)"
+            : "perspective(1100px) rotateY(-8deg) rotateX(1deg) rotateZ(-0.3deg)",
+          transformOrigin: "50% 52%",
+          filter: "drop-shadow(18px 27px 19px rgba(16, 43, 54, 0.26))",
+        }}
+      >
         <div
           className="absolute overflow-hidden bg-[#1E647C]"
           style={{ left: "4.3%", top: "5.5%", width: "90.7%", height: "63.2%" }}

@@ -134,7 +134,7 @@ export default function LandingPageC({
                 </a>
               </div>
             </div>
-            <div className="lg:col-span-5 lg:scale-[1.08] lg:origin-left">
+            <div className="lg:col-span-5 lg:-translate-x-12 lg:scale-[1.11] lg:origin-left xl:-translate-x-20 xl:scale-[1.16]">
               <PlatformDesktopFrame
                 src={`${base}images/platform-dashboard-real.webp`}
                 alt="AIO Fusion project dashboard showing setup progress, visibility audits and content activity"
@@ -181,12 +181,13 @@ export default function LandingPageC({
               <h3 className="text-3xl mt-3 mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>From insight to stronger content.</h3>
               <p className="leading-relaxed" style={{ color: ink }}>Work across research, planning and optimisation without losing sight of what matters: better visibility and measurable authority for your brand.</p>
             </div>
-            <PlatformDesktopFrame
-              src={`${base}images/platform-optimiser-real.webp`}
-              alt="AIO Fusion Content Optimiser and Editor showing the content setup form"
-              title="Content Optimiser & Editor"
-              angled
-            />
+            <div className="w-full scale-[1.04] md:-translate-x-4 md:scale-[1.1] md:origin-center">
+              <PlatformDesktopFrame
+                src={`${base}images/platform-optimiser-real.webp`}
+                alt="AIO Fusion Content Optimiser and Editor showing the content setup form"
+                title="Content Optimiser & Editor"
+              />
+            </div>
           </div>
           <div className="grid md:grid-cols-3 gap-5 mt-5">
             {[
