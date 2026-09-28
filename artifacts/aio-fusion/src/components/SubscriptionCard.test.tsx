@@ -125,6 +125,68 @@ function activeSubscription() {
 }
 
 describe("billing descriptions", () => {
+  it.each([
+    {
+      plan: "inhouse",
+      annual: 400000,
+      perQuarter: 115000,
+      quarterlyYear: 460000,
+      annualMonthly: "£333",
+      quarterlyMonthly: "£383",
+      annualCharge: "£4,000",
+      quarterlyCharge: "£1,150",
+      quarterlyTotal: "£4,600",
+    },
+    {
+      plan: "agency",
+      annual: 500000,
+      perQuarter: 143750,
+      quarterlyYear: 575000,
+      annualMonthly: "£417",
+      quarterlyMonthly: "£479",
+      annualCharge: "£5,000",
+      quarterlyCharge: "£1,437.50",
+      quarterlyTotal: "£5,750",
+    },
+  ])("shows monthly equivalents and actual charges for the $plan plan without offering monthly checkout", async ({
+    plan, annual, perQuarter, quarterlyYear, annualMonthly, quarterlyMonthly, annualCharge, quarterlyCharge, quarterlyTotal,
+  }) => {
+    const info = {
+      ...activeSubscription(),
+      status: "none",
+      plan: null,
+      applicablePlan: plan,
+      entitled: false,
+      prices: {
+        annual: { yearlyTotal: annual },
+        quarterly: { perQuarter, yearlyTotal: quarterlyYear },
+      },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => ({
+      ok: !String(input).endsWith("/api/platform/billing/checkout"),
+      json: async () => String(input).endsWith("/api/platform/billing/subscription")
+        ? info
+        : { error: "Checkout unavailable" },
+    } as Response));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<SubscriptionCard />);
+
+    const annually = await screen.findByRole("button", { name: /pay annually/i });
+    const quarterly = screen.getByRole("button", { name: /pay quarterly/i });
+    expect(annually).toHaveTextContent(`${annualMonthly}/mo equivalent`);
+    expect(annually).toHaveTextContent(`${annualCharge} billed annually`);
+    expect(quarterly).toHaveTextContent(`${quarterlyMonthly}/mo equivalent`);
+    expect(quarterly).toHaveTextContent(`${quarterlyCharge} billed quarterly`);
+    expect(quarterly).toHaveTextContent(`${quarterlyTotal}/yr`);
+    expect(screen.getByText(/payments are taken annually or quarterly, not monthly/i)).toBeInTheDocument();
+
+    fireEvent.click(quarterly);
+    fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/api/platform/billing/checkout"))).toBe(true));
+    const checkout = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/api/platform/billing/checkout"));
+    expect(checkout?.[1]).toEqual(expect.objectContaining({ body: JSON.stringify({ frequency: "quarterly" }) }));
+  });
+
   it("shows agency package reservations and account-appropriate purchase terms", async () => {
     const info = {
       ...activeSubscription(),

@@ -90,6 +90,10 @@ function pounds(pence: number): string {
   })}`;
 }
 
+function monthlyEquivalent(pencePerPeriod: number, months: number): string {
+  return `£${Math.round(pencePerPeriod / (months * 100)).toLocaleString("en-GB")}`;
+}
+
 const PLAN_LABELS: Record<string, string> = {
   inhouse: "In-House",
   agency: "Agency/Partner",
@@ -1196,16 +1200,18 @@ function RestartChooser({
   onStart: () => void;
   error: string | null;
 }) {
-  const options: { key: "annual" | "quarterly"; title: string; detail: string }[] = [
+  const options: { key: "annual" | "quarterly"; label: string; monthly: string; detail: string }[] = [
     {
       key: "annual",
-      title: `${pounds(info.prices.annual.yearlyTotal)}/yr`,
-      detail: "Billed annually",
+      label: "Pay annually",
+      monthly: monthlyEquivalent(info.prices.annual.yearlyTotal, 12),
+      detail: `${pounds(info.prices.annual.yearlyTotal)} billed annually`,
     },
     {
       key: "quarterly",
-      title: `${pounds(info.prices.quarterly.perQuarter)}/quarter`,
-      detail: `Billed quarterly - ${pounds(info.prices.quarterly.yearlyTotal)}/yr`,
+      label: "Pay quarterly",
+      monthly: monthlyEquivalent(info.prices.quarterly.perQuarter, 3),
+      detail: `${pounds(info.prices.quarterly.perQuarter)} billed quarterly · ${pounds(info.prices.quarterly.yearlyTotal)}/yr`,
     },
   ];
   return (
@@ -1222,11 +1228,13 @@ function RestartChooser({
               background: frequency === opt.key ? "#FBE3ED22" : "white",
             }}
           >
-            <span className="aio-type-card-title block" style={{ color: ink }}>{opt.title}</span>
-            <span className="aio-type-meta" style={{ color: vars.g500 }}>{opt.detail}</span>
+            <span className="aio-type-label block mb-1" style={{ color: ink }}>{opt.label}</span>
+            <span className="aio-type-card-title block" style={{ color: ink }}>{opt.monthly}<span className="aio-type-meta font-normal" style={{ color: vars.g500 }}>/mo equivalent</span></span>
+            <span className="aio-type-meta block mt-1" style={{ color: vars.g500 }}>{opt.detail}</span>
           </button>
         ))}
       </div>
+      <p className="aio-type-meta mb-4" style={{ color: vars.g500 }}>Monthly figures are for comparison only. Payments are taken annually or quarterly, not monthly. Review the final amount at checkout.</p>
       {!info.checkoutAvailable && (
         <p className="aio-type-supporting mb-3" style={{ color: vars.g500 }}>
           Online checkout isn't available right now - contact info@aiofusion.ai to subscribe.
