@@ -30,6 +30,11 @@ const basePath = process.env.BASE_PATH ?? "/";
 
 export default defineConfig({
   base: basePath,
+  define: {
+    "import.meta.env.VITE_CANONICAL_DOMAIN": JSON.stringify(
+      process.env.CANONICAL_DOMAIN || "aiofusion.ai",
+    ),
+  },
   plugins: [
     react(),
     tailwindcss(),

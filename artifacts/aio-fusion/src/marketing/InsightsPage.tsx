@@ -3,6 +3,7 @@ import { ArrowUpRight, BookOpen } from "lucide-react";
 import MarketingPage from "./MarketingPage";
 import { PageHead } from "./PageHead";
 import { HIDDEN_PUBLIC_INSIGHT_SLUGS, PAGE_META, type PageMeta } from "./pageMeta";
+import { articleCanonicalUrl } from "./articleCanonical";
 import { vars } from "./vars";
 import ArticleDetailView from "./ArticleDetailView";
 import { NEW_ARTICLES, type Article, type ArticleSection } from "./articles-data";
@@ -90,10 +91,15 @@ function apiPath(path: string): string {
 }
 
 function articleMeta(article: PublicInsight): PageMeta {
+  const canonical = articleCanonicalUrl(
+    article.canonicalUrl,
+    article.slug,
+    `https://${import.meta.env.VITE_CANONICAL_DOMAIN || "aiofusion.ai"}`,
+  );
   return {
     title: article.seoTitle || article.title,
     description: article.seoDescription || article.excerpt,
-    canonical: article.canonicalUrl || `https://aiofusion.ai/insights/${article.slug}`,
+    canonical,
     ogTitle: article.title,
     ogDescription: article.excerpt,
     ogType: "article",
@@ -104,7 +110,7 @@ function articleMeta(article: PublicInsight): PageMeta {
       "@type": "Article",
       headline: article.title,
       description: article.excerpt,
-      mainEntityOfPage: article.canonicalUrl || `https://aiofusion.ai/insights/${article.slug}`,
+      mainEntityOfPage: canonical,
       image: article.coverImageUrl || undefined,
       author: { "@type": "Organization", name: "AIO Fusion" },
       publisher: { "@type": "Organization", name: "AIO Fusion" },

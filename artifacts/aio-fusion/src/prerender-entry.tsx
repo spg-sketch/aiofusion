@@ -22,6 +22,7 @@ import { createElement } from "react";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { articleCanonicalUrl } from "./marketing/articleCanonical";
 
 import LandingPageC from "./marketing/LandingPage";
 import ForInhousePage from "./marketing/ForInhousePage";
@@ -345,12 +346,17 @@ export async function runPrerender(options: PrerenderOptions = {}): Promise<Prer
   // Render each complete article
   for (const articleSlug of articleSlugs) {
     const published = publishedInsights.find((article) => article.slug === articleSlug);
+    const canonical = articleCanonicalUrl(
+      published?.canonicalUrl ?? null,
+      published?.slug ?? articleSlug,
+      `https://${configuredDomain || "aiofusion.ai"}`,
+    );
     const meta: ArticleMeta | undefined = published ? {
       articleTitle: published.title,
       excerpt: published.excerpt,
       title: published.seoTitle || published.title,
       description: published.seoDescription || published.excerpt,
-      canonical: published.canonicalUrl || `https://${configuredDomain || "aiofusion.ai"}/insights/${published.slug}`,
+      canonical,
       ogTitle: published.title,
       ogDescription: published.excerpt,
       ogType: "article",
@@ -362,7 +368,7 @@ export async function runPrerender(options: PrerenderOptions = {}): Promise<Prer
         headline: published.title,
         description: published.excerpt,
         image: published.coverImageUrl || undefined,
-        mainEntityOfPage: published.canonicalUrl || undefined,
+        mainEntityOfPage: canonical,
         author: { "@type": "Organization", name: "AIO Fusion" },
         publisher: { "@type": "Organization", name: "AIO Fusion" },
       },

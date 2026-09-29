@@ -88,6 +88,9 @@ export default defineConfig({
     "import.meta.env.PROD":      JSON.stringify(true),
     "import.meta.env.DEV":       JSON.stringify(false),
     "import.meta.env.VITE_API_BASE": JSON.stringify(""),
+    "import.meta.env.VITE_CANONICAL_DOMAIN": JSON.stringify(
+      process.env.CANONICAL_DOMAIN || "aiofusion.ai",
+    ),
   },
 
   build: {

@@ -111,11 +111,14 @@ describe("controlled prerender output", () => {
         "A controlled B2B authority story",
         "A local fixture excerpt for the B2B authority route.",
       ),
-      publishedFixture(
-        "ai-changing-b2b-visibility",
-        "A controlled visibility story",
-        "A local fixture excerpt for the visibility route.",
-      ),
+      {
+        ...publishedFixture(
+          "ai-changing-b2b-visibility",
+          "A controlled visibility story",
+          "A local fixture excerpt for the visibility route.",
+        ),
+        canonicalUrl: "https://staging.aiofusion.ai/insights/ai-changing-b2b-visibility",
+      },
       ...HIDDEN_PUBLIC_INSIGHT_SLUGS.map((slug) =>
         publishedFixture(slug, `Hidden ${slug}`, `This story is retained but not public: ${slug}.`),
       ),
@@ -159,6 +162,7 @@ describe("controlled prerender output", () => {
       expect(html).toContain(`<title>${title} | AIO Fusion</title>`);
       expect(html).toContain(`name="description" content="${excerpt}"`);
       expect(html).toContain(`href="https://aiofusion.ai/insights/${slug}"`);
+      expect(html).not.toContain(`https://staging.aiofusion.ai/insights/${slug}`);
       expect(html).toContain(`<h1`);
       expect(html).toContain(title);
       expect(html).toContain(excerpt);
