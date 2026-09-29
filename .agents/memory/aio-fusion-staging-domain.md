@@ -10,6 +10,12 @@ description: Lessons from wiring staging.aiofusion.ai to the aio-fusion-staging 
 - Environments (user asked to remember, CORRECTED): **THIS repl = `aio-fusion-staging`**, the feature-development/staging server. The beta site is on another Replit instance and was intended to have its own DB; beta/alpha promotion should not share databases or data. Do not assume this intended isolation matches the current runtime: a later startup change explicitly forced the staging deployment to use a beta-named connection. Verify the actual target before claiming staging has its own independent DB.
 - User's key shared links (asked to remember): Roadmap = https://www.aiofusion.ai/roadmap.html ; Tasks/build plan = https://www.aiofusion.ai/build-plan.html (served from aio-fusion `public/`).
 
+An exposed historical database-login address was confirmed to authenticate and to match the separate beta connection, not this staging deployment's main connection. Do not rotate the staging main database credential to fix that exposure.
+
+**Why:** The value was labelled as a production-database identifier in an old tracked configuration entry, but credential matching showed it belongs to beta. A rotation against the wrong database would leave the exposure intact and could interrupt staging.
+
+**How to apply:** Coordinate revocation or rotation with the beta database owner and every beta consumer before changing it. Do not put connection strings in tracked configuration, even in fields intended to contain only hostname fragments.
+
 Deployment identity values must not be committed in `.replit` because the same source is promoted between the staging and production Repls.
 
 **Why:** Replit's non-secret production environment operation persists values into `.replit`; a staging canonical there can travel with source and poison or block the live deployment.
