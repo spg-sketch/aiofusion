@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import type { Request, Response, NextFunction } from "express";
 import { requireAuth } from "./require-auth";
 
@@ -58,6 +58,7 @@ describe("requireAuth (session expiry enforcement)", () => {
 describe("authMiddleware + requireAuth integration: expired session is rejected", () => {
   const getSessionMock = vi.hoisted(() => vi.fn());
   const clearSessionMock = vi.hoisted(() => vi.fn());
+  let authMiddleware: typeof import("../middlewares/authMiddleware").authMiddleware;
 
   vi.mock("../lib/auth", async (importOriginal) => {
     const original = await importOriginal<typeof import("../lib/auth")>();
@@ -69,6 +70,10 @@ describe("authMiddleware + requireAuth integration: expired session is rejected"
     };
   });
 
+  beforeAll(async () => {
+    ({ authMiddleware } = await import("../middlewares/authMiddleware"));
+  }, 60_000);
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -76,8 +81,6 @@ describe("authMiddleware + requireAuth integration: expired session is rejected"
   it("clears the cookie and leaves req.user unset when getSession returns null (expired)", async () => {
     getSessionMock.mockResolvedValue(null);
     clearSessionMock.mockResolvedValue(undefined);
-
-    const { authMiddleware } = await import("../middlewares/authMiddleware");
 
     const req = {
       headers: {},
@@ -101,8 +104,6 @@ describe("authMiddleware + requireAuth integration: expired session is rejected"
   it("rejects an expired session end-to-end through requireAuth after authMiddleware clears it", async () => {
     getSessionMock.mockResolvedValue(null);
     clearSessionMock.mockResolvedValue(undefined);
-
-    const { authMiddleware } = await import("../middlewares/authMiddleware");
 
     const req = {
       headers: {},
