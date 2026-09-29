@@ -366,3 +366,17 @@ mtime_ms = 1790520613406
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/69e97f21-ebcc-4e42-bc8b-98f65b9b06a1/809adad3-f0d6-49cb-9a6e-11c733283d0a"
 storage_version_token = "1790520710222102"
 content_type = "image/png"
+
+[[outputs]]
+id = "xFukFw_YkBsxsq7rbPjN-"
+uri = "file://artifacts/aio-fusion/public/images/platform-dashboard-real.webp"
+type = "image"
+title = "Revised dashboard preview"
+description = "Blank Sample brand logo with example audit scores of 42 and 67."
+logical_id = "32539271-4ef5-466a-b821-0712285068db"
+content_hash = "sha256:5a668847af4fe4ef3ae08eae7e998682a6e715e87f0b433a9cca386817c3e369"
+size = 37758
+mtime_ms = 1790675552230
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/32539271-4ef5-466a-b821-0712285068db/8db435c5-62af-4f06-ad10-296fe824cbaf"
+storage_version_token = "1790675724525121"
+content_type = "image/webp"
