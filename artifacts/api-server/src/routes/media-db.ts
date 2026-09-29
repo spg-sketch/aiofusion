@@ -45,7 +45,7 @@ import { MEDIA_RECOMMENDATION_STOP_WORDS, scoreMediaRecommendation } from "../li
 import { assessEditorialFit, reduceScoreForMissingContactName, type EditorialAssessment, type TargetingBrief } from "../lib/media-editorial-ranking";
 import { checkFairUsage, checkMonthlySpendLimit } from "../lib/fair-usage";
 import { collectJournalistCoverage } from "../lib/journalist-coverage-evidence";
-import { acquirePrivacyIdentityLock, createSuppressionMatcher, filterSuppressedContacts, isContactSuppressed, isSuppressed, isSuppressedWithDb, privacyHash } from "../lib/journalist-privacy";
+import { acquirePrivacyIdentityLock, createSuppressionMatcher, createSuppressionMatcherWithDb, filterSuppressedContacts, isContactSuppressed, isSuppressed, isSuppressedWithDb, privacyHash } from "../lib/journalist-privacy";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -1246,9 +1246,46 @@ router.post(
         let outletsCreated = 0;
         let outletsUpdated = 0;
         let contactsCreated = 0;
+        const newOutletRows = new Map<string, { row: (typeof commitPlan.publicationRows)[number]["row"] | (typeof commitPlan.importRows)[number]["row"]; outletRef: string }>();
+        for (const { row, outletRef } of [...commitPlan.publicationRows, ...commitPlan.importRows]) {
+          if (!outletIdByRef.has(outletRef) && !newOutletRows.has(outletRef)) {
+            newOutletRows.set(outletRef, { row, outletRef });
+          }
+        }
+        const outletRefByValues = new Map<string, string>();
+        const outletEntries = Array.from(newOutletRows.values());
+        for (const { row, outletRef } of outletEntries) {
+          const valueKey = JSON.stringify([row.outletName, row.website.trim()]);
+          const previousRef = outletRefByValues.get(valueKey);
+          if (previousRef && previousRef !== outletRef) {
+            throw new Error("Import outlet reconciliation is ambiguous.");
+          }
+          outletRefByValues.set(valueKey, outletRef);
+        }
+        for (let offset = 0; offset < outletEntries.length; offset += 200) {
+          const batch = outletEntries.slice(offset, offset + 200);
+          const inserted = await tx.insert(mediaOutletsTable).values(batch.map(({ row }) => ({
+            name: row.outletName,
+            ...importedOutletMetadata(row, selectedCategory),
+            website: row.website.trim(),
+            accountId,
+          }))).returning({
+            id: mediaOutletsTable.id,
+            name: mediaOutletsTable.name,
+            website: mediaOutletsTable.website,
+          });
+          for (const outlet of inserted) {
+            const valueKey = JSON.stringify([outlet.name, outlet.website]);
+            const outletRef = outletRefByValues.get(valueKey);
+            if (!outletRef) throw new Error("Import outlet reconciliation failed.");
+            outletIdByRef.set(outletRef, outlet.id);
+            outletsCreated += 1;
+          }
+        }
         for (const { row, outletRef, changedFields } of commitPlan.publicationRows) {
           const existingOutletId = outletIdByRef.get(outletRef);
           if (existingOutletId) {
+            if (newOutletRows.has(outletRef)) continue;
             if (changedFields.length) {
               const metadata = importedOutletMetadata(row, selectedCategory);
               const updated = await tx.update(mediaOutletsTable)
@@ -1260,114 +1297,109 @@ router.post(
                 .returning({ id: mediaOutletsTable.id });
               if (updated.length) outletsUpdated += 1;
             }
-            continue;
           }
-          const metadata = importedOutletMetadata(row, selectedCategory);
-          const [created] = await tx.insert(mediaOutletsTable).values({
-            name: row.outletName,
-            ...metadata,
-            website: row.website.trim(),
-            accountId,
-          }).returning({ id: mediaOutletsTable.id });
-          outletIdByRef.set(outletRef, created.id);
-          outletsCreated += 1;
         }
+        const pendingContactInserts: Array<{
+          identity: { name: string; email: string; linkedinUrl: string; outlet: string; accountId: string };
+          values: typeof mediaContactsTable.$inferInsert;
+        }> = [];
         for (const { row, outletRef, aggregate } of commitPlan.importRows) {
-          let outletId = outletIdByRef.get(outletRef);
-          if (!outletId) {
-            const metadata = importedOutletMetadata(row, selectedCategory);
-            const [created] = await tx.insert(mediaOutletsTable).values({
-              name: row.outletName,
-              ...metadata,
-              website: row.website.trim(),
-              accountId,
-            }).returning({ id: mediaOutletsTable.id });
-            outletId = created.id;
-            outletIdByRef.set(outletRef, outletId);
-            outletsCreated += 1;
-          }
+          const outletId = outletIdByRef.get(outletRef);
+          if (!outletId) throw new Error("Import outlet reconciliation failed.");
           const imported = buildImportedContactMetadata(row, aggregate, {
             filename: typeof filename === "string" ? filename.slice(0, 500) : "",
             sourceHash: source.sourceHash,
             sourceType: source.sourceType,
             selectedCategory,
           });
-          if (await isSuppressedWithDb(tx, {
-            name: `${row.firstName} ${row.lastName}`,
-            email: row.email,
-            linkedinUrl: row.linkedinUrl,
-            outlet: row.outletName,
-            accountId: workspaceId,
-          })) throw new Error("SUPPRESSED_IMPORT");
-          await tx.insert(mediaContactsTable).values({
-            outletId,
-            firstName: row.firstName,
-            lastName: row.lastName,
-            role: row.role,
-            email: row.email,
-            phone: "",
-            notes: imported.notes,
-            beats: imported.beats,
-            sectors: imported.sectors,
-            geography: imported.geography,
-            sourceRef: imported.sourceRef,
-            linkedinUrl: row.linkedinUrl ?? "",
-            sourceUrl: row.sourceUrl ?? "",
-            publicationReach: row.reachBand,
-            publicationAuthority: row.publicationAuthority ?? "",
-            journalistAuthority: row.journalistAuthority ?? "",
-            confidence: row.confidence,
-            reviewNotes: row.reviewNotes ?? "",
-            // Workbook dates are source assertions, not page verification.
-            provenance: imported.provenance,
-            accountId,
-          });
-          contactsCreated += 1;
-        }
-
-        for (const match of commitPlan.matches) {
-          const aggregate = match.aggregate;
-          const { row } = aggregate;
-          const contact = match.contact;
-          const imported = buildImportedContactMetadata(row, aggregate, {
-            filename: typeof filename === "string" ? filename.slice(0, 500) : "",
-            sourceHash: source.sourceHash,
-            sourceType: source.sourceType,
-            selectedCategory,
-          });
-          const next: Record<string, unknown> = {
-            sourceRef: imported.sourceRef,
-            // Sectors are additive, including rows with no email.
-            sectors: Array.from(new Set([...(contact.sectors ?? []), ...imported.sectors])),
-            provenance: mergeImportedProvenance(contact.provenance, imported.provenance),
-          };
-          if (row.role) next.role = row.role;
-          if (row.linkedinUrl) next.linkedinUrl = row.linkedinUrl;
-          if (row.sourceUrl) next.sourceUrl = row.sourceUrl;
-          if (imported.geography) next.geography = imported.geography;
-          if (row.reachBand) next.publicationReach = row.reachBand;
-          if (row.publicationAuthority) next.publicationAuthority = row.publicationAuthority;
-          if (row.journalistAuthority) next.journalistAuthority = row.journalistAuthority;
-          if (row.confidence) next.confidence = row.confidence;
-          if (row.reviewNotes) next.reviewNotes = row.reviewNotes;
-          if (imported.beats.length) {
-            // Workbook refreshes add beat evidence; they do not erase a
-            // previously curated or source-derived beat.
-            next.beats = Array.from(new Set([...(contact.beats ?? []), ...imported.beats]));
-          }
-          if (!contact.email && row.email) next.email = row.email;
-          for (const key of Object.keys(next)) {
-            if (overrideSet.has(`${contact.id}:${key}`) || match.overriddenFields.includes(key)) delete next[key];
-          }
-          if (Object.keys(next).length) {
-            if (await isSuppressedWithDb(tx, {
-              ...contact,
-              ...next,
-              name: `${String(next.firstName ?? contact.firstName ?? "")} ${String(next.lastName ?? contact.lastName ?? "")}`,
+          pendingContactInserts.push({
+            identity: {
+              name: `${row.firstName} ${row.lastName}`,
+              email: row.email,
+              linkedinUrl: row.linkedinUrl ?? "",
               outlet: row.outletName,
               accountId: workspaceId,
-            })) throw new Error("SUPPRESSED_IMPORT");
-            await tx.update(mediaContactsTable).set({ ...next, updatedAt: new Date() }).where(eq(mediaContactsTable.id, contact.id!));
+            },
+            values: {
+              outletId,
+              firstName: row.firstName,
+              lastName: row.lastName,
+              role: row.role,
+              email: row.email,
+              phone: "",
+              notes: imported.notes,
+              beats: imported.beats,
+              sectors: imported.sectors,
+              geography: imported.geography,
+              sourceRef: imported.sourceRef,
+              linkedinUrl: row.linkedinUrl ?? "",
+              sourceUrl: row.sourceUrl ?? "",
+              publicationReach: row.reachBand,
+              publicationAuthority: row.publicationAuthority ?? "",
+              journalistAuthority: row.journalistAuthority ?? "",
+              confidence: row.confidence,
+              reviewNotes: row.reviewNotes ?? "",
+              // Workbook dates are source assertions, not page verification.
+              provenance: imported.provenance,
+              accountId,
+            },
+          });
+        }
+        for (let offset = 0; offset < pendingContactInserts.length; offset += 200) {
+          const batch = pendingContactInserts.slice(offset, offset + 200);
+          const isSuppressed = await createSuppressionMatcherWithDb(tx, workspaceId);
+          if (batch.some(({ identity }) => isSuppressed(identity))) throw new Error("SUPPRESSED_IMPORT");
+          await tx.insert(mediaContactsTable).values(batch.map(({ values }) => values));
+          contactsCreated += batch.length;
+        }
+
+        for (let offset = 0; offset < commitPlan.matches.length; offset += 200) {
+          const matches = commitPlan.matches.slice(offset, offset + 200);
+          const isSuppressed = await createSuppressionMatcherWithDb(tx, workspaceId);
+          for (const match of matches) {
+            const aggregate = match.aggregate;
+            const { row } = aggregate;
+            const contact = match.contact;
+            const imported = buildImportedContactMetadata(row, aggregate, {
+              filename: typeof filename === "string" ? filename.slice(0, 500) : "",
+              sourceHash: source.sourceHash,
+              sourceType: source.sourceType,
+              selectedCategory,
+            });
+            const next: Record<string, unknown> = {
+              sourceRef: imported.sourceRef,
+              // Sectors are additive, including rows with no email.
+              sectors: Array.from(new Set([...(contact.sectors ?? []), ...imported.sectors])),
+              provenance: mergeImportedProvenance(contact.provenance, imported.provenance),
+            };
+            if (row.role) next.role = row.role;
+            if (row.linkedinUrl) next.linkedinUrl = row.linkedinUrl;
+            if (row.sourceUrl) next.sourceUrl = row.sourceUrl;
+            if (imported.geography) next.geography = imported.geography;
+            if (row.reachBand) next.publicationReach = row.reachBand;
+            if (row.publicationAuthority) next.publicationAuthority = row.publicationAuthority;
+            if (row.journalistAuthority) next.journalistAuthority = row.journalistAuthority;
+            if (row.confidence) next.confidence = row.confidence;
+            if (row.reviewNotes) next.reviewNotes = row.reviewNotes;
+            if (imported.beats.length) {
+              // Workbook refreshes add beat evidence; they do not erase a
+              // previously curated or source-derived beat.
+              next.beats = Array.from(new Set([...(contact.beats ?? []), ...imported.beats]));
+            }
+            if (!contact.email && row.email) next.email = row.email;
+            for (const key of Object.keys(next)) {
+              if (overrideSet.has(`${contact.id}:${key}`) || match.overriddenFields.includes(key)) delete next[key];
+            }
+            if (Object.keys(next).length) {
+              if (isSuppressed({
+                ...contact,
+                ...next,
+                name: `${String(next.firstName ?? contact.firstName ?? "")} ${String(next.lastName ?? contact.lastName ?? "")}`,
+                outlet: row.outletName,
+                accountId: workspaceId,
+              })) throw new Error("SUPPRESSED_IMPORT");
+              await tx.update(mediaContactsTable).set({ ...next, updatedAt: new Date() }).where(eq(mediaContactsTable.id, contact.id!));
+            }
           }
         }
         const summary = {

@@ -164,6 +164,7 @@ vi.mock("@workspace/db", async () => {
 
 import {
   db,
+  pool,
   mediaContactsTable,
   mediaBookmarksTable,
   mediaContactFieldOverridesTable,
@@ -321,9 +322,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-  if (previousSessionSecret === undefined) delete process.env.SESSION_SECRET;
-  else process.env.SESSION_SECRET = previousSessionSecret;
+  try {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await pool.end();
+  } finally {
+    if (previousSessionSecret === undefined) delete process.env.SESSION_SECRET;
+    else process.env.SESSION_SECRET = previousSessionSecret;
+  }
 });
 
 describe("media import route regressions", () => {

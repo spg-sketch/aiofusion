@@ -11,7 +11,9 @@ const GIT_REVISION_PATTERN = /^[0-9a-f]{40}$/i;
 export const RELEASE_STAGE_TIMEOUTS = Object.freeze({
   "release automation guard": 60_000,
   typecheck: 10 * 60_000,
-  "api regression suite": 10 * 60_000,
+  // The full-workbook import test can use 10 minutes by itself; leave time for
+  // the rest of the API suite instead of killing it at the same deadline.
+  "api regression suite": 20 * 60_000,
   "web regression suite": 10 * 60_000,
   "operational script suite": 10 * 60_000,
   "API production build": 10 * 60_000,
