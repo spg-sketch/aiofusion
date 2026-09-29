@@ -11,9 +11,9 @@ const GIT_REVISION_PATTERN = /^[0-9a-f]{40}$/i;
 export const RELEASE_STAGE_TIMEOUTS = Object.freeze({
   "release automation guard": 60_000,
   typecheck: 10 * 60_000,
-  // The full-workbook import test can use 10 minutes by itself; leave time for
-  // the rest of the API suite instead of killing it at the same deadline.
-  "api regression suite": 20 * 60_000,
+  // The full-workbook import test can use 10 minutes by itself, while the rest
+  // of the PGlite-backed API files still need time to finish.
+  "api regression suite": 30 * 60_000,
   "web regression suite": 10 * 60_000,
   "operational script suite": 10 * 60_000,
   "API production build": 10 * 60_000,
@@ -26,7 +26,9 @@ export const DEFAULT_STAGE_TIMEOUT_MS = 10 * 60_000;
 export const RELEASE_STAGES = [
   ["release automation guard", "pnpm run release:validate-automation", RELEASE_STAGE_TIMEOUTS["release automation guard"]],
   ["typecheck", "pnpm run typecheck", RELEASE_STAGE_TIMEOUTS.typecheck],
-  ["api regression suite", "pnpm --filter @workspace/api-server run test", RELEASE_STAGE_TIMEOUTS["api regression suite"]],
+  // Release checks run sequentially on this eight-CPU workspace. Use more
+  // file workers here without raising the default used alongside typechecking.
+  ["api regression suite", "pnpm --filter @workspace/api-server exec vitest run --maxWorkers=4", RELEASE_STAGE_TIMEOUTS["api regression suite"]],
   ["web regression suite", "pnpm --filter @workspace/aio-fusion run test", RELEASE_STAGE_TIMEOUTS["web regression suite"]],
   ["operational script suite", "pnpm --filter @workspace/scripts run test", RELEASE_STAGE_TIMEOUTS["operational script suite"]],
   ["API production build", "pnpm --filter @workspace/api-server run build", RELEASE_STAGE_TIMEOUTS["API production build"]],
