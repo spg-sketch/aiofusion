@@ -13,4 +13,4 @@ When anonymising an approved marketing capture, replace both the borrowed logo a
 
 **Why:** The neutral dashboard treatment with distinct example scores was approved, but leaving a brand name below a removed logo would undermine the anonymisation.
 
-**How to apply:** Inspect every logo, caption and score in the final rendered image, not just the source component.
+**How to apply:** Inspect every logo, caption, score and internal account-role label in the final rendered image, not just the source component. Public previews should not show an administrator identity beside a neutral sample client.

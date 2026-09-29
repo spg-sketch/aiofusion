@@ -136,7 +136,7 @@ export default function LandingPageC({
             </div>
             <div className="lg:col-span-5 lg:-translate-x-12 lg:scale-[1.11] lg:origin-left xl:-translate-x-20 xl:scale-[1.16]">
               <PlatformDesktopFrame
-                src={`${base}images/platform-dashboard-real.webp?v=sample-client`}
+                src={`${base}images/platform-dashboard-real.webp?v=sample-client-no-admin`}
                 alt="Illustrative AIO Fusion dashboard with a sample client and example audit scores"
                 title="Example authority dashboard"
                 fit="fill"
