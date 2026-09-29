@@ -1,15 +1,15 @@
 type DatabaseEnvironment = Record<string, string | undefined>;
 
-export function bindStagingDatabaseTarget(env: DatabaseEnvironment): void {
+export function bindPublishedDatabaseTarget(env: DatabaseEnvironment): void {
   const deploymentEnv = env.DEPLOYMENT_ENV?.toLowerCase().trim();
-  if (deploymentEnv !== "staging") return;
+  if (deploymentEnv !== "staging" && deploymentEnv !== "production") return;
 
-  // This staging deployment uses this project's main published database.
-  // The separate beta site must never become its data source implicitly.
+  // Both published modes must use this project's main database, never the
+  // separate beta database or an implicit runtime-provided default.
   const mainDatabaseUrl = env.PRODUCTION_DATABASE_URL?.trim();
   if (!mainDatabaseUrl) {
     throw new Error(
-      "PRODUCTION_DATABASE_URL is required when DEPLOYMENT_ENV=staging.",
+      `PRODUCTION_DATABASE_URL is required when DEPLOYMENT_ENV=${deploymentEnv}.`,
     );
   }
 
@@ -20,7 +20,6 @@ export function bindStagingDatabaseTarget(env: DatabaseEnvironment): void {
     );
   }
 
-  // This must happen before importing index.ts because the database workspace
-  // package creates its pool during module initialisation.
+  // Bind before importing index.ts: @workspace/db creates its pool at import time.
   env.DATABASE_URL = mainDatabaseUrl;
 }

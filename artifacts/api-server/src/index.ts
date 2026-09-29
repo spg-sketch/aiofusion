@@ -69,9 +69,9 @@ async function recoverDurableAudits(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Staging database target guard
+// Published database target guard
 // ---------------------------------------------------------------------------
-// bootstrap.ts binds staging DATABASE_URL to this project's main published
+// bootstrap.ts binds DATABASE_URL to this project's main published
 // database before this module (and @workspace/db) loads. Verify the explicit
 // target here rather than relying on host/name substring heuristics.
 // ---------------------------------------------------------------------------
@@ -86,14 +86,14 @@ const deploymentEnv = (
 // secrets have accidentally been copied between production and staging.
 assertCanonicalDomainIsSafeForDeployment();
 
-if (deploymentEnv === "staging") {
+if (deploymentEnv === "staging" || deploymentEnv === "production") {
   const dbUrl = process.env["DATABASE_URL"] ?? "";
   const betaDbUrl = process.env["BETA_DATABASE_URL"]?.trim() ?? "";
   const mainDbUrl = process.env["PRODUCTION_DATABASE_URL"]?.trim() ?? "";
 
   if (!mainDbUrl || dbUrl !== mainDbUrl) {
     logger.error(
-      "FATAL: Staging DATABASE_URL is not bound to the verified main database. " +
+      "FATAL: Published DATABASE_URL is not bound to the verified main database. " +
         "Start the production bundle through bootstrap.ts and verify the main secret.",
     );
     process.exit(1);
@@ -101,13 +101,13 @@ if (deploymentEnv === "staging") {
 
   if (betaDbUrl && dbUrl === betaDbUrl) {
     logger.error(
-      "FATAL: Staging main database target equals the beta database. " +
+      "FATAL: Published main database target equals the beta database. " +
         "Correct the protected database secrets before publishing.",
     );
     process.exit(1);
   }
 
-  logger.info("Staging main database target confirmed");
+  logger.info("Published main database target confirmed");
 }
 
 // ---------------------------------------------------------------------------

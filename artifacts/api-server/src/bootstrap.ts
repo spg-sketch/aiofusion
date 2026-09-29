@@ -1,5 +1,5 @@
-import { bindStagingDatabaseTarget } from "./lib/staging-database-target";
+import { bindPublishedDatabaseTarget } from "./lib/published-database-target";
 
-bindStagingDatabaseTarget(process.env);
+bindPublishedDatabaseTarget(process.env);
 
 await import("./index");
