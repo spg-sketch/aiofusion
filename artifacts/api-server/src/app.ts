@@ -11,6 +11,7 @@ import { cspMiddleware } from "./middleware/csp";
 import { randomUUID } from "node:crypto";
 import { addRequestReference } from "./lib/request-reference";
 import { stripeWebhookHealth } from "./lib/stripe-webhook-health";
+import { PRODUCTION_CANONICAL_HOST } from "./lib/app-url";
 
 const app: Express = express();
 
@@ -101,6 +102,22 @@ app.use((req, res, next) => {
     return sendJson(addRequestReference(body, res.statusCode, String(req.id)));
   }) as Response["json"];
   next();
+});
+// The former staging deployment hostname remains reachable after a domain
+// cutover. Never serve production account or checkout APIs through it.
+app.use((req, res, next) => {
+  if (process.env.DEPLOYMENT_ENV?.toLowerCase().trim() !== "production" ||
+      req.path === "/api/healthz") {
+    next();
+    return;
+  }
+  const host = req.get("host")?.toLowerCase().replace(/:443$/, "").replace(/\.$/, "");
+  if (host === PRODUCTION_CANONICAL_HOST ||
+      host === `www.${PRODUCTION_CANONICAL_HOST}`) {
+    next();
+    return;
+  }
+  res.status(421).json({ error: "Use the production domain for API requests." });
 });
 app.use(cors(corsOptionsDelegate));
 app.use(cookieParser());

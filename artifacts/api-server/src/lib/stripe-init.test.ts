@@ -155,16 +155,26 @@ describe("Stripe webhook registration at startup", () => {
 
   it("registers the intended production endpoint", async () => {
     process.env.DEPLOYMENT_ENV = "production";
-    process.env.REPLIT_DOMAINS = "app.example";
+    process.env.REPLIT_DOMAINS = "aio-fusion-staging.replit.app";
     process.env.DATABASE_URL = "postgres://test-only";
 
     await initStripe();
 
-    expect(calls.managedUrls).toEqual(["https://app.example/api/stripe/webhook"]);
+    expect(calls.managedUrls).toEqual(["https://aiofusion.ai/api/stripe/webhook"]);
     expect(calls.updatedUrls).toEqual([]);
     expect(calls.readiness.at(-1)).toEqual({ available: true });
     expect(calls.customerCreates).toBe(1);
     expect(calls.customerDeletes).toBe(1);
+  });
+
+  it("registers the canonical live endpoint without a Replit domain", async () => {
+    process.env.DEPLOYMENT_ENV = "production";
+    delete process.env.REPLIT_DOMAINS;
+    process.env.DATABASE_URL = "postgres://test-only";
+
+    await initStripe();
+
+    expect(calls.managedUrls).toEqual(["https://aiofusion.ai/api/stripe/webhook"]);
   });
 
   it("does not let development replace the published endpoint", async () => {

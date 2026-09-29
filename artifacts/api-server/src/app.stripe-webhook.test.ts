@@ -1,4 +1,4 @@
-import { createServer, type Server } from "node:http";
+import { createServer, request as httpRequest, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import Stripe from "stripe";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -93,18 +93,72 @@ afterEach(() => {
   setStripeCheckoutReadiness({ available: false, reason: "webhook_validation_pending" });
 });
 
-async function sendWebhook(body: string, signature?: string) {
-  return fetch(`${baseUrl}/api/stripe/webhook`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      ...(signature ? { "stripe-signature": signature } : {}),
-    },
-    body,
+// Node's fetch replaces a caller-supplied Host with the URL hostname, so use
+// http.request to test the exact host seen by production middleware.
+async function requestWithHost(
+  path: string,
+  host: string,
+  body?: string,
+  signature?: string,
+): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(`${baseUrl}${path}`, {
+      method: body === undefined ? "GET" : "POST",
+      headers: {
+        host,
+        ...(body === undefined ? {} : {
+          "content-type": "application/json",
+          "content-length": Buffer.byteLength(body),
+        }),
+        ...(signature ? { "stripe-signature": signature } : {}),
+      },
+    }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on("data", (chunk: Buffer) => chunks.push(chunk));
+      response.on("error", reject);
+      response.on("end", () => resolve(new Response(
+        Buffer.concat(chunks).toString("utf8"),
+        { status: response.statusCode },
+      )));
+    });
+    request.on("error", reject);
+    request.end(body);
   });
 }
 
+async function sendWebhook(body: string, signature?: string, host?: string) {
+  return requestWithHost(
+    "/api/stripe/webhook",
+    host ?? (process.env.DEPLOYMENT_ENV === "production" ? "aiofusion.ai" : new URL(baseUrl).host),
+    body,
+    signature,
+  );
+}
+
 describe("Stripe raw-body HTTP webhook route", () => {
+  it("blocks production API and webhook requests on the former staging hosts", async () => {
+    vi.stubEnv("DEPLOYMENT_ENV", "production");
+    for (const host of ["staging.aiofusion.ai", "aio-fusion-staging.replit.app"]) {
+      const response = await requestWithHost("/api/billing/checkout", host);
+      expect(response.status).toBe(421);
+      const webhookResponse = await sendWebhook('{"id":"evt_old_host"}', "signature", host);
+      expect(webhookResponse.status).toBe(421);
+    }
+    expect(webhook.handled).not.toHaveBeenCalled();
+    expect(webhook.mirrored).not.toHaveBeenCalled();
+    expect((await requestWithHost(
+      "/api/healthz",
+      "aio-fusion-staging.replit.app",
+    )).status).not.toBe(421);
+  });
+
+  it("accepts both production hostnames for API routing", async () => {
+    vi.stubEnv("DEPLOYMENT_ENV", "production");
+    for (const host of ["aiofusion.ai", "www.aiofusion.ai"]) {
+      expect((await requestWithHost("/api/billing/checkout", host)).status).not.toBe(421);
+    }
+  });
+
   it("verifies a valid signed raw event and dispatches business handling", async () => {
     const body = JSON.stringify({
       id: "evt_http_valid",

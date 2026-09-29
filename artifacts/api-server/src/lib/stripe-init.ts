@@ -13,6 +13,7 @@ import {
   startStripeWebhookReadinessProbe,
 } from "./stripe-readiness";
 import { ensureAllPrices, warnIfTaxDeactivated } from "./billing";
+import { getDeployedAppOrigin } from "./app-url";
 
 export function shouldRegisterManagedStripeWebhook(): boolean {
   const deploymentEnv = process.env.DEPLOYMENT_ENV?.toLowerCase().trim();
@@ -91,13 +92,13 @@ async function configureStagingWebhookUrl(): Promise<boolean> {
 
 // Startup Stripe initialisation:
 //   1. create the `stripe` schema tables (idempotent)
-//   2. register the managed webhook at <domain>/api/stripe/webhook
+//   2. register the managed webhook at the environment's intended host
 //   3. make sure every catalogue product/price exists (by lookup_key)
 //   4. backfill existing Stripe data into the stripe schema (background)
 //
-// Reading REPLIT_DOMAINS here is correct: in a deployment it resolves to the
-// published domain. Development intentionally does not manage the webhook
-// because it may share Stripe and PostgreSQL state with published staging.
+// Staging retains its existing Replit-domain webhook. Production must use the
+// canonical live host, even if the deployment's old staging Replit domain
+// remains in REPLIT_DOMAINS. Development never manages a published webhook.
 export async function initStripe(): Promise<void> {
   const deploymentEnv = process.env.DEPLOYMENT_ENV?.toLowerCase().trim();
   if (deploymentEnv === "staging" || deploymentEnv === "production") {
@@ -162,9 +163,9 @@ export async function initStripe(): Promise<void> {
   const stripeSync = await getStripeSync();
 
   const domain = process.env.REPLIT_DOMAINS?.split(",")[0];
-  if (domain && shouldRegisterManagedStripeWebhook()) {
+  if (deploymentEnv === "production") {
     const webhook = await stripeSync.findOrCreateManagedWebhook(
-      `https://${domain}/api/stripe/webhook`,
+      `${getDeployedAppOrigin()}/api/stripe/webhook`,
     );
     logger.info({ url: webhook?.url }, "stripe-init: managed webhook configured");
     const stripe = await getUncachableStripeClient();
