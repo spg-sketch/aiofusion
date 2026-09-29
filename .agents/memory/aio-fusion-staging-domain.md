@@ -16,6 +16,12 @@ An exposed historical database-login address was confirmed to authenticate and t
 
 **How to apply:** Coordinate revocation or rotation with the beta database owner and every beta consumer before changing it. Do not put connection strings in tracked configuration, even in fields intended to contain only hostname fragments.
 
+For the domain cutover, the user chose this Replit project's main production database as the master and said the separate beta site/database is no longer needed. Do not migrate beta data into the new live site or block domain planning on a beta database rotation.
+
+**Why:** The beta connection is separate from the database backing the version the user wants to launch.
+
+**How to apply:** Confirm production-mode startup still targets this project's intended main database before changing DNS or Stripe mode. Treat revocation of the exposed beta login as separate security cleanup, not a production data migration.
+
 Deployment identity values must not be committed in `.replit` because the same source is promoted between the staging and production Repls.
 
 **Why:** Replit's non-secret production environment operation persists values into `.replit`; a staging canonical there can travel with source and poison or block the live deployment.
