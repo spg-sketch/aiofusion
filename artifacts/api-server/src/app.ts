@@ -149,7 +149,7 @@ app.post(
       // Mirror into the stripe schema tables (fail-soft - business state above
       // is the source of truth for entitlements).
       try {
-        const sync = await getStripeSync();
+        const sync = await getStripeSync({ webhookSecret });
         await sync.processWebhook(req.body, sig);
       } catch (err) {
         logger.warn({ err }, "stripe webhook: stripe-replit-sync mirror failed (non-fatal)");

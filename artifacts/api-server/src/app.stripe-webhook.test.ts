@@ -12,6 +12,7 @@ import {
 const webhook = vi.hoisted(() => ({
   handled: vi.fn(),
   mirrored: vi.fn(),
+  syncSecret: vi.fn(),
 }));
 
 vi.mock("./routes", async () => {
@@ -49,10 +50,12 @@ vi.mock("./lib/stripe-client", () => {
   const stripe = new Stripe("sk_test_http_route");
   return {
     getUncachableStripeClient: () => Promise.resolve(stripe),
-    getStripeSync: () =>
-      Promise.resolve({
+    getStripeSync: (options?: { webhookSecret?: string }) => {
+      webhook.syncSecret(options?.webhookSecret);
+      return Promise.resolve({
         processWebhook: webhook.mirrored,
-      }),
+      });
+    },
   };
 });
 
@@ -80,6 +83,7 @@ afterAll(async () => {
 beforeEach(() => {
   webhook.handled.mockReset();
   webhook.mirrored.mockReset();
+  webhook.syncSecret.mockReset();
   vi.stubEnv("DEPLOYMENT_ENV", "staging");
   setStripeCheckoutReadiness({ available: false, reason: "webhook_secret_mismatch" });
 });
@@ -121,6 +125,7 @@ describe("Stripe raw-body HTTP webhook route", () => {
       expect.objectContaining({ id: "evt_http_valid", type: "customer.subscription.updated" }),
     );
     expect(webhook.mirrored).toHaveBeenCalledWith(Buffer.from(body), signature);
+    expect(webhook.syncSecret).toHaveBeenCalledWith("whsec_http_route_test");
     expect(getStripeCheckoutReadiness()).toEqual({ available: true });
   });
 

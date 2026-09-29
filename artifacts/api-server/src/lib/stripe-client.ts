@@ -155,7 +155,7 @@ export async function getUncachableStripeClient(): Promise<Stripe> {
 /**
  * Returns a fresh StripeSync instance for webhook processing and data sync.
  */
-export async function getStripeSync(): Promise<StripeSync> {
+export async function getStripeSync(options?: { webhookSecret?: string }): Promise<StripeSync> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error("DATABASE_URL environment variable is required");
@@ -165,6 +165,6 @@ export async function getStripeSync(): Promise<StripeSync> {
   return new StripeSync({
     poolConfig: { connectionString: databaseUrl },
     stripeSecretKey: secretKey,
-    stripeWebhookSecret: webhookSecret ?? "",
+    stripeWebhookSecret: options?.webhookSecret ?? webhookSecret ?? "",
   });
 }

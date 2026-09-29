@@ -1,4 +1,5 @@
 import { runMigrations } from "stripe-replit-sync";
+import { existsSync } from "node:fs";
 import { logger } from "./logger";
 import {
   getStripeCredentials,
@@ -118,6 +119,14 @@ export async function initStripe(): Promise<void> {
   // The mirror schema must exist before staging moves the webhook or starts its
   // signed-delivery probe. Otherwise that probe can successfully update
   // business billing state while stripe-replit-sync fails on stripe.accounts.
+  if (
+    process.env.NODE_ENV === "production" &&
+    !existsSync(new URL("./migrations/0001_products.sql", import.meta.url))
+  ) {
+    throw new Error(
+      "Stripe sync SQL migrations are missing from the API bundle; checkout remains disabled.",
+    );
+  }
   await runMigrations({ databaseUrl });
   logger.info("stripe-init: stripe schema ready");
 

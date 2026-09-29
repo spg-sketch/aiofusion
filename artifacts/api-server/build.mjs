@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm } from "node:fs/promises";
+import { cp, readdir, rm } from "node:fs/promises";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
@@ -128,6 +128,30 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     `,
     },
   });
+
+  // stripe-replit-sync loads SQL files relative to its own __dirname. When
+  // esbuild bundles it into dist/index.mjs, that directory becomes dist/.
+  // Without these assets its migration runner silently skips every table.
+  const stripeEntry = fileURLToPath(import.meta.resolve("stripe-replit-sync"));
+  const migrationsSource = path.join(path.dirname(stripeEntry), "migrations");
+  const migrations = (await readdir(migrationsSource)).filter((name) =>
+    name.endsWith(".sql"),
+  );
+  if (
+    migrations.length < 2 ||
+    !migrations.includes("0000_initial_migration.sql") ||
+    !migrations.includes("0001_products.sql")
+  ) {
+    throw new Error("Stripe sync SQL migrations are missing from the installed package.");
+  }
+  const migrationsTarget = path.join(distDir, "migrations");
+  await cp(migrationsSource, migrationsTarget, { recursive: true });
+  const copied = (await readdir(migrationsTarget)).filter((name) =>
+    name.endsWith(".sql"),
+  );
+  if (copied.length !== migrations.length) {
+    throw new Error("Stripe sync SQL migrations were not fully copied into the API bundle.");
+  }
 }
 
 buildAll().catch((err) => {
