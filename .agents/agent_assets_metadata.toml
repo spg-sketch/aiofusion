@@ -380,3 +380,17 @@ mtime_ms = 1790676943470
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/32539271-4ef5-466a-b821-0712285068db/6323bb28-b114-4b5b-9cc8-1afa801eed0b"
 storage_version_token = "1790676996750747"
 content_type = "image/webp"
+
+[[outputs]]
+id = "GzsrBOEa0zBC7lyniLh7A"
+uri = "file://exports/aio-fusion-staging-source.zip"
+type = "unspecified"
+title = "AIO Fusion staging source copy"
+description = "Source-only project copy for a separate staging Replit app. Excludes Git history, saved secrets, agent files, screenshots, and the old credential-bearing setting; do not publish until staging secrets, database, and Stripe sandbox are configured."
+logical_id = "d40eb24c-e899-4789-8337-ff6a40e03d1e"
+content_hash = "sha256:fd2cf232c33fb7bbea692b7e27a4b31b539478033b3eed769bd11c468075d960"
+size = 28900533
+mtime_ms = 1790689130681
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/d40eb24c-e899-4789-8337-ff6a40e03d1e/ff1c79b6-1766-4394-916f-d90a09063d78"
+storage_version_token = "1790689137191407"
+content_type = "application/octet-stream"
