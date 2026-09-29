@@ -6,6 +6,11 @@ description: Lessons from wiring staging.aiofusion.ai to the aio-fusion-staging 
 - Replit custom domains need the A + TXT (replit-verify) records; the TXT must stay permanently for cert renewal. A CNAME cannot coexist with the TXT at the same hostname — never replace A+TXT with a CNAME.
 - A domain verified *after* the last publish only starts serving on the next Republish; until then it shows Replit's "This app isn't live yet" 404 even with valid SSL.
 - The Domains panel SSL status can stay red/stale after the cert is actually issued — verify with `curl -v https://<domain>` instead of trusting the UI.
+- Check the authoritative DNS zone against the intended hostname before suggesting any record change. The similarly named `.ai` and `.io` zones can appear in the same registrar UI, and the user confirmed a screenshot of the `.io` zone was mistaken for `.ai`.
+
+**Why:** A verification record placed in the wrong zone cannot verify the live `.ai` domain, and changing that zone may disrupt an unrelated `.io` hostname.
+
+**How to apply:** Compare public NS and the Replit-required TXT record against the actual zone in the screenshot. Treat a DNS table with no visible zone name as ambiguous; do not infer its domain from the user's current goal.
 - Deployment visibility can change; check current deployment metadata rather than assuming the historical password shield still applies.
 - Environments (user asked to remember, CORRECTED): **THIS repl = `aio-fusion-staging`**, the feature-development/staging server. The beta site is on another Replit instance and was intended to have its own DB; beta/alpha promotion should not share databases or data. Do not assume this intended isolation matches the current runtime: a later startup change explicitly forced the staging deployment to use a beta-named connection. Verify the actual target before claiming staging has its own independent DB.
 - User's key shared links (asked to remember): Roadmap = https://www.aiofusion.ai/roadmap.html ; Tasks/build plan = https://www.aiofusion.ai/build-plan.html (served from aio-fusion `public/`).

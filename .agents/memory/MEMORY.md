@@ -32,7 +32,7 @@
 - [AIO Fusion Earned Media Tracker scoping](aio-fusion-earned-tracker-scoping.md) — tracker had zero per-client isolation (one global key); check any bare-key localStorage feature for this same cross-client leak pattern.
 - [AIO Fusion LLM roster = ChatGPT+Claude only](aio-fusion-llm-roster-scope.md) — product scope excludes Perplexity/Gemini/other LLMs everywhere (UI, prompts, public/llms.txt, agents.md, robots.txt); grep sweep needed across all surfaces, not just app pages.
 - [AIO Fusion ReportPage real-data rewiring](aio-fusion-reportpage-real-data.md) — Executive Summary/GEO tabs were hardcoded demo numbers; now derived from loadSavedAudits/loadSavedDiagnostics; empty-state text required wherever no audit exists yet.
-- [AIO Fusion staging custom domain](aio-fusion-staging-domain.md) — A+TXT only; deployment identity stays outside `.replit`; domain binds on Republish; verify SSL with curl.
+- [AIO Fusion staging custom domain](aio-fusion-staging-domain.md) — A+TXT, verify `.ai` vs `.io` authoritative zone before edits; identity outside `.replit`; bind on Republish.
 - [AIO Fusion fair usage policy](aio-fusion-fair-usage.md) — 50 actions/project/month for content-% ops only; audits (llm-check%) and llm-queries excluded (own 21-day lock); checkFairUsage() takes optional projectId; all content routes must send projectId in body.
 - [Team seat pools per workspace type](aio-fusion-team-seat-pools.md) — Agency Partners and direct Clients share the full two-pool model; agency-managed Clients have no team controls.
 - [Multiple Master Owners](aio-fusion-multiple-master-owners.md) — named Master Owners may manage other Owners, never self/last; deliberate membership revocation outranks automatic provisioning.
