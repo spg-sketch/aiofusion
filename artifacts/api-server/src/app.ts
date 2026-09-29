@@ -112,8 +112,15 @@ app.use((req, res, next) => {
     return;
   }
   const host = req.get("host")?.toLowerCase().replace(/:443$/, "").replace(/\.$/, "");
-  if (host === PRODUCTION_CANONICAL_HOST ||
-      host === `www.${PRODUCTION_CANONICAL_HOST}`) {
+  if (host === `www.${PRODUCTION_CANONICAL_HOST}`) {
+    if (req.method === "GET" || req.method === "HEAD") {
+      res.redirect(308, `https://${PRODUCTION_CANONICAL_HOST}${req.originalUrl}`);
+    } else {
+      res.status(421).json({ error: "Use the production domain for API requests." });
+    }
+    return;
+  }
+  if (host === PRODUCTION_CANONICAL_HOST) {
     next();
     return;
   }

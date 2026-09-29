@@ -118,7 +118,7 @@ async function requestWithHost(
       response.on("error", reject);
       response.on("end", () => resolve(new Response(
         Buffer.concat(chunks).toString("utf8"),
-        { status: response.statusCode },
+        { status: response.statusCode, headers: { location: response.headers.location ?? "" } },
       )));
     });
     request.on("error", reject);
@@ -152,11 +152,13 @@ describe("Stripe raw-body HTTP webhook route", () => {
     )).status).not.toBe(421);
   });
 
-  it("accepts both production hostnames for API routing", async () => {
+  it("serves the apex and redirects www API navigation to the apex", async () => {
     vi.stubEnv("DEPLOYMENT_ENV", "production");
-    for (const host of ["aiofusion.ai", "www.aiofusion.ai"]) {
-      expect((await requestWithHost("/api/billing/checkout", host)).status).not.toBe(421);
-    }
+    expect((await requestWithHost("/api/billing/checkout", "aiofusion.ai")).status).not.toBe(421);
+    const www = await requestWithHost("/api/billing/checkout?src=www", "www.aiofusion.ai");
+    expect(www.status).toBe(308);
+    expect(www.headers.get("location")).toBe("https://aiofusion.ai/api/billing/checkout?src=www");
+    expect((await requestWithHost("/api/stripe/webhook", "www.aiofusion.ai", "{}")).status).toBe(421);
   });
 
   it("verifies a valid signed raw event and dispatches business handling", async () => {
