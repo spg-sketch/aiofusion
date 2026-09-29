@@ -1,9 +1,9 @@
 ---
-name: AIO Fusion testing setup + pre-existing typecheck failures
-description: How automated tests run in this pnpm monorepo (vitest), and which typecheck errors are pre-existing noise to ignore.
+name: AIO Fusion testing and release checks
+description: Vitest testing gotchas and keeping release validation reliable under PGlite load.
 ---
 
-# Testing & typecheck state
+# Testing and release checks
 
 Vitest is the test runner. `pnpm --filter @workspace/api-server run test` (node env) and `pnpm --filter @workspace/aio-fusion run test` (jsdom env) both work; a combined `test` validation command runs both.
 
@@ -12,11 +12,12 @@ Vitest is the test runner. `pnpm --filter @workspace/api-server run test` (node 
 - jsdom does not implement `window.scrollTo`; `LlmCheckPage` calls it when opening a saved audit. Stub it in the test setup file or you get "Not implemented" noise.
 - `LlmCheckPage` renders a saved audit when given `pendingAuditId` matching an entry in `localStorage` key `aio.savedAudits.<clientId>` — the clean seam for backward-compat render tests without faking a network audit.
 
-**Pre-existing typecheck failures (NOT caused by test work, do not chase under this task):**
-- `pnpm run typecheck:libs` must run first (builds lib/* project refs) or api-server/aio-fusion typecheck reports phantom "no exported member" errors from `@workspace/db` / `@workspace/api-zod`.
-- Even after building libs, these remain broken on main: `api-server/src/routes/diagnostic.ts` (`Property 'score'/'findings'/'recommendations' does not exist on type '{}'`) and `lib/replit-auth-web/src/use-auth.ts` (`Property 'env' does not exist on ImportMeta`).
-- **Why:** so a future agent isn't alarmed by these and doesn't attribute them to new changes.
-
 - **react-qr-code bundled d.ts breaks under @types/react 19** (TS2607/TS2786 on `<QRCode>`): its ambient class-component declaration clashes; fix by casting the default import to a function-component type in MfaPanels.tsx — `pnpm dedupe` does NOT fix this one.
 - **Change-password route tests**: the shared test app in platform-login-signup.test.ts injects `req.account = null`; authed routes need a per-suite server that resolves the sid (cookie or Bearer) via getPlatformSessionAccount.
 - **Native V8 worker crashes are not assertion failures:** parallel Vitest can rarely abort inside `ThreadIsolation::UnregisterWasmAllocation`, followed by `ERR_IPC_CHANNEL_CLOSED`. Treat this as runtime instability only when the same revision passes the release gate and affected focused suites.
+
+Size the release API stage for the whole suite, not only its longest test. Keep release-only file concurrency separate from the lower default used when typechecking runs concurrently. Move expensive module initialization out of short assertion timeouts and into bounded setup hooks, rather than weakening the assertions or removing the full-workbook regression.
+
+**Why:** PGlite-backed files can queue for a long time. A whole-suite deadline equal to the workbook test budget killed healthy files, while concurrent module loading consumed a short authentication test's entire time budget without an assertion failure.
+
+**How to apply:** When a release gate times out, distinguish stage, file, setup, and assertion deadlines in the logs before adjusting concurrency or test structure. Preserve the release guard and all tests.
