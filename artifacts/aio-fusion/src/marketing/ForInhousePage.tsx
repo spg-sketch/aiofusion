@@ -5,7 +5,7 @@ import { PAGE_META } from "./pageMeta";
 
 export default function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
   return (
-    <MarketingPage title={<>The AI visibility and GEO software for <span className="whitespace-nowrap">in-house</span> PR teams</>} eyebrow={<><Globe size={12} /> For In-house Teams</> as any} {...props}>
+    <MarketingPage title={<>The AI visibility and GEO software for <span className="whitespace-nowrap">in-house</span> PR and marketing teams</>} eyebrow={<><Globe size={12} /> For In-house Teams</> as any} {...props}>
       <PageHead meta={PAGE_META["for-inhouse"]} />
       <p className="text-[17px] font-medium leading-[1.7] mb-2" style={{ color: "#102B36" }}>
         When an AI looks at your industry, do they see your business?
