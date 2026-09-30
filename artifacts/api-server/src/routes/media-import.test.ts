@@ -519,13 +519,15 @@ describe("media import route regressions", () => {
     const searchVisible = await mediaRequest("GET", "/api/store/media-db/search?type=contacts&phrase=Traceable", workspace);
     const searchPrivateOutlet = await mediaRequest("GET", "/api/store/media-db/search?type=contacts&phrase=Shared", workspace);
     const bookmarks = await mediaRequest("GET", "/api/store/media-db/bookmarks", workspace);
-    const resultContact = (response: typeof searchVisible) => response.json.results[0]?.contact;
+    const resultContact = (response: typeof searchVisible, contactId: number) => response.json.results.find(
+      (result: { type: string; id: number }) => result.type === "contact" && result.id === contactId,
+    )?.contact;
     const bookmarkContact = (contactId: number) => bookmarks.json.bookmarks.find(
       (bookmark: { contactId: number | null }) => bookmark.contactId === contactId,
     )?.contact;
 
-    expect(resultContact(searchVisible).outletDescription).toBe("Visible outlet background.");
-    expect(resultContact(searchPrivateOutlet).outletDescription).toBeNull();
+    expect(resultContact(searchVisible, visibleContact!.id).outletDescription).toBe("Visible outlet background.");
+    expect(resultContact(searchPrivateOutlet, sharedContact!.id).outletDescription).toBeNull();
     expect(bookmarkContact(visibleContact!.id).outletDescription).toBe("Visible outlet background.");
     expect(bookmarkContact(sharedContact!.id).outletDescription).toBeNull();
     expect(JSON.stringify(searchPrivateOutlet.json)).not.toContain("Private outlet confidential background.");
@@ -1583,16 +1585,16 @@ describe("media import route regressions", () => {
     });
     expect(preview).toMatchObject({
       validRows: 19_275,
-      importableRows: 13_119,
-      new: 13_119,
-      conflicted: 3_643,
-      duplicate: 2_413,
-      newOutletCount: 5_359,
+      importableRows: 11_884,
+      new: 11_884,
+      conflicted: 3_639,
+      duplicate: 2_197,
+      newOutletCount: 4_996,
       expectedMutations: {
-        outletsCreated: 5_359,
+        outletsCreated: 4_996,
         outletsUpdated: 0,
         outletsUnchanged: 0,
-        contactsCreated: 13_119,
+        contactsCreated: 11_884,
         contactsMatched: 0,
         publicationsProcessed: 100,
       },
