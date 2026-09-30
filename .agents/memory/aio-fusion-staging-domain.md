@@ -38,3 +38,9 @@ Use the staging custom domain for attended Google sign-in, not automatically the
 **Why:** OAuth state cookies are host-bound. Starting on a Replit hostname and returning to a custom domain loses that cookie and produces a session-expired error before MFA is evaluated.
 
 **How to apply:** Verify the deployed OAuth redirect destination without logging state or cookies. Keep the user's sign-in on that same hostname, and distinguish OAuth state failures from MFA recovery.
+
+A staging-looking hostname is not proof of a test-mode service after a production cutover. Both the staging custom domain and its older generated Replit domain can still reach the production API; `/api/healthz` may return 200 there while ordinary API routes reject the host with 421.
+
+**Why:** The health route is deliberately exempt from the production host guard, so relying on it alone could send a Stripe test-card checkout to a live-mode service.
+
+**How to apply:** Before any published-staging payment test, verify a harmless ordinary API route and the deployment's actual mode. If the host reaches production, stop; use a separately verified test-mode deployment, or explicitly offer the development preview as a less representative alternative. Do not repoint production domains just to run a test.
