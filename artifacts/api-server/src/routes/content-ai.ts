@@ -21,6 +21,7 @@ import { TRADE_MEDIA_CATEGORIES } from "../lib/trade-media-categories";
 import { normaliseMediaResearchRegions } from "../lib/media-research-regions";
 import { isSuppressedWithDb } from "../lib/journalist-privacy";
 import { getMediaDiscoveryInstructions } from "../lib/media-discovery-instructions";
+import { boundedMediaDiscoveryDurationMs, fetchMediaDiscoverySourceWithRetry } from "../lib/media-discovery-reliability";
 import {
   normaliseExactPhraseText,
   normaliseSubmittedExactTargetPhrases,
@@ -1293,8 +1294,13 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
       ? `\nExact target phrases submitted by the user. Use only these IDs and exact texts in phraseAttributions:\n${targetPhrases.map((phrase) => `- ${phrase.id}: "${phrase.text}" (${phrase.intentGroup})`).join("\n")}\nFor each attribution, separate exact phrase match, article fit, publication authority context and suggested placement angle. These are AI-suggested/inferred explanations, not source-verified exact matches or authority claims. Publication authority context may label stored authority or reach only. Never claim a placement, citation, reach outcome or journalist endorsement. Keep cited source evidence separate.\n`
       : "";
 
+    const discoveryStartedAt = Date.now();
+    let searchDurationMs: number | null = null;
     try {
-      const response = await client.responses.create({
+      const searchStartedAt = Date.now();
+      let response: Awaited<ReturnType<typeof client.responses.create>>;
+      try {
+        response = await client.responses.create({
         model: "gpt-5.4-mini",
         tools: [{ type: "web_search" }],
         max_output_tokens: 16384,
@@ -1384,7 +1390,23 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
             },
           },
         },
-      }, { timeout: MEDIA_DISCOVERY_SEARCH_TIMEOUT_MS });
+        }, { timeout: MEDIA_DISCOVERY_SEARCH_TIMEOUT_MS });
+      } catch (error) {
+        searchDurationMs = boundedMediaDiscoveryDurationMs(searchStartedAt);
+        logger.warn({
+          runId: (req as Request & { mediaDiscoveryRunId?: string }).mediaDiscoveryRunId,
+          stage: "web_search",
+          durationMs: searchDurationMs,
+        }, "content-ai: media discovery stage failed");
+        throw error;
+      }
+      searchDurationMs = boundedMediaDiscoveryDurationMs(searchStartedAt);
+      logger.info({
+        runId: (req as Request & { mediaDiscoveryRunId?: string }).mediaDiscoveryRunId,
+        stage: "web_search",
+        durationMs: searchDurationMs,
+        searchCalls: countWebSearchCalls(response.output),
+      }, "content-ai: media discovery stage finished");
       void logTokenUsage(
         req.account.username,
         "media-discover",
@@ -1434,13 +1456,22 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
       });
       const runId = (req as Request & { mediaDiscoveryRunId?: string }).mediaDiscoveryRunId;
       if (runId) await setMediaDiscoveryCandidates(runId, candidates);
+      const verificationStartedAt = Date.now();
+      let verifiedCount = 0;
+      let failedCount = 0;
+      let retryCount = 0;
       const checked = await mapWithConcurrency(candidates, 10, async (candidate): Promise<TrustedMediaDiscovery | null> => {
         try {
-          const source = await fetchSiteContent(candidate.sourceUrl, 20_000);
+          const fetched = await fetchMediaDiscoverySourceWithRetry(
+            () => fetchSiteContent(candidate.sourceUrl, 20_000),
+            () => { retryCount += 1; },
+          );
+          const source = fetched.value;
           const evidenceText = `${source.title} ${source.description} ${source.text}`.toLowerCase();
           const fullName = `${candidate.firstName} ${candidate.lastName}`.trim().toLowerCase();
           if (!fullName || !evidenceText.includes(fullName)) {
             if (runId) await settleMediaDiscoveryCandidate(runId, candidate.candidateKey, null);
+            failedCount += 1;
             return null;
           }
           const publishedEmails = new Set(
@@ -1454,6 +1485,7 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
             email,
           };
           if (runId) await settleMediaDiscoveryCandidate(runId, candidate.candidateKey, verified);
+          verifiedCount += 1;
           return verified;
         } catch (error) {
           const timedOut = error instanceof Error && /timed out|timeout/i.test(error.message);
@@ -1463,9 +1495,19 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
             null,
             timedOut ? "The cited page check timed out." : "The cited page could not be checked.",
           );
+          failedCount += 1;
           return null;
         }
       });
+      logger.info({
+        runId,
+        stage: "source_verification",
+        durationMs: boundedMediaDiscoveryDurationMs(verificationStartedAt),
+        candidateCount: candidates.length,
+        verifiedCount,
+        failedCount,
+        retryCount,
+      }, "content-ai: media discovery stage finished");
       const items = checked.filter((candidate): candidate is TrustedMediaDiscovery => candidate !== null);
       const discoveryToken = signMediaDiscoveries({
         accountId: normUsername(req.account.username),
@@ -1474,8 +1516,22 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
         items,
       });
       res.json({ ok: true, items, discoveryToken });
+      logger.info({
+        runId,
+        stage: "complete",
+        durationMs: boundedMediaDiscoveryDurationMs(discoveryStartedAt),
+        searchDurationMs,
+        candidateCount: candidates.length,
+        verifiedCount: items.length,
+        failedCount,
+      }, "content-ai: media discovery finished");
     } catch (error) {
-      logger.error({ err: error }, "content-ai: live media discovery failed");
+      logger.error({
+        err: error,
+        runId: (req as Request & { mediaDiscoveryRunId?: string }).mediaDiscoveryRunId,
+        durationMs: boundedMediaDiscoveryDurationMs(discoveryStartedAt),
+        searchDurationMs,
+      }, "content-ai: live media discovery failed");
       const timedOut = error instanceof Error && /timed out|timeout/i.test(error.message);
       res.status(502).json({
         error: timedOut
