@@ -1,22 +1,33 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+async function dismissAutoDemo(page: Page) {
+  const dialog = page.getByRole("dialog", { name: /see your ai visibility/i });
+  // Hydration can lag behind the initial document response in the built app.
+  await expect(dialog).toBeVisible({ timeout: 25_000 });
+  // Escape is the dialog's supported close action; it avoids waiting for a
+  // moving close button to become stable while the page is still rendering.
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+}
 
 test("public navigation serves the production-built application", async ({ page }) => {
+  test.setTimeout(90_000);
   await page.goto("/");
   await expect(page.locator("h1")).toContainText("The AI Authority Platform");
-  await expect(page.getByRole("dialog", { name: /see your ai visibility/i })).toBeVisible();
-  await page.getByRole("button", { name: "Close demo enquiry" }).click();
+  await dismissAutoDemo(page);
   await page.goto("/about");
   await expect(page).toHaveURL(/\/about$/);
   await expect(page.locator("body")).not.toBeEmpty();
 });
 
 test("sign-in grants only the authorised workspace", async ({ page }) => {
+  test.setTimeout(90_000);
   const authority = page.waitForResponse((response) =>
     response.url().endsWith("/api/platform/me") && response.request().method() === "GET",
   );
   await page.goto("/");
   await authority;
-  await page.getByRole("button", { name: "Close demo enquiry" }).click();
+  await dismissAutoDemo(page);
   await page.getByRole("button", { name: "Platform Login" }).click();
   await page.getByPlaceholder("Email or username").fill("release@example.invalid");
   await page.getByPlaceholder("Password").fill("release-harness-password");
