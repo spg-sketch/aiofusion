@@ -256,18 +256,54 @@ function EnrichmentSections({
   );
 }
 
-function AssessmentSection({ assessment, compact = false, suggestedAngle }: { assessment?: RecommendationAssessment; compact?: boolean; suggestedAngle?: string | null }) {
+function AssessmentSection({ assessment, compact = false, simplified = false, suggestedAngle }: { assessment?: RecommendationAssessment; compact?: boolean; simplified?: boolean; suggestedAngle?: string | null }) {
   const [factorsOpen, setFactorsOpen] = React.useState(false);
   const compactFitScore = assessment?.fitScore;
-  
-  if (compact) {
+
+  if (simplified) {
+    const readinessLabel = assessment?.readiness.status === "ready"
+      ? "Ready to contact"
+      : assessment?.readiness.status === "blocked"
+        ? "Blocked"
+        : assessment?.readiness.status === "needs_check"
+          ? "Needs verification"
+          : "Not assessed";
+    const hasSparseEvidence = assessment?.confidence === "low"
+      && (assessment.evidence.length === 0 || assessment.evidenceCoverage < 50);
     return (
       <div className="mb-3" data-testid="editorial-assessment">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px]">
           <span className="font-semibold text-slate-800">Editorial fit: {compactFitScore ?? "Not assessed"}{compactFitScore !== null && compactFitScore !== undefined ? "%" : ""}</span>
           <span className="text-slate-600">Evidence confidence: <span className="font-medium capitalize">{assessment?.confidence || "Not assessed"}</span></span>
+          <span className="text-slate-600">Contact readiness: <span className={`font-medium ${assessment?.readiness.status === "blocked" ? "text-rose-700" : assessment?.readiness.status === "needs_check" ? "text-amber-700" : "text-slate-700"}`}>{readinessLabel}</span></span>
         </div>
         {assessment && <p className="text-[11px] text-slate-500 mt-1">Confidence reflects the quality and coverage of available evidence, not the likelihood of a placement.</p>}
+        {hasSparseEvidence && <p className="text-[11px] text-amber-800 mt-1">Limited checked evidence. Review recent bylines and confirm the contact’s current remit before outreach.</p>}
+        {assessment?.readiness.reasons.length ? <p className={`text-[11px] mt-1 ${assessment.readiness.status === "blocked" ? "text-rose-700" : "text-amber-800"}`}><span className="font-semibold">Contact check:</span> {assessment.readiness.reasons.join(" ")}</p> : null}
+        {suggestedAngle && <p className="text-[12px] text-slate-700 mt-2"><span className="font-semibold">Suggested pitch angle:</span> {suggestedAngle}</p>}
+      </div>
+    );
+  }
+
+  if (compact) {
+    const readinessLabel = assessment?.readiness.status === "ready"
+      ? "Ready to contact"
+      : assessment?.readiness.status === "blocked"
+        ? "Blocked"
+        : assessment?.readiness.status === "needs_check"
+          ? "Needs verification"
+          : "Not assessed";
+    const hasSparseEvidence = assessment?.confidence === "low"
+      && (assessment.evidence.length === 0 || assessment.evidenceCoverage < 50);
+    return (
+      <div className="mb-3" data-testid="editorial-assessment">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px]">
+          <span className="font-semibold text-slate-800">Editorial fit: {compactFitScore ?? "Not assessed"}{compactFitScore !== null && compactFitScore !== undefined ? "%" : ""}</span>
+          <span className="text-slate-600">Evidence confidence: <span className="font-medium capitalize">{assessment?.confidence || "Not assessed"}</span></span>
+          <span className="text-slate-600">Contact readiness: <span className={`font-medium ${assessment?.readiness.status === "blocked" ? "text-rose-700" : assessment?.readiness.status === "needs_check" ? "text-amber-700" : "text-slate-700"}`}>{readinessLabel}</span></span>
+        </div>
+        {assessment && <p className="text-[11px] text-slate-500 mt-1">Confidence reflects the quality and coverage of available evidence, not the likelihood of a placement.</p>}
+        {hasSparseEvidence && <p className="text-[11px] text-amber-800 mt-1">Limited checked evidence. Review recent bylines and confirm the contact’s current remit before outreach.</p>}
         {suggestedAngle && <p className="text-[12px] text-slate-700 mt-2"><span className="font-semibold">Suggested pitch angle:</span> {suggestedAngle}</p>}
         {assessment && <>
           <details className="mt-2 text-[12px] text-slate-600">
@@ -275,7 +311,6 @@ function AssessmentSection({ assessment, compact = false, suggestedAngle }: { as
             <div className="mt-2 space-y-2">
               <p>{assessment.evidence.length} cited source{assessment.evidence.length === 1 ? "" : "s"} checked. {assessment.evidenceCoverage} evidence coverage.</p>
               {assessment.readiness.reasons.length > 0 && <p><span className="font-semibold">Contact checks:</span> {assessment.readiness.reasons.join(" ")}</p>}
-              {assessment.warnings.map((warning, index) => <p key={index} className="text-amber-700">{warning}</p>)}
               {assessment.evidence.map((evidence, index) => (
                 <div key={`${evidence.url}-${index}`} className="rounded-md border border-slate-200 bg-white p-2">
                   <a href={evidence.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{evidence.title}</a>
@@ -506,15 +541,27 @@ export function RecommendationCard({
             {c.outletReachBand && !compact && (
               <>
                 <span className="mx-2 text-slate-300">|</span>
-                <span className="text-slate-600">Reach: {c.outletReachBand}</span>
+                <span className="text-slate-600" title="Imported publication reach band or source estimate; not verified readership or a score">Source reach (imported): {c.outletReachBand}</span>
               </>
             )}
           </p>
           {compact && <p className="text-[12px] text-slate-600 mb-2">
-            Source-provided publication reach: {c.publicationReach || c.outletReachBand || "Not available"} <span className="text-[11px] text-slate-500">(not a verified audience measurement)</span>
+            Source reach (imported publication value): {c.publicationReach || c.outletReachBand || "Not available"} <span className="text-[11px] text-slate-500">(source estimate/band, not verified readership or a score)</span>
             <span className="mx-2 text-slate-300">·</span>
             Publication authority: {c.publicationAuthority !== undefined && c.publicationAuthority !== null && c.publicationAuthority !== "" ? c.publicationAuthority : "Not available"}
           </p>}
+          {(compact || isShortlist) && (c.sourceRef || c.sourceStatus || c.lastVerifiedAt) && (
+            <p className="text-[11px] text-slate-500 mb-2" data-testid={`contact-provenance-${c.id}`}>
+              Record provenance: {c.sourceRef || "Imported contact record"}
+              {c.sourceStatus && <> · Source review: {c.sourceStatus === "current" ? "current" : c.sourceStatus === "due" ? "check due" : c.sourceStatus === "changed" ? "source changed" : c.sourceStatus === "unavailable" ? "source unavailable" : "unverified"}</>}
+              {c.lastVerifiedAt && <> · Record checked: {new Date(c.lastVerifiedAt).toLocaleDateString()}</>}
+            </p>
+          )}
+          {item.restricted && (
+            <p className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-semibold text-rose-800" role="alert" data-testid={`contact-restricted-${c.id}`}>
+              Do not contact restriction is active. Outreach planning is blocked until the restriction is removed.
+            </p>
+          )}
 
           <div className={`grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-[13px] ${compact ? "mb-2" : "mb-4"}`}>
             {c.email && (
@@ -570,7 +617,7 @@ export function RecommendationCard({
             </div>
           ) : null}
 
-          {!compact && item.reasons && item.reasons.length > 0 && (
+          {!isShortlist && item.reasons && item.reasons.length > 0 && (
             <div className="p-3 rounded-lg bg-indigo-50 border border-indigo-100 mb-4">
               <div className="flex items-start gap-2">
                 <Target size={14} className="text-indigo-600 mt-0.5" />
@@ -601,10 +648,11 @@ export function RecommendationCard({
           <AssessmentSection
             assessment={item.assessment}
             compact={compact}
+            simplified={isShortlist}
             suggestedAngle={item.assessment?.suggestedAngle || item.phraseAttributions?.[0]?.suggestedPlacementAngle || c.mediaOpportunities?.[0]?.angle || latestDiscovery?.mediaOpportunities?.[0]?.angle}
           />
 
-          {!compact && c.notes && (
+          {!isShortlist && c.notes && (
             <div className="p-3 rounded-lg bg-amber-50 border border-amber-100 mb-4">
               <div className="flex items-start gap-2">
                 <FileText size={14} className="text-amber-600 mt-0.5" />
@@ -634,7 +682,7 @@ export function RecommendationCard({
           {!compact && <div className="flex flex-wrap gap-2 justify-end w-full">
              {c.publicationReach && (
               <div className="flex flex-col items-center p-2 rounded-lg bg-slate-50 border border-slate-100 flex-1 min-w-[70px]">
-                 <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wide" title="Source-provided value; not a verified audience measurement">Source reach</span>
+                 <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wide" title="Imported publication reach or source estimate; not verified readership or a score">Source reach (estimate)</span>
                  <span className="text-[13px] font-bold text-slate-700">{c.publicationReach}</span>
               </div>
             )}
@@ -690,11 +738,12 @@ export function RecommendationCard({
                 type="button"
                 data-testid={`button-plan-story-outreach-${c.id}`}
                 onClick={onAccept}
-                disabled={actionLoading}
+                disabled={actionLoading || item.restricted}
+                title={item.restricted ? "Remove the do-not-contact restriction before planning outreach" : undefined}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
               >
                 {actionLoading ? <Loader2 size={14} className="animate-spin" /> : decision?.decision === "shortlisted" ? <Check size={14} /> : <Target size={14} />}
-                {actionLoading ? "Saving..." : decision?.decision === "shortlisted" ? "Added to story shortlist" : "Plan outreach for this story"}
+                {actionLoading ? "Saving..." : item.restricted ? "Outreach blocked - do not contact" : decision?.decision === "shortlisted" ? "Added to story shortlist" : "Plan outreach for this story"}
               </button>
             )}
           </div>

@@ -33,6 +33,7 @@ const plannedRow = {
 };
 
 let rows: Record<string, unknown>[] = [];
+let mutationFailure = "";
 
 function response(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status });
@@ -41,15 +42,23 @@ function response(body: unknown, status = 200) {
 describe("MediaOutreachPanel", () => {
   beforeEach(() => {
     rows = [{ ...plannedRow }];
+    mutationFailure = "";
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.includes("/store/media-db/outreach?")) return response({ outreach: rows });
+      if (url.endsWith("/store/media-db/outreach") && init?.method === "POST") {
+        if (mutationFailure) return response({ error: mutationFailure }, 500);
+        rows = [{ ...plannedRow }];
+        return response({ ok: true, outreach: rows[0] }, 201);
+      }
       if (url.includes("/store/media-db/outreach/7") && init?.method === "PUT") {
+        if (mutationFailure) return response({ error: mutationFailure }, 500);
         const patch = JSON.parse(String(init.body)) as Record<string, string>;
         rows = [{ ...rows[0], ...patch }];
         return response({ ok: true, outreach: rows[0] });
       }
       if (url.includes("/store/media-db/outreach/7/placements") && init?.method === "POST") {
+        if (mutationFailure) return response({ error: mutationFailure }, 500);
         const placement = JSON.parse(String(init.body));
         rows = [{ ...rows[0], status: "placed", placements: [{ id: 22, ...placement, verification: "user_claimed" }] }];
         return response({ ok: true, placement }, 201);
@@ -75,6 +84,32 @@ describe("MediaOutreachPanel", () => {
     ));
     const call = vi.mocked(fetch).mock.calls.find(([input, init]) => String(input).includes("/outreach/7") && init?.method === "PUT");
     expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ status: "pitched", pitchDate: "2026-09-01" });
+    expect(await screen.findByRole("status")).toHaveTextContent("Outreach status saved as pitched.");
+  });
+
+  it("explains that planning is optional, does not send a pitch, and saves the plan only on success", async () => {
+    rows = [];
+    render(<MediaOutreachPanel projectId="project-1" storyKey="story-1" articleTitle="Story" contacts={[contact]} targetPhrases={[]} />);
+    expect(await screen.findByText(/Planning is optional and does not send a pitch/)).toBeInTheDocument();
+    expect(screen.getByText(/No outreach has been planned.*This is optional/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Plan outreach to Jane Reporter/i }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Outreach planned for Jane Reporter.");
+    expect(screen.getByRole("status")).toHaveTextContent("Saved for this project and article.");
+  });
+
+  it("shows a date and notes save confirmation after successful updates", async () => {
+    render(<MediaOutreachPanel projectId="project-1" storyKey="story-1" articleTitle="Story" contacts={[contact]} targetPhrases={[]} />);
+    const pitchDate = await screen.findByLabelText("Pitch date");
+    fireEvent.change(pitchDate, { target: { value: "2026-09-01" } });
+    fireEvent.blur(pitchDate);
+    expect(await screen.findByRole("status")).toHaveTextContent("Pitch date saved.");
+
+    const notes = await screen.findByLabelText("Notes");
+    fireEvent.change(notes, { target: { value: "Follow up next week" } });
+    fireEvent.blur(notes);
+    expect(await screen.findByRole("status")).toHaveTextContent("Notes saved.");
+    await waitFor(() => expect(rows[0]).toMatchObject({ pitchDate: "2026-09-01", notes: "Follow up next week" }));
   });
 
   it("requires all placement evidence before allowing a placement save", async () => {
@@ -101,5 +136,27 @@ describe("MediaOutreachPanel", () => {
       publicationDate: "2026-09-03",
       supportingEvidence: "The article names the company.",
     });
+    expect(await screen.findByRole("status")).toHaveTextContent("Placement saved for this project and article.");
+  });
+
+  it("keeps mutation errors visible without announcing a save", async () => {
+    mutationFailure = "Server could not save this update.";
+    render(<MediaOutreachPanel projectId="project-1" storyKey="story-1" articleTitle="Story" contacts={[contact]} targetPhrases={[]} />);
+    const notes = await screen.findByLabelText("Notes");
+    fireEvent.change(notes, { target: { value: "Unconfirmed note" } });
+    fireEvent.blur(notes);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Server could not save this update.");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("does not announce that outreach was planned when planning fails", async () => {
+    mutationFailure = "Planning was rejected.";
+    rows = [];
+    render(<MediaOutreachPanel projectId="project-1" storyKey="story-1" articleTitle="Story" contacts={[contact]} targetPhrases={[]} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Plan outreach to Jane Reporter/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Planning was rejected.");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });

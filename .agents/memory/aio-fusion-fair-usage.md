@@ -8,3 +8,9 @@ Content fair usage is enforced per project over a rolling 30-day window. Standar
 Only content-generation and optimisation actions count. LLM Check audits and LLM query generation are excluded because they use separate 21-day locks. Excluded operations must remain available when the content allowance is exhausted, but all AI operations still remain subject to the account-wide spend cap.
 
 **Why:** Published project packs promise tier-specific content allowances, while audits and query generation have separately communicated timing controls. Mixing these limits blocks a product operation under the wrong policy.
+
+Media discovery and journalist coverage research are not content-writing actions, including older usage records named as content operations. They remain subject to the account spend cap. For a multi-contact coverage check, reserve the whole eligible batch before making any provider call, then settle each attempted call from measured usage; retain an estimate for attempted calls that fail before usage is available. A near-cap rejection must not start a subset of searches that cannot yield a saved result.
+
+**Why:** Counting research against content allowance produced a misleading AI-limit error, while recording coverage checks at zero bypassed the real spend guard. Independent reservations for a five-contact batch could also spend money on a request that returned only a cap error.
+
+**How to apply:** When adding another research action, keep content-quota accounting separate from spend accounting. If a result needs an all-or-nothing group of provider calls, reserve that group atomically before dispatch and wait for every started call before responding.

@@ -43,12 +43,35 @@ import {
 } from "../lib/exact-target-phrases";
 import { MEDIA_RECOMMENDATION_STOP_WORDS, scoreMediaRecommendation } from "../lib/media-recommendation-ranking";
 import { assessEditorialFit, reduceScoreForMissingContactName, type EditorialAssessment, type TargetingBrief } from "../lib/media-editorial-ranking";
-import { checkFairUsage, checkMonthlySpendLimit } from "../lib/fair-usage";
+import { checkMonthlySpendLimit } from "../lib/fair-usage";
 import { collectJournalistCoverage } from "../lib/journalist-coverage-evidence";
+import {
+  MonthlySpendCapReservationError,
+  releaseJournalistCoverageUsage,
+  reserveJournalistCoverageUsageBatch,
+  settleJournalistCoverageUsage,
+} from "../lib/token-usage";
 import { acquirePrivacyIdentityLock, createSuppressionMatcher, createSuppressionMatcherWithDb, filterSuppressedContacts, isContactSuppressed, isSuppressed, isSuppressedWithDb, privacyHash } from "../lib/journalist-privacy";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
+const recommendationEnrichmentCommitQueues = new Map<string, Promise<void>>();
+
+async function withRecommendationEnrichmentCommitLock<T>(key: string, operation: () => Promise<T>): Promise<T> {
+  const previous = recommendationEnrichmentCommitQueues.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => { release = resolve; });
+  recommendationEnrichmentCommitQueues.set(key, current);
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (recommendationEnrichmentCommitQueues.get(key) === current) {
+      recommendationEnrichmentCommitQueues.delete(key);
+    }
+  }
+}
 const IMPORT_JOB_STALE_MS = 10 * 60 * 1000;
 
 function importWorkerSignature(jobId: string): string {
@@ -3106,6 +3129,7 @@ type RecommendationCriteria = {
   evidence?: Record<string, unknown[]>;
   warnings?: Record<string, string[]>;
   rankingVersion?: string;
+  enrichmentVersion?: number;
 };
 
 const emptyTargetingBrief = (terms: string[], phrases: ExactTargetPhrase[]): TargetingBrief => ({
@@ -4284,8 +4308,6 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
     const visible = await visibleAccounts(req);
     const spend = await checkMonthlySpendLimit(accountId);
     if (!spend.allowed) { res.status(429).json({ error: "Monthly spending limit reached." }); return; }
-    const usage = await checkFairUsage(accountId, projectId);
-    if (!usage.allowed) { res.status(429).json({ error: "This project's AI usage limit has been reached." }); return; }
     const [set] = await db.select().from(mediaRecommendationSetsTable).where(and(
       eq(mediaRecommendationSetsTable.id, recommendationSetId), eq(mediaRecommendationSetsTable.accountId, accountId),
       eq(mediaRecommendationSetsTable.projectId, projectId), eq(mediaRecommendationSetsTable.storyKey, storyKey),
@@ -4320,10 +4342,32 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
     const warnings: Record<string, string[]> = { ...(criteria.warnings ?? {}) };
     const enriched: Array<typeof rows[number] & { assessment: EditorialAssessment; score: number }> = [];
     try {
+      const unsuppressedRows: typeof enrichmentRows = [];
+      for (const row of enrichmentRows) {
+        if (!await isContactSuppressed({ ...row.contact, outlet: row.outlet?.name, accountId })) {
+          unsuppressedRows.push(row);
+        }
+      }
+
+      // Reserve the complete dispatch batch atomically before any provider
+      // request starts. This prevents a near-cap request from dispatching a
+      // partial set and then failing its next independent reservation.
+      const reservationIds = await reserveJournalistCoverageUsageBatch({
+        accountId,
+        projectId,
+        limitGbp: spend.limitGbp,
+        callCount: unsuppressedRows.length,
+      });
+      const reservations = reservationIds.map((id) => ({ id, attempted: false }));
+
       // Keep provider calls bounded and auditable. The set itself is already
       // sorted, and only its first five candidates may trigger enrichment.
-      for (const row of enrichmentRows) {
-        if (await isContactSuppressed({ ...row.contact, outlet: row.outlet?.name, accountId })) continue;
+      // Await every dispatched request before handling any partial failure.
+      // Do not mutate the criteria snapshot until every candidate succeeds:
+      // a provider timeout/failure leaves the whole enrichment uncommitted.
+      const collectedResults = await Promise.allSettled(unsuppressedRows.map(async (row, index) => {
+        if (await isContactSuppressed({ ...row.contact, outlet: row.outlet?.name, accountId })) return null;
+        const reservation = reservations[index];
         const collected = await collectJournalistCoverage({
           contact: {
             name: `${row.contact.firstName} ${row.contact.lastName}`.trim(),
@@ -4332,7 +4376,31 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
           },
           brief,
           now: new Date(),
+          usage: {
+            reserve: async () => {
+              reservation.attempted = true;
+              return reservation.id;
+            },
+            settle: (reservationId, providerUsage) => settleJournalistCoverageUsage({
+              reservationId,
+              accountId,
+              projectId,
+              ...providerUsage,
+            }),
+          },
         });
+        return { row, collected };
+      }));
+      await Promise.all(reservations.filter((reservation) => !reservation.attempted).map((reservation) => (
+        releaseJournalistCoverageUsage({ reservationId: reservation.id, accountId })
+      )));
+      const failedResult = collectedResults.find((result) => result.status === "rejected");
+      if (failedResult?.status === "rejected") throw failedResult.reason;
+      const collectedRows = collectedResults.flatMap((result) => (
+        result.status === "fulfilled" && result.value ? [result.value] : []
+      ));
+      for (const result of collectedRows) {
+        const { row, collected } = result;
         const priorEvidence = criteria.evidence?.[String(row.contact.id)] ?? [];
         evidence[String(row.contact.id)] = mergeCoverageEvidence(priorEvidence, collected.evidence);
         warnings[String(row.contact.id)] = [...new Set([
@@ -4349,6 +4417,10 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
         enriched.push({ ...row, assessment, score: assessment.fitScore ?? row.item.score });
       }
     } catch (error) {
+      if (error instanceof MonthlySpendCapReservationError) {
+        res.status(429).json({ error: "Monthly spending limit reached." });
+        return;
+      }
       const message = error instanceof Error ? error.message : "Coverage collection failed";
       res.status(502).json({ error: `Failed to collect journalist coverage: ${message}` });
       return;
@@ -4358,7 +4430,9 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
       res.status(409).json({ error: "Recommendations changed while enrichment was running. Reload and try again." });
       return;
     }
-    const committed = await db.transaction(async (tx) => {
+    const committed = await withRecommendationEnrichmentCommitLock(
+      `${accountId}:${projectId}:${storyKey}:${set.id}`,
+      () => db.transaction(async (tx) => {
       await acquirePrivacyIdentityLock(tx, "recommendations");
       const currentHierarchy = req.account?.role === "admin"
         ? []
@@ -4503,6 +4577,10 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
         baseScores: committedBaseScores,
         totalMatches: currentEligibleRows.length,
         rankingVersion: "editorial-v1",
+        // Advance this even when the collected evidence is unchanged. Without
+        // a changing CAS value, concurrent enrichments that both return empty
+        // results could each match and commit the same criteria snapshot.
+        enrichmentVersion: Math.max(0, Math.floor(Number(criteria.enrichmentVersion) || 0)) + 1,
       };
       // Criteria is the optimistic-lock snapshot. Two slow enrichments can
       // both finish provider calls, but only the first one may commit its
@@ -4525,17 +4603,6 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
           .where(eq(mediaRecommendationItemsTable.recommendationSetId, set.id));
       }
       const ranked = await rerankRecommendationSetLocked(tx, accountId, projectId, storyKey, set.id);
-      // Count the provider action only when its current project authorization,
-      // evidence snapshot and ranking all commit together.
-      await tx.insert(tokenUsageTable).values({
-        accountId,
-        operation: "content-media-recommendations-enrich",
-        model: "gpt-5.4-mini",
-        inputTokens: 0,
-        outputTokens: 0,
-        costGbpEstimate: "0",
-        projectId,
-      });
       const rowByContactId = new Map(currentEligibleRows.map((row) => [row.contact.id, row]));
       const responseItems = ranked.flatMap((rankedRow, index) => {
         const row = rowByContactId.get(rankedRow.item.contactId);
@@ -4583,7 +4650,8 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
         ),
         suppressed: false as const,
       };
-    });
+      }),
+    );
     if (committed.accessChanged) {
       res.status(409).json({ error: "Project access changed while enrichment was running. Reload and try again." });
       return;

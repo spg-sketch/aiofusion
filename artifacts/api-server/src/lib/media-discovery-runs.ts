@@ -125,7 +125,7 @@ export async function getMediaDiscoveryRun(runId: string, owner: string) {
 }
 
 export async function getLatestMediaDiscoveryRun(owner: string, projectId: string, storyKey: string) {
-  await expireStaleMediaDiscoveryRuns();
+  await ensureMediaDiscoveryRunsTable();
   const rows = await db.execute(sql`
     SELECT run_id, project_id, story_key, status, items, discovery_token, error_message,
            started_at, updated_at, completed_at

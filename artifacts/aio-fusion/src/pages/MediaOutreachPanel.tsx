@@ -30,6 +30,7 @@ export function MediaOutreachPanel({ projectId, storyKey, articleTitle, recommen
   const [rows, setRows] = useState<Outreach[]>([]);
   const [busy, setBusy] = useState<number | "load" | "create" | null>("load");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const loadSequence = useRef(0);
   const scopeRef = useRef(`${projectId}\u0000${storyKey}`);
   const dateInputRefs = useRef<Record<number, { pitchDate: HTMLInputElement | null; responseDate: HTMLInputElement | null }>>({});
@@ -76,13 +77,14 @@ export function MediaOutreachPanel({ projectId, storyKey, articleTitle, recommen
     setRows([]);
     dateInputRefs.current = {};
     setError("");
+    setSuccess("");
     void load();
     return () => { loadSequence.current += 1; };
   }, [projectId, storyKey]);
 
   const create = async (contact: Contact) => {
     const scope = `${projectId}\u0000${storyKey}`;
-    setBusy("create"); setError("");
+    setBusy("create"); setError(""); setSuccess("");
     try {
       const response = await fetch(`${apiBase()}/api/store/media-db/outreach`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
@@ -90,20 +92,35 @@ export function MediaOutreachPanel({ projectId, storyKey, articleTitle, recommen
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not plan outreach.");
-      if (scopeRef.current === scope) await load();
+      if (scopeRef.current === scope) {
+        setSuccess(`Outreach planned for ${contact.firstName} ${contact.lastName}. Saved for this project and article.`);
+        await load();
+      }
     } catch (reason) { if (scopeRef.current === scope) { setError(reason instanceof Error ? reason.message : "Could not plan outreach."); setBusy(null); } }
   };
 
   const update = async (row: Outreach, patch: Record<string, unknown>) => {
     const scope = `${projectId}\u0000${storyKey}`;
-    setBusy(row.id); setError("");
+    setBusy(row.id); setError(""); setSuccess("");
     try {
       const response = await fetch(`${apiBase()}/api/store/media-db/outreach/${row.id}`, {
         method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not update outreach.");
-      if (scopeRef.current === scope) await load();
+      if (scopeRef.current === scope) {
+        const message = typeof patch.status === "string"
+          ? `Outreach status saved as ${patch.status}.`
+          : "pitchDate" in patch
+            ? "Pitch date saved."
+            : "responseDate" in patch
+              ? "Response date saved."
+              : "notes" in patch
+                ? "Notes saved."
+                : "Responsible team member saved.";
+        setSuccess(message);
+        await load();
+      }
     } catch (reason) { if (scopeRef.current === scope) { setError(reason instanceof Error ? reason.message : "Could not update outreach."); setBusy(null); } }
   };
 
@@ -126,7 +143,7 @@ export function MediaOutreachPanel({ projectId, storyKey, articleTitle, recommen
 
   const savePlacement = async (row: Outreach) => {
     const scope = `${projectId}\u0000${storyKey}`;
-    setBusy(row.id); setError("");
+    setBusy(row.id); setError(""); setSuccess("");
     try {
       const response = await fetch(`${apiBase()}/api/store/media-db/outreach/${row.id}/placements`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(placement),
@@ -134,6 +151,7 @@ export function MediaOutreachPanel({ projectId, storyKey, articleTitle, recommen
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not record placement.");
       if (scopeRef.current === scope) {
+        setSuccess("Placement saved for this project and article.");
         setPlacementFor(null); setPlacement({ canonicalUrl: "", publicationDate: "", headline: "", supportingEvidence: "", legacySourceRef: "" });
         await load();
       }
@@ -142,12 +160,15 @@ export function MediaOutreachPanel({ projectId, storyKey, articleTitle, recommen
 
   const verifyPlacement = async (id: number) => {
     const scope = `${projectId}\u0000${storyKey}`;
-    setBusy(id); setError("");
+    setBusy(id); setError(""); setSuccess("");
     try {
       const response = await fetch(`${apiBase()}/api/store/media-db/placements/${id}/verification`, { method: "PUT", credentials: "include" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not verify the placement page.");
-      if (scopeRef.current === scope) await load();
+      if (scopeRef.current === scope) {
+        setSuccess("Placement verification saved.");
+        await load();
+      }
     } catch (reason) { if (scopeRef.current === scope) { setError(reason instanceof Error ? reason.message : "Could not verify the placement page."); setBusy(null); } }
   };
 
@@ -162,14 +183,16 @@ export function MediaOutreachPanel({ projectId, storyKey, articleTitle, recommen
     <div className="p-5 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}>
       <h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Outreach and placements</h2>
       <p className="text-[13px] mt-1" style={{ color: vars.g500 }}>Record what happened and preserve the exact article, contact, publication and phrase evidence used at the time.</p>
+      <p className="text-[13px] mt-2" style={{ color: vars.g500 }}>Planning is optional and does not send a pitch. Outreach and placement records are saved for this project and the selected article, and will reload here when you reopen that saved article.</p>
     </div>
-    {error && <p className="m-4 rounded-lg bg-rose-50 p-3 text-[12px] text-rose-700">{error}</p>}
+    {error && <p role="alert" className="m-4 rounded-lg bg-rose-50 p-3 text-[12px] text-rose-700">{error}</p>}
+    {success && <p role="status" aria-live="polite" className="m-4 rounded-lg bg-emerald-50 p-3 text-[12px] text-emerald-800">{success}</p>}
     {unplanned.length > 0 && <div className="p-4 border-b flex flex-wrap gap-2" style={{ borderColor: vars.g100 }}>
       {unplanned.map((rec) => (
          <button key={rec.contact.id} disabled={busy !== null || rec.restricted || rec.assessment?.readiness.status === 'blocked'} onClick={() => void create(rec.contact)} title={rec.restricted ? "Contact is restricted from outreach" : rec.assessment?.readiness.status === 'blocked' ? "Contact assessment is blocked" : ""} className="rounded-lg border px-3 py-2 text-[12px] font-semibold disabled:opacity-50"><Plus size={13} className="inline mr-1" />Plan outreach to {rec.contact.firstName} {rec.contact.lastName}</button>
       ))}
     </div>}
-    {busy === "load" ? <p className="p-8 text-center text-sm text-slate-500"><Loader2 className="inline animate-spin mr-2" size={16} />Loading outreach...</p> : rows.length === 0 ? <p className="p-8 text-center text-sm italic text-slate-500">Add a shortlisted contact, then plan outreach here.</p> :
+    {busy === "load" ? <p className="p-8 text-center text-sm text-slate-500"><Loader2 className="inline animate-spin mr-2" size={16} />Loading outreach...</p> : rows.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">No outreach has been planned for this saved article yet. This is optional. Choose “Plan outreach” above to save a record for this project and article; it will appear here again when you reopen the article. Planning does not send a pitch.</p> :
       <div className="divide-y">{rows.map((row) => <div key={row.id} className="p-5">
         <div className="flex flex-wrap justify-between gap-3">
           <div><h3 className="font-semibold text-slate-900">{row.contactSnapshot.name || "Historical contact"}{row.outletSnapshot.name ? `, ${row.outletSnapshot.name}` : ""}</h3><p className="text-[12px] text-slate-500">{row.contactSnapshot.role} {row.contactSnapshot.email}</p></div>

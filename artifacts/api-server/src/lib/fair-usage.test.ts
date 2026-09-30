@@ -5,6 +5,7 @@ const state = vi.hoisted(() => ({
   spentGbp: "0",
   multiplier: null as string | null,
   baseLimit: 50,
+  fairUsageFilter: null as unknown,
 }));
 
 const sendQuotaBreachAlert = vi.hoisted(() => vi.fn(async () => undefined));
@@ -25,13 +26,16 @@ vi.mock("@workspace/db", () => {
     db: {
       select: (selection: Record<string, unknown>) => ({
         from: (table: unknown) => ({
-          where: () => {
+          where: (condition: unknown) => {
             if (table === platformMetaTable) {
               return {
                 limit: async () => state.multiplier === null ? [] : [{ value: state.multiplier }],
               };
             }
-            if ("count" in selection) return Promise.resolve([{ count: state.callCount }]);
+            if ("count" in selection) {
+              state.fairUsageFilter = condition;
+              return Promise.resolve([{ count: state.callCount }]);
+            }
             if ("spent" in selection) return Promise.resolve([{ spent: state.spentGbp }]);
             return Promise.resolve([]);
           },
@@ -49,7 +53,8 @@ vi.mock("drizzle-orm", () => ({
   lt: (...args: unknown[]) => args,
   inArray: (...args: unknown[]) => args,
   sql: Object.assign(
-    () => "sql",
+    (strings: TemplateStringsArray, ...values: unknown[]) =>
+      strings.reduce((result, part, index) => `${result}${part}${index < values.length ? String(values[index]) : ""}`, ""),
     { raw: () => "sql" },
   ),
 }));
@@ -72,6 +77,7 @@ describe("fair usage enforcement", () => {
     state.spentGbp = "0";
     state.multiplier = null;
     state.baseLimit = 50;
+    state.fairUsageFilter = null;
   });
 
   afterEach(() => {
@@ -109,6 +115,22 @@ describe("fair usage enforcement", () => {
       limit: 50,
     });
     expect(sendQuotaBreachAlert).not.toHaveBeenCalled();
+  });
+
+  it("excludes historical media discovery/enrichment rows but retains other content operations", async () => {
+    process.env.FAIR_USAGE_ENFORCEMENT_ENABLED = "true";
+    state.callCount = 49;
+
+    const { checkFairUsage } = await import("./fair-usage");
+    await expect(checkFairUsage("staging-account", "project-1")).resolves.toMatchObject({
+      allowed: true,
+      callCount: 49,
+    });
+    const filter = JSON.stringify(state.fairUsageFilter);
+    expect(filter).toContain("operation LIKE 'content-%'");
+    expect(filter).toContain("'content-media-discover'");
+    expect(filter).toContain("'content-media-recommendations-enrich'");
+    expect(filter).toContain("NOT IN");
   });
 
   it("applies the account multiplier to the published project-tier allowance", async () => {

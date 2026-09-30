@@ -9,6 +9,12 @@ Long-running AI work within an open tab belongs to an app-level lifecycle rather
 
 **How to apply:** Keep request execution and exactly-once completion effects outside page mount lifetimes. Pages subscribe to retained snapshots, derive elapsed time from `Date.now() - startedAt`, and restore results only into the captured subject. Clear all runs at authentication or workspace boundaries.
 
+An explicit "new search / reset" is different from routine navigation. It must invalidate the current tab's app-owned result and prevent older server-persisted history for that same subject from immediately repopulating the cleared view, without deleting audit history or other saved work. Only an explicit fresh run should resume recovery for that subject.
+
+**Why:** Clearing local page state alone let a late result return after reset; clearing only the app-owned run still let the server's latest-run rehydration restore the result after reselecting the same article.
+
+**How to apply:** Guard both client lifecycle completion and server-history rehydration against the reset boundary. Keep normal remount recovery unchanged where the user has not reset.
+
 An AI run's person identity must match the identity established by the app shell, separately from its workspace identity. A workspace slug must never stand in for the signed-in human in run scope.
 
 **Why:** When those identities differed for a team member, a successful streamed draft result and even the run's timeout were ignored by the lifecycle identity check. Content Creator kept showing "Writing draft" while its independent Planner action could still save earlier editor copy.

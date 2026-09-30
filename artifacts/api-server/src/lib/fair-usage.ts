@@ -24,12 +24,16 @@ const SPIKE_COOLDOWN_MS = 60 * 60 * 1000;
 const spendLimitCooldown = new Map<string, number>();
 const SPEND_LIMIT_COOLDOWN_MS = 60 * 60 * 1000; // at most once per hour per account
 
-// Operations that count toward the per-project fair usage quota (50/project/month).
-// Audits (llm-check%) have their own 21-day lock and are NOT counted here.
-// LLM queries (section 1.6, llm-queries) also have a 21-day lock and are excluded.
-// Coverage-search is content-AI and counts toward the 50.
+// Content-generation and optimisation operations count toward the per-project
+// fair usage quota. Media discovery/enrichment rows written by the earlier
+// content-prefixed operation names remain in usage history, but are excluded
+// here as well as under their current non-content operation names.
 const OPERATION_FILTER = sql`(
   ${tokenUsageTable.operation} LIKE 'content-%'
+  AND ${tokenUsageTable.operation} NOT IN (
+    'content-media-discover',
+    'content-media-recommendations-enrich'
+  )
 )`;
 
 async function getFairUsageMultiplier(accountId: string): Promise<number> {

@@ -1,10 +1,14 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import express from "express";
 import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 
-const { collectJournalistCoverage } = vi.hoisted(() => ({ collectJournalistCoverage: vi.fn() }));
+const { collectJournalistCoverage, checkFairUsageMock, checkMonthlySpendLimitMock } = vi.hoisted(() => ({
+  collectJournalistCoverage: vi.fn(),
+  checkFairUsageMock: vi.fn(() => Promise.resolve({ allowed: true, callCount: 0, limit: 50 })),
+  checkMonthlySpendLimitMock: vi.fn(() => Promise.resolve({ allowed: true, spentGbp: 0, limitGbp: 50 })),
+}));
 
 vi.mock("@workspace/db", async () => {
   const { PGlite } = await import("@electric-sql/pglite");
@@ -75,6 +79,10 @@ vi.mock("../lib/safe-fetch", () => ({
   fetchPlacementPageEvidence: async (url: string) => ({ canonicalUrl: url, headline: "Verified headline", publicationDate: "2026-09-03" }),
 }));
 vi.mock("../lib/journalist-coverage-evidence", () => ({ collectJournalistCoverage }));
+vi.mock("../lib/fair-usage", () => ({
+  checkFairUsage: checkFairUsageMock,
+  checkMonthlySpendLimit: checkMonthlySpendLimitMock,
+}));
 
 import {
   db,
@@ -94,6 +102,7 @@ import {
 } from "@workspace/db";
 import { ensureMediaSchema } from "../lib/ensure-media-schema";
 import { stableExactTargetPhraseId } from "../lib/exact-target-phrases";
+import { JOURNALIST_COVERAGE_CALL_RESERVE_GBP } from "../lib/token-usage";
 import mediaDbRouter from "./media-db";
 
 let server: Server;
@@ -142,10 +151,47 @@ beforeAll(async () => {
 
 afterAll(() => new Promise<void>((resolve) => server ? server.close(() => resolve()) : resolve()));
 
+afterEach(async () => {
+  await db.delete(platformMetaTable)
+    .where(eq(platformMetaTable.key, "spendLimit:monthly:gbp:workspace-a"));
+  checkMonthlySpendLimitMock.mockReset();
+  checkMonthlySpendLimitMock.mockResolvedValue({ allowed: true, spentGbp: 0, limitGbp: 50 });
+});
+
 const request = (path: string, workspace = "workspace-a", init?: RequestInit) => fetch(`${baseUrl}${path}`, {
   ...init,
   headers: { "Content-Type": "application/json", "x-workspace": workspace, ...(init?.headers || {}) },
 });
+
+type MockCoverageUsage = {
+  reserve: () => Promise<number>;
+  settle: (reservationId: number, usage: {
+    inputTokens: number;
+    outputTokens: number;
+    webSearchCalls: number;
+  }) => Promise<void>;
+};
+
+async function recordMockCoverageCall(input: { usage: MockCoverageUsage }) {
+  const reservationId = await input.usage.reserve();
+  await input.usage.settle(reservationId, {
+    inputTokens: 1_000,
+    outputTokens: 100,
+    webSearchCalls: 1,
+  });
+  return {
+    evidence: [{
+      title: "Energy transition",
+      url: "https://example.test/article",
+      publishedAt: "2026-01-01",
+      checkedAt: "2026-01-02T00:00:00.000Z",
+      excerpt: "transition",
+      attribution: "page_checked" as const,
+      authorMatched: true,
+    }],
+    warnings: ["checked"],
+  };
+}
 
 type SchemaColumn = ReturnType<typeof getTableColumns>[string];
 
@@ -570,14 +616,23 @@ describe("media recommendation refinement API", () => {
       method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "story-1", contactId }),
     })).status).toBe(409);
 
-    collectJournalistCoverage.mockResolvedValue({
-      evidence: [{ title: "Energy transition", url: "https://example.test/article", publishedAt: "2026-01-01", checkedAt: "2026-01-02T00:00:00.000Z", excerpt: "transition", attribution: "page_checked", authorMatched: true }],
-      warnings: ["checked"],
+    let activeChecks = 0;
+    let maxConcurrentChecks = 0;
+    collectJournalistCoverage.mockImplementation(async (input: { usage: MockCoverageUsage }) => {
+      activeChecks += 1;
+      maxConcurrentChecks = Math.max(maxConcurrentChecks, activeChecks);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      activeChecks -= 1;
+      return recordMockCoverageCall(input);
     });
+    checkFairUsageMock.mockResolvedValueOnce({ allowed: false, callCount: 50, limit: 50 });
     const enriched = await request("/store/media-db/recommendations/enrich", "workspace-a", {
       method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "story-1", recommendationSetId: generatedBody.recommendationSet.id }),
     });
     expect(enriched.status).toBe(200);
+    expect(checkFairUsageMock).not.toHaveBeenCalled();
+    expect(checkMonthlySpendLimitMock).toHaveBeenCalled();
+    expect(maxConcurrentChecks).toBeGreaterThan(1);
     expect(collectJournalistCoverage).toHaveBeenCalledTimes(Math.min(5, generatedBody.items.length));
     const enrichedBody = await enriched.json() as { items: Array<{ rank: number; score: number; contact: { id: number }; assessment: { evidence: unknown[] } }> };
     expect(enrichedBody.items[0].assessment.evidence).toHaveLength(1);
@@ -592,10 +647,138 @@ describe("media recommendation refinement API", () => {
     expect([...storedItems].sort((a, b) => a.rank - b.rank).map((item) => item.score)).toEqual(
       [...storedItems].sort((a, b) => Number(b.score) - Number(a.score) || a.contactId - b.contactId).map((item) => item.score),
     );
-    expect(await db.select().from(tokenUsageTable).where(eq(tokenUsageTable.operation, "content-media-recommendations-enrich"))).toHaveLength(1);
+    const successfulUsage = await db.select().from(tokenUsageTable)
+      .where(eq(tokenUsageTable.operation, "media-recommendations-enrich"));
+    expect(successfulUsage).toHaveLength(Math.min(5, generatedBody.items.length));
+    expect(successfulUsage.every((row) => Number(row.costGbpEstimate) > 0)).toBe(true);
+    checkMonthlySpendLimitMock.mockResolvedValueOnce({ allowed: false, spentGbp: 50, limitGbp: 50 });
+    const spendBlocked = await request("/store/media-db/recommendations/enrich", "workspace-a", {
+      method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "story-1", recommendationSetId: generatedBody.recommendationSet.id }),
+    });
+    expect(spendBlocked.status).toBe(429);
+    expect(collectJournalistCoverage).toHaveBeenCalledTimes(Math.min(5, generatedBody.items.length));
+    expect(await db.select().from(tokenUsageTable).where(eq(tokenUsageTable.operation, "media-recommendations-enrich"))).toHaveLength(successfulUsage.length);
     const saved = await db.select().from(mediaRecommendationSetsTable).where(eq(mediaRecommendationSetsTable.id, generatedBody.recommendationSet.id));
     expect((saved[0].criteria as { evidence: Record<string, unknown[]> }).evidence).toBeDefined();
     expect((await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, "mediaRecommendation:brief:workspace-a:project-1:story-1")))).toHaveLength(1);
+    checkFairUsageMock.mockReset();
+    checkFairUsageMock.mockResolvedValue({ allowed: true, callCount: 0, limit: 50 });
+    checkMonthlySpendLimitMock.mockReset();
+    checkMonthlySpendLimitMock.mockResolvedValue({ allowed: true, spentGbp: 0, limitGbp: 50 });
+  });
+
+  it("records measured costs for five provider calls and blocks a repeat at the reserved monthly cap", async () => {
+    const spendLimitKey = "spendLimit:monthly:gbp:workspace-a";
+    await db.insert(archiveItemsTable).values({
+      id: "usage-cap-story",
+      projectId: "project-1",
+      owner: "workspace-a",
+      title: "Usage cap story",
+    });
+    const [outlet] = await db.select().from(mediaOutletsTable).limit(1);
+    await db.insert(mediaContactsTable).values(Array.from({ length: 5 }, (_, index) => ({
+      outletId: outlet.id,
+      firstName: `Usage${index}`,
+      lastName: "Reporter",
+      role: "Usageprobe editor",
+      beats: ["usageprobe"],
+      sectors: ["usageprobe"],
+      geography: "UK",
+    })));
+    const brief = {
+      topic: "usageprobe",
+      angle: "accounting",
+      audience: "trade press",
+      regions: ["UK"],
+      publicationTypes: ["Trade press"],
+      whyNow: "current coverage",
+    };
+    expect((await request("/store/media-db/recommendations/brief", "workspace-a", {
+      method: "PUT",
+      body: JSON.stringify({ projectId: "project-1", storyKey: "usage-cap-story", brief }),
+    })).status).toBe(200);
+    const generated = await request("/store/media-db/recommendations", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({ projectId: "project-1", storyKey: "usage-cap-story", terms: ["usageprobe"] }),
+    });
+    expect(generated.status).toBe(200);
+    const generatedBody = await generated.json() as {
+      recommendationSet: { id: number };
+      items: Array<{ contact: { firstName: string } }>;
+    };
+    expect(generatedBody.items.length).toBeGreaterThanOrEqual(5);
+
+    const existingUsage = await db.select().from(tokenUsageTable)
+      .where(eq(tokenUsageTable.operation, "media-recommendations-enrich"));
+    const existingIds = new Set(existingUsage.map((row) => row.id));
+    const accountUsageBefore = await db.select().from(tokenUsageTable)
+      .where(eq(tokenUsageTable.accountId, "workspace-a"));
+    const spendBefore = accountUsageBefore.reduce((total, row) => total + Number(row.costGbpEstimate ?? 0), 0);
+    const capGbp = spendBefore + 5 * JOURNALIST_COVERAGE_CALL_RESERVE_GBP + 0.001;
+    await db.insert(platformMetaTable).values({ key: spendLimitKey, value: String(capGbp) })
+      .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: String(capGbp) } });
+    checkMonthlySpendLimitMock.mockResolvedValue({ allowed: true, spentGbp: spendBefore, limitGbp: capGbp });
+    let providerAttempts = 0;
+    collectJournalistCoverage.mockImplementation(async (input: { usage: MockCoverageUsage }) => {
+      const reservationId = await input.usage.reserve();
+      providerAttempts += 1;
+      await input.usage.settle(reservationId, {
+        inputTokens: 1_000,
+        outputTokens: 100,
+        webSearchCalls: 1,
+      });
+      return { evidence: [], warnings: [] };
+    });
+    const enriched = await request("/store/media-db/recommendations/enrich", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: "project-1",
+        storyKey: "usage-cap-story",
+        recommendationSetId: generatedBody.recommendationSet.id,
+      }),
+    });
+    expect(enriched.status).toBe(200);
+    expect(providerAttempts).toBe(5);
+    const afterSuccess = await db.select().from(tokenUsageTable)
+      .where(eq(tokenUsageTable.operation, "media-recommendations-enrich"));
+    const successfulCallRows = afterSuccess.filter((row) => !existingIds.has(row.id));
+    expect(successfulCallRows).toHaveLength(5);
+    expect(successfulCallRows.every((row) => Number(row.costGbpEstimate) > 0)).toBe(true);
+    expect(successfulCallRows.map((row) => Number(row.costGbpEstimate))).toEqual(
+      Array(5).fill(0.020944),
+    );
+
+    const accountUsageAfter = await db.select().from(tokenUsageTable)
+      .where(eq(tokenUsageTable.accountId, "workspace-a"));
+    const spendAfterSuccessfulRun = accountUsageAfter.reduce(
+      (total, row) => total + Number(row.costGbpEstimate ?? 0),
+      0,
+    );
+    // There is headroom for four reservations but not the complete five-call
+    // batch. No member of the repeated batch may reach the provider.
+    const repeatLimitGbp = spendAfterSuccessfulRun + JOURNALIST_COVERAGE_CALL_RESERVE_GBP * 4.5;
+    await db.insert(platformMetaTable).values({ key: spendLimitKey, value: String(repeatLimitGbp) })
+      .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: String(repeatLimitGbp) } });
+    checkMonthlySpendLimitMock.mockResolvedValue({
+      allowed: true,
+      spentGbp: spendAfterSuccessfulRun,
+      limitGbp: repeatLimitGbp,
+    });
+    const usageCountBeforeRepeat = afterSuccess.length;
+    const repeated = await request("/store/media-db/recommendations/enrich", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: "project-1",
+        storyKey: "usage-cap-story",
+        recommendationSetId: generatedBody.recommendationSet.id,
+      }),
+    });
+    expect(repeated.status).toBe(429);
+    expect(providerAttempts).toBe(5);
+    expect(await db.select().from(tokenUsageTable)
+      .where(eq(tokenUsageTable.operation, "media-recommendations-enrich"))).toHaveLength(usageCountBeforeRepeat);
+    await db.delete(platformMetaTable).where(eq(platformMetaTable.key, spendLimitKey));
+    checkMonthlySpendLimitMock.mockResolvedValue({ allowed: true, spentGbp: 0, limitGbp: 50 });
   });
 
   it("does not write failed provider results and uses compare-and-swap for concurrent enrichments", async () => {
@@ -604,20 +787,73 @@ describe("media recommendation refinement API", () => {
     });
     const body = await generated.json() as { recommendationSet: { id: number; criteria: Record<string, unknown> }; items: unknown[] };
     const before = await db.select({ criteria: mediaRecommendationSetsTable.criteria }).from(mediaRecommendationSetsTable).where(eq(mediaRecommendationSetsTable.id, body.recommendationSet.id));
-    collectJournalistCoverage.mockRejectedValueOnce(new Error("provider unavailable"));
-    const failed = await request("/store/media-db/recommendations/enrich", "workspace-a", {
+    const checksPerRun = Math.min(5, body.items.length);
+    const usageBeforeRace = await db.select().from(tokenUsageTable)
+      .where(eq(tokenUsageTable.operation, "media-recommendations-enrich"));
+    const usageIdsBeforeFailure = new Set(usageBeforeRace.map((row) => row.id));
+    let partialFailureCalls = 0;
+    let collectionInvocations = 0;
+    let releasePartialFailure!: () => void;
+    const partialFailureGate = new Promise<void>((resolve) => { releasePartialFailure = resolve; });
+    collectJournalistCoverage.mockImplementation(async (input: { usage: MockCoverageUsage }) => {
+      collectionInvocations += 1;
+      if (collectionInvocations === 2) {
+        // Simulate a local validation/configuration failure before the
+        // collector starts the provider attempt; its unused reservation is
+        // expected to be released.
+        throw new Error("Coverage input validation failed");
+      }
+      const reservationId = await input.usage.reserve();
+      partialFailureCalls += 1;
+      if (partialFailureCalls === 1) {
+        throw new Error("Journalist coverage search timed out");
+      }
+      await partialFailureGate;
+      await input.usage.settle(reservationId, {
+        inputTokens: 1_000,
+        outputTokens: 100,
+        webSearchCalls: 1,
+      });
+      return { evidence: [], warnings: [] };
+    });
+    const pendingFailure = request("/store/media-db/recommendations/enrich", "workspace-a", {
       method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "race-story", recommendationSetId: body.recommendationSet.id }),
     });
+    while (collectionInvocations < checksPerRun) await new Promise((resolve) => setTimeout(resolve, 1));
+    let failureResponseFinished = false;
+    void pendingFailure.then(() => { failureResponseFinished = true; });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(failureResponseFinished).toBe(false);
+    releasePartialFailure();
+    const failed = await pendingFailure;
+    expect(partialFailureCalls).toBe(checksPerRun - 1);
     expect(failed.status).toBe(502);
+    expect(await failed.json()).toMatchObject({ error: "Failed to collect journalist coverage: Journalist coverage search timed out" });
     const afterFailure = await db.select({ criteria: mediaRecommendationSetsTable.criteria }).from(mediaRecommendationSetsTable).where(eq(mediaRecommendationSetsTable.id, body.recommendationSet.id));
     expect(afterFailure[0].criteria).toEqual(before[0].criteria);
+    const usageAfterFailure = await db.select().from(tokenUsageTable)
+      .where(eq(tokenUsageTable.operation, "media-recommendations-enrich"));
+    expect(usageAfterFailure).toHaveLength(usageBeforeRace.length + checksPerRun - 1);
+    const partialFailureUsage = usageAfterFailure.filter((row) => !usageIdsBeforeFailure.has(row.id));
+    expect(partialFailureUsage.filter((row) => (
+      Math.abs(Number(row.costGbpEstimate) - JOURNALIST_COVERAGE_CALL_RESERVE_GBP) < 0.000001
+    ))).toHaveLength(1);
+    expect(partialFailureUsage.filter((row) => (
+      Math.abs(Number(row.costGbpEstimate) - 0.020944) < 0.000001
+    ))).toHaveLength(checksPerRun - 2);
 
     let calls = 0;
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
-    collectJournalistCoverage.mockImplementation(async () => {
+    collectJournalistCoverage.mockImplementation(async (input: { usage: MockCoverageUsage }) => {
+      const reservationId = await input.usage.reserve();
       calls += 1;
       await gate;
+      await input.usage.settle(reservationId, {
+        inputTokens: 1_000,
+        outputTokens: 100,
+        webSearchCalls: 1,
+      });
       return { evidence: [], warnings: [] };
     });
     const first = request("/store/media-db/recommendations/enrich", "workspace-a", {
@@ -626,10 +862,26 @@ describe("media recommendation refinement API", () => {
     const second = request("/store/media-db/recommendations/enrich", "workspace-a", {
       method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "race-story", recommendationSetId: body.recommendationSet.id }),
     });
-    while (calls < 2) await new Promise((resolve) => setTimeout(resolve, 1));
+    // Every invocation now runs its top-five provider checks concurrently,
+    // so wait until both requests have entered the provider for every row
+    // before releasing the shared gate.
+    while (calls < checksPerRun * 2) await new Promise((resolve) => setTimeout(resolve, 1));
     release();
     const statuses = await Promise.all([first.then((response) => response.status), second.then((response) => response.status)]);
-    expect(statuses.sort()).toEqual([200, 409]);
+    const committedCriteria = await db.select({ criteria: mediaRecommendationSetsTable.criteria })
+      .from(mediaRecommendationSetsTable)
+      .where(eq(mediaRecommendationSetsTable.id, body.recommendationSet.id));
+    const committedUsage = await db.select().from(tokenUsageTable)
+      .where(eq(tokenUsageTable.operation, "media-recommendations-enrich"));
+    expect({
+      statuses: statuses.sort(),
+      version: (committedCriteria[0].criteria as { enrichmentVersion?: number }).enrichmentVersion,
+      usageCount: committedUsage.length,
+    }).toEqual({
+      statuses: [200, 409],
+      version: 1,
+      usageCount: usageBeforeRace.length + checksPerRun * 3 - 1,
+    });
   });
 
   it("drops a recommendation whose outlet becomes private during enrichment", async () => {
@@ -667,9 +919,11 @@ describe("media recommendation refinement API", () => {
     let releaseProvider!: () => void;
     const started = new Promise<void>((resolve) => { providerStarted = resolve; });
     const gate = new Promise<void>((resolve) => { releaseProvider = resolve; });
-    collectJournalistCoverage.mockImplementationOnce(async () => {
+    collectJournalistCoverage.mockImplementationOnce(async (input: { usage: MockCoverageUsage }) => {
+      const reservationId = await input.usage.reserve();
       providerStarted();
       await gate;
+      await input.usage.settle(reservationId, { inputTokens: 1_000, outputTokens: 100, webSearchCalls: 1 });
       return { evidence: [], warnings: [] };
     }).mockResolvedValue({ evidence: [], warnings: [] });
 
@@ -805,9 +1059,11 @@ describe("media recommendation refinement API", () => {
     let releaseProvider!: () => void;
     const started = new Promise<void>((resolve) => { providerStarted = resolve; });
     const gate = new Promise<void>((resolve) => { releaseProvider = resolve; });
-    collectJournalistCoverage.mockImplementationOnce(async () => {
+    collectJournalistCoverage.mockImplementationOnce(async (input: { usage: MockCoverageUsage }) => {
+      const reservationId = await input.usage.reserve();
       providerStarted();
       await gate;
+      await input.usage.settle(reservationId, { inputTokens: 1_000, outputTokens: 100, webSearchCalls: 1 });
       return { evidence: [], warnings: [] };
     }).mockResolvedValue({ evidence: [], warnings: [] });
 
@@ -878,13 +1134,15 @@ describe("media recommendation refinement API", () => {
     let releaseProvider!: () => void;
     const started = new Promise<void>((resolve) => { providerStarted = resolve; });
     const gate = new Promise<void>((resolve) => { releaseProvider = resolve; });
-    collectJournalistCoverage.mockImplementationOnce(async () => {
+    collectJournalistCoverage.mockImplementationOnce(async (input: { usage: MockCoverageUsage }) => {
+      const reservationId = await input.usage.reserve();
       providerStarted();
       await gate;
+      await input.usage.settle(reservationId, { inputTokens: 1_000, outputTokens: 100, webSearchCalls: 1 });
       return { evidence: [], warnings: [] };
     }).mockResolvedValue({ evidence: [], warnings: [] });
     const usageBefore = await db.select().from(tokenUsageTable)
-      .where(eq(tokenUsageTable.operation, "content-media-recommendations-enrich"));
+      .where(eq(tokenUsageTable.operation, "media-recommendations-enrich"));
     const enriching = request("/store/media-db/recommendations/enrich", "workspace-a", {
       method: "POST",
       body: JSON.stringify({
@@ -903,8 +1161,8 @@ describe("media recommendation refinement API", () => {
       .where(eq(mediaRecommendationSetsTable.id, generatedBody.recommendationSet.id));
     expect(savedSet.criteria).toEqual(generatedBody.recommendationSet.criteria);
     const usageAfter = await db.select().from(tokenUsageTable)
-      .where(eq(tokenUsageTable.operation, "content-media-recommendations-enrich"));
-    expect(usageAfter).toHaveLength(usageBefore.length);
+      .where(eq(tokenUsageTable.operation, "media-recommendations-enrich"));
+    expect(usageAfter).toHaveLength(usageBefore.length + 1);
   });
 
   it("does not send an already deleted contact to the coverage provider", async () => {

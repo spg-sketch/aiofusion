@@ -152,6 +152,89 @@ describe("collectJournalistCoverage", () => {
     await expect(collectJournalistCoverage(input())).rejects.not.toThrow("secret request detail");
   });
 
+  it("settles a pre-call reservation with actual token and web-search usage", async () => {
+    const order: string[] = [];
+    responsesCreate.mockImplementation(async () => {
+      order.push("provider");
+      const response = requestResponse([{ title: "Grid changes", url: URL, excerpt: "Search snippet" }]);
+      return {
+        ...response,
+        output: [...response.output, { type: "web_search_call" }],
+        usage: { input_tokens: 100, output_tokens: 10 },
+      };
+    });
+    const reserve = vi.fn(async () => {
+      order.push("reserve");
+      return 17;
+    });
+    const settle = vi.fn(async () => { order.push("settle"); });
+
+    await collectJournalistCoverage({
+      ...input(),
+      usage: { reserve, settle },
+    });
+
+    expect(order).toEqual(["reserve", "provider", "settle"]);
+    expect(settle).toHaveBeenCalledWith(17, {
+      inputTokens: 100,
+      outputTokens: 10,
+      webSearchCalls: 1,
+    });
+  });
+
+  it("leaves the pre-call reservation in place when the provider attempt fails", async () => {
+    responsesCreate.mockRejectedValue(new Error("provider offline"));
+    const reserve = vi.fn(async () => 23);
+    const settle = vi.fn(async () => undefined);
+
+    await expect(collectJournalistCoverage({
+      ...input(),
+      usage: { reserve, settle },
+    })).rejects.toThrow("provider failed");
+
+    expect(reserve).toHaveBeenCalledTimes(1);
+    expect(settle).not.toHaveBeenCalled();
+  });
+
+  it("surfaces search timeouts and aborts the provider request", async () => {
+    vi.useFakeTimers();
+    let providerSignal: AbortSignal | undefined;
+    responsesCreate.mockImplementation((_request: unknown, options: { signal?: AbortSignal }) => {
+      providerSignal = options.signal;
+      return new Promise(() => {});
+    });
+    try {
+      const pending = collectJournalistCoverage(input());
+      const rejection = expect(pending).rejects.toThrow("Journalist coverage search timed out");
+      await vi.advanceTimersByTimeAsync(20_000);
+      await rejection;
+      expect(providerSignal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a source timeout explicit as a search suggestion warning", async () => {
+    vi.useFakeTimers();
+    responsesCreate.mockResolvedValue(requestResponse([
+      { title: "Grid changes", url: URL, excerpt: "Search snippet" },
+    ]));
+    fetchMediaSourceEvidence.mockImplementation(() => new Promise(() => {}));
+    try {
+      const pending = collectJournalistCoverage(input());
+      await vi.advanceTimersByTimeAsync(17_000);
+      const result = await pending;
+      expect(result.evidence[0]).toMatchObject({
+        url: URL,
+        attribution: "search_suggested",
+        authorMatched: false,
+      });
+      expect(result.warnings.join(" ")).toContain(`Source check timed out for ${URL}`);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not use the original candidate domain after a safe redirect", async () => {
     responsesCreate.mockResolvedValue(requestResponse([
       { title: "Grid changes", url: URL, excerpt: "Search snippet" },

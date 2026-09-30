@@ -6,9 +6,9 @@ import { isContentStoreReady, loadArchive, useContentStore } from "../lib/conten
 import * as IntakeForm from "../IntakeForm";
 import { getExactTargetPhrases as getCanonicalExactTargetPhrases, normaliseExactTargetPhrases, type ExactTargetPhrase } from "../lib/exactTargetPhrases";
 import { SummaryRow } from "./shared";
-import { RecommendationCard, LiveDiscoveryCard, isSendableContactEmail, type Contact, type Recommendation, type Decision, type LiveDiscovery, type DiscoveryReviewStatus } from "./JournalistComponents";
+import { RecommendationCard, LiveDiscoveryCard, type Contact, type Recommendation, type Decision, type LiveDiscovery, type DiscoveryReviewStatus } from "./JournalistComponents";
 import { MediaOutreachPanel } from "./MediaOutreachPanel";
-import { aiRunKey, startAiRun, useAiRun } from "../lib/aiRunLifecycle";
+import { aiRunKey, discardAiRun, startAiRun, useAiRun } from "../lib/aiRunLifecycle";
 import { getSession } from "../lib/auth";
 import { useDatabaseCategories } from "../lib/databaseCategories";
 
@@ -31,7 +31,10 @@ function normaliseTargetingBrief(value: unknown, fallback: TargetingBrief): Targ
     angle: typeof raw.angle === "string" ? raw.angle : fallback.angle,
     audience: typeof raw.audience === "string" ? raw.audience : fallback.audience,
     regions: stringList(raw.regions, fallback.regions),
-    publicationTypes: stringList(raw.publicationTypes, fallback.publicationTypes),
+    // Older briefs could contain multiple sectors. Keep the first saved value
+    // as the deterministic single-select choice; the server record is only
+    // changed when the user explicitly saves the brief.
+    publicationTypes: stringList(raw.publicationTypes, fallback.publicationTypes).slice(0, 1),
     whyNow: typeof raw.whyNow === "string" ? raw.whyNow : fallback.whyNow,
   };
 }
@@ -260,14 +263,49 @@ function exportDate(value: string | null | undefined): string {
 }
 
 export const SHORTLIST_EXPORT_COLUMNS = [
-  "First Name", "Last Name", "Role", "Email", "Email Status", "Phone", "Mobile",
-  "Outlet", "Category", "Country", "Publication Reach", "Beats", "Sectors",
-  "Geography", "Language", "Seniority", "Editorial Status", "LinkedIn URL",
-  "Source URL", "Source Reference", "Publication Authority", "Journalist Authority",
-  "Confidence", "Last Verified", "Source Status", "Lifecycle Status", "Notes", "Review Notes",
+  "First Name", "Last Name", "Role", "Email", "Outlet", "Category", "Country",
+  "Publication Reach", "Beats", "Sectors", "Geography", "LinkedIn URL",
+  "Source URL", "Source Reference", "Confidence", "Last Verified", "Notes",
 ] as const;
 
+export function shortlistExportHtml(contacts: Contact[]): string {
+  const title = "Accepted Media Contacts";
+  const detailFields: Array<[string, (contact: Contact) => unknown]> = [
+    ["Role", (contact) => contact.role],
+    ["Email", (contact) => contact.email],
+    ["Outlet", (contact) => contact.outletName],
+    ["Category", (contact) => contact.outletCategory],
+    ["Country", (contact) => contact.outletCountry],
+    ["Publication reach", (contact) => contact.publicationReach || contact.outletReachBand],
+    ["Beats", (contact) => (contact.beats || []).join("; ")],
+    ["Sectors", (contact) => (contact.sectors || []).join("; ")],
+    ["Geography", (contact) => contact.geography],
+    ["LinkedIn", (contact) => contact.linkedinUrl],
+    ["Source URL", (contact) => contact.sourceUrl],
+    ["Source reference", (contact) => contact.sourceRef],
+    ["Confidence", (contact) => contact.confidence || contact.confidenceLevel],
+    ["Last verified", (contact) => exportDate(contact.lastVerifiedAt)],
+    ["Notes", (contact) => contact.notes],
+  ];
+  const cards = contacts.map((contact, index) => {
+    const name = [contact.firstName, contact.lastName].filter(Boolean).join(" ") || "Unnamed contact";
+    const details = detailFields
+      .map(([label, value]) => `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(String(value(contact) ?? ""))}</p>`)
+      .join("");
+    return `<section class="contact${index ? " page-break" : ""}"><h2>${escapeHtml(name)}</h2>${details}</section>`;
+  }).join("");
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font:11pt Arial,sans-serif;color:#172033}h1{font-size:20pt}h2{font-size:14pt;margin:0 0 8pt}.contact{border:1px solid #cbd5e1;border-radius:6px;padding:12pt;margin:0 0 12pt;break-inside:avoid}.contact p{margin:3pt 0;overflow-wrap:anywhere}.page-break{break-before:page;page-break-before:always}</style></head><body><h1>${title}</h1>${cards}</body></html>`;
+}
+
+function researchRequestError(response: Response, data: Record<string, unknown>, fallback: string): Error {
+  if (response.status === 429) {
+    return new Error("This request reached the account's AI spend limit or request quota. Ask an account admin to review the limit, or try again after it resets.");
+  }
+  return new Error(typeof data.error === "string" ? data.error : fallback);
+}
+
 const RESEARCH_SELECTION_KEY = "aio.research.selection.v1";
+const DISCOVERY_RESET_KEY = "aio.research.discovery-reset.v1";
 
 function researchSelectionStorageKey(projectId: string | null): string | null {
   if (!projectId) return null;
@@ -280,6 +318,22 @@ function researchSelectionStorageKey(projectId: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+function discoveryResetStorageKey(runKey: string): string {
+  return `${DISCOVERY_RESET_KEY}::${encodeURIComponent(runKey)}`;
+}
+
+function serverDiscoveryWasReset(runKey: string): boolean {
+  try { return sessionStorage.getItem(discoveryResetStorageKey(runKey)) === "1"; } catch { return false; }
+}
+
+function markServerDiscoveryReset(runKey: string): void {
+  try { sessionStorage.setItem(discoveryResetStorageKey(runKey), "1"); } catch { /* browser storage may be unavailable */ }
+}
+
+function clearServerDiscoveryReset(runKey: string): void {
+  try { sessionStorage.removeItem(discoveryResetStorageKey(runKey)); } catch { /* browser storage may be unavailable */ }
 }
 
 function readRememberedResearchSelection(storageKey: string | null): string {
@@ -297,9 +351,6 @@ export function shortlistExportRow(contact: Contact): string[] {
     contact.lastName,
     contact.role,
     contact.email,
-    contact.email ? (isSendableContactEmail(contact.email) ? "Sendable format" : "Review - not sendable") : "",
-    contact.phone,
-    contact.mobile,
     contact.outletName,
     contact.outletCategory,
     contact.outletCountry,
@@ -307,20 +358,12 @@ export function shortlistExportRow(contact: Contact): string[] {
     (contact.beats || []).join("; "),
     (contact.sectors || []).join("; "),
     contact.geography,
-    contact.language,
-    contact.seniority,
-    contact.editorialStatus,
     contact.linkedinUrl,
     contact.sourceUrl,
     contact.sourceRef,
-    contact.publicationAuthority,
-    contact.journalistAuthority,
     contact.confidence || contact.confidenceLevel,
     exportDate(contact.lastVerifiedAt),
-    contact.sourceStatus,
-    contact.lifecycleStatus,
     contact.notes,
-    contact.reviewNotes,
   ].map((value) => String(value ?? ""));
 }
 
@@ -359,6 +402,7 @@ function MediaResearchPage() {
   const [liveNow, setLiveNow] = useState(() => Date.now());
   const [savedDiscoveries, setSavedDiscoveries] = useState<Record<string, DiscoveryReviewStatus>>({});
   const [discoveryToken, setDiscoveryToken] = useState("");
+  const researchGeneration = useRef(0);
   const [bookmarkedContacts, setBookmarkedContacts] = useState<Set<number>>(() => new Set());
   const [bookmarkLoading, setBookmarkLoading] = useState<Record<number, boolean>>({});
   const [bookmarkLoadError, setBookmarkLoadError] = useState("");
@@ -442,7 +486,7 @@ function MediaResearchPage() {
     return () => { active = false; };
   }, [bookmarkLoadAttempt, workspaceId]);
 
-  const pollDiscoveryRun = async (runId: string, _progress?: (value: number) => void): Promise<DiscoveryRunResult> => {
+  const pollDiscoveryRun = async (runId: string, _progress?: (value: number) => void, generation = researchGeneration.current): Promise<DiscoveryRunResult> => {
     const deadline = Date.now() + 120_000;
     const pollStoryKey = `${projectId}:${storyKey}`;
     for (;;) {
@@ -462,9 +506,9 @@ function MediaResearchPage() {
         window.clearTimeout(timeout);
       }
       const data = await response.json() as RemoteDiscoveryRun & { error?: string };
-      if (!response.ok) throw new Error(data.error || "Could not load live media research.");
+      if (!response.ok) throw researchRequestError(response, data as Record<string, unknown>, "Could not load live media research.");
       const receivedItems = Array.isArray(data.items) ? data.items : [];
-      if (activeStoryRef.current === pollStoryKey) {
+      if (researchGeneration.current === generation && activeStoryRef.current === pollStoryKey) {
         setLiveItems((current) => mergeLiveDiscoveryItems(current, receivedItems));
         if (data.discoveryToken) setDiscoveryToken(data.discoveryToken);
       }
@@ -472,7 +516,7 @@ function MediaResearchPage() {
       if (data.status === "succeeded") return { items: receivedItems, discoveryToken: data.discoveryToken || "" };
       await new Promise((resolve) => window.setTimeout(resolve, 1200));
     }
-    throw new Error("Live search is taking longer than expected. Leave this page and return later to resume the search.");
+    throw new Error("Live search timed out while waiting for progress. The server keeps the run for rehydration; retry now or return to this article later to resume and review any saved results.");
   };
 
   const [brief, setBrief] = useState<TargetingBrief>({ topic: "", angle: "", audience: "", regions: [], publicationTypes: [], whyNow: "" });
@@ -568,6 +612,7 @@ function MediaResearchPage() {
 
   const saveStoryShortlist = async (contactId: number) => {
     if (!projectId || !storyKey) return;
+    const generation = researchGeneration.current;
     const requestKey = `${projectId}:${storyKey}`;
     const savingKey = `${requestKey}:${contactId}`;
     setDecisionSaving((current) => ({ ...current, [savingKey]: true }));
@@ -587,7 +632,7 @@ function MediaResearchPage() {
         throw new Error("Could not add contact to this story shortlist: the server returned invalid data.");
       }
       if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Could not add contact to this story shortlist.");
-      if (activeStoryRef.current !== requestKey) return;
+      if (researchGeneration.current !== generation || activeStoryRef.current !== requestKey) return;
       const saved = data.decision && typeof data.decision === "object" ? data.decision as Partial<Decision> : {};
       setDecisions((current) => ({
         ...current,
@@ -599,9 +644,9 @@ function MediaResearchPage() {
       }));
       await loadDecisions();
     } catch (reason) {
-      if (activeStoryRef.current === requestKey) setError(reason instanceof Error ? reason.message : "Could not add contact to this story shortlist.");
+      if (researchGeneration.current === generation && activeStoryRef.current === requestKey) setError(reason instanceof Error ? reason.message : "Could not add contact to this story shortlist.");
     } finally {
-      setDecisionSaving((current) => ({ ...current, [savingKey]: false }));
+      if (researchGeneration.current === generation) setDecisionSaving((current) => ({ ...current, [savingKey]: false }));
     }
   };
   useEffect(() => { void loadDecisions(); }, [projectId, storyKey]);
@@ -655,7 +700,7 @@ function MediaResearchPage() {
         body: JSON.stringify({ projectId, storyKey, recommendationSetId }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Could not enrich recommendations.");
+      if (!response.ok) throw researchRequestError(response, data, "Could not enrich recommendations.");
       if (activeStoryRef.current !== requestKey || recommendationLoadSequence.current !== loadId) return;
       const set = data.recommendationSet && typeof data.recommendationSet === "object"
         ? data.recommendationSet as Record<string, unknown>
@@ -678,6 +723,7 @@ function MediaResearchPage() {
 
   const saveAndRecommend = async () => {
     if (!selected || !projectId) { setError("Choose a saved article and active project before matching contacts."); return; }
+    const generation = researchGeneration.current;
     
     // Save brief first
     setLoading(true);
@@ -689,7 +735,8 @@ function MediaResearchPage() {
         body: JSON.stringify({ projectId, storyKey, brief })
       });
       const savedBriefResponse = await briefResponse.json() as Record<string, unknown>;
-      if (!briefResponse.ok) throw new Error(typeof savedBriefResponse.error === "string" ? savedBriefResponse.error : "Could not save targeting brief.");
+      if (!briefResponse.ok) throw researchRequestError(briefResponse, savedBriefResponse, "Could not save targeting brief.");
+      if (researchGeneration.current !== generation) return;
       const savedBrief = normaliseTargetingBrief(savedBriefResponse.brief, brief);
       briefForMatch = {
         ...savedBrief,
@@ -698,8 +745,10 @@ function MediaResearchPage() {
       setBrief(savedBrief);
       setBriefIsDirty(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save targeting brief.");
-      setLoading(false);
+      if (researchGeneration.current === generation) {
+        setError(e instanceof Error ? e.message : "Could not save targeting brief.");
+        setLoading(false);
+      }
       return;
     }
 
@@ -734,7 +783,8 @@ function MediaResearchPage() {
          body: JSON.stringify({ projectId, storyKey, brief: briefForMatch, terms, targetPhrases: activeTargetPhrases }),
       });
       const data = await response.json() as Record<string, unknown>;
-      if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Could not match database contacts.");
+      if (!response.ok) throw researchRequestError(response, data, "Could not match database contacts.");
+      if (researchGeneration.current !== generation) return;
       if (!requestIsCurrent(request, recommendationRequest.current)) return;
       const set = data.recommendationSet && typeof data.recommendationSet === "object"
         ? data.recommendationSet as Record<string, unknown>
@@ -751,9 +801,9 @@ function MediaResearchPage() {
     await loadDecisions();
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === "AbortError") return;
-      if (requestIsCurrent(request, recommendationRequest.current)) setError(reason instanceof Error ? reason.message : "Could not match database contacts.");
+      if (researchGeneration.current === generation && requestIsCurrent(request, recommendationRequest.current)) setError(reason instanceof Error ? reason.message : "Could not match database contacts.");
     } finally {
-      if (requestIsCurrent(request, recommendationRequest.current)) {
+      if (researchGeneration.current === generation && requestIsCurrent(request, recommendationRequest.current)) {
         recommendationRequest.current = null;
         setLoading(false);
       }
@@ -839,12 +889,14 @@ function MediaResearchPage() {
 
   useEffect(() => {
     if (!projectId || !storyKey) return;
+    if (serverDiscoveryWasReset(discoveryRunKey)) return;
+    const generationAtStart = researchGeneration.current;
     let cancelled = false;
     void (async () => {
       const response = await fetch(`${apiBase()}/api/content/journalist-search-runs/latest?projectId=${encodeURIComponent(projectId)}&storyKey=${encodeURIComponent(storyKey)}`, { credentials: "include" });
-      if (!response.ok || cancelled) return;
+      if (!response.ok || cancelled || researchGeneration.current !== generationAtStart || serverDiscoveryWasReset(discoveryRunKey)) return;
       const remote = await response.json() as RemoteDiscoveryRun | null;
-      if (!remote || cancelled || activeStoryRef.current !== `${projectId}:${storyKey}`) return;
+      if (!remote || cancelled || researchGeneration.current !== generationAtStart || serverDiscoveryWasReset(discoveryRunKey) || activeStoryRef.current !== `${projectId}:${storyKey}`) return;
       setLiveItems(Array.isArray(remote.items) ? remote.items : []);
       if (remote.discoveryToken) setDiscoveryToken(remote.discoveryToken);
       if (remote.status === "running" && !discoveryRun) {
@@ -888,6 +940,7 @@ function MediaResearchPage() {
 
   const discoverLive = async () => {
     if (!selected || !projectId) { setError("Choose a saved article and active project before searching the web."); return; }
+    const generation = researchGeneration.current;
     const criteria = generatedCriteria(
       selected,
       [...categories, ...brief.publicationTypes.filter((sector) => databaseCategories.categories.includes(sector))],
@@ -928,20 +981,21 @@ function MediaResearchPage() {
           }),
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Could not complete live media research.");
+        if (!response.ok) throw researchRequestError(response, data, "Could not complete live media research.");
         const immediateItems = Array.isArray(data.items) ? data.items as LiveDiscovery[] : null;
         if (immediateItems) {
           return { items: immediateItems, discoveryToken: typeof data.discoveryToken === "string" ? data.discoveryToken : "" };
         }
         const runId = typeof data.runId === "string" ? data.runId : "";
         if (!runId) throw new Error("The live discovery run could not be started.");
-        return pollDiscoveryRun(runId, progress);
+        return pollDiscoveryRun(runId, progress, generation);
       },
       onSuccess: async (result) => {
         // The app-owned lifecycle retains the verified result across in-app
         // navigation. Do not submit candidates for human review automatically;
         // each result still requires the explicit "Send for review" action.
-        if (activeStoryRef.current !== requestKey) return;
+        if (researchGeneration.current !== generation || activeStoryRef.current !== requestKey) return;
+        clearServerDiscoveryReset(discoveryRunKey);
         setLiveItems((current) => mergeLiveDiscoveryItems(current, result.items));
         setDiscoveryToken(result.discoveryToken);
         setError("");
@@ -1024,6 +1078,7 @@ function MediaResearchPage() {
   };
   const toggleRestriction = async (contactId: number, doNotContact: boolean) => {
     if (!projectId || !storyKey) return;
+    const generation = researchGeneration.current;
     const requestKey = `${projectId}:${storyKey}`;
     try {
       const response = await fetch(`${apiBase()}/api/store/media-db/recommendations/contact-restriction`, {
@@ -1033,7 +1088,7 @@ function MediaResearchPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not save restriction.");
       
-      if (activeStoryRef.current !== requestKey) return;
+      if (researchGeneration.current !== generation || activeStoryRef.current !== requestKey) return;
       // Update immediately, then re-read the saved set. The server recomputes
       // readiness from the current restriction and lifecycle state; retaining
       // the old assessment here would leave an accepted contact blocked after
@@ -1043,7 +1098,9 @@ function MediaResearchPage() {
         : item));
       await Promise.all([loadRecommendations(), loadDecisions()]);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not save restriction.");
+      if (researchGeneration.current === generation && activeStoryRef.current === requestKey) {
+        setError(reason instanceof Error ? reason.message : "Could not save restriction.");
+      }
     }
   };
 
@@ -1083,7 +1140,7 @@ function MediaResearchPage() {
     const title = "Accepted Media Contacts";
     const content = format === "xls"
       ? [SHORTLIST_EXPORT_COLUMNS, ...accepted.map(shortlistExportRow)].map((row) => row.map(researchCsvCell).join(",")).join("\r\n")
-      : `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body><h1>${title}</h1><table border="1"><tr>${SHORTLIST_EXPORT_COLUMNS.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>${accepted.map((contact) => `<tr>${shortlistExportRow(contact).map((value) => `<td>${escapeHtml(value)}</td>`).join("")}</tr>`).join("")}</table></body></html>`;
+      : shortlistExportHtml(accepted);
     const blob = new Blob([content], { type: format === "xls" ? "text/csv;charset=utf-8;" : "application/msword" });
     const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `${title}.${format === "xls" ? "csv" : "doc"}`; link.click(); URL.revokeObjectURL(url);
   };
@@ -1100,11 +1157,54 @@ function MediaResearchPage() {
         : [...brief.regions.filter((value) => value !== "Global"), region];
     editBrief({ regions });
   };
+  const resetResearch = () => {
+    // Invalidate UI ownership before scheduling state changes so late
+    // responses cannot repopulate a cleared search. Drop this page's
+    // app-owned snapshot and suppress server-history rehydration for this
+    // article in this browser session; server history itself is untouched.
+    researchGeneration.current += 1;
+    invalidateRequests();
+    discardAiRun(discoveryRunKey);
+    if (storyKey) markServerDiscoveryReset(discoveryRunKey);
+    briefLoadSequence.current += 1;
+    activeStoryRef.current = `${projectId || ""}:`;
+    setSelectedId("");
+    setBrief({ topic: "", angle: "", audience: "", regions: [], publicationTypes: [], whyNow: "" });
+    setBriefIsDirty(false);
+    setBriefReadyKey("");
+    setBriefLoading(false);
+    setBriefLoadError("");
+    setItems([]);
+    setVisibleRecommendationCount(5);
+    setTotalMatches(0);
+    setRecommendationSetId(null);
+    setRecommendationHasRun(false);
+    setEvaluation(null);
+    setDecisions({});
+    setDecisionSaving({});
+    setDecisionContacts({});
+    setDecisionAssessments({});
+    setLiveItems([]);
+    setLiveLoading(false);
+    setDiscoveryToken("");
+    setSavedDiscoveries({});
+    setLoading(false);
+    setEnriching(false);
+    setEnrichmentWarning("");
+    setError("");
+    try {
+      if (selectionStorageKey) sessionStorage.removeItem(selectionStorageKey);
+      localStorage.removeItem("aio.research.preload");
+    } catch { /* browser storage may be unavailable */ }
+    preloadIdRef.current = "";
+  };
   const hasUnavailableSavedSector = brief.publicationTypes.length > 0
     && databaseCategories.status !== "loading"
     && (databaseCategories.status !== "ready" || brief.publicationTypes.some((sector) => !databaseCategories.categories.includes(sector)));
   const sectorSelectionUnresolved = brief.publicationTypes.length > 0
     && (databaseCategories.status === "loading" || hasUnavailableSavedSector);
+  const showResetSearch = recommendationHasRun || items.length > 0 || liveItems.length > 0 || loading || liveLoading
+    || ["running", "succeeded", "failed"].includes(discoveryRun?.status || "");
   const contactCard = (item: Recommendation, shortlist = false) => {
     const sharedScoreCount = shortlist ? 1 : items.filter((candidate) => candidate.score === item.score).length;
     return (
@@ -1125,7 +1225,15 @@ function MediaResearchPage() {
     );
   };
   return <div className="p-6 sm:p-8 max-w-6xl mx-auto"><div className="mb-6"><div className="flex gap-3 items-center"><Target color="#fff" size={28} /><h1 className="text-3xl sm:text-4xl" style={{ color: "#fff", fontFamily: "'Alice', Georgia, serif" }}>Media Research</h1></div><p className="text-[14px] mt-2" style={{ color: "rgba(255,255,255,.85)" }}>Match trusted contacts already in your database or discover current journalists from public web sources. Every live result includes evidence and a source. Live search sends the selected article excerpt to OpenAI only after you explicitly run it.</p></div>
-    <section className="bg-white rounded-2xl border p-5 mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><label className="block text-[12px] font-bold mb-2" style={{ color: vars.navy }}>Saved article</label><select data-testid="select-research-article" value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setItems([]); setVisibleRecommendationCount(5); setTotalMatches(0); setLiveItems([]); setDiscoveryToken(""); setError(""); }} className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400"><option value="">Choose a saved article</option>{archive.map((a) => <option key={a.id} value={a.id}>{a.title} ({a.contentType})</option>)}</select>{selected && <><div className="grid sm:grid-cols-2 gap-2 mt-4"><SummaryRow label="Article" value={selected.title} /><SummaryRow label="Categories" value={categories.join(", ") || "No categories selected"} /></div><div className="mt-3 rounded-lg border px-3 py-2" style={{ borderColor: vars.g200 }}><p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: vars.g500 }}>Exact target phrases</p>{activeTargetPhrases.length ? <ul className="mt-1 list-disc pl-4 text-[13px]" style={{ color: vars.g600 }}>{activeTargetPhrases.map((phrase) => <li key={phrase.id}><span className="font-medium">{phrase.text}</span><span className="ml-2 text-[11px] text-slate-400">({phrase.intentGroup})</span></li>)}</ul> : <p className="mt-1 text-[12px] text-slate-500">No exact phrases selected for this article or project.</p>}</div></>}
+     <section className="bg-white rounded-2xl border p-5 mb-5 shadow-sm" style={{ borderColor: vars.g200 }}>
+       <div className="flex flex-wrap items-end justify-between gap-3">
+         <div className="flex-1 min-w-[240px]">
+           <label className="block text-[12px] font-bold mb-2" style={{ color: vars.navy }}>Saved article</label>
+           <select data-testid="select-research-article" value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setItems([]); setVisibleRecommendationCount(5); setTotalMatches(0); setLiveItems([]); setDiscoveryToken(""); setError(""); }} className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400"><option value="">Choose a saved article</option>{archive.map((a) => <option key={a.id} value={a.id}>{a.title} ({a.contentType})</option>)}</select>
+         </div>
+         {showResetSearch && <button type="button" data-testid="button-new-research-search" onClick={resetResearch} className="px-4 py-2 rounded-lg border text-[12px] font-semibold bg-white hover:bg-slate-50" style={{ borderColor: vars.g200, color: vars.navy }}>New search / reset</button>}
+       </div>
+       {selected && <><div className="grid sm:grid-cols-2 gap-2 mt-4"><SummaryRow label="Article" value={selected.title} /><SummaryRow label="Categories" value={categories.join(", ") || "No categories selected"} /></div><div className="mt-3 rounded-lg border px-3 py-2" style={{ borderColor: vars.g200 }}><p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: vars.g500 }}>Exact target phrases</p>{activeTargetPhrases.length ? <ul className="mt-1 list-disc pl-4 text-[13px]" style={{ color: vars.g600 }}>{activeTargetPhrases.map((phrase) => <li key={phrase.id}><span className="font-medium">{phrase.text}</span><span className="ml-2 text-[11px] text-slate-400">({phrase.intentGroup})</span></li>)}</ul> : <p className="mt-1 text-[12px] text-slate-500">No exact phrases selected for this article or project.</p>}</div></>}
        <div className="mt-5 pt-5 border-t" style={{ borderColor: vars.g100 }}>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-[14px] font-semibold" style={{ color: vars.navy }}>Targeting Brief</h3>
@@ -1147,15 +1255,16 @@ function MediaResearchPage() {
                <label className="block text-[12px] font-bold mb-1" style={{ color: vars.navy }}>Media sectors</label>
                <select
                  aria-label="Media sectors"
-                 multiple
-                 value={brief.publicationTypes}
+                  data-testid="select-media-sector"
+                  value={brief.publicationTypes[0] || ""}
                  disabled={databaseCategories.status !== "ready"}
-                 onChange={(event) => editBrief({ publicationTypes: Array.from(event.currentTarget.selectedOptions, (option) => option.value) })}
-                 className="w-full min-h-24 border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400 disabled:bg-slate-50"
+                  onChange={(event) => editBrief({ publicationTypes: event.currentTarget.value ? [event.currentTarget.value] : [] })}
+                  className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400 disabled:bg-slate-50"
                >
+                  <option value="">No sector filter</option>
                  {databaseCategories.categories.map((category) => <option key={category} value={category}>{category}</option>)}
                </select>
-               <p className="mt-1 text-[11px] text-slate-500">Choose one or more sectors from your Media Database categories.</p>
+                <p className="mt-1 text-[11px] text-slate-500">Choose one sector from your Media Database categories, or leave the filter blank.</p>
                {databaseCategories.status === "loading" && <p className="mt-1 text-[11px] text-slate-500">Loading database sectors…</p>}
                {databaseCategories.status === "empty" && <p className="mt-1 text-[11px] text-amber-700">No database sectors are available yet. Continue without a sector filter.</p>}
                {databaseCategories.status === "error" && <p className="mt-1 text-[11px] text-rose-700">{databaseCategories.error} <button type="button" onClick={databaseCategories.retry} className="underline">Retry</button></p>}
@@ -1173,7 +1282,10 @@ function MediaResearchPage() {
           </div>
        </div>
 
-        <div className="mt-5 pt-5 border-t flex flex-wrap gap-3" style={{ borderColor: vars.g100 }}><button data-testid="button-recommend-contacts" disabled={loading || briefLoading || briefReadyKey !== `${projectId}:${storyKey}` || Boolean(briefLoadError) || sectorSelectionUnresolved || !selected || brief.regions.length === 0 || !brief.topic || !brief.angle} onClick={() => void saveAndRecommend()} className="px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-all shadow-sm" style={{ background: vars.coral }}>{loading ? <Loader2 className="inline animate-spin mr-1.5" size={16} /> : <Target className="inline mr-1.5" size={16} />}Save brief & match database contacts</button>{items.length > 0 && <button data-testid="button-discover-live" disabled={liveLoading || briefLoading || briefReadyKey !== `${projectId}:${storyKey}` || Boolean(briefLoadError) || sectorSelectionUnresolved || !selected || brief.regions.length === 0} onClick={() => void discoverLive()} className="px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-all shadow-sm" style={{ background: vars.navy }}>{liveLoading ? <Loader2 className="inline animate-spin mr-1.5" size={16} /> : <Search className="inline mr-1.5" size={16} />}Expand with live search</button>}</div><p className="mt-3 text-[11px]" style={{ color: vars.g500 }}>External live search is explicit and does not run automatically. It uses the selected article excerpt and the saved Targeting Brief for AI evaluation. The selected article excerpt is sent to OpenAI only when you explicitly run live search; any returned email must be supported by the cited public source.</p></section>
+        <div className="mt-5 pt-5 border-t flex flex-wrap gap-3" style={{ borderColor: vars.g100 }}><button data-testid="button-recommend-contacts" disabled={loading || briefLoading || briefReadyKey !== `${projectId}:${storyKey}` || Boolean(briefLoadError) || sectorSelectionUnresolved || !selected || brief.regions.length === 0 || !brief.topic || !brief.angle} onClick={() => void saveAndRecommend()} className="px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-all shadow-sm" style={{ background: vars.coral }}>{loading ? <Loader2 className="inline animate-spin mr-1.5" size={16} /> : <Target className="inline mr-1.5" size={16} />}Save brief & match database contacts</button>{items.length > 0 && <button data-testid="button-discover-live" disabled={liveLoading || briefLoading || briefReadyKey !== `${projectId}:${storyKey}` || Boolean(briefLoadError) || sectorSelectionUnresolved || !selected || brief.regions.length === 0} onClick={() => void discoverLive()} className="px-5 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 transition-all shadow-sm" style={{ background: vars.navy }}>{liveLoading ? <Loader2 className="inline animate-spin mr-1.5" size={16} /> : <Search className="inline mr-1.5" size={16} />}Expand with live search</button>}</div><p className="mt-3 text-[11px]" style={{ color: vars.g500 }}>External live search is explicit and does not run automatically. It uses the selected article excerpt and the saved Targeting Brief for AI evaluation. The selected article excerpt is sent to OpenAI only when you explicitly run live search; any returned email must be supported by the cited public source.</p>
+        {items.length > 0 && <p className="mt-2 text-[11px] text-slate-500">“Save to My Media Database” creates an account-level reusable contact bookmark. It does not add the contact to this story’s shortlist or create story outreach planning.</p>}
+        {showResetSearch && <p className="mt-2 text-[11px] text-slate-500">New search / reset clears this page’s current brief and results and forgets the selected article here; saved briefs, story decisions, bookmarks, and outreach remain in your account.</p>}
+      </section>
      {error && <p data-testid="status-research-error" className="p-3 rounded bg-white text-[12px] mb-5" style={{ color: vars.red }}>{error}</p>}
       {bookmarkLoadError && <p data-testid="status-bookmark-load-error" className="p-3 rounded bg-white text-[12px] mb-5 text-amber-800">Saved status could not be loaded: {bookmarkLoadError}. Saving remains available. <button type="button" onClick={() => setBookmarkLoadAttempt((attempt) => attempt + 1)} className="underline">Retry saved status</button></p>}
      {(liveLoading || discoveryRun?.status === "failed" || discoveryRun?.status === "succeeded") && <section className="bg-white rounded-xl border p-4 mb-5" style={{ borderColor: vars.g200 }} data-testid="status-live-discovery">
@@ -1183,7 +1295,7 @@ function MediaResearchPage() {
             <p className="text-[12px] text-slate-600">Elapsed this session: {Math.floor(liveElapsedSeconds / 60)}m {liveElapsedSeconds % 60}s{liveItems.length ? ` · ${verifiedLiveCount} verified, ${pendingLiveCount} pending` : ""}</p>
            {liveLoading && liveElapsedSeconds >= 15 && <p className="text-[12px] text-slate-600 mt-1">Checks are continuing. Verified results appear here as they are ready; the search has no promised completion time.</p>}
            {liveLoading && liveElapsedSeconds >= 40 && <p className="text-[12px] text-slate-600 mt-1">You can leave and return to this article later to resume the account-bound search.</p>}
-           {discoveryRun?.status === "failed" && <p className="text-[12px] text-rose-700 mt-1">The run failed. You can retry the live search; any verified results already shown remain available for review.</p>}
+            {discoveryRun?.status === "failed" && <p className="text-[12px] text-rose-700 mt-1">The run stopped or timed out. Retry live search; any verified results remain available for review. Server-persisted runs are rehydrated when you return to this article, and a timeout does not delete them.</p>}
          </div>
          {discoveryRun?.status === "failed" && <button type="button" data-testid="button-retry-live-search" onClick={() => void discoverLive()} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Retry live search</button>}
        </div>
@@ -1196,7 +1308,7 @@ function MediaResearchPage() {
             {enriching ? "Checking top 5..." : "Check top 5 recent coverage"}
           </button>
         )}
-       </div></div>{enrichmentWarning && <p className="mx-5 mb-3 rounded-lg bg-amber-50 border border-amber-100 p-3 text-[12px] text-amber-800">Coverage check warning: {enrichmentWarning}</p>}{items.slice(0, visibleRecommendationCount).map((item) => contactCard(item))}{visibleRecommendationCount < items.length && <div className="p-5 border-t text-center" style={{ borderColor: vars.g200 }}><button type="button" data-testid="button-show-more-recommendations" onClick={() => setVisibleRecommendationCount((count) => Math.min(items.length, count + 5))} className="px-5 py-2.5 rounded-lg border bg-white text-[13px] font-semibold hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}>Show 5 more preloaded matches</button></div>}</section>}
+        </div></div><p className="mx-5 mb-3 text-[11px] text-slate-500">This checks recent coverage for up to five contacts per run and counts toward your account’s AI spend limit. It is a coverage research check, not a content-writing AI action.</p>{enrichmentWarning && <p className="mx-5 mb-3 rounded-lg bg-amber-50 border border-amber-100 p-3 text-[12px] text-amber-800">Coverage check warning: {enrichmentWarning}</p>}{items.slice(0, visibleRecommendationCount).map((item) => contactCard(item))}{visibleRecommendationCount < items.length && <div className="p-5 border-t text-center" style={{ borderColor: vars.g200 }}><button type="button" data-testid="button-show-more-recommendations" onClick={() => setVisibleRecommendationCount((count) => Math.min(items.length, count + 5))} className="px-5 py-2.5 rounded-lg border bg-white text-[13px] font-semibold hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}>Show 5 more preloaded matches</button></div>}</section>}
        {liveItems.length > 0 && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Public web discoveries</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{liveItems.length} journalists across {livePublicationCount} publications. {liveLoading ? "Evidence checks are continuing. Verified cards are ready to review now; pending candidates are identified." : "Evidence checks are complete."}</p></div>
       {liveGroups.filter((group) => group.items.length > 0).map((group) => <div key={group.label}>
         <div className="px-5 py-2.5 border-b text-[12px] font-bold uppercase tracking-wide" style={{ color: vars.navy, background: "rgba(31,116,143,0.07)", borderColor: vars.g200 }}>{group.label} · {group.items.length}</div>

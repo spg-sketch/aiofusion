@@ -8,7 +8,7 @@ import { contentAiLimiter } from "../middleware/rate-limit";
 import { deepStripEmDashes } from "../lib/text-sanitise";
 import { fetchSiteContent, fetchSiteContentWithSubpages } from "../lib/safe-fetch";
 import { db, mediaOutletsTable, mediaContactsTable, auditLocksTable, projectsTable } from "@workspace/db";
-import { isNull, eq, and, gte } from "drizzle-orm";
+import { isNull, eq, and, gte, sql } from "drizzle-orm";
 import { logTokenUsage } from "../lib/token-usage";
 import { checkFairUsage, checkMonthlySpendLimit, detectAndLogSpike } from "../lib/fair-usage";
 import { features } from "../lib/features";
@@ -28,7 +28,7 @@ import {
 } from "../lib/exact-target-phrases";
 import {
   completeMediaDiscoveryRun,
-  createMediaDiscoveryRun,
+  ensureMediaDiscoveryRunsTable,
   failMediaDiscoveryRun,
   getLatestMediaDiscoveryRun,
   getMediaDiscoveryRun,
@@ -37,6 +37,7 @@ import {
 } from "../lib/media-discovery-runs";
 
 const contentAiRouter = Router();
+const mediaDiscoveryRunStarts = new Map<string, Promise<{ runId: string; shouldStart: boolean }>>();
 
 async function spendLimitCheck(req: Request, res: Response, next: NextFunction): Promise<void> {
   if (!req.account) { next(); return; }
@@ -130,6 +131,7 @@ async function fairUsageCheck(req: Request, res: Response, next: NextFunction): 
 const MODEL = "claude-sonnet-4-6";
 const MAX_FIELD_CHARS = 24000;
 const MAX_PROJECT_DATA_CHARS = 9000;
+const MEDIA_DISCOVERY_SEARCH_TIMEOUT_MS = 45_000;
 const EVENT_MARKETING_TYPES = new Set(["Trade Conferences", "Conference Sponsorships", "Trade Speaker", "Trade Awards", "Networking"]);
 const EVENT_CATEGORIES = new Set(TRADE_MEDIA_CATEGORIES);
 const WEB_SEARCH_COST_GBP = 0.0079;
@@ -1372,10 +1374,10 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
             },
           },
         },
-      });
+      }, { timeout: MEDIA_DISCOVERY_SEARCH_TIMEOUT_MS });
       void logTokenUsage(
         req.account.username,
-        "content-media-discover",
+        "media-discover",
         "gpt-5.4-mini",
         response.usage?.input_tokens ?? 0,
         response.usage?.output_tokens ?? 0,
@@ -1422,7 +1424,7 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
       });
       const runId = (req as Request & { mediaDiscoveryRunId?: string }).mediaDiscoveryRunId;
       if (runId) await setMediaDiscoveryCandidates(runId, candidates);
-      const checked = await mapWithConcurrency(candidates, 5, async (candidate): Promise<TrustedMediaDiscovery | null> => {
+      const checked = await mapWithConcurrency(candidates, 10, async (candidate): Promise<TrustedMediaDiscovery | null> => {
         try {
           const source = await fetchSiteContent(candidate.sourceUrl, 20_000);
           const evidenceText = `${source.title} ${source.description} ${source.text}`.toLowerCase();
@@ -1443,8 +1445,14 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
           };
           if (runId) await settleMediaDiscoveryCandidate(runId, candidate.candidateKey, verified);
           return verified;
-        } catch {
-          if (runId) await settleMediaDiscoveryCandidate(runId, candidate.candidateKey, null, "The cited page could not be checked.");
+        } catch (error) {
+          const timedOut = error instanceof Error && /timed out|timeout/i.test(error.message);
+          if (runId) await settleMediaDiscoveryCandidate(
+            runId,
+            candidate.candidateKey,
+            null,
+            timedOut ? "The cited page check timed out." : "The cited page could not be checked.",
+          );
           return null;
         }
       });
@@ -1458,7 +1466,12 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
       res.json({ ok: true, items, discoveryToken });
     } catch (error) {
       logger.error({ err: error }, "content-ai: live media discovery failed");
-      res.status(502).json({ error: "Live media research could not be completed right now. Please try again." });
+      const timedOut = error instanceof Error && /timed out|timeout/i.test(error.message);
+      res.status(502).json({
+        error: timedOut
+          ? "Live media research search timed out. Please try again."
+          : "Live media research could not be completed right now. Please try again.",
+      });
     }
 };
 
@@ -1513,7 +1526,7 @@ contentAiRouter.get("/content/journalist-search-runs/:runId", async (req: Reques
 contentAiRouter.post(
   "/content/media-discover",
   contentAiLimiter,
-  fairUsageCheck,
+  spendLimitCheck,
   async (req: Request, res: Response): Promise<void> => {
     if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -1523,7 +1536,53 @@ contentAiRouter.post(
       res.status(404).json({ error: "Project not found" });
       return;
     }
-    const runId = await createMediaDiscoveryRun(normUsername(req.account.username), projectId, storyKey);
+    const owner = normUsername(req.account.username);
+    const identity = JSON.stringify([owner, projectId, storyKey]);
+    const concurrentStart = mediaDiscoveryRunStarts.get(identity);
+    if (concurrentStart) {
+      const { runId } = await concurrentStart;
+      res.json({ runId, status: "running" });
+      return;
+    }
+    const startPromise = (async () => {
+      await ensureMediaDiscoveryRunsTable();
+      return db.transaction(async (tx) => {
+        if (process.env.NODE_ENV !== "test" && process.env.VITEST !== "true") {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${identity}))`);
+        }
+        const existingRows = await tx.execute(sql`
+          SELECT run_id, status
+          FROM media_discovery_runs
+          WHERE owner = ${owner} AND project_id = ${projectId} AND story_key = ${storyKey}
+          ORDER BY started_at DESC
+          LIMIT 1
+          FOR UPDATE
+        `);
+        const existingRun = existingRows.rows[0] as { run_id: string; status: string } | undefined;
+        if (existingRun?.status === "running") return { runId: existingRun.run_id, shouldStart: false };
+        const runId = randomUUID();
+        await tx.execute(sql`
+          INSERT INTO media_discovery_runs (run_id, owner, project_id, story_key)
+          VALUES (${runId}, ${owner}, ${projectId}, ${storyKey})
+        `);
+        return { runId, shouldStart: true };
+      });
+    })();
+    mediaDiscoveryRunStarts.set(identity, startPromise);
+    let start: { runId: string; shouldStart: boolean };
+    try {
+      start = await startPromise;
+    } catch (error) {
+      logger.error({ err: error }, "content-ai: could not start media discovery run");
+      throw error;
+    } finally {
+      if (mediaDiscoveryRunStarts.get(identity) === startPromise) mediaDiscoveryRunStarts.delete(identity);
+    }
+    if (!start.shouldStart) {
+      res.json({ runId: start.runId, status: "running" });
+      return;
+    }
+    const runId = start.runId;
     const workerReq = req as Request & { mediaDiscoveryRunId?: string };
     workerReq.mediaDiscoveryRunId = runId;
     let workerStatusCode = 200;
@@ -1531,16 +1590,19 @@ contentAiRouter.post(
       status(code: number) { workerStatusCode = code; return this; },
       json(payload: any) {
         if (workerStatusCode >= 400) {
-          void failMediaDiscoveryRun(runId, payload?.error || "Live media research failed.");
+          void failMediaDiscoveryRun(runId, payload?.error || "Live media research failed.")
+            .catch((error) => logger.error({ err: error, runId }, "content-ai: could not persist media discovery failure"));
         } else {
-          void completeMediaDiscoveryRun(runId, payload?.discoveryToken || "");
+          void completeMediaDiscoveryRun(runId, payload?.discoveryToken || "")
+            .catch((error) => logger.error({ err: error, runId }, "content-ai: could not persist media discovery completion"));
         }
         return this;
       },
     } as unknown as Response;
     void mediaDiscoverWorker(workerReq, workerRes).catch((error) => {
       logger.error({ err: error, runId }, "content-ai: background media discovery failed");
-      void failMediaDiscoveryRun(runId, "Live media research could not be completed right now.");
+      void failMediaDiscoveryRun(runId, "Live media research could not be completed right now.")
+        .catch((persistError) => logger.error({ err: persistError, runId }, "content-ai: could not persist media discovery failure"));
     });
     res.json({ runId, status: "running" });
   },

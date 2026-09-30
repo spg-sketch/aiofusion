@@ -1,5 +1,15 @@
 import OpenAI from "openai";
 import { fetchMediaSourceEvidence, type MediaSourceEvidence } from "./safe-fetch";
+import { countWebSearchCalls } from "./media-discovery-usage";
+
+export type JournalistCoverageUsageHooks = {
+  reserve: () => Promise<number>;
+  settle: (reservationId: number, usage: {
+    inputTokens: number;
+    outputTokens: number;
+    webSearchCalls: number;
+  }) => Promise<void>;
+};
 
 export type JournalistCoverageContact = {
   name: string;
@@ -209,6 +219,7 @@ export async function collectJournalistCoverage(input: {
   contact: JournalistCoverageContact;
   brief: JournalistCoverageBrief;
   now?: Date;
+  usage?: JournalistCoverageUsageHooks;
 }): Promise<JournalistCoverageResult> {
   const checkedAtValue = checkedAt(input.now);
   const contact = input.contact;
@@ -243,6 +254,9 @@ ${queryParts.join(" | ")}`;
 
   let response: any;
   const searchController = new AbortController();
+  // Persist a conservative reservation before issuing the provider call. If
+  // the request errors or times out, the reservation remains as the charge.
+  const usageReservationId = input.usage ? await input.usage.reserve() : null;
   try {
     response = await withTimeout(
       client.responses.create({
@@ -289,6 +303,18 @@ ${queryParts.join(" | ")}`;
       ? "Journalist coverage search timed out"
       : "Journalist coverage search provider failed";
     throw new Error(message);
+  }
+  if (input.usage && usageReservationId !== null) {
+    const usage = response?.usage;
+    // If the provider omits token usage, retain the full reservation rather
+    // than recording a false zero-cost successful call.
+    if (usage && Number.isFinite(usage.input_tokens) && Number.isFinite(usage.output_tokens)) {
+      await input.usage.settle(usageReservationId, {
+        inputTokens: usage.input_tokens,
+        outputTokens: usage.output_tokens,
+        webSearchCalls: countWebSearchCalls(response?.output),
+      });
+    }
   }
 
   const citations = new Set(citationUrls(response?.output).map(normaliseUrl).filter((url): url is string => !!url));
