@@ -181,10 +181,11 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
     selectedMessages: selectedMessagesSnapshot,
   }), [projectName, contentType, articleHeadline, standfirst, headline, transcript, actionNotes, spokesperson, spokesLi, mediaTarget, contentStatus, pubDate, targetPhrases, selectedMessagesSnapshot]);
 
-  const workspaceId = getSession()?.username || "";
+  const session = getSession();
+  const workspaceId = session?.username || "";
   const projectId = getActiveProjectId() || "default";
   const runScope = {
-    sessionId: workspaceId || "anonymous",
+    sessionId: session?.userEmail || session?.userName || workspaceId || "anonymous",
     workspaceId: workspaceId || "default",
     projectId,
   };
@@ -1206,7 +1207,7 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
         <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={acceptAndArchive}
-            disabled={!hasAnyContent}
+            disabled={!hasAnyContent || generating}
             className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
             style={hasAnyContent ? { borderColor: "#C8497A", color: "#ffffff", background: "#C8497A" } : { borderColor: "#C8497A", color: "#C8497A", background: "#ffffff" }}
             title="Sign off this piece and save it to the Content Library"
@@ -1215,7 +1216,7 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
           </button>
           <button
             onClick={sendToMediaResearchFromCreator}
-            disabled={!hasAnyContent}
+            disabled={!hasAnyContent || generating}
             className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
             style={hasAnyContent ? { borderColor: "#84AB7D", color: "#ffffff", background: "#84AB7D" } : { borderColor: "#84AB7D", color: "#84AB7D", background: "#ffffff" }}
             title="Save the draft and jump to Media Research to find target publications and journalists"
@@ -1224,7 +1225,7 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
           </button>
           <button
             onClick={pushToCommsPlanner}
-            disabled={!hasAnyContent}
+            disabled={!hasAnyContent || generating}
             className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
             style={hasAnyContent ? { borderColor: "#D4922A", color: "#ffffff", background: "#D4922A" } : { borderColor: "#D4922A", color: "#D4922A", background: "#ffffff" }}
             title={pubDate ? `Push this piece to the Comms Planner for w/c ${pubDate}` : "Push this piece to the Comms Planner (uses current week if no publication date set)"}

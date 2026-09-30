@@ -329,9 +329,10 @@ function MediaResearchPage() {
   const archiveReady = isContentStoreReady();
   const archive = loadArchive().filter((a) => ["Press release", "Article", "Case study", "Whitepaper", "Blog post"].includes(a.contentType));
   const projectId = IntakeForm.getActiveProjectId();
-  const workspaceId = getSession()?.username || "";
+  const session = getSession();
+  const workspaceId = session?.username || "";
   const discoveryScope = {
-    sessionId: workspaceId || "anonymous",
+    sessionId: session?.userEmail || session?.userName || workspaceId || "anonymous",
     workspaceId: workspaceId || "default",
     projectId: projectId || "none",
   };

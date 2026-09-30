@@ -214,10 +214,11 @@ function OptimiserPage({
     creatorPitch, spokespersonLinkedIn,
   }), [projectTitle, contentType, spokesperson, selectedMessages, mediaCats, targetPhrases, targetPhraseIds, contentStatus, pubDate, llmTarget, articleHeadline, standfirst, bodyCopy, actionNotes, creatorPitch, spokespersonLinkedIn]);
 
-  const workspaceId = getSession()?.username || "";
+  const session = getSession();
+  const workspaceId = session?.username || "";
   const projectId = getActiveProjectId() || "default";
   const runScope = {
-    sessionId: workspaceId || "anonymous",
+    sessionId: session?.userEmail || session?.userName || workspaceId || "anonymous",
     workspaceId: workspaceId || "default",
     projectId,
   };

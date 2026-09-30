@@ -9,6 +9,12 @@ Long-running AI work within an open tab belongs to an app-level lifecycle rather
 
 **How to apply:** Keep request execution and exactly-once completion effects outside page mount lifetimes. Pages subscribe to retained snapshots, derive elapsed time from `Date.now() - startedAt`, and restore results only into the captured subject. Clear all runs at authentication or workspace boundaries.
 
+An AI run's person identity must match the identity established by the app shell, separately from its workspace identity. A workspace slug must never stand in for the signed-in human in run scope.
+
+**Why:** When those identities differed for a team member, a successful streamed draft result and even the run's timeout were ignored by the lifecycle identity check. Content Creator kept showing "Writing draft" while its independent Planner action could still save earlier editor copy.
+
+**How to apply:** Check both person and workspace values when adding AI run callers, especially for team members whose email/name differs from the workspace slug. Keep save and handoff actions unavailable while draft generation is active so a prior editor snapshot cannot be mistaken for the completed draft.
+
 For browser-streamed content drafting, a server-side model completion is not proof that the page received a terminal result. The in-tab run needs its own wall-clock failure boundary, separate from the transport's abort timer, and the page should derive its loading display directly from that run rather than mirror it in local state.
 
 **Why:** A live generation completed on the server in about a minute while the browser still displayed the final progress stage more than nine minutes beyond its estimate. The exact response-delivery failure was not observable from the available server log, so neither a successful model stop reason nor a client-side fetch timeout alone was enough to explain the stuck page.

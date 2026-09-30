@@ -57,7 +57,7 @@ vi.mock("../components/CountdownBanner", () => ({
 vi.mock("../LlmCheckPage", () => ({ loadSavedAudits: () => [] }));
 
 import { ContentCreatorPage } from "./ContentCreatorPage";
-import { clearAiRuns } from "../lib/aiRunLifecycle";
+import { clearAiRuns, getAiRun, setAiRunIdentity } from "../lib/aiRunLifecycle";
 
 describe("ContentCreatorPage database category guard", () => {
   beforeEach(() => {
@@ -138,5 +138,31 @@ describe("ContentCreatorPage database category guard", () => {
     expect(screen.getByDisplayValue("Unsaved creator context")).toBeInTheDocument();
     resolveRun?.({ headline: "Recovered unsaved draft", standfirst: "", bodyCopy: "Recovered body" });
     expect(await screen.findByDisplayValue("Recovered unsaved draft")).toBeInTheDocument();
+  });
+
+  it("finishes a person's draft run before allowing a Planner handoff", async () => {
+    const username = "workspace";
+    const userEmail = "member@example.test";
+    window.localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username, userEmail, role: "client" }));
+    setAiRunIdentity(userEmail, username);
+    let finish!: (value: { headline: string; standfirst: string; bodyCopy: string }) => void;
+    streamContent.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    window.localStorage.setItem("aio.creator.preload", "stale");
+    render(<ContentCreatorPage onNavigate={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Create Content/i }));
+    await waitFor(() => expect(streamContent).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("button", { name: /Writing draft/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Save to Content Library/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Media Research/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Push to Comms Planner/i })).toBeDisabled();
+    finish({ headline: "Finished article", standfirst: "Finished summary", bodyCopy: "Finished copy" });
+
+    expect(await screen.findByDisplayValue("Finished article")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Writing draft/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Save to Content Library/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Media Research/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Push to Comms Planner/i })).toBeEnabled();
+    expect(getAiRun(`${encodeURIComponent(userEmail)}:${encodeURIComponent(username)}:project-1:content-draft:stale`)?.status).toBe("succeeded");
   });
 });
