@@ -201,9 +201,9 @@ export async function notify(
       text,
       html,
     });
-    if (result.error) {
+    if (result.error || !result.data?.id) {
       console.warn(
-        `[${label}] ⚠️  Email delivery failed: ${JSON.stringify(result.error)}`,
+        `[${label}] ⚠️  Email provider did not accept message: ${result.error ? JSON.stringify(result.error) : "missing confirmation ID"}`,
       );
     }
   } catch (err: unknown) {

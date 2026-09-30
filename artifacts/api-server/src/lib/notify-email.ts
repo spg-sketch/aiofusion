@@ -67,7 +67,7 @@ export async function sendStripeWebhookFailureAlert(opts: {
   });
 
   try {
-    await resend.emails.send({
+    await sendCheckedEmail(resend, {
       from: fromAddress(),
       to: ALERT_RECIPIENTS,
       subject,
@@ -92,6 +92,14 @@ function getClient(): Resend | null {
   return new Resend(key);
 }
 
+// Resend reports API rejections in { error } instead of always throwing.
+// Only an accepted message with an ID may be reported as sent.
+async function sendCheckedEmail(resend: Resend, message: Parameters<Resend["emails"]["send"]>[0]): Promise<void> {
+  const result = await resend.emails.send(message);
+  if (result.error) throw new Error(`Email provider rejected send: ${result.error.message}`);
+  if (!result.data?.id) throw new Error("Email provider did not confirm message acceptance");
+}
+
 function fromAddress(): string {
   return process.env.RESEND_FROM ?? "AIO Fusion Alerts <info@aiofusion.ai>";
 }
@@ -103,7 +111,7 @@ export async function sendJournalistPrivacyCaseAlert(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) throw new Error("RESEND_API_KEY is not configured");
-  await resend.emails.send({
+  await sendCheckedEmail(resend, {
     from: fromAddress(),
     to: ALERT_RECIPIENTS,
     subject: "[AIO Fusion] Journalist privacy request received",
@@ -122,7 +130,7 @@ export async function sendJournalistPrivacyCaseAlert(opts: {
 export async function sendJournalistPrivacyOutcome(opts: { toEmail: string; requestId: number; requestType: string; body: string }): Promise<void> {
   const resend = getClient();
   if (!resend) throw new Error("RESEND_API_KEY is not configured");
-  await resend.emails.send({
+  await sendCheckedEmail(resend, {
     from: fromAddress(), to: opts.toEmail,
     subject: "Your privacy rights request outcome",
     text: opts.body,
@@ -173,7 +181,7 @@ export async function sendVerificationEmail(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html });
     logger.info({ toEmail: opts.toEmail }, "notify-email: verification email sent");
   } catch (err) {
     logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send verification email (non-fatal)");
@@ -231,7 +239,7 @@ export async function sendMfaAdminResetEmail(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html });
     logger.info({ toEmail: opts.toEmail }, "notify-email: MFA admin reset alert sent");
   } catch (err) {
     logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send MFA admin reset alert (non-fatal)");
@@ -301,7 +309,7 @@ export async function sendInviteReminderEmail(opts: {
   });
 
   // Let provider errors propagate - the sweep will catch them and skip stamping.
-  await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+  await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html });
   logger.info({ toEmail: opts.toEmail }, "notify-email: invite reminder email sent");
   return true;
 }
@@ -313,7 +321,7 @@ export async function sendMfaLegacyRecoveryEmail(opts: { toEmail: string; toName
   }
   const subject = "Security alert: personal authenticator enrollment authorised";
   const message = "Your verified Google sign-in and the previous shared authenticator authorised new personal two-factor enrollment on staging. No shared authenticator was copied or removed. You must set up and confirm your own new authenticator before accessing Master. Other members and shared workspace data are unchanged. If you did not request this, contact the AIO Fusion team immediately.";
-  await resend.emails.send({
+  await sendCheckedEmail(resend, {
     from: fromAddress(), to: [opts.toEmail], subject,
     text: `Hi ${opts.toName},\n\n${message}`,
     html: buildEmailHtml({
@@ -398,7 +406,7 @@ export async function sendMfaChangedEmail(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html });
     logger.info({ toEmail: opts.toEmail, enabled: opts.enabled }, "notify-email: MFA changed alert sent");
   } catch (err) {
     logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send MFA changed alert (non-fatal)");
@@ -454,9 +462,9 @@ export async function sendTeamInviteEmail(opts: {
 
   try {
     const result = await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
-    if (result.error) {
+    if (result.error || !result.data?.id) {
       logger.warn(
-        { error: result.error, toEmail: opts.toEmail },
+        { error: result.error ?? "Provider did not confirm message acceptance", toEmail: opts.toEmail },
         "notify-email: team invite email rejected by provider",
       );
       return false;
@@ -561,7 +569,7 @@ export async function sendClientAccountCreatedEmail(opts: {
   const html = buildEmailHtml({ label: "Account Created", bodyHtml, cta });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html });
     logger.info({ toEmail: opts.toEmail, hasSetPasswordUrl: !!opts.setPasswordUrl }, "notify-email: client account created email sent");
   } catch (err) {
     logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send client account created email (non-fatal)");
@@ -652,7 +660,7 @@ export async function sendClientAccessChangedEmail(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html });
     logger.info({ toEmail: opts.toEmail, action: opts.action }, "notify-email: client access changed email sent");
   } catch (err) {
     logger.warn({ err, toEmail: opts.toEmail, action: opts.action }, "notify-email: failed to send client access changed email (non-fatal)");
@@ -713,7 +721,7 @@ export async function sendAccountTypeChangedEmail(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html });
     logger.info({ toEmail: opts.toEmail, newType: opts.newType }, "notify-email: account type changed email sent");
   } catch (err) {
     logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send account type changed email (non-fatal)");
@@ -766,7 +774,7 @@ export async function sendNewSignupAlert(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: ALERT_RECIPIENTS, subject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: ALERT_RECIPIENTS, subject, text, html });
     logger.info({ username: opts.username, method: opts.method }, "notify-email: signup alert sent");
   } catch (err) {
     logger.warn({ err, username: opts.username }, "notify-email: failed to send signup alert (non-fatal)");
@@ -822,7 +830,7 @@ export async function sendApprovalEmail(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html });
     logger.info({ toEmail: opts.toEmail }, "notify-email: approval email sent");
   } catch (err) {
     logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send approval email (non-fatal)");
@@ -875,7 +883,7 @@ export async function sendSpikeAlert(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: ALERT_RECIPIENTS, subject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: ALERT_RECIPIENTS, subject, text, html });
     logger.info({ slug: opts.slug, ratio: opts.ratio.toFixed(2) }, "notify-email: spike alert sent");
   } catch (err) {
     logger.warn({ err, slug: opts.slug }, "notify-email: failed to send spike alert (non-fatal)");
@@ -926,7 +934,7 @@ export async function sendQuotaBreachAlert(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: ALERT_RECIPIENTS, subject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: ALERT_RECIPIENTS, subject, text, html });
     logger.info({ slug: opts.slug, callCount: opts.callCount }, "notify-email: quota breach alert sent");
   } catch (err) {
     logger.warn({ err, slug: opts.slug }, "notify-email: failed to send quota breach alert (non-fatal)");
@@ -981,7 +989,7 @@ export async function sendSpendCapAlert(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: ALERT_RECIPIENTS, subject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: ALERT_RECIPIENTS, subject, text, html });
     logger.info({ slug: opts.slug, spendGbp: opts.spendGbp }, "notify-email: spend cap alert sent");
   } catch (err) {
     logger.warn({ err, slug: opts.slug }, "notify-email: failed to send spend cap alert (non-fatal)");
@@ -1077,10 +1085,10 @@ export async function sendEmailChangedEmail(opts: {
 
   // Send both - fail-soft independently so one failure doesn't suppress the other.
   await Promise.allSettled([
-    resend.emails.send({ from: fromAddress(), to: [opts.oldEmail], subject: noticeSubject, text: noticeText, html: noticeHtml })
+    sendCheckedEmail(resend, { from: fromAddress(), to: [opts.oldEmail], subject: noticeSubject, text: noticeText, html: noticeHtml })
       .then(() => logger.info({ toEmail: opts.oldEmail }, "notify-email: email changed notice sent to old address"))
       .catch((err: unknown) => logger.warn({ err, toEmail: opts.oldEmail }, "notify-email: failed to send email changed notice to old address (non-fatal)")),
-    resend.emails.send({ from: fromAddress(), to: [opts.newEmail], subject: confirmSubject, text: confirmText, html: confirmHtml })
+    sendCheckedEmail(resend, { from: fromAddress(), to: [opts.newEmail], subject: confirmSubject, text: confirmText, html: confirmHtml })
       .then(() => logger.info({ toEmail: opts.newEmail }, "notify-email: email changed confirmation sent to new address"))
       .catch((err: unknown) => logger.warn({ err, toEmail: opts.newEmail }, "notify-email: failed to send email changed confirmation to new address (non-fatal)")),
   ]);
@@ -1132,7 +1140,7 @@ export async function sendPasswordChangedEmail(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html });
     logger.info({ toEmail: opts.toEmail }, "notify-email: password changed alert sent");
   } catch (err) {
     logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send password changed alert (non-fatal)");
@@ -1173,14 +1181,13 @@ export async function sendBookDemoInternalAlert(opts: {
     cta: { text: "Reply to enquiry", href: `mailto:${opts.email}` },
   });
 
-  const { error } = await resend.emails.send({
+  await sendCheckedEmail(resend, {
     from: fromAddress(),
     to: CONTACT_FORM_RECIPIENTS,
     subject,
     text,
     html,
   });
-  if (error) throw new Error(`Book demo alert delivery failed: ${error.message}`);
   logger.info({ email: opts.email }, "notify-email: book demo internal alert sent");
 }
 
@@ -1224,8 +1231,7 @@ export async function sendBookDemoConfirmation(opts: {
     cta: { text: "Visit AIO Fusion", href: getAppBaseUrl() },
   });
 
-  const { error } = await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
-  if (error) throw new Error(`Book demo confirmation delivery failed: ${error.message}`);
+  await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html });
   logger.info({ toEmail: opts.toEmail }, "notify-email: book demo confirmation sent");
 }
 
@@ -1273,14 +1279,13 @@ export async function sendEnquiryInternalAlert(opts: {
     cta: { text: "Reply to enquiry", href: `mailto:${opts.email}` },
   });
 
-  const { error } = await resend.emails.send({
+  await sendCheckedEmail(resend, {
     from: fromAddress(),
     to: CONTACT_FORM_RECIPIENTS,
     subject: emailSubject,
     text,
     html,
   });
-  if (error) throw new Error(`Enquiry alert delivery failed: ${error.message}`);
   logger.info({ email: opts.email }, "notify-email: enquiry internal alert sent");
 }
 
@@ -1339,7 +1344,7 @@ export async function sendSupportTicketAlert(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: ALERT_RECIPIENTS, subject: emailSubject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: ALERT_RECIPIENTS, subject: emailSubject, text, html });
     logger.info({ ticketId: opts.ticketId, accountUsername: opts.accountUsername }, "notify-email: support ticket alert sent");
     return true;
   } catch (err) {
@@ -1401,7 +1406,7 @@ export async function sendSupportTicketAck(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject: emailSubject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject: emailSubject, text, html });
     logger.info({ toEmail: opts.toEmail, ticketId: opts.ticketId }, "notify-email: support ticket ack sent");
     return true;
   } catch (err) {
@@ -1470,7 +1475,7 @@ export async function sendSupportTicketReplyNotification(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject: emailSubject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject: emailSubject, text, html });
     logger.info({ toEmail: opts.toEmail, ticketId: opts.ticketId }, "notify-email: support ticket reply notification sent");
     return true;
   } catch (err) {
@@ -1538,7 +1543,7 @@ export async function sendContactFormFailedAlert(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: CONTACT_FORM_RECIPIENTS, subject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: CONTACT_FORM_RECIPIENTS, subject, text, html });
     logger.info({ submissionId: opts.submissionId }, "notify-email: contact form failed alert sent");
   } catch (err) {
     logger.warn({ err, submissionId: opts.submissionId }, "notify-email: failed to send contact form failed alert");
@@ -1583,8 +1588,7 @@ export async function sendEnquiryConfirmation(opts: {
     cta: { text: "Visit AIO Fusion", href: getAppBaseUrl() },
   });
 
-  const { error } = await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
-  if (error) throw new Error(`Enquiry confirmation delivery failed: ${error.message}`);
+  await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html });
   logger.info({ toEmail: opts.toEmail }, "notify-email: enquiry confirmation sent");
 }
 
@@ -1633,7 +1637,7 @@ export async function sendNewTrustedDeviceEmail(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html });
     logger.info({ toEmail: opts.toEmail }, "notify-email: new trusted device alert sent");
   } catch (err) {
     logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send new trusted device alert (non-fatal)");
@@ -1685,7 +1689,7 @@ export async function sendPasswordResetEmail(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html });
     logger.info({ toEmail: opts.toEmail }, "notify-email: password reset email sent");
   } catch (err) {
     logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send password reset email (non-fatal)");
@@ -1746,7 +1750,7 @@ export async function sendTeamRoleDowngradedEmail(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html });
     logger.info({ toEmail: opts.toEmail, count }, "notify-email: team role downgrade email sent");
   } catch (err) {
     logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send team role downgrade email (non-fatal)");
@@ -1806,7 +1810,7 @@ export async function sendPaymentFailedEmail(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html });
     logger.info({ toEmail: opts.toEmail }, "notify-email: payment failed email sent");
   } catch (err) {
     logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send payment failed email (non-fatal)");
@@ -1850,7 +1854,7 @@ export async function sendSubscriptionCancelledEmail(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html });
     logger.info({ toEmail: opts.toEmail }, "notify-email: subscription cancelled email sent");
   } catch (err) {
     logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send cancellation email (non-fatal)");
@@ -1914,8 +1918,8 @@ export async function sendSubscriptionRenewalReminderEmail(opts: {
     text,
     html,
   });
-  if (result.error) {
-    logger.warn({ error: result.error, toEmail: opts.toEmail }, "notify-email: renewal reminder rejected by provider");
+  if (result.error || !result.data?.id) {
+    logger.warn({ error: result.error ?? "Provider did not confirm message acceptance", toEmail: opts.toEmail }, "notify-email: renewal reminder rejected by provider");
     return false;
   }
   logger.info({ toEmail: opts.toEmail }, "notify-email: subscription renewal reminder sent");
