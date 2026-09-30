@@ -109,6 +109,16 @@ async function fairUsageCheck(req: Request, res: Response, next: NextFunction): 
     return;
   }
 
+  // Platform-owned projects are used by the internal team for testing and
+  // have no subscription to supply a tier allowance. Do not treat their
+  // resulting zero action limit as an exhausted customer quota. The monthly
+  // spend cap above still applies, and viewing a customer's project from the
+  // platform account does not bypass that customer's action limit.
+  if (req.account.role === "admin" && project.owner.toLowerCase() === req.account.username.toLowerCase()) {
+    next();
+    return;
+  }
+
   // 2. Rolling 30-day call-count quota - enforced per project when projectId is present.
   const { allowed, callCount, limit } = await checkFairUsage(req.account.username, projectId);
   if (!allowed) {

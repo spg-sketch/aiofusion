@@ -534,6 +534,65 @@ beforeAll(async () => {
 });
 
 describe("content fair usage route boundaries", () => {
+  it("lets the platform team use its own project without a tier quota, but keeps spend and customer-project guards", async () => {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const slug = "admin";
+    await db.insert(platformAccountsTable).values({
+      username: slug, passwordHash: hashPassword("owner-password-1"), role: "admin", status: "active",
+    }).onConflictDoNothing();
+    const [company] = await db.insert(platformCompaniesTable).values({
+      slug, role: "admin", status: "active", setupComplete: true,
+    }).returning();
+    const [person] = await db.insert(platformUsersTable).values({
+      email: `${slug}@example.test`, emailVerified: true,
+    }).returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: person!.id, companyId: company!.id, companySlug: slug, role: "owner",
+    });
+    const subject = `user:${person!.id}`;
+    await saveMfaState(subject, { secret: generateTotpSecret(), enabled: true, recoveryHashes: [] });
+    const sid = await createPlatformSession(slug, null, person!.id, company!.id);
+    await recordMfaSession(sid, subject, person!.sessionVersion);
+    const ownProjectId = `platform-owned-${suffix}`;
+    const customerProjectId = `customer-owned-${suffix}`;
+    await db.insert(projectsTable).values([
+      { id: ownProjectId, name: "Internal test", owner: slug },
+      { id: customerProjectId, name: "Customer project", owner: "another-workspace" },
+    ]);
+    checkFairUsageMock.mockResolvedValue({ allowed: false, callCount: 0, limit: 0 });
+    messagesCreate.mockRejectedValue(new Error("provider unavailable in boundary test"));
+
+    try {
+      const own = await api("/api/content/creator-field", {
+        sid, body: { projectId: ownProjectId, fieldKey: "headline", value: "A headline" },
+      });
+      expect(own.status).not.toBe(429);
+      expect(own.status).not.toBe(402);
+      expect(checkFairUsageMock).not.toHaveBeenCalled();
+
+      const customer = await api("/api/content/creator-field", {
+        sid, body: { projectId: customerProjectId, fieldKey: "headline", value: "A headline" },
+      });
+      // An internal session does not extend its quota exception to a
+      // customer's project, even though the platform can see that project.
+      expect(customer.status).toBe(429);
+      expect(checkFairUsageMock).toHaveBeenCalledWith(slug, customerProjectId);
+
+      checkMonthlySpendLimitMock.mockResolvedValueOnce({ allowed: false, spentGbp: 50, limitGbp: 50 });
+      const capped = await api("/api/content/creator-field", {
+        sid, body: { projectId: ownProjectId, fieldKey: "headline", value: "A headline" },
+      });
+      expect(capped.status).toBe(429);
+      expect(capped.json).toMatchObject({ spentGbp: 50, limitGbp: 50 });
+    } finally {
+      checkFairUsageMock.mockReset();
+      checkFairUsageMock.mockResolvedValue({ allowed: true, callCount: 0, limit: 50 });
+      checkMonthlySpendLimitMock.mockReset();
+      checkMonthlySpendLimitMock.mockResolvedValue({ allowed: true, spentGbp: 0, limitGbp: 10 });
+      messagesCreate.mockReset();
+    }
+  });
+
   it("blocks counted content but not LLM Check or LLM query generation at quota exhaustion", async () => {
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const { sid, company } = await seedAgency(`quota-${suffix}`, `quota-${suffix}@example.test`);
@@ -1229,6 +1288,9 @@ describe("media discovery house prompt integration", () => {
     checkMonthlySpendLimitMock.mockResolvedValue({ allowed: true, spentGbp: 0, limitGbp: 10 });
     const [company] = await db.insert(platformCompaniesTable).values({
       slug: "admin", role: "admin", status: "active", setupComplete: true,
+    }).onConflictDoUpdate({
+      target: platformCompaniesTable.slug,
+      set: { role: "admin", status: "active" },
     }).returning();
     const [person] = await db.insert(platformUsersTable).values({
       email: "media-owner@example.test", emailVerified: true,
