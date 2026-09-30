@@ -285,6 +285,11 @@ export function publicationWebsiteHref(value: string | null | undefined): string
   }
 }
 
+export function contactDisplayName(contact: Pick<Contact, "firstName" | "lastName">): string {
+  const name = `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim();
+  return name && !/^\d+(?:[.,]\d+)?$/.test(name) ? name : "Name not available";
+}
+
 export function contactExportRow(contact: Contact): string[] {
   return [
     contact.firstName,
@@ -381,8 +386,9 @@ function MediaDatabasePage() {
   const [allCategories, setAllCategories] = useState<string[]>([]);
   const [loadError, setLoadError] = useState("");
   const loadRequestSequence = useRef(0);
+  const searchRequestSequence = useRef(0);
   const loadControllerRef = useRef<AbortController | null>(null);
-  const [resultMode, setResultMode] = useState<"none" | "browse" | "search">("none");
+  const [resultMode, setResultMode] = useState<"none" | "browse" | "search">("search");
   const [resultMessage, setResultMessage] = useState("");
   const [resultRefreshToken, setResultRefreshToken] = useState(0);
   const [outletSearch, setOutletSearch] = useState("");
@@ -408,7 +414,7 @@ function MediaDatabasePage() {
   const [searchPage, setSearchPage] = useState(1);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchType, setSearchType] = useState<"contacts" | "publications">("contacts");
-  const [searchScope, setSearchScope] = useState<"all" | "added" | "saved">("all");
+  const [searchScope, setSearchScope] = useState<"all" | "added" | "saved">("saved");
   const [savedMedia, setSavedMedia] = useState<Set<string>>(new Set());
   const [bookmarkError, setBookmarkError] = useState("");
   const [bookmarkBusy, setBookmarkBusy] = useState<string | null>(null);
@@ -417,6 +423,7 @@ function MediaDatabasePage() {
   const [correctionFields, setCorrectionFields] = useState<string[]>([]);
   const [correctionDetails, setCorrectionDetails] = useState("");
   const [correctionBusy, setCorrectionBusy] = useState(false);
+  const [correctionConfirmation, setCorrectionConfirmation] = useState("");
   const [correctionReports, setCorrectionReports] = useState<CorrectionReport[]>([]);
   const [correctionQueueLoading, setCorrectionQueueLoading] = useState(false);
   const [correctionQueueError, setCorrectionQueueError] = useState("");
@@ -461,18 +468,10 @@ function MediaDatabasePage() {
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState("");
   const [selectedMedia, setSelectedMedia] = useState<Set<string>>(new Set());
+  const [showManagement, setShowManagement] = useState(false);
   const importPreviewSequence = useRef(0);
   const importJobStorageKey = `aio.media-import-job:${session?.username || "anonymous"}`;
   const projectCategories = getProjectMediaCategories();
-  const profileProvenance = showContactProfile?.provenance && typeof showContactProfile.provenance === "object"
-    ? showContactProfile.provenance
-    : null;
-  const profileImportFilename = profileProvenance && typeof profileProvenance.importFilename === "string" ? profileProvenance.importFilename : "";
-  const profileImportSheet = profileProvenance && typeof profileProvenance.sheet === "string" ? profileProvenance.sheet : "";
-  const profileImportRow = profileProvenance && (typeof profileProvenance.sourceRow === "number" || typeof profileProvenance.sourceRow === "string")
-    ? String(profileProvenance.sourceRow)
-    : "";
-
   const loadData = async (requestedMode = resultMode, requestedTab = activeTab) => {
     const sequence = ++loadRequestSequence.current;
     loadControllerRef.current?.abort();
@@ -557,6 +556,11 @@ function MediaDatabasePage() {
       loadControllerRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (searchLocation && searchLocation !== "UK" && searchLocation !== "US") setSearchLocation("");
+    if (contactCountryFilter && contactCountryFilter !== "UK" && contactCountryFilter !== "US") setContactCountryFilter("");
+  }, [searchLocation, contactCountryFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -739,6 +743,7 @@ function MediaDatabasePage() {
 
   const searchActive = resultMode === "search";
   const runSearch = () => {
+    setShowManagement(false);
     setSelectedMedia(new Set());
     setResultMode("search");
     setSearchPage(1);
@@ -747,7 +752,7 @@ function MediaDatabasePage() {
   };
   useEffect(() => {
     if (!searchActive) return;
-    const sequence = ++loadRequestSequence.current;
+    const sequence = ++searchRequestSequence.current;
     const controller = new AbortController();
     let timedOut = false;
     const timeout = window.setTimeout(() => { timedOut = true; controller.abort(); }, 10_000);
@@ -764,18 +769,18 @@ function MediaDatabasePage() {
     fetch(`${apiBase()}/api/store/media-db/search?${params}`, { credentials: "include", signal: controller.signal })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not search the media database.")))
       .then((data) => {
-        if (sequence !== loadRequestSequence.current) return;
+        if (sequence !== searchRequestSequence.current) return;
         setSearchResults(data.results ?? []); setSearchTotal(data.total ?? 0);
         setSearchCounts(data.counts ?? { contacts: 0, outlets: 0 });
       })
       .catch((error) => {
         if (error.name === "AbortError") {
-          if (timedOut && sequence === loadRequestSequence.current) setResultMessage("Search timed out. Try again.");
+          if (timedOut && sequence === searchRequestSequence.current) setResultMessage("Search timed out. Try again.");
           return;
         }
-        if (sequence === loadRequestSequence.current) setResultMessage(error instanceof Error ? error.message : "Search failed. Try again.");
+        if (sequence === searchRequestSequence.current) setResultMessage(error instanceof Error ? error.message : "Search failed. Try again.");
       })
-      .finally(() => { window.clearTimeout(timeout); if (sequence === loadRequestSequence.current) setSearchLoading(false); });
+      .finally(() => { window.clearTimeout(timeout); if (sequence === searchRequestSequence.current) setSearchLoading(false); });
     return () => { controller.abort(); window.clearTimeout(timeout); };
   }, [searchActive, searchPage, resultRefreshToken, searchType, searchScope]);
 
@@ -957,14 +962,20 @@ function MediaDatabasePage() {
     } catch {}
     setOutletSaving(false);
   };
-  const deleteOutlet = async (id: number) => {
-    const outlet = outlets.find((item) => item.id === id);
+  const deleteOutlet = async (id: number, savedOutlet?: Outlet) => {
+    const outlet = savedOutlet ?? outlets.find((item) => item.id === id);
     if (!outlet || !canManageCollectionItem(outlet, isMaster, canWriteMediaDatabase, session?.username)) return;
     setDeletingOutletId(id);
     try {
-      await fetch(`${apiBase()}/api/store/media-db/outlets/${id}`, { method: "DELETE", credentials: "include" });
+      const response = await fetch(`${apiBase()}/api/store/media-db/outlets/${id}`, { method: "DELETE", credentials: "include" });
+      if (!response.ok) throw new Error("Could not delete this publication.");
+      setSearchResults((current) => current.filter((result) => result.type !== "outlet" || result.id !== id));
+      setSavedMedia((current) => { const next = new Set(current); next.delete(`publication:${id}`); return next; });
+      if (searchActive) setResultRefreshToken((value) => value + 1);
       await loadData();
-    } catch {}
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Could not delete this publication.");
+    }
     setDeletingOutletId(null);
   };
 
@@ -1029,14 +1040,20 @@ function MediaDatabasePage() {
     } catch {}
     setContactSaving(false);
   };
-  const deleteContact = async (id: number) => {
-    const contact = contacts.find((item) => item.id === id);
+  const deleteContact = async (id: number, savedContact?: Contact) => {
+    const contact = savedContact ?? contacts.find((item) => item.id === id);
     if (!contact || !canManageCollectionItem(contact, isMaster, canWriteMediaDatabase, session?.username)) return;
     setDeletingContactId(id);
     try {
-      await fetch(`${apiBase()}/api/store/media-db/contacts/${id}`, { method: "DELETE", credentials: "include" });
+      const response = await fetch(`${apiBase()}/api/store/media-db/contacts/${id}`, { method: "DELETE", credentials: "include" });
+      if (!response.ok) throw new Error("Could not delete this contact.");
+      setSearchResults((current) => current.filter((result) => result.type !== "contact" || result.id !== id));
+      setSavedMedia((current) => { const next = new Set(current); next.delete(`contact:${id}`); return next; });
+      if (searchActive) setResultRefreshToken((value) => value + 1);
       await loadData();
-    } catch {}
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Could not delete this contact.");
+    }
     setDeletingContactId(null);
   };
   const recheckSource = async (contact: Contact) => {
@@ -1101,6 +1118,7 @@ function MediaDatabasePage() {
         else next.add(key);
         return next;
       });
+      if (isSaved && searchScope === "saved") setResultRefreshToken((value) => value + 1);
     } catch (error) {
       setBookmarkError(error instanceof Error ? error.message : "Could not update your saved media.");
     } finally {
@@ -1119,6 +1137,7 @@ function MediaDatabasePage() {
       if (!response.ok) throw new Error("Could not submit this report.");
       setSearchResults((current) => current.map((result) => result.type === "contact" && result.id === correctionContact.id
         ? { ...result, contact: { ...result.contact, hasPendingCorrection: true } } : result));
+      setCorrectionConfirmation("Your report was submitted and is pending internal review. It does not change the saved contact details.");
       setCorrectionContact(null); setCorrectionFields([]); setCorrectionDetails("");
     } finally { setCorrectionBusy(false); }
   };
@@ -1278,6 +1297,33 @@ function MediaDatabasePage() {
   const visibleSearchResults = searchResults.filter((result) => searchType === "contacts"
     ? result.type === "contact"
     : result.type === "outlet");
+  const savedSectorGroups = Array.from(visibleSearchResults.reduce((groups, result) => {
+    const sector = result.type === "contact"
+      ? result.contact.sectors?.[0] || result.contact.outletCategory || "Unspecified"
+      : result.outlet.category || "Unspecified";
+    const group = groups.get(sector) ?? [];
+    group.push(result);
+    groups.set(sector, group);
+    return groups;
+  }, new Map<string, UnifiedResult[]>()).entries()).sort(([a], [b]) => a.localeCompare(b));
+  const openSavedMedia = (type: "contacts" | "publications") => {
+    setShowManagement(false);
+    setActiveTab("contacts");
+    setSearchResults([]);
+    setSearchTotal(0);
+    setSearchCounts({ contacts: 0, outlets: 0 });
+    setSearchPhrase("");
+    setSearchTopic("");
+    setSearchLocation("");
+    setSearchCategory("");
+    setSearchAuthority("");
+    setSearchType(type);
+    setSearchScope("saved");
+    setSearchPage(1);
+    setResultMode("search");
+    setResultMessage("");
+    setResultRefreshToken((value) => value + 1);
+  };
 
   return (
     <div className="min-h-screen p-6 max-w-6xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
@@ -1287,11 +1333,21 @@ function MediaDatabasePage() {
           <Database size={24} color="#ffffff" />
           <h1 className="text-[28px] font-semibold mb-1" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Media Database</h1>
         </div>
-         <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>Search contacts and publications in the shared collection, your team's additions, or your saved media.</p>
+         <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>Find media contacts and publications, then save the records your team wants to follow.</p>
+         <div className="mt-3 flex flex-wrap gap-2">
+           <button onClick={() => openSavedMedia("contacts")} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: "rgba(255,255,255,0.45)", color: "#ffffff" }}>My Media Database</button>
+           <button onClick={() => openSavedMedia("publications")} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: "rgba(255,255,255,0.45)", color: "#ffffff" }}>Saved publications</button>
+           <button onClick={() => { setShowManagement(false); setActiveTab("contacts"); setSearchScope("all"); setSearchType("contacts"); setSearchPage(1); setResultMode("search"); setResultRefreshToken((value) => value + 1); }} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: "rgba(255,255,255,0.45)", color: "#ffffff" }}>Search all media</button>
+           <button onClick={() => {
+             if (showManagement) openSavedMedia("contacts");
+             else { setShowManagement(true); setResultMode("none"); }
+           }} className="rounded-lg px-3 py-2 text-[12px] font-semibold" style={{ background: vars.accent, color: "#ffffff" }}>{showManagement ? "Back to My Media Database" : "Manage my records"}</button>
+         </div>
       </div>
       {loadError && <div role="alert" className="mb-4 rounded-xl border bg-white px-4 py-3 text-[13px]" style={{ borderColor: "#FECACA", color: vars.red }}>
         {loadError} <button onClick={() => void loadData()} className="ml-2 font-semibold underline">Try again</button>
       </div>}
+      {correctionConfirmation && <p role="status" className="mb-4 rounded-xl border bg-emerald-50 px-4 py-3 text-[13px] text-emerald-800">{correctionConfirmation}</p>}
 
       {showCollectionTools && <section className="mb-5 rounded-2xl border bg-white shadow-sm" style={{ borderColor: vars.g200 }}>
         <div className="p-4 sm:p-5">
@@ -1303,12 +1359,12 @@ function MediaDatabasePage() {
               </select>
             </label>
             <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Collection
-              <select data-testid="select-media-collection-scope" aria-label="Media collection scope" value={searchScope} onChange={(event) => { setSearchScope(event.target.value as "all" | "added" | "saved"); setSearchPage(1); }} className="ml-2 rounded-lg border bg-white px-3 py-2 text-[12px]" style={{ borderColor: vars.g200 }}>
+              <select data-testid="select-media-collection-scope" aria-label="Media collection scope" value={searchScope} onChange={(event) => { const scope = event.target.value as "all" | "added" | "saved"; if (scope === "saved") { setSearchResults([]); setSearchTotal(0); setSearchCounts({ contacts: 0, outlets: 0 }); } setSearchScope(scope); setSearchPage(1); }} className="ml-2 rounded-lg border bg-white px-3 py-2 text-[12px]" style={{ borderColor: vars.g200 }}>
                 <option value="all">All</option><option value="added">Added</option><option value="saved">Saved</option>
               </select>
             </label>
           </div>
-          <p className="mt-2 text-[11px]" style={{ color: vars.g500 }}>All searches the shared AIO Fusion collection and this account's additions. Added shows this account's private records; Saved shows its private bookmarks. Saving never copies a shared record.</p>
+          <p className="mt-2 text-[11px]" style={{ color: vars.g500 }}>All searches shared and workspace records. Added shows this account's private records. Saved shows this account's bookmarks.</p>
           <div className="flex items-center gap-2 rounded-xl border px-3" style={{ borderColor: vars.g200 }}>
             <Search size={18} color={vars.g400} />
             <input data-testid="input-media-search" id="media-primary-search" value={searchPhrase} onChange={(event) => { setSearchPhrase(event.target.value); setSearchPage(1); }} onKeyDown={(event) => { if (event.key === "Enter") runSearch(); }} placeholder={searchType === "contacts" ? "Search people, roles, publications or topics" : "Search publication names or topics"} className="w-full py-3 text-[14px] outline-none" />
@@ -1322,32 +1378,16 @@ function MediaDatabasePage() {
             </label>
             <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Region
               <select data-testid="select-media-region" aria-label="Region filter" value={searchLocation} onChange={(event) => { setSearchLocation(event.target.value); setSearchPage(1); }} className="ml-2 rounded-lg border bg-white px-3 py-2 text-[12px]" style={{ borderColor: vars.g200 }}>
-                <option value="">All regions</option><option value="UK">UK</option><option value="US">US</option><option value="Europe">Europe</option><option value="Global">Global</option>
+                <option value="">All regions</option><option value="UK">UK</option><option value="US">US</option>
               </select>
             </label>
             <button data-testid="button-clear-media-search" onClick={() => { setSearchPhrase(""); setSearchTopic(""); setSearchLocation(""); setSearchCategory(""); setSearchAuthority(""); setSearchType("contacts"); setSearchScope("all"); setSearchPage(1); setResultMessage(""); setResultRefreshToken((value) => value + 1); }} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Clear</button>
             {bookmarkError && <span role="alert" className="text-[11px]" style={{ color: vars.red }}>{bookmarkError}</span>}
           </div>
-          <details className="mt-4 border-t pt-3" style={{ borderColor: vars.g100 }}>
-            <summary className="cursor-pointer text-[12px] font-semibold" style={{ color: vars.g600 }}>Advanced search and database management</summary>
-            <div className="mt-3 rounded-xl p-3" style={{ background: vars.g50 }}>
-              <p className="mb-3 text-[11px] leading-relaxed" style={{ color: vars.g500 }}>
-                Shared Collection records are centrally maintained and read-only to customer accounts. Added records belong to this workspace; Saved records are private bookmarks, not copies. Complete (%) counts ten populated information groups, not accuracy. Due for Review means a saved public source needs a human check; it does not mean a detail has changed. Edit and save updates the existing record. Delete soft-removes it from active results while retaining its audit history.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {canWriteMediaDatabase && <>
-                  <button onClick={openAddContact} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.accent }}><Plus size={13} /> Add contact</button>
-                  <button onClick={openAddOutlet} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}><Building2 size={13} /> Add publication</button>
-                  <button onClick={openImport} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}><Upload size={13} /> Import</button>
-                </>}
-              </div>
-              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Topic<input value={searchTopic} onChange={(event) => { setSearchTopic(event.target.value); setSearchPage(1); }} placeholder="e.g. fintech" className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-[13px] font-normal" style={{ borderColor: vars.g200 }} /></label>
-                <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Minimum authority<input type="number" min="0" max="100" value={searchAuthority} onChange={(event) => { setSearchAuthority(event.target.value); setSearchPage(1); }} placeholder="0-100" className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-[13px] font-normal" style={{ borderColor: vars.g200 }} /></label>
-                <button onClick={runSearch} className="self-end rounded-lg px-3 py-2 text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Apply advanced filters</button>
-              </div>
-            </div>
-          </details>
+           <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+             <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Topic<input value={searchTopic} onChange={(event) => { setSearchTopic(event.target.value); setSearchPage(1); }} placeholder="e.g. fintech" className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-[13px] font-normal" style={{ borderColor: vars.g200 }} /></label>
+             <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Minimum authority<input type="number" min="0" max="100" value={searchAuthority} onChange={(event) => { setSearchAuthority(event.target.value); setSearchPage(1); }} placeholder="0-100" className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-[13px] font-normal" style={{ borderColor: vars.g200 }} /></label>
+           </div>
         </div>
       </section>}
 
@@ -1367,7 +1407,60 @@ function MediaDatabasePage() {
             <span>{selectedMedia.size}/25 selected</span>
           </div>}
          {resultMessage && !searchLoading && <button onClick={runSearch} className="mb-3 text-[12px] font-semibold underline" style={{ color: vars.accent }}>Retry search</button>}
-         <div className="space-y-3" aria-live="polite">
+          {searchScope === "saved" ? (
+            <div className="space-y-4" aria-live="polite">
+              {savedSectorGroups.map(([sector, records]) => <section key={sector} className="overflow-hidden rounded-xl border bg-white" style={{ borderColor: vars.g200 }}>
+                <h2 className="border-b px-4 py-3 text-[13px] font-semibold" style={{ borderColor: vars.g100, color: vars.navy }}>{sector}</h2>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left text-[12px]">
+                    <thead style={{ background: vars.g50, color: vars.g600 }}>
+                      {searchType === "contacts" ? <tr>{["First name", "Last name", "Job title", "Outlet", "Email", "LinkedIn", "Outlet website", "Outlet description", "Country", "Source-provided reach", "Actions"].map((label) => <th key={label} className="whitespace-nowrap px-3 py-2 font-semibold">{label}</th>)}</tr>
+                        : <tr>{["Publication", "Website", "Description", "Country", "Source-provided reach", "Linked journalists", "Actions"].map((label) => <th key={label} className="whitespace-nowrap px-3 py-2 font-semibold">{label}</th>)}</tr>}
+                    </thead>
+                    <tbody>
+                      {records.map((result) => {
+                        const key = `${result.type === "contact" ? "contact" : "publication"}:${result.id}`;
+                        return result.type === "contact" ? <tr key={key} className="border-t align-top" style={{ borderColor: vars.g100 }}>
+                          <td className="whitespace-nowrap px-3 py-3">{result.contact.firstName && !/^\d+(?:[.,]\d+)?$/.test(result.contact.firstName.trim()) ? result.contact.firstName : "Name not available"}</td>
+                          <td className="whitespace-nowrap px-3 py-3">{result.contact.lastName && !/^\d+(?:[.,]\d+)?$/.test(result.contact.lastName.trim()) ? result.contact.lastName : ""}</td>
+                          <td className="px-3 py-3">{result.contact.role || "Not available"}</td>
+                          <td className="px-3 py-3">{result.contact.outletName || "Not available"}</td>
+                          <td className="px-3 py-3">{result.contact.email && isSendableContactEmail(result.contact.email) ? <a href={`mailto:${result.contact.email}`} className="underline" style={{ color: vars.accent }}>{result.contact.email}</a> : "Not available"}</td>
+                          <td className="px-3 py-3">{result.contact.linkedinUrl ? <a href={result.contact.linkedinUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>LinkedIn</a> : "Not available"}</td>
+                          <td className="px-3 py-3">{publicationWebsiteHref(result.contact.outletWebsite) ? <a href={publicationWebsiteHref(result.contact.outletWebsite)!} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>Visit</a> : "Not available"}</td>
+                          <td className="max-w-[220px] px-3 py-3">{(result.contact as Contact & { outletDescription?: string }).outletDescription || "Not available"}</td>
+                          <td className="px-3 py-3">{result.contact.outletCountry || result.contact.geography || "Not available"}</td>
+                          <td className="px-3 py-3">{result.contact.publicationReach || result.contact.outletReachBand ? <><span>{result.contact.publicationReach || result.contact.outletReachBand}</span><span className="block text-[10px]" style={{ color: vars.g500 }}>Source-provided, not verified audience</span></> : "Not available"}</td>
+                          <td className="whitespace-nowrap px-3 py-3">
+                            {canWriteMediaDatabase && isCurrentWorkspaceItem(result.contact, session?.username) && <>
+                              <button onClick={() => openEditContact(result.contact)} className="mr-3 underline" style={{ color: vars.accent }}>Edit</button>
+                              <button disabled={deletingContactId === result.id} onClick={() => { if (window.confirm(`Delete ${contactDisplayName(result.contact)}?`)) void deleteContact(result.id, result.contact); }} className="mr-3 underline" style={{ color: vars.red }}>Delete</button>
+                            </>}
+                            <button disabled={bookmarkBusy === key} onClick={() => void toggleBookmark("contact", result.id)} className="underline" style={{ color: vars.accent }}>Remove from My Media Database</button>
+                          </td>
+                        </tr> : <tr key={key} className="border-t align-top" style={{ borderColor: vars.g100 }}>
+                          <td className="whitespace-nowrap px-3 py-3 font-semibold">{result.outlet.name}</td>
+                          <td className="px-3 py-3">{publicationWebsiteHref(result.outlet.website) ? <a href={publicationWebsiteHref(result.outlet.website)!} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>Visit</a> : "Not available"}</td>
+                          <td className="max-w-[240px] px-3 py-3">{result.outlet.description || "Not available"}</td>
+                          <td className="px-3 py-3">{result.outlet.country || "Not available"}</td>
+                          <td className="px-3 py-3">{result.outlet.reachBand ? <><span>{result.outlet.reachBand}</span><span className="block text-[10px]" style={{ color: vars.g500 }}>Source-provided, not verified audience</span></> : "Not available"}</td>
+                          <td className="min-w-[200px] px-3 py-3">{(result.outlet.linkedJournalists ?? result.outlet.journalists ?? []).filter((person) => person.lifecycleStatus !== "departed").map(contactDisplayName).join(", ") || "Not available"}</td>
+                          <td className="whitespace-nowrap px-3 py-3">
+                            {canWriteMediaDatabase && isCurrentWorkspaceItem(result.outlet, session?.username) && <>
+                              <button onClick={() => openEditOutlet(result.outlet)} className="mr-3 underline" style={{ color: vars.accent }}>Edit</button>
+                              <button disabled={deletingOutletId === result.id} onClick={() => { if (window.confirm(`Delete "${result.outlet.name}"?`)) void deleteOutlet(result.id, result.outlet); }} className="mr-3 underline" style={{ color: vars.red }}>Delete</button>
+                            </>}
+                            <button disabled={bookmarkBusy === key} onClick={() => void toggleBookmark("publication", result.id)} className="underline" style={{ color: vars.accent }}>Remove from My Media Database</button>
+                          </td>
+                        </tr>;
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>)}
+              {!searchLoading && !resultMessage && visibleSearchResults.length === 0 && <div className="rounded-2xl border bg-white py-12 text-center" style={{ borderColor: vars.g200 }}><p className="font-semibold" style={{ color: vars.navy }}>Your My Media Database is empty</p><p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Save contacts or publications from search results to see them here.</p></div>}
+            </div>
+          ) : <div className="space-y-3" aria-live="polite">
            {visibleSearchResults.map((result) => {
             const isContact = result.type === "contact";
             const contact = isContact ? result.contact : null;
@@ -1386,24 +1479,23 @@ function MediaDatabasePage() {
                        Select
                      </label>
                     <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide" style={{ background: isContact ? "rgba(31,116,143,0.1)" : "rgba(201,160,78,0.18)", color: isContact ? vars.accent : "#7A5E25" }}>{isContact ? "Contact" : "Publication"}</span>
-                     <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: vars.g100, color: vars.g600 }}>{isSharedCollection(contact || outlet!) ? "AIO Fusion collection" : isCurrentWorkspaceItem(contact || outlet!, session?.username) ? "Added by your team" : "Private workspace record"}</span>
                     {contact?.lifecycleStatus === "departed" && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">Departed</span>}
                     {contact?.hasPendingCorrection && <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-800">Correction pending</span>}
                   </div>
-                  <h2 className="text-[18px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{contact ? `${contact.firstName} ${contact.lastName}`.trim() : outlet?.name}</h2>
+                   <h2 className="text-[18px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{contact ? contactDisplayName(contact) : outlet?.name}</h2>
                    <p className="mt-1 text-[13px]" style={{ color: vars.g600 }}>{contact ? [contact.role || "Role not available", contact.outletName || "Publication not available"].join(" · ") : [outlet?.category || "Sector not available", outlet?.country || "Region not available"].join(" · ")}</p>
                    {contact && <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px]" style={{ color: vars.g500 }}>
                      {contact.email && isSendableContactEmail(contact.email) ? <a href={`mailto:${contact.email}`} className="underline" style={{ color: vars.accent }}>{contact.email}</a> : <span>Valid email not available</span>}
                      {contact.outletName && (outletWebsite
                        ? <a href={outletWebsite} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>Publication website</a>
                        : <span>{contact.outletWebsite ? "Publication website value needs review" : "Publication website not available"}</span>)}
-                     {(contact.publicationReach || contact.outletReachBand) && <span>Source reach value: {contact.publicationReach || contact.outletReachBand}</span>}
+                      {(contact.publicationReach || contact.outletReachBand) && <span>Source-provided reach: {contact.publicationReach || contact.outletReachBand}, not verified audience</span>}
                    </div>}
                    {contact?.linkedinUrl && <a className="mt-1 inline-block text-[12px] underline" href={contact.linkedinUrl} target="_blank" rel="noreferrer" style={{ color: vars.accent }}>LinkedIn profile</a>}
                    {outlet && <div className="mt-1 flex flex-wrap gap-3 text-[12px]" style={{ color: vars.g500 }}>
                      {outletWebsite ? <a href={outletWebsite} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>Visit publication website</a> : <span>{outlet.website ? "Stored website value needs review" : "Website not available"}</span>}
-                     <span>Source reach value: {outlet.reachBand || "Not available"}</span>
-                     <span>Verified authority: {outlet.verifiedAuthority ?? "Not available"}</span>
+                      <span>Source-provided reach: {outlet.reachBand || "Not available"}{outlet.reachBand ? ", not verified audience" : ""}</span>
+                      {outlet.verifiedAuthority != null && outlet.verifiedAuthority !== "" && <span>Recorded authority: {outlet.verifiedAuthority}</span>}
                      {outlet.linkedinUrl && <a href={outlet.linkedinUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>LinkedIn</a>}
                    </div>}
                 </div>
@@ -1418,7 +1510,7 @@ function MediaDatabasePage() {
                  <h3 className="text-[12px] font-semibold" style={{ color: vars.navy }}>Currently linked journalists ({linkedJournalists.length})</h3>
                  {linkedJournalists.length > 0
                    ? <ul className="mt-2 space-y-2">{linkedJournalists.map((journalist) => <li key={journalist.id} className="text-[12px]" style={{ color: vars.g600 }}>
-                     <span className="font-semibold" style={{ color: vars.navy }}>{`${journalist.firstName} ${journalist.lastName}`.trim() || "Name not available"}</span>
+                      <span className="font-semibold" style={{ color: vars.navy }}>{contactDisplayName(journalist)}</span>
                      {journalist.role && ` · ${journalist.role}`}
                      {journalist.email && isSendableContactEmail(journalist.email) ? <> · <a href={`mailto:${journalist.email}`} className="underline" style={{ color: vars.accent }}>{journalist.email}</a></> : " · Valid email not available"}
                      {journalist.linkedinUrl && <> · <a href={journalist.linkedinUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>LinkedIn</a></>}
@@ -1429,22 +1521,27 @@ function MediaDatabasePage() {
                 {contact && <><button onClick={() => setShowContactProfile(contact)} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>View profile</button>
                   {canManageCollectionItem(contact, isMaster, canWriteMediaDatabase, session?.username) && <>
                     <button disabled={statusBusyId === contact.id} onClick={() => void setContactStatus(contact, contact.lifecycleStatus === "departed" ? "active" : "departed")} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.g600 }}>{contact.lifecycleStatus === "departed" ? "Mark active" : "Mark as departed"}</button>
-                    <button onClick={() => { setCorrectionContact(contact); setCorrectionFields([]); setCorrectionDetails(""); }} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.g600 }}>Flag incorrect details</button>
+                     <button onClick={() => { setCorrectionConfirmation(""); setCorrectionContact(contact); setCorrectionFields([]); setCorrectionDetails(""); }} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.g600 }}>Flag incorrect details</button>
                   </>}
                 </>}
-                 {outletWebsite && <a href={outletWebsite} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Visit publication</a>}
-                 <button data-testid={`button-save-media-${bookmarkType}-${result.id}`} disabled={bookmarkBusy === bookmarkKey} onClick={() => void toggleBookmark(bookmarkType, result.id)} className="px-3 py-2 rounded-lg border text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>{bookmarkBusy === bookmarkKey ? "Saving…" : isSaved ? "Saved by your team" : "Save to My Media Database"}</button>
+                  {outlet && (outletWebsite ? <a href={outletWebsite} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Visit</a> : <span className="px-3 py-2 text-[12px]" style={{ color: vars.g500 }}>Website not available</span>)}
+                  <button data-testid={`button-save-media-${bookmarkType}-${result.id}`} disabled={bookmarkBusy === bookmarkKey} onClick={() => void toggleBookmark(bookmarkType, result.id)} className="px-3 py-2 rounded-lg border text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>{bookmarkBusy === bookmarkKey ? "Saving…" : isSaved ? "Remove from My Media Database" : "Save to My Media Database"}</button>
               </div>
             </article>;
           })}
           {!searchLoading && !resultMessage && visibleSearchResults.length === 0 && <div className="rounded-2xl border bg-white py-12 text-center" style={{ borderColor: vars.g200 }}><Search size={28} className="mx-auto mb-2" color={vars.g300} /><p className="font-semibold" style={{ color: vars.navy }}>No matching {searchType}</p><p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Clear a filter or broaden the search.</p></div>}
-        </div>
+         </div>}
         {searchTotal > 25 && <div className="flex justify-end items-center gap-3 mt-3 text-[12px]" style={{ color: vars.navy }}><button disabled={searchPage === 1} onClick={() => { setSelectedMedia(new Set()); setSearchPage((page) => page - 1); }} className="px-3 py-1 border rounded disabled:opacity-40">Previous</button><span>Page {searchPage} of {Math.ceil(searchTotal / 25)}</span><button disabled={searchPage * 25 >= searchTotal} onClick={() => { setSelectedMedia(new Set()); setSearchPage((page) => page + 1); }} className="px-3 py-1 border rounded disabled:opacity-40">Next</button></div>}
       </section>}
 
-      {(!searchActive || !showCollectionTools) && <details className="mb-5 rounded-2xl border bg-white p-4" style={{ borderColor: vars.g200 }}>
-       <summary className="cursor-pointer text-[13px] font-semibold" style={{ color: vars.navy }}>Advanced management: imports, corrections, discoveries and record editing</summary>
+      {showManagement && <details open className="mb-5 rounded-2xl border bg-white p-4" style={{ borderColor: vars.g200 }}>
+        <summary className="cursor-pointer text-[13px] font-semibold" style={{ color: vars.navy }}>Manage my records</summary>
       <div className="mt-4">
+       {canWriteMediaDatabase && <div className="mb-4 flex flex-wrap gap-2">
+         <button onClick={openAddContact} className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold text-white" style={{ background: vars.accent }}><Plus size={13} /> Add contact</button>
+         <button onClick={openAddOutlet} className="flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}><Building2 size={13} /> Add publication</button>
+         <button onClick={openImport} className="flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}><Upload size={13} /> Import CSV</button>
+       </div>}
       {/* Tabs */}
       <div className="flex gap-1 mb-6 p-1 rounded-xl inline-flex" style={{ background: vars.g100 }}>
         {([
@@ -1534,9 +1631,6 @@ function MediaDatabasePage() {
               <button disabled={exportBusy || !Array.from(savedMedia).some((key) => key.startsWith("publication:"))} onClick={() => void exportMediaCsv("saved", "publications")} className="rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>Export saved connections CSV</button>
               {selectedIdsFor("publications").length > 0 && <button disabled={exportBusy} onClick={() => void exportMediaCsv("selected", "publications", selectedIdsFor("publications"))} className="rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>Export selected CSV ({selectedIdsFor("publications").length})</button>}
               {isMaster && <button disabled={exportBusy} onClick={() => void exportMediaCsv("full", "publications")} className="rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>Export full CSV</button>}
-             {canWriteMediaDatabase && <button onClick={openAddOutlet} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors" style={{ background: vars.accent }}>
-               <Plus size={14} /> Add outlet
-             </button>}
           </div>
           {outletTotal > 50 && <div className="flex justify-end items-center gap-3 mb-3 text-[12px]" style={{ color: vars.navy }}>
             <button disabled={outletPage === 1} onClick={() => setOutletPage((page) => page - 1)} className="px-3 py-1 border rounded disabled:opacity-40">Previous</button>
@@ -1552,7 +1646,6 @@ function MediaDatabasePage() {
               <Building2 size={32} className="mx-auto mb-3" color={vars.g300} />
               <p className="text-[15px] font-semibold mb-1" style={{ color: vars.navy }}>No outlets yet</p>
               <p className="text-[13px] font-light mb-4" style={{ color: vars.g400 }}>Add publications to build your media database.</p>
-               {canWriteMediaDatabase && <button onClick={openAddOutlet} className="px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>Add your first outlet</button>}
             </div>
           ) : (
             <div className="rounded-2xl border overflow-hidden" style={{ borderColor: vars.g200, background: "white" }}>
@@ -1575,7 +1668,6 @@ function MediaDatabasePage() {
                           <input type="checkbox" aria-label={`Select publication ${o.id}`} checked={selectedMedia.has(`publication:${o.id}`)} disabled={!selectedMedia.has(`publication:${o.id}`) && selectedMedia.size >= 25} onChange={() => toggleMediaSelection("publication", o.id)} />
                           <div><p className="font-semibold" style={{ color: vars.navy }}>{o.name}</p>
                         {o.description && <p className="text-[11px] font-light mt-0.5" style={{ color: vars.g500 }}>{o.description.slice(0, 80)}{o.description.length > 80 ? "…" : ""}</p>}
-                        {isSharedCollection(o) && <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded" style={{ background: "rgba(31,116,143,0.1)", color: vars.accent }}>Shared collection</span>}
                         {Array.isArray(o.linkedJournalists) || Array.isArray(o.journalists)
                           ? <div className="mt-2 text-[10px]" style={{ color: vars.g500 }}>
                             <p className="font-semibold">Currently linked journalists ({(o.linkedJournalists ?? o.journalists ?? []).filter((journalist) => journalist.lifecycleStatus !== "departed").length})</p>
@@ -1628,8 +1720,6 @@ function MediaDatabasePage() {
                 <option value="">All locations</option>
                 <option value="UK">United Kingdom</option>
                 <option value="US">United States</option>
-                <option value="EU">Europe</option>
-                <option value="Global">Global</option>
               </select>
               <select aria-label="Contact publication filter" value={contactOutletFilter} onChange={(e) => setContactOutletFilter(e.target.value)} className="px-3 py-2 rounded-lg border text-[13px] bg-white outline-none" style={{ borderColor: vars.g200, color: contactOutletFilter ? vars.navy : "inherit" }}>
                 <option value="">All outlets</option>
@@ -1643,14 +1733,6 @@ function MediaDatabasePage() {
                 <button disabled={exportBusy || !Array.from(savedMedia).some((key) => key.startsWith("contact:"))} onClick={() => void exportMediaCsv("saved", "contacts")} className="flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Export saved connections CSV</button>
                 {selectedIdsFor("contacts").length > 0 && <button disabled={exportBusy} onClick={() => void exportMediaCsv("selected", "contacts", selectedIdsFor("contacts"))} className="flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Export selected CSV ({selectedIdsFor("contacts").length})</button>}
                 {isMaster && <button disabled={exportBusy} onClick={() => void exportMediaCsv("full", "contacts")} className="flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Export full CSV</button>}
-               {canWriteMediaDatabase && <>
-                 <button onClick={openAddContact} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors" style={{ background: vars.accent }}>
-                   <Plus size={14} /> Add contact
-                 </button>
-                 <button onClick={openImport} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold border bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.gold, color: vars.navy }}>
-                   <Upload size={14} className="text-amber-600" /> Import CSV
-                 </button>
-               </>}
             </div>
           </div>
 
@@ -1659,7 +1741,6 @@ function MediaDatabasePage() {
               <Users size={32} className="mx-auto mb-3" color={vars.g300} />
               <p className="text-[15px] font-semibold mb-1" style={{ color: vars.navy }}>No contacts yet</p>
               <p className="text-[13px] font-light mb-4" style={{ color: vars.g400 }}>Add journalists and PR contacts to your database.</p>
-               {canWriteMediaDatabase && <button onClick={openAddContact} className="px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>Add your first contact</button>}
             </div>
           ) : (
             <div className="rounded-2xl border overflow-hidden" style={{ borderColor: vars.g200, background: "white" }}>
@@ -1698,7 +1779,6 @@ function MediaDatabasePage() {
                           <p className="font-semibold" style={{ color: vars.navy }}>{`${c.firstName} ${c.lastName}`.trim()}</p>
                         </div>
                          {c.outletCategory && <p className="text-[11px] font-light" style={{ color: vars.g500 }}>{c.outletCategory}</p>}
-                         {isSharedCollection(c) && <span className="inline-flex text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded" style={{ background: "rgba(31,116,143,0.1)", color: vars.accent }}>Shared collection</span>}
                          {recordVerificationBadge(c)}
                          {(c.beats?.length || c.sectors?.length || c.seniority || c.editorialStatus) && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>{[c.beats?.length ? `Beats: ${c.beats.join(", ")}` : "", c.sectors?.length ? `Sectors: ${c.sectors.join(", ")}` : "", c.seniority, c.editorialStatus].filter(Boolean).join(" · ")}</p>}
                           {(c.reach || c.reachBand || c.authority !== undefined || c.authorityScore !== undefined || c.confidence || c.confidenceLevel) && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>{[c.reach || c.reachBand ? `Source reach value: ${c.reach || c.reachBand}` : "", c.authority ?? c.authorityScore !== undefined ? `Recorded authority score: ${c.authority ?? c.authorityScore}` : "", c.confidence || c.confidenceLevel ? `Confidence: ${c.confidence || c.confidenceLevel}` : ""].filter(Boolean).join(" · ")}</p>}
@@ -2057,7 +2137,7 @@ function MediaDatabasePage() {
 
       {/* Contact modal */}
       {showCollectionTools && showContactProfile && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowContactProfile(null)}>
+        <div role="dialog" aria-modal="true" aria-label="Journalist Profile" className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowContactProfile(null)}>
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 flex items-center justify-between border-b" style={{ borderColor: vars.g200, background: vars.g50 }}>
               <div className="flex items-center gap-2">
@@ -2101,37 +2181,14 @@ function MediaDatabasePage() {
                   )}
                 </div>
               </div>
-              {(showContactProfile.sourceRef || profileImportFilename || profileImportSheet || profileImportRow) && (
-                <div className="px-5 pt-3">
-                  <div className="rounded-xl border p-4" style={{ borderColor: vars.g200, background: "#FFFBEB" }}>
-                    <p className="text-[12px] font-bold" style={{ color: vars.navy }}>Workbook assertion</p>
-                    <p className="text-[11px] mt-1" style={{ color: vars.g500 }}>Imported workbook values are recorded separately from later page verification. They are not evidence that the linked page currently shows the same details.</p>
-                    <dl className="mt-3 grid sm:grid-cols-2 gap-x-4 gap-y-2 text-[12px]" style={{ color: vars.g600 }}>
-                      {showContactProfile.sourceRef && <div><dt className="font-semibold">Source reference</dt><dd>{showContactProfile.sourceRef}</dd></div>}
-                      {profileImportFilename && <div><dt className="font-semibold">Workbook</dt><dd>{profileImportFilename}</dd></div>}
-                      {profileImportSheet && <div><dt className="font-semibold">Sheet</dt><dd>{profileImportSheet}</dd></div>}
-                      {profileImportRow && <div><dt className="font-semibold">Workbook row</dt><dd>{profileImportRow}</dd></div>}
-                    </dl>
-                  </div>
-                </div>
-              )}
-              {showContactProfile.sourceCheck && (
-                <div className="px-5 pt-3">
-                  <div className="rounded-xl border p-4" style={{ borderColor: vars.g200, background: "#F8FAFC" }}>
-                    <p className="text-[12px] font-bold" style={{ color: vars.navy }}>Page check evidence</p>
-                    <p className="text-[11px] mt-1" style={{ color: vars.g500 }}>Observed values below come from the cited page check at {new Date(showContactProfile.sourceCheck.checkedAt).toLocaleString()}; they do not rewrite workbook assertions without review.</p>
-                    {showContactProfile.sourceCheck.observedEvidence.excerpt && <p className="mt-2 text-[12px]" style={{ color: vars.g600 }}>{showContactProfile.sourceCheck.observedEvidence.excerpt}</p>}
-                    {showContactProfile.sourceCheck.observedEvidence.observedRole && <p className="mt-1 text-[12px]" style={{ color: vars.g600 }}>Observed role: {showContactProfile.sourceCheck.observedEvidence.observedRole}</p>}
-                    {showContactProfile.sourceCheck.observedEvidence.observedEmails.length > 0 && <p className="mt-1 text-[12px]" style={{ color: vars.g600 }}>Observed email values: {showContactProfile.sourceCheck.observedEvidence.observedEmails.join(", ")}</p>}
-                  </div>
-                </div>
-              )}
               <RecommendationCard
                 item={{
                   rank: 0,
                   score: 100, // Or whatever placeholder score since it's just a profile view
                   reasons: [],
-                  contact: showContactProfile,
+                  contact: contactDisplayName(showContactProfile) === "Name not available"
+                    ? { ...showContactProfile, firstName: "Name not available", lastName: "" }
+                    : showContactProfile,
                 }}
                 isShortlist={true}
                  onEdit={canManageCollectionItem(showContactProfile, isMaster, canWriteMediaDatabase, session?.username) ? () => {

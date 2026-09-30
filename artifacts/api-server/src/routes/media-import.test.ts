@@ -422,6 +422,116 @@ afterAll(async () => {
 });
 
 describe("media import route regressions", () => {
+  it("does not import numeric-only placeholder names as journalist identities and keeps the source row traceable", async () => {
+    const workspace = "numeric-placeholder-import";
+    const sourceRow = 2396;
+    const rows = [{
+      ...workbookRows[0],
+      sourceRow,
+      firstName: "2396",
+      lastName: "",
+      email: "placeholder-2396@example.test",
+      outletName: "Placeholder News",
+    }];
+    const { preview, commitResponse } = await previewThenCommit(workspace, {
+      rows,
+      filename: "placeholder.csv",
+      idempotencyKey: "numeric-placeholder-source",
+    });
+
+    expect(preview).toMatchObject({ invalid: 1, importableRows: 0 });
+    expect(preview.rowOutcomes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceRow,
+        outcome: "invalid",
+        fields: ["name"],
+        reason: expect.stringContaining("Numeric-only"),
+      }),
+    ]));
+    expect(commitResponse.status).toBe(400);
+    expect(commitResponse.json.error).toMatch(/does not contain any valid contacts/i);
+    expect(await db.select().from(mediaContactsTable)
+      .where(eq(mediaContactsTable.email, "placeholder-2396@example.test"))).toHaveLength(0);
+  });
+
+  it("does not surface existing numeric-only contact names as journalist search, publication, or bookmark identities", async () => {
+    const workspace = "numeric-placeholder-api";
+    const [outlet] = await db.insert(mediaOutletsTable).values({
+      name: "Numeric Placeholder Daily",
+      accountId: workspace,
+    }).returning();
+    const [contact] = await db.insert(mediaContactsTable).values({
+      firstName: "2396",
+      lastName: "",
+      role: "Reporter",
+      email: "placeholder-api@example.test",
+      outletId: outlet!.id,
+      accountId: workspace,
+    }).returning();
+    await db.insert(mediaBookmarksTable).values({
+      accountId: workspace,
+      contactId: contact!.id,
+      outletId: null,
+    });
+
+    const contacts = await mediaRequest("GET", "/api/store/media-db/search?type=contacts&phrase=2396", workspace);
+    const publication = await mediaRequest("GET", "/api/store/media-db/search?type=publications&phrase=Numeric%20Placeholder%20Daily", workspace);
+    const bookmarks = await mediaRequest("GET", "/api/store/media-db/bookmarks", workspace);
+    const contactList = await mediaRequest("GET", "/api/store/media-db/contacts", workspace);
+    expect(contacts.json.counts.contacts).toBe(0);
+    expect(JSON.stringify(publication.json)).not.toContain("2396");
+    expect(bookmarks.json.total).toBe(0);
+    expect(contactList.json.contacts.some((entry: { id: number }) => entry.id === contact!.id)).toBe(false);
+    expect(await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, contact!.id))).toHaveLength(1);
+  });
+
+  it("returns outlet descriptions with saved contacts only when the joined outlet is visible", async () => {
+    const workspace = "saved-contact-outlet-description";
+    const [visibleOutlet] = await db.insert(mediaOutletsTable).values({
+      name: "Visible Description Outlet",
+      description: "Visible outlet background.",
+      accountId: workspace,
+    }).returning();
+    const [privateOutlet] = await db.insert(mediaOutletsTable).values({
+      name: "Private Description Outlet",
+      description: "Private outlet confidential background.",
+      accountId: "description-other-workspace",
+    }).returning();
+    const [visibleContact, sharedContact] = await db.insert(mediaContactsTable).values([
+      {
+        firstName: "Traceable",
+        lastName: "Reporter",
+        outletId: visibleOutlet!.id,
+        accountId: workspace,
+      },
+      {
+        firstName: "Shared",
+        lastName: "Reporter",
+        outletId: privateOutlet!.id,
+        accountId: null,
+      },
+    ]).returning();
+    await db.insert(mediaBookmarksTable).values([
+      { accountId: workspace, contactId: visibleContact!.id, outletId: null },
+      { accountId: workspace, contactId: sharedContact!.id, outletId: null },
+    ]);
+
+    const searchVisible = await mediaRequest("GET", "/api/store/media-db/search?type=contacts&phrase=Traceable", workspace);
+    const searchPrivateOutlet = await mediaRequest("GET", "/api/store/media-db/search?type=contacts&phrase=Shared", workspace);
+    const bookmarks = await mediaRequest("GET", "/api/store/media-db/bookmarks", workspace);
+    const resultContact = (response: typeof searchVisible) => response.json.results[0]?.contact;
+    const bookmarkContact = (contactId: number) => bookmarks.json.bookmarks.find(
+      (bookmark: { contactId: number | null }) => bookmark.contactId === contactId,
+    )?.contact;
+
+    expect(resultContact(searchVisible).outletDescription).toBe("Visible outlet background.");
+    expect(resultContact(searchPrivateOutlet).outletDescription).toBeNull();
+    expect(bookmarkContact(visibleContact!.id).outletDescription).toBe("Visible outlet background.");
+    expect(bookmarkContact(sharedContact!.id).outletDescription).toBeNull();
+    expect(JSON.stringify(searchPrivateOutlet.json)).not.toContain("Private outlet confidential background.");
+    expect(JSON.stringify(bookmarks.json)).not.toContain("Private outlet confidential background.");
+  });
+
   it("returns a durable job immediately and reconciles exact-source retries to its persisted summary", async () => {
     const previewResponse = await api("durable-job-workspace", {
       csv,

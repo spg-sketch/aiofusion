@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../lib/contentAi", () => ({
@@ -10,7 +10,7 @@ vi.mock("../IntakeForm", () => ({
   getProjectMediaCategories: () => [],
 }));
 
-import { MediaDatabasePage, contactCompletenessPercent, contactExportRow, importOutcomesWithErrors, importPlanHasWork, isUploadedMediaContact, publicationWebsiteHref, sanitizeSpreadsheetCell } from "./MediaDatabasePage";
+import { MediaDatabasePage, contactCompletenessPercent, contactDisplayName, contactExportRow, importOutcomesWithErrors, importPlanHasWork, isUploadedMediaContact, publicationWebsiteHref, sanitizeSpreadsheetCell } from "./MediaDatabasePage";
 
 const changedContact = {
   id: 12, outletId: 2, firstName: "Jane", lastName: "Reporter", role: "Energy Editor",
@@ -38,16 +38,16 @@ let bookmarkTestRows: Array<Record<string, unknown>> = [];
 let bookmarkTotalOverride: number | null = null;
 
 async function browseContacts() {
-  const advanced = Array.from(document.querySelectorAll("details")).find((details) => details.querySelector("summary")?.textContent?.includes("Advanced management"));
-  if (advanced && !advanced.open) fireEvent.click(advanced.querySelector("summary")!);
+  const manageButton = screen.queryByRole("button", { name: "Manage my records" });
+  if (manageButton) fireEvent.click(manageButton);
   fireEvent.click(screen.getByRole("button", { name: /Contacts \(/i }));
   fireEvent.click(screen.getByRole("button", { name: "Browse contacts" }));
   expect(await screen.findByText("Jane Reporter")).toBeTruthy();
 }
 
 async function browseOutlets() {
-  const advanced = Array.from(document.querySelectorAll("details")).find((details) => details.querySelector("summary")?.textContent?.includes("Advanced management"));
-  if (advanced && !advanced.open) fireEvent.click(advanced.querySelector("summary")!);
+  const manageButton = screen.queryByRole("button", { name: "Manage my records" });
+  if (manageButton) fireEvent.click(manageButton);
   fireEvent.click(screen.getByRole("button", { name: /Publications \(/i }));
   fireEvent.click(screen.getByRole("button", { name: "Browse publications" }));
   await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/outlets?"))).toBe(true));
@@ -66,9 +66,9 @@ async function submitPublicationSearch() {
 }
 
 function openImportModal() {
-  const advanced = Array.from(document.querySelectorAll("details")).find((details) => details.querySelector("summary")?.textContent?.includes("Advanced search and database management"));
+  const advanced = Array.from(document.querySelectorAll("details")).find((details) => details.querySelector("summary")?.textContent?.includes("Manage my records"));
   if (advanced && !advanced.open) fireEvent.click(advanced.querySelector("summary")!);
-  fireEvent.click(screen.getByRole("button", { name: "Import" }));
+  fireEvent.click(screen.getByRole("button", { name: "Import CSV" }));
 }
 
 describe("MediaDatabasePage source health", () => {
@@ -127,6 +127,9 @@ describe("MediaDatabasePage source health", () => {
       if (url.includes("/source-checks/44/approve")) {
         expect(JSON.parse(String(init?.body))).toEqual({ fields: ["role"] });
         return new Response(JSON.stringify({ ok: true, applied: ["role"], skipped: [] }), { status: 200 });
+      }
+      if (url.includes("/contacts/12/corrections")) {
+        return new Response(JSON.stringify({ ok: true, report: { id: 10, status: "pending" } }), { status: 201 });
       }
       if (url.includes("/source-check")) {
         return new Response(JSON.stringify({ ok: true, sourceCheck: changedContact.sourceCheck }), { status: 200 });
@@ -201,12 +204,14 @@ describe("MediaDatabasePage source health", () => {
     expect(screen.getByText("Unverified")).toBeTruthy();
 
     fireEvent.click(screen.getAllByRole("button", { name: "View Profile" })[0]);
+    const profile = within(screen.getByRole("dialog", { name: "Journalist Profile" }));
     expect(screen.getByText(/saved email is no longer shown/i)).toBeTruthy();
     expect(screen.getAllByText(/Energy Editor/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Climate Correspondent/).length).toBeGreaterThan(0);
-    expect(screen.getByText("Workbook assertion")).toBeTruthy();
-    expect(screen.getByText("v33.xlsx")).toBeTruthy();
-    expect(screen.getByText("Page check evidence")).toBeTruthy();
+    expect(screen.queryByText("Workbook assertion")).toBeNull();
+    expect(screen.queryByText("v33.xlsx")).toBeNull();
+    expect(screen.queryByText("Page check evidence")).toBeNull();
+    expect(profile.queryByText("Notes")).toBeNull();
     expect(screen.getByText("Journalist authority")).toBeTruthy();
     expect(screen.getByText("Confidence")).toBeTruthy();
 
@@ -226,15 +231,15 @@ describe("MediaDatabasePage source health", () => {
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 
-  it("does not request result records on initial render", async () => {
+  it("shows the account's saved contacts by default", async () => {
     render(<MediaDatabasePage />);
-    await new Promise((resolve) => window.setTimeout(resolve, 250));
-    const contactCalls = vi.mocked(fetch).mock.calls.filter(([input]) =>
-      String(input).includes("/media-db/contacts?"),
-    );
-    expect(contactCalls).toHaveLength(0);
-    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/outlets?"))).toBe(false);
-    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/search?"))).toBe(false);
+    expect(await screen.findByRole("columnheader", { name: "First name" })).toBeTruthy();
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => {
+      const url = new URL(String(input), "http://test.local");
+      return url.pathname.endsWith("/media-db/search") && url.searchParams.get("scope") === "saved";
+    })).toBe(true));
+    expect(screen.queryByRole("button", { name: "Manage my records" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Browse contacts" })).toBeNull();
   });
 
   it("loads contacts only after an explicit browse action", async () => {
@@ -262,10 +267,15 @@ describe("MediaDatabasePage source health", () => {
   it("requires explicit submit and paginates unified search results", async () => {
     searchTotalOverride = 50;
     render(<MediaDatabasePage />);
-    fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "energy" } });
     fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
+    fireEvent.change(screen.getByLabelText("Media collection scope"), { target: { value: "all" } });
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => {
+      const url = new URL(String(input), "http://test.local");
+      return url.pathname.endsWith("/media-db/search") && url.searchParams.get("type") === "publications" && url.searchParams.get("scope") === "all";
+    })).toBe(true));
+    fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "energy" } });
     await new Promise((resolve) => window.setTimeout(resolve, 250));
-    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/search?"))).toBe(false);
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => new URL(String(input), "http://test.local").searchParams.get("phrase") === "energy")).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(await screen.findByText("Energy Weekly")).toBeTruthy();
     expect(screen.getByText("Currently linked journalists (1)")).toBeTruthy();
@@ -277,6 +287,7 @@ describe("MediaDatabasePage source health", () => {
 
   it("saves and unsaves a search result using the account bookmark endpoints", async () => {
     render(<MediaDatabasePage />);
+    fireEvent.change(screen.getByLabelText("Media collection scope"), { target: { value: "all" } });
     fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "energy" } });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(await screen.findByText("Jane Reporter")).toBeTruthy();
@@ -285,8 +296,8 @@ describe("MediaDatabasePage source health", () => {
       expect.stringContaining("/api/store/media-db/bookmarks/contact/12"),
       expect.objectContaining({ method: "PUT", credentials: "include" }),
     ));
-    expect(await screen.findByRole("button", { name: "Saved by your team" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Saved by your team" }));
+    expect(await screen.findByRole("button", { name: "Remove from My Media Database" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Remove from My Media Database" }));
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/store/media-db/bookmarks/contact/12"),
       expect.objectContaining({ method: "DELETE", credentials: "include" }),
@@ -305,7 +316,7 @@ describe("MediaDatabasePage source health", () => {
     fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(await screen.findByText("Energy Weekly")).toBeTruthy();
-    expect(await screen.findByRole("button", { name: "Saved by your team" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Remove from My Media Database" })).toBeTruthy();
   });
 
   it("shows an explicit error when saved media exceeds the safe loading cap", async () => {
@@ -402,6 +413,7 @@ describe("MediaDatabasePage source health", () => {
   it("renders an explicit no-results state without replacing the page shell", async () => {
     searchEmptyMode = true;
     render(<MediaDatabasePage />);
+    fireEvent.change(screen.getByLabelText("Media collection scope"), { target: { value: "all" } });
     fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "nothing" } });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(await screen.findByText("No matching contacts")).toBeTruthy();
@@ -446,9 +458,79 @@ describe("MediaDatabasePage source health", () => {
     expect(publicationWebsiteHref("https://example.com/news")).toBe("https://example.com/news");
   });
 
+  it("keeps numeric-only source names out of display without changing stored values", () => {
+    const numericContact = { firstName: "2396", lastName: "" };
+    expect(contactDisplayName(numericContact as never)).toBe("Name not available");
+    expect(numericContact.firstName).toBe("2396");
+  });
+
+  it("opens My Media Database as an account-saved spreadsheet view and removes Europe from both region selectors", async () => {
+    bookmarkTestRows = [{ type: "contact", targetId: 12 }];
+    render(<MediaDatabasePage />);
+    expect(Array.from((screen.getByLabelText("Region filter") as HTMLSelectElement).options).some((option) => /Europe/i.test(option.textContent || ""))).toBe(false);
+    expect(Array.from((screen.getByLabelText("Region filter") as HTMLSelectElement).options).some((option) => option.value === "Global")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Manage my records" }));
+    const contactRegion = screen.getByLabelText("Contact region filter") as HTMLSelectElement;
+    expect(Array.from(contactRegion.options).some((option) => /Europe/i.test(option.textContent || ""))).toBe(false);
+    expect(Array.from(contactRegion.options).some((option) => option.value === "Global")).toBe(false);
+    fireEvent.change(contactRegion, { target: { value: "Global" } });
+    await waitFor(() => expect(contactRegion.value).not.toBe("Global"));
+    fireEvent.click(screen.getByRole("button", { name: "My Media Database" }));
+    expect(await screen.findByRole("columnheader", { name: "First name" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Source-provided reach" })).toBeTruthy();
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => {
+      const url = new URL(String(input), "http://test.local");
+      return url.pathname.endsWith("/media-db/search") && url.searchParams.get("scope") === "saved";
+    })).toBe(true));
+    expect(screen.getByText("Source-provided, not verified audience")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove from My Media Database" })).toBeTruthy();
+  });
+
+  it("shows saved publications in sector tables with honest website and reach labels", async () => {
+    bookmarkTestRows = [{ type: "publication", targetId: 20 }];
+    render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Saved publications" }));
+    expect(await screen.findByRole("columnheader", { name: "Publication" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Linked journalists" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Visit" })).toHaveAttribute("href", "https://energy.example/");
+    expect(screen.getByText("Source-provided, not verified audience")).toBeTruthy();
+    expect(screen.queryByText(/Verified authority/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Remove from My Media Database" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+  });
+
+  it("allows edit and delete for workspace-owned contacts directly from My Media Database", async () => {
+    bookmarkTestRows = [{ type: "contact", targetId: 12 }];
+    render(<MediaDatabasePage />);
+    expect(await screen.findByRole("button", { name: "Edit" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("heading", { name: "Edit contact" })).toBeTruthy();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input, init]) => String(input).includes("/media-db/contacts/12") && init?.method === "DELETE")).toBe(true));
+    confirm.mockRestore();
+  });
+
+  it("confirms submitted correction reports are pending internal review", async () => {
+    render(<MediaDatabasePage />);
+    fireEvent.change(screen.getByLabelText("Media collection scope"), { target: { value: "all" } });
+    fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "energy" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(await screen.findByText("Jane Reporter")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Flag incorrect details" }));
+    fireEvent.click(screen.getByLabelText("role"));
+    fireEvent.change(screen.getByLabelText("What is incorrect?"), { target: { value: "The title has changed." } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit for review" }));
+    expect(await screen.findByText(/pending internal review/i)).toBeTruthy();
+    expect(screen.getByText(/does not change the saved contact details/i)).toBeTruthy();
+  });
+
   it("shows unified explained results and opens a provenance-safe correction report", async () => {
     render(<MediaDatabasePage />);
     await browseContacts();
+    fireEvent.change(screen.getByLabelText("Media collection scope"), { target: { value: "all" } });
     fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "energy" } });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(await screen.findByText("Jane Reporter")).toBeTruthy();
@@ -557,7 +639,7 @@ describe("MediaDatabasePage source health", () => {
     await browseContacts();
     await browseOutlets();
 
-    expect(screen.getByText("Shared collection")).toBeTruthy();
+    expect(screen.queryByText("AIO Fusion collection")).toBeNull();
     expect(screen.getAllByTitle("Edit")).toHaveLength(1);
     expect(screen.getAllByTitle("Delete")).toHaveLength(1);
     expect(screen.getByText("Agency News")).toBeTruthy();
@@ -623,6 +705,7 @@ describe("MediaDatabasePage source health", () => {
     expect(screen.queryByTitle("Edit Profile")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
+    fireEvent.change(screen.getByLabelText("Media collection scope"), { target: { value: "all" } });
     fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "energy" } });
     fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));

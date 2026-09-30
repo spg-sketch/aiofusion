@@ -264,6 +264,11 @@ function rowHasIdentity(row: MediaImportRow): boolean {
   return Boolean(row.outletName?.trim() && (row.firstName?.trim() || row.lastName?.trim() || row.email?.trim()));
 }
 
+export function isNumericOnlyJournalistName(firstName: string | null | undefined, lastName: string | null | undefined): boolean {
+  const name = `${firstName ?? ""} ${lastName ?? ""}`.replace(/\s+/g, "");
+  return /^\d+$/.test(name);
+}
+
 function fieldValue(row: MediaImportRow, field: string, aggregate: ImportAggregate): unknown {
   switch (field) {
     case "beats": return aggregate.beats;
@@ -837,6 +842,21 @@ export function reconcileMediaImport(
         status: createdPublication ? "publication" : "duplicate",
         ...(createdPublication ? { changedFields: mutation!.changedFields } : {}),
         conflicts: [],
+      });
+      return;
+    }
+    if (isNumericOnlyJournalistName(row.firstName, row.lastName)) {
+      counts.invalid += 1;
+      outcomes.push({
+        sourceRow: row.sourceRow,
+        sheetName: row.sheetName,
+        status: "invalid",
+        conflicts: [{
+          kind: "identity",
+          field: "name",
+          message: "Numeric-only names are not accepted as journalist identities.",
+          sourceRow: row.sourceRow,
+        }],
       });
       return;
     }

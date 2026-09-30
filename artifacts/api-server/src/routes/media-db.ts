@@ -29,6 +29,7 @@ import {
   verifyMediaImportPreviewToken,
   issueMediaImportPreviewToken,
   mergeImportedProvenance,
+  isNumericOnlyJournalistName,
 } from "../lib/media-import-reconciliation";
 import type { ImportReconciliation } from "../lib/media-import-reconciliation";
 import { mediaDiscoveryNotes, verifyMediaDiscoveries, type TrustedMediaDiscovery } from "../lib/media-discovery-token";
@@ -344,6 +345,10 @@ function importOutletOwnerCondition(accountId: string | null) {
     : eq(mediaOutletsTable.accountId, accountId);
 }
 
+function numericOnlyJournalistNameSql() {
+  return sql`NOT (regexp_replace(trim(concat(${mediaContactsTable.firstName}, ' ', ${mediaContactsTable.lastName})), '\\s+', '', 'g') ~ '^[0-9]+$')`;
+}
+
 async function editableContact(req: Request, id: number) {
   const rows = await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, id)).limit(1);
   const row = rows[0];
@@ -441,13 +446,14 @@ router.get("/store/media-db/bookmarks", requirePlatformAuth, async (req: Request
       createdAt: Date;
       contact: (typeof mediaContactsTable.$inferSelect & {
         outletName: string | null; outletCategory: string | null; outletWebsite: string;
-        outletCountry: string | null; outletReachBand: string | null;
+        outletCountry: string | null; outletReachBand: string | null; outletDescription: string | null;
       }) | null;
       publication: (typeof mediaOutletsTable.$inferSelect & { website: string }) | null;
     }> = [];
     for (const { bookmark, contact, contactOutlet, publication } of rows) {
       if (bookmark.contactId !== null) {
         if (!contact || contact.deletedAt || departed.has(contact.id)
+            || isNumericOnlyJournalistName(contact.firstName, contact.lastName)
             || isFormerJournalistStatus(contact.editorialStatus)
             || latestChecks.get(`${contact.id}\0${contact.sourceUrl}`)?.outcome === "unavailable") continue;
         const allowedOutlet = contactOutlet && outletVisible(contactOutlet.accountId, visible) && !contactOutlet.deletedAt ? contactOutlet : null;
@@ -460,7 +466,7 @@ router.get("/store/media-db/bookmarks", requirePlatformAuth, async (req: Request
         safe.push({
           id: contact.id, bookmarkId: bookmark.id, targetId: contact.id, contactId: contact.id, outletId: null,
           type: "contact" as const, createdAt: bookmark.createdAt,
-          contact: { ...contact, outletName: allowedOutlet?.name ?? null, outletCategory: allowedOutlet?.category ?? null, outletWebsite: safePublicationWebsite(allowedOutlet?.website), outletCountry: allowedOutlet?.country ?? null, outletReachBand: allowedOutlet?.reachBand ?? null },
+          contact: { ...contact, outletName: allowedOutlet?.name ?? null, outletCategory: allowedOutlet?.category ?? null, outletWebsite: safePublicationWebsite(allowedOutlet?.website), outletCountry: allowedOutlet?.country ?? null, outletReachBand: allowedOutlet?.reachBand ?? null, outletDescription: allowedOutlet?.description ?? null },
           publication: null,
         });
         continue;
@@ -684,6 +690,7 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
       const latest = new Map<string, typeof checks[number]>();
       for (const check of checks) if (!latest.has(`${check.contactId}\0${check.sourceUrl}`)) latest.set(`${check.contactId}\0${check.sourceUrl}`, check);
       const eligible = rows.filter(({ contact, outlet }) => !departed.has(contact.id)
+        && !isNumericOnlyJournalistName(contact.firstName, contact.lastName)
         && !isFormerJournalistStatus(contact.editorialStatus)
         && latest.get(`${contact.id}\0${contact.sourceUrl}`)?.outcome !== "unavailable"
         && !matcher({ name: `${contact.firstName} ${contact.lastName}`, email: contact.email, linkedinUrl: contact.linkedinUrl, outlet: outlet?.name ?? "" }));
@@ -761,7 +768,8 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
       const latest = new Map<string, typeof checks[number]>();
       for (const check of checks) if (!latest.has(`${check.contactId}\0${check.sourceUrl}`)) latest.set(`${check.contactId}\0${check.sourceUrl}`, check);
       for (const { contact, outletName } of linkedRows) {
-        if (departed.has(contact.id) || isFormerJournalistStatus(contact.editorialStatus)
+        if (isNumericOnlyJournalistName(contact.firstName, contact.lastName)
+            || departed.has(contact.id) || isFormerJournalistStatus(contact.editorialStatus)
             || latest.get(`${contact.id}\0${contact.sourceUrl}`)?.outcome === "unavailable"
             || matcher({ name: `${contact.firstName} ${contact.lastName}`, email: contact.email, linkedinUrl: contact.linkedinUrl, outlet: outletName ?? "" })) continue;
         const journalists = journalistsByOutlet.get(contact.outletId!) ?? [];
@@ -2173,6 +2181,7 @@ async function eligibleLinkedJournalists(
         sql`NULLIF(BTRIM(${mediaContactsTable.firstName}), '') IS NOT NULL`,
         sql`NULLIF(BTRIM(${mediaContactsTable.lastName}), '') IS NOT NULL`,
       ),
+      numericOnlyJournalistNameSql(),
       visible === null ? undefined : or(isNull(mediaContactsTable.accountId), inArray(mediaContactsTable.accountId, visible)),
       testSuppressionFallback ? undefined : notSuppressedSql(workspaceId, mediaContactsTable.firstName, mediaContactsTable.lastName, mediaContactsTable.email, mediaContactsTable.linkedinUrl, mediaOutletsTable.name),
     ));
@@ -2279,7 +2288,7 @@ router.get(
         sql`NULLIF(BTRIM(${mediaContactsTable.lastName}), '') IS NOT NULL`,
       );
       const contactPredicate = and(
-        isNull(mediaContactsTable.deletedAt), contactScope, hasPersonName,
+        isNull(mediaContactsTable.deletedAt), contactScope, hasPersonName, numericOnlyJournalistNameSql(),
         resultType === "publications" ? sql`false` : undefined,
         sqlSearchGroups(phraseGroups, contactSearchFields),
         sqlSearchGroups(topicGroups, [sql`array_to_string(${mediaContactsTable.beats}, ' ')`, sql`array_to_string(${mediaContactsTable.sectors}, ' ')`, sql`${mediaOutletsTable.description}`]),
@@ -2366,6 +2375,7 @@ router.get(
       const boundedContacts = selectedContactIds.length ? await db.select({
         contact: mediaContactsTable, outletName: mediaOutletsTable.name, outletCategory: mediaOutletsTable.category,
         outletWebsite: mediaOutletsTable.website, outletCountry: mediaOutletsTable.country, outletReachBand: mediaOutletsTable.reachBand,
+        outletDescription: mediaOutletsTable.description,
         outletAccountId: mediaOutletsTable.accountId,
       }).from(mediaContactsTable).leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
         .where(inArray(mediaContactsTable.id, selectedContactIds)) : [];
@@ -2383,11 +2393,13 @@ router.get(
         outletWebsite: mediaOutletsTable.website,
         outletCountry: mediaOutletsTable.country,
         outletReachBand: mediaOutletsTable.reachBand,
+        outletDescription: mediaOutletsTable.description,
       }).from(mediaContactsTable).innerJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
         .where(and(
           inArray(mediaContactsTable.outletId, selectedOutletIds),
           isNull(mediaContactsTable.deletedAt),
           hasPersonName,
+          numericOnlyJournalistNameSql(),
           isNull(mediaOutletsTable.deletedAt),
           visible === null ? undefined : or(isNull(mediaContactsTable.accountId), inArray(mediaContactsTable.accountId, visible)),
           testSuppressionFallback ? undefined : notSuppressedSql(workspaceId, mediaContactsTable.firstName, mediaContactsTable.lastName, mediaContactsTable.email, mediaContactsTable.linkedinUrl, mediaOutletsTable.name),
@@ -2404,7 +2416,7 @@ router.get(
       const pending = new Set(corrections.map((row) => row.contactId));
       const suppressionMatcher = testSuppressionFallback ? await createSuppressionMatcher(workspaceId) : null;
       const linkedJournalistsByOutlet = new Map<number, Array<Record<string, unknown>>>();
-      for (const { contact, outletName, outletCategory, outletWebsite, outletCountry, outletReachBand } of linkedContactsRaw) {
+      for (const { contact, outletName, outletCategory, outletWebsite, outletCountry, outletReachBand, outletDescription } of linkedContactsRaw) {
         const lifecycleStatus = latestStatuses.get(contact.id)?.status ?? "active";
         const sourceCheck = latestChecks.get(`${contact.id}\0${contact.sourceUrl}`) ?? null;
         const sourceStatus = !contact.sourceUrl ? "unverified" : !sourceCheck ? "due" : sourceCheck.outcome;
@@ -2423,6 +2435,7 @@ router.get(
           outletWebsite: safePublicationWebsite(outletWebsite),
           outletCountry,
           outletReachBand,
+          outletDescription,
           sourceCheck,
           sourceStatus,
           lifecycleStatus,
@@ -2430,12 +2443,12 @@ router.get(
         });
         linkedJournalistsByOutlet.set(contact.outletId!, journalists);
       }
-      const contactResults = boundedContacts.flatMap(({ contact, outletName, outletCategory, outletWebsite, outletCountry, outletReachBand, outletAccountId }) => {
+      const contactResults = boundedContacts.flatMap(({ contact, outletName, outletCategory, outletWebsite, outletCountry, outletReachBand, outletDescription, outletAccountId }) => {
         const allowed = outletVisible(outletAccountId ?? null, visible);
         const sourceCheck = latestChecks.get(`${contact.id}\0${contact.sourceUrl}`) ?? null;
         const due = mediaSourceNextDueAt(sourceCheck, contact.sourceCheckFailureCount);
         const matchedPhrases = phrase ? [phrase] : [];
-        return [{ type: "contact" as const, id: contact.id, contact: { ...contact, outletName: allowed ? outletName : null, outletCategory: allowed ? outletCategory : null, outletWebsite: allowed ? safePublicationWebsite(outletWebsite) : null, outletCountry: allowed ? outletCountry : null, outletReachBand: allowed ? outletReachBand : null, sourceCheck, sourceStatus: !contact.sourceUrl ? "unverified" : !sourceCheck ? "due" : sourceCheck.outcome, sourceReviewDueAt: due, sourceCheckQueued: Boolean(contact.sourceCheckClaimedAt), lifecycleStatus: latestStatuses.get(contact.id)?.status ?? "active", hasPendingCorrection: pending.has(contact.id) }, matchedFields: (topic || phrase) ? ["topic"] : ["name"], matchedPhrases, reasons: phrase ? [`Contains the exact phrase "${interpretation.phrase}".`] : ["Matched search criteria."], authority: Math.max(authorityNumber(contact.journalistAuthority), authorityNumber(contact.publicationAuthority)) }];
+        return [{ type: "contact" as const, id: contact.id, contact: { ...contact, outletName: allowed ? outletName : null, outletCategory: allowed ? outletCategory : null, outletWebsite: allowed ? safePublicationWebsite(outletWebsite) : null, outletCountry: allowed ? outletCountry : null, outletReachBand: allowed ? outletReachBand : null, outletDescription: allowed ? outletDescription : null, sourceCheck, sourceStatus: !contact.sourceUrl ? "unverified" : !sourceCheck ? "due" : sourceCheck.outcome, sourceReviewDueAt: due, sourceCheckQueued: Boolean(contact.sourceCheckClaimedAt), lifecycleStatus: latestStatuses.get(contact.id)?.status ?? "active", hasPendingCorrection: pending.has(contact.id) }, matchedFields: (topic || phrase) ? ["topic"] : ["name"], matchedPhrases, reasons: phrase ? [`Contains the exact phrase "${interpretation.phrase}".`] : ["Matched search criteria."], authority: Math.max(authorityNumber(contact.journalistAuthority), authorityNumber(contact.publicationAuthority)) }];
       });
       const outletResults = boundedOutlets.map((outlet) => {
         const journalists = linkedJournalistsByOutlet.get(outlet.id) ?? [];
@@ -2796,6 +2809,7 @@ router.get(
         : isNull(mediaContactsTable.accountId);
       const predicate = and(
         isNull(mediaContactsTable.deletedAt),
+        numericOnlyJournalistNameSql(),
         visibility,
         terms.length ? and(...terms.map((term) => or(
           ilike(mediaContactsTable.firstName, `%${term}%`), ilike(mediaContactsTable.lastName, `%${term}%`),
@@ -4451,7 +4465,8 @@ router.get("/store/media-db/recommendations", requirePlatformAuth, async (req: R
     .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
     .where(and(eq(mediaRecommendationItemsTable.recommendationSetId, set.id), isNull(mediaContactsTable.deletedAt)))
     .orderBy(asc(mediaRecommendationItemsTable.rank), desc(mediaRecommendationItemsTable.score));
-   const candidateRows = filterVisibleRecommendationItems(rows.map((row) => ({ ...row, contact: row.contact })), visible);
+   const candidateRows = filterVisibleRecommendationItems(rows.map((row) => ({ ...row, contact: row.contact })), visible)
+     .filter(({ contact }) => !isNumericOnlyJournalistName(contact.firstName, contact.lastName));
    const visibleRows = (await Promise.all(candidateRows.map(async (row) => ({
      row,
       suppressed: await isContactSuppressed({ ...row.contact, outlet: row.outletName, accountId }),
