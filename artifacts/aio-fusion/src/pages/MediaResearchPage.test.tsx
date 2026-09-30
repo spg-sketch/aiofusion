@@ -671,6 +671,8 @@ describe("MediaResearchPage live discovery", () => {
         && JSON.stringify(request.body?.ids) === "[100]"
     )).toBe(true));
     await waitFor(() => expect(createObjectURL).toHaveBeenCalledOnce());
+    // Keep the URL mock installed until the delayed download cleanup runs.
+    await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith("blob:media-test"), { timeout: 2500 });
     click.mockRestore();
   });
 
