@@ -33,3 +33,9 @@ Media regression suites may share seeded contacts across cases. A test that mark
 **Why:** The departure event persists within the suite and silently changes what subsequent requests can recommend or contact.
 
 **How to apply:** Give lifecycle/status tests their own contact and story identity instead of changing a shared fixture. If a whole file fails but its cases pass alone, inspect newly added tests for persistent fixture mutations before changing application logic.
+
+Async browser-download tests must wait for delayed object-URL cleanup before restoring global browser mocks.
+
+**Why:** A test can pass its assertions and still fail the full release gate when a cleanup timer fires after Vitest restores the mocked `URL` to jsdom's incomplete implementation.
+
+**How to apply:** Assert that the revocation callback ran before the test exits, rather than only asserting that the download started.
