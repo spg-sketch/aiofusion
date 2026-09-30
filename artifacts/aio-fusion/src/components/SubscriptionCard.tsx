@@ -1263,7 +1263,7 @@ function RestartChooser({
         {error && <span className="aio-type-supporting" style={{ color: "#991B1B" }}>{error}</span>}
       </div>
       <p className="aio-type-meta mt-3" style={{ color: vars.g400 }}>
-        Payments are processed securely by Stripe. During Beta, payments run in test mode.
+        Payments are processed securely by Stripe.
       </p>
     </div>
   );
