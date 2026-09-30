@@ -41,21 +41,21 @@ export function WorkspaceSwitcher({ workspaces, className = "", requestAction }:
 
   return (
     <div
-      className={`flex items-center gap-2 ${className}`}
+      className={`flex min-w-0 items-center gap-2 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 shadow-sm focus-within:ring-2 focus-within:ring-[#C8497A] ${className}`}
       title="Switch workspace"
       aria-live="polite"
     >
-      <Building2 size={13} color="#1F748F" />
+      <Building2 size={15} color="#0a1628" aria-hidden="true" className="shrink-0" />
       {switching ? (
-        <span className="flex items-center gap-1.5 text-[12px] font-medium" style={{ color: "#1F748F" }}>
+        <span className="flex items-center gap-1.5 text-[12px] font-medium" style={{ color: "#0a1628" }}>
           <Loader2 size={12} className="animate-spin" aria-hidden="true" /> Switching…
         </span>
       ) : (
         <select
           value={active?.companyId ?? ""}
           onChange={(e) => handleChange(e.target.value)}
-          className="text-[12px] font-semibold bg-transparent border-none outline-none cursor-pointer pr-1"
-          style={{ color: "#1F748F" }}
+          className="min-w-0 max-w-[120px] cursor-pointer border-none bg-white pr-1 text-[12px] font-semibold outline-none sm:max-w-[200px]"
+          style={{ color: "#0a1628" }}
           aria-label="Switch workspace"
           aria-describedby={error ? "workspace-switch-error" : undefined}
         >

@@ -198,7 +198,7 @@ export function GenerationProgress({
             {stage}…
           </span>
         </div>
-        <span className={`flex-shrink-0 tabular-nums ${compact ? "text-[10px]" : "text-[11px]"}`} style={{ color: vars.g500 }}>
+        <span className={`flex-shrink-0 tabular-nums ${compact ? "text-[11px]" : "text-[12px]"}`} style={{ color: vars.g600 }}>
           {estimatedProgress === null
             ? `${elapsed}s`
             : estimatePassed
@@ -226,7 +226,7 @@ export function GenerationProgress({
         )}
       </div>
       {!compact && (
-        <p className="text-[10.5px] font-light mt-2" style={{ color: vars.g500 }}>
+        <p className="mt-2 text-[12px] font-medium" style={{ color: vars.g600 }}>
           Generating with AI. You can navigate within AIO Fusion, but please keep this browser tab open.
         </p>
       )}

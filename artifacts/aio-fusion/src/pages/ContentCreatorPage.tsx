@@ -1125,7 +1125,7 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
             ]}
             chars={generateChars}
             accent={vars.coral}
-            textColor="#ffffff"
+            textColor={vars.navy}
             startedAt={draftRun?.startedAt}
             durationSeconds={draftRun?.estimateSeconds}
           />
@@ -1150,7 +1150,7 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
             ]}
             chars={creatorChars}
             accent={vars.coral}
-            textColor="#ffffff"
+            textColor={vars.navy}
             compact
           />
         </div>
