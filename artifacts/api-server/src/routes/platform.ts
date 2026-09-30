@@ -4041,6 +4041,16 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
     if (!tokenResp.ok) {
       let tokenErrBody: { error?: string } = {};
       try { tokenErrBody = await tokenResp.json() as { error?: string }; } catch { /* ignore */ }
+      // Microsoft can reject the token exchange for several unrelated reasons.
+      // Log only its bounded error category, never the response description,
+      // authorization code, client secret, or token response body.
+      const errorCode = typeof tokenErrBody.error === "string" && /^[a-z_]{1,48}$/.test(tokenErrBody.error)
+        ? tokenErrBody.error
+        : "unknown";
+      (req.log ?? logger).warn(
+        { provider: "microsoft", status: tokenResp.status, errorCode },
+        "Microsoft token exchange rejected",
+      );
       const msg = tokenErrBody.error === "invalid_grant" ? "code_already_used" : "token_exchange_failed";
       res.redirect(`${origin}/?oauth_status=error&oauth_msg=${msg}`);
       return;
