@@ -89,6 +89,7 @@ vi.mock("../lib/fair-usage", () => ({
 import {
   db,
   mediaContactsTable,
+  mediaContactStatusEventsTable,
   mediaOutletsTable,
   mediaRecommendationDecisionsTable,
   mediaRecommendationFeedbackTable,
@@ -518,6 +519,47 @@ describe("media recommendation refinement API", () => {
     const otherArticle = await (await request("/store/media-db/recommendations/decisions?projectId=project-1&storyKey=story-2")).json() as { feedback: unknown[] };
     expect(otherArticle.feedback).toEqual([]);
     expect((await request("/store/media-db/recommendations/decisions?projectId=project-1&storyKey=story-1", "workspace-b")).status).toBe(404);
+  });
+
+  it("keeps a departed accepted contact in decision history but excludes it from hydrated shortlist contacts", async () => {
+    const [candidate] = await db.insert(mediaContactsTable).values({
+      firstName: "Retained", lastName: "Regression", role: "News editor",
+      accountId: "workspace-a", beats: [], sectors: [],
+    }).returning();
+    const contactId = candidate!.id;
+    const storyKey = "retained-departed-regression";
+
+    const accepted = await request("/store/media-db/recommendations/decisions", "workspace-a", {
+      method: "PUT",
+      body: JSON.stringify({
+        projectId: "project-1",
+        storyKey,
+        contactId,
+        decision: "shortlisted",
+        note: "Accepted for outreach",
+      }),
+    });
+    expect(accepted.status).toBe(200);
+    await db.insert(mediaContactStatusEventsTable).values({
+      contactId,
+      accountId: "workspace-a",
+      status: "departed",
+      note: "No longer at this outlet",
+      createdBy: "workspace-a",
+    });
+
+    const response = await request(`/store/media-db/recommendations/decisions?projectId=project-1&storyKey=${storyKey}`);
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      decisions: Array<{ contactId: number; decision: string; note: string }>;
+      decisionContacts: Array<{ contactId: number }>;
+    };
+    expect(body.decisions).toContainEqual(expect.objectContaining({
+      contactId,
+      decision: "shortlisted",
+      note: "Accepted for outreach",
+    }));
+    expect(body.decisionContacts.some((contact) => contact.contactId === contactId)).toBe(false);
   });
 
   it("persists exact phrase attributions and rejects forged phrase identities", async () => {

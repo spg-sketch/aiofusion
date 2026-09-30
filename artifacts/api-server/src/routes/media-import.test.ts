@@ -260,6 +260,19 @@ async function mediaRequest(
   return { status: response.status, json: await response.json() as any };
 }
 
+async function mediaExportRequest(workspace: string, body: Record<string, unknown>, platformRole = "agency") {
+  const response = await fetch(`${baseUrl}/api/store/media-db/export`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-test-workspace": workspace,
+      "x-test-platform-role": platformRole,
+    },
+    body: JSON.stringify(body),
+  });
+  return { status: response.status, contentType: response.headers.get("content-type"), text: await response.text() };
+}
+
 const csv = [
   "First Name,Last Name,Publication,Email,Website,Role",
   "Jane,Doe,Workspace Daily,jane@workspace.test,https://workspace.test,Editor",
@@ -318,6 +331,83 @@ beforeAll(async () => {
       baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
       resolve();
     });
+  });
+});
+
+describe("media export route regressions", () => {
+  it("allows only the canonical platform admin to export the full collection", async () => {
+    const [publication] = await db.insert(mediaOutletsTable).values({ name: "Export Shared Publication", accountId: null }).returning();
+    await db.insert(mediaContactsTable).values({
+      firstName: "Shared", lastName: "Journalist", email: "shared-journalist@example.test",
+      outletId: publication!.id, accountId: null,
+    });
+    const admin = await mediaExportRequest("admin", { scope: "full", type: "publications" }, "admin");
+    const workspaceAdmin = await mediaExportRequest("customer-admin", { scope: "full", type: "publications" }, "admin");
+    expect(admin.status).toBe(200);
+    expect(admin.contentType).toContain("text/csv");
+    expect(admin.text).toContain('"Export Shared Publication"');
+    expect(admin.text).toContain('"Linked journalist emails"');
+    expect(admin.text).toContain("shared-journalist@example.test");
+    expect(workspaceAdmin.status).toBe(403);
+  });
+
+  it("limits saved exports to the active account bookmarks and omits restricted contact fields", async () => {
+    const [ownContact] = await db.insert(mediaContactsTable).values({
+      firstName: "Saved", lastName: '=Owner, "QA"', email: "saved-owner@example.test",
+      phone: "555-1212", mobile: "555-3434", accountId: "saved-export-owner",
+    }).returning();
+    const [otherContact] = await db.insert(mediaContactsTable).values({
+      firstName: "Other", lastName: "Saved", email: "other-saved@example.test",
+      accountId: "saved-export-other",
+    }).returning();
+    await db.insert(mediaBookmarksTable).values([
+      { accountId: "saved-export-owner", contactId: ownContact!.id, outletId: null },
+      { accountId: "saved-export-other", contactId: otherContact!.id, outletId: null },
+    ]);
+    const response = await mediaExportRequest("saved-export-owner", { scope: "saved", type: "contacts" });
+    const header = response.text.split("\r\n")[0]!;
+    expect(response.status).toBe(200);
+    expect(header).toContain('"First Name"');
+    expect(header).not.toContain('"Phone"');
+    expect(header).not.toContain('"Review Notes"');
+    expect(response.text).toContain('"Saved"');
+    expect(response.text).toContain(`"'=Owner, ""QA"""`);
+    expect(response.text).not.toContain("Other");
+    expect(response.text).not.toContain("555-1212");
+  });
+
+  it("rejects oversized and suppressed selected exports and uses publication export headers", async () => {
+    const oversized = await mediaExportRequest("selected-export-workspace", {
+      scope: "selected", type: "contacts", ids: Array.from({ length: 26 }, (_, index) => index + 1),
+    });
+    const [contact] = await db.insert(mediaContactsTable).values({
+      firstName: "Suppressed", lastName: "Reporter", email: "selected-blocked@example.test",
+      accountId: "selected-export-workspace",
+    }).returning();
+    await db.insert(mediaSuppressionsTable).values({
+      scope: "workspace", accountId: "selected-export-workspace",
+      emailHash: privacyHash("selected-blocked@example.test"), reason: "export test",
+    });
+    const suppressed = await mediaExportRequest("selected-export-workspace", {
+      scope: "selected", type: "contacts", ids: [contact!.id],
+    });
+    const [publication] = await db.insert(mediaOutletsTable).values({
+      name: "Selected Publication", accountId: "selected-export-workspace",
+    }).returning();
+    await db.insert(mediaContactsTable).values({
+      firstName: "Not", lastName: "Selected", email: "not-selected@example.test",
+      outletId: publication!.id, accountId: "selected-export-workspace",
+    });
+    const publicationExport = await mediaExportRequest("selected-export-workspace", {
+      scope: "selected", type: "publications", ids: [publication!.id],
+    });
+    expect(oversized.status).toBe(400);
+    expect(suppressed.status).toBe(403);
+    expect(publicationExport.status).toBe(200);
+    expect(publicationExport.text.split("\r\n")[0]).toBe(
+      '"Publication","Sector","Region","Description","Website","LinkedIn URL","Source reach value","Verified authority"',
+    );
+    expect(publicationExport.text).not.toContain("not-selected@example.test");
   });
 });
 

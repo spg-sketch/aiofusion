@@ -206,8 +206,35 @@ describe("assessEditorialFit", () => {
     expect(result.factors.find((factor) => factor.key === "recent")?.score).toBeNull();
     expect(result.factors.find((factor) => factor.key === "angle")?.score).toBeNull();
     expect(result.evidenceCoverage).toBe(65);
+    expect(result.confidence).toBe("low");
     expect(result.readiness.status).toBe("needs_check");
     expect(result.warnings.join(" ")).toMatch(/No coverage evidence/i);
+  });
+
+  it("raises evidence confidence only for a recent cited page with the author's name, without verifying contact details", () => {
+    const now = "2025-03-01T00:00:00.000Z";
+    const unverifiedContact = { ...contact, email: "" };
+    const suggested = assessEditorialFit({
+      contact: unverifiedContact, outlet, brief, evidence: [checked({ attribution: "search_suggested" })], now,
+    });
+    const wrongAuthor = assessEditorialFit({
+      contact: unverifiedContact, outlet, brief, evidence: [checked({ authorMatched: false })], now,
+    });
+    const cited = assessEditorialFit({
+      contact: unverifiedContact, outlet, brief, evidence: [checked({
+        url: "https://publisher.example/renewable-grid-story",
+        checkedAt: "2025-02-28T00:00:00.000Z",
+      })], now,
+    });
+    expect(suggested.confidence).toBe("low");
+    expect(wrongAuthor.confidence).toBe("low");
+    expect(cited.confidence).toBe("medium");
+    expect(cited.evidence[0]).toMatchObject({
+      attribution: "page_checked",
+      authorMatched: true,
+      url: "https://publisher.example/renewable-grid-story",
+    });
+    expect(cited.readiness.status).toBe("needs_check");
   });
 
   it("blocks departed and suppressed contacts", () => {

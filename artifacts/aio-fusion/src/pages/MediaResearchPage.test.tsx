@@ -70,7 +70,7 @@ vi.mock("../lib/contentAi", () => ({
   escapeHtml: (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"),
 }));
 
-import { MediaResearchPage, orderRecommendations, resolveArticleResearchContext, resolveArticleTargetPhrases, SHORTLIST_EXPORT_COLUMNS, sanitizeSpreadsheetCell as sanitizeResearchSpreadsheetCell, shortlistExportHtml, shortlistExportRow } from "./MediaResearchPage";
+import { MediaResearchPage, orderRecommendations, resolveArticleResearchContext, resolveArticleTargetPhrases } from "./MediaResearchPage";
 import { RecommendationCard } from "./JournalistComponents";
 import { exactTargetPhraseId } from "../lib/exactTargetPhrases";
 import { clearAiRuns } from "../lib/aiRunLifecycle";
@@ -137,47 +137,6 @@ describe("MediaResearchPage live discovery", () => {
   it("keeps explicit empty phrase snapshots empty while legacy articles inherit project phrases", () => {
     expect(resolveArticleTargetPhrases({ targetPhrases: [], targetPhraseIds: [] }, [storyOnePhrase])).toEqual([]);
     expect(resolveArticleTargetPhrases({}, [storyOnePhrase])).toEqual([storyOnePhrase]);
-  });
-
-  it("keeps shortlist exports rich and spreadsheet-safe", () => {
-    const contact = {
-      id: 91, outletId: 4, firstName: "Jane", lastName: "Reporter", role: "Energy editor",
-      email: "=unsafe@example.com", phone: "+447700900000", mobile: "", notes: "Review + follow-up",
-      accountId: "workspace-a", outletName: "Energy Today", outletCategory: "Energy", outletCountry: "UK",
-      publicationReach: "1M-5M", beats: ["energy"], sectors: ["Environment"], geography: "UK",
-      language: "English", seniority: "Senior", editorialStatus: "Active",
-      linkedinUrl: "https://linkedin.example/jane", sourceUrl: "https://energy.example/jane",
-      sourceRef: "Contacts:2", publicationAuthority: 82, journalistAuthority: 91,
-      confidence: "High", lastVerifiedAt: "2026-09-08T12:00:00.000Z", sourceStatus: "current",
-      lifecycleStatus: "active", reviewNotes: "Check current remit",
-    } as never;
-    const row = shortlistExportRow(contact);
-    expect(SHORTLIST_EXPORT_COLUMNS).toEqual(expect.arrayContaining(["Sectors", "Source Reference", "Confidence"]));
-    expect(SHORTLIST_EXPORT_COLUMNS).not.toEqual(expect.arrayContaining([
-      "Email status", "Phone", "Mobile", "Language", "Seniority", "Editorial status",
-      "Publication authority", "Journalist authority", "Source status", "Lifecycle status", "Review notes",
-    ]));
-    expect(row).toHaveLength(SHORTLIST_EXPORT_COLUMNS.length);
-    expect(row).toEqual(expect.arrayContaining(["Environment", "Contacts:2", "High"]));
-    expect(sanitizeResearchSpreadsheetCell("=HYPERLINK(\"https://bad.example\")")).toBe("'=HYPERLINK(\"https://bad.example\")");
-  });
-
-  it("exports Word contacts as readable, source-preserving cards rather than a wide table", () => {
-    const html = shortlistExportHtml([{
-      firstName: "Jane",
-      lastName: "Reporter",
-      role: "Editor",
-      outletName: "Energy Today",
-      sourceUrl: "https://energy.example/jane",
-      sourceRef: "Contacts:2",
-      notes: "<script>bad</script>",
-    } as never]);
-    expect(html).toContain("Energy Today");
-    expect(html).toContain("https://energy.example/jane");
-    expect(html).toContain("Contacts:2");
-    expect(html).toContain("&lt;script&gt;bad&lt;/script&gt;");
-    expect(html).toContain("class=\"contact\"");
-    expect(html).not.toContain("<table");
   });
 
   let requests: { url: string; method?: string; body?: Record<string, unknown> }[] = [];
@@ -364,6 +323,11 @@ describe("MediaResearchPage live discovery", () => {
       }
       if (url.includes("/store/media-db/discoveries")) {
         return new Response(JSON.stringify({ ok: true, discovery: { id: 10, status: "pending" } }), { status: 201 });
+      }
+      if (url.endsWith("/store/media-db/export") && init?.method === "POST") {
+        return new Response("\uFEFF\"First Name\",\"Last Name\"\r\n\"Reporter0\",\"Test\"", {
+          status: 200, headers: { "Content-Type": "text/csv; charset=utf-8" },
+        });
       }
       if (url.includes("/store/media-db/outreach?")) return new Response(JSON.stringify({ outreach: [] }), { status: 200 });
       return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
@@ -674,6 +638,40 @@ describe("MediaResearchPage live discovery", () => {
     expect(await screen.findByText("Persisted Shortlist")).toBeTruthy();
     expect(screen.getByText("Older Energy Weekly")).toBeTruthy();
     expect(screen.queryByText("Recommended from your Media Database")).toBeNull();
+  });
+
+  it("limits Story outreach CSV to explicitly selected contacts when the shortlist exceeds 25", async () => {
+    recommendationState.includeContact = false;
+    decisionState.payload = {
+      decisions: Array.from({ length: 26 }, (_, index) => ({ contactId: index + 100, decision: "shortlisted" })),
+      items: [],
+      decisionContacts: Array.from({ length: 26 }, (_, index) => ({
+        contactId: index + 100,
+        contact: {
+          id: index + 100, firstName: `Reporter${index}`, lastName: "Test", role: "Reporter",
+          email: "", phone: "", notes: "", beats: [], sectors: [], outletName: "Test Publication",
+        },
+      })),
+    };
+    const createObjectURL = vi.fn(() => "blob:media-test");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", Object.assign(class extends URL {}, { createObjectURL, revokeObjectURL }));
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    const download = await screen.findByTestId("button-export-shortlist-csv") as HTMLButtonElement;
+    expect(download.disabled).toBe(true);
+    expect(screen.getByText(/choose up to 25 contacts per download/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Reporter0 Test for CSV" }));
+    expect(download.disabled).toBe(false);
+    fireEvent.click(download);
+    await waitFor(() => expect(requests.some((request) =>
+      request.url.endsWith("/store/media-db/export") && request.method === "POST"
+        && request.body?.scope === "selected" && request.body?.type === "contacts"
+        && JSON.stringify(request.body?.ids) === "[100]"
+    )).toBe(true));
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledOnce());
+    click.mockRestore();
   });
 
   it("shows a stable fallback and review warning for an unnamed recommendation", async () => {
@@ -1031,6 +1029,8 @@ describe("MediaResearchPage live discovery", () => {
     expect(await screen.findByText("Decision Contact")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Check top 5 recent coverage" }));
     expect(await screen.findByText("Enriched Contact")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toMatch(/1 of the top 1 contacts have a page-checked byline/i);
+    expect(screen.getByRole("status").textContent).toMatch(/does not verify current contact details/i);
     fireEvent.click(screen.getByText("Evidence and contact checks"));
     expect(screen.getByText("Recent energy coverage")).toBeTruthy();
     expect(screen.getByText("Author matched")).toBeTruthy();

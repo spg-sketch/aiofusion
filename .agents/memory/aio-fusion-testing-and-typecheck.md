@@ -27,3 +27,9 @@ When a small PGlite schema test passes alone but repeatedly hangs in its setup h
 **Why:** Contention caused the setup to exceed both the original and a longer timeout, while the identical test passed quickly without concurrent workers.
 
 **How to apply:** Use an explicit exclusion from the parallel invocation followed by an isolated invocation joined with `&&`; keep both under the release stage's deadline and verify the gate includes the isolated result.
+
+Media regression suites may share seeded contacts across cases. A test that marks a reused contact departed can make unrelated ranking and outreach tests fail later even when each passes alone.
+
+**Why:** The departure event persists within the suite and silently changes what subsequent requests can recommend or contact.
+
+**How to apply:** Give lifecycle/status tests their own contact and story identity instead of changing a shared fixture. If a whole file fails but its cases pass alone, inspect newly added tests for persistent fixture mutations before changing application logic.

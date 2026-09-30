@@ -585,6 +585,210 @@ router.delete("/store/media-db/bookmarks/:type/:id", requirePlatformAuth, async 
   res.json({ ok: true });
 });
 
+const MEDIA_EXPORT_MAX_ROWS = 10_000;
+const MEDIA_EXPORT_CONTACT_HEADERS = [
+  "First Name", "Last Name", "Role", "Email", "Email Status", "Phone", "Mobile",
+  "Outlet", "Category", "Country", "Publication Reach", "Beats", "Sectors",
+  "Geography", "Language", "Seniority", "Editorial Status", "LinkedIn URL",
+  "Source URL", "Source Reference", "Publication Authority", "Journalist Authority",
+  "Confidence", "Last Verified", "Source Status", "Lifecycle Status", "Notes", "Review Notes",
+];
+const MEDIA_EXPORT_RESTRICTED_HEADERS = new Set([
+  "Email Status", "Phone", "Mobile", "Language", "Seniority", "Editorial Status",
+  "Publication Authority", "Journalist Authority", "Source Status", "Lifecycle Status", "Review Notes",
+]);
+const MEDIA_EXPORT_PUBLICATION_HEADERS = [
+  "Publication", "Sector", "Region", "Description", "Website", "LinkedIn URL",
+  "Source reach value", "Verified authority", "Linked journalist names", "Linked journalist emails",
+];
+
+function mediaExportCsv(headers: string[], rows: unknown[][]): string {
+  const csvCell = (value: unknown) => {
+    const text = String(value ?? "");
+    const safe = /^[\t\r\n ]*[=+\-@]/.test(text) ? `'${text}` : text;
+    return `"${safe.replace(/"/g, '""')}"`;
+  };
+  return `\uFEFF${[headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n")}`;
+}
+
+router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { scope, type, ids } = req.body ?? {};
+    if (!["full", "saved", "selected"].includes(scope) || !["contacts", "publications"].includes(type)) {
+      res.status(400).json({ error: 'scope must be "full", "saved", or "selected" and type must be "contacts" or "publications".' });
+      return;
+    }
+    if (scope === "full" && !isMasterWorkspace(req)) {
+      res.status(403).json({ error: "Only the internal platform admin may export the full media collection." });
+      return;
+    }
+    let requestedIds: number[] | null = null;
+    if (scope === "selected") {
+      if (!Array.isArray(ids) || ids.length < 1 || ids.length > 25
+          || ids.some((id: unknown) => !Number.isSafeInteger(id) || (id as number) < 1)
+          || new Set(ids).size !== ids.length) {
+        res.status(400).json({ error: "Selected export requires 1–25 distinct positive integer IDs." });
+        return;
+      }
+      requestedIds = ids as number[];
+    } else if (ids !== undefined) {
+      res.status(400).json({ error: "ids may only be supplied for a selected export." });
+      return;
+    }
+    const accountId = normUsername(req.account!.username);
+    if (scope === "saved") {
+      const bookmarks = await db.select({
+        contactId: mediaBookmarksTable.contactId,
+        outletId: mediaBookmarksTable.outletId,
+      }).from(mediaBookmarksTable).where(eq(mediaBookmarksTable.accountId, accountId))
+        .orderBy(desc(mediaBookmarksTable.createdAt), desc(mediaBookmarksTable.id))
+        .limit(MEDIA_EXPORT_MAX_ROWS + 1);
+      if (bookmarks.length > MEDIA_EXPORT_MAX_ROWS) {
+        res.status(413).json({ error: "Saved connections exceed the safe CSV export limit. Contact the platform admin for an assisted export." });
+        return;
+      }
+      requestedIds = bookmarks.flatMap((bookmark) => type === "contacts"
+        ? bookmark.contactId === null ? [] : [bookmark.contactId]
+        : bookmark.outletId === null ? [] : [bookmark.outletId]);
+    }
+    const visible = await visibleAccounts(req);
+
+    if (type === "contacts") {
+      const ownerCondition = scope === "full"
+        ? or(isNull(mediaContactsTable.accountId), eq(mediaContactsTable.accountId, DEFAULT_ADMIN_USERNAME))
+        : visible === null ? undefined : or(isNull(mediaContactsTable.accountId), inArray(mediaContactsTable.accountId, visible));
+      const rows = await db.select({ contact: mediaContactsTable, outlet: mediaOutletsTable })
+        .from(mediaContactsTable)
+        .leftJoin(mediaOutletsTable, and(
+          eq(mediaContactsTable.outletId, mediaOutletsTable.id),
+          isNull(mediaOutletsTable.deletedAt),
+          visible === null ? undefined : or(isNull(mediaOutletsTable.accountId), inArray(mediaOutletsTable.accountId, visible)),
+        ))
+        .where(and(
+          isNull(mediaContactsTable.deletedAt),
+          ownerCondition,
+          requestedIds ? inArray(mediaContactsTable.id, requestedIds.length ? requestedIds : [-1]) : undefined,
+        )).orderBy(asc(mediaContactsTable.id)).limit(MEDIA_EXPORT_MAX_ROWS + 1);
+      if (rows.length > MEDIA_EXPORT_MAX_ROWS) {
+        res.status(413).json({ error: "The media collection exceeds the safe CSV export limit; no partial file was created." });
+        return;
+      }
+      const contactIds = rows.map(({ contact }) => contact.id);
+      const [departed, matcher, checks] = await Promise.all([
+        departedContactIds(contactIds, accountId),
+        createSuppressionMatcher(accountId),
+        contactIds.length ? db.select().from(mediaContactSourceChecksTable)
+          .where(inArray(mediaContactSourceChecksTable.contactId, contactIds))
+          .orderBy(desc(mediaContactSourceChecksTable.checkedAt), desc(mediaContactSourceChecksTable.id)) : Promise.resolve([]),
+      ]);
+      const latest = new Map<string, typeof checks[number]>();
+      for (const check of checks) if (!latest.has(`${check.contactId}\0${check.sourceUrl}`)) latest.set(`${check.contactId}\0${check.sourceUrl}`, check);
+      const eligible = rows.filter(({ contact, outlet }) => !departed.has(contact.id)
+        && !isFormerJournalistStatus(contact.editorialStatus)
+        && latest.get(`${contact.id}\0${contact.sourceUrl}`)?.outcome !== "unavailable"
+        && !matcher({ name: `${contact.firstName} ${contact.lastName}`, email: contact.email, linkedinUrl: contact.linkedinUrl, outlet: outlet?.name ?? "" }));
+      if (scope === "selected" && eligible.length !== requestedIds!.length) {
+        res.status(403).json({ error: "One or more selected contacts are unavailable for export." });
+        return;
+      }
+      const headers = scope === "full"
+        ? MEDIA_EXPORT_CONTACT_HEADERS
+        : MEDIA_EXPORT_CONTACT_HEADERS.filter((header) => !MEDIA_EXPORT_RESTRICTED_HEADERS.has(header));
+      const output = eligible.map(({ contact, outlet }) => {
+        const data: Record<string, unknown> = {
+          "First Name": contact.firstName, "Last Name": contact.lastName, Role: contact.role, Email: contact.email,
+          "Email Status": contact.email ? (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email.trim()) ? "Sendable format" : "Review - not sendable") : "",
+          Phone: contact.phone, Mobile: contact.mobile,
+          Outlet: outlet?.name ?? "", Category: outlet?.category ?? "", Country: outlet?.country ?? "",
+          "Publication Reach": contact.publicationReach || outlet?.reachBand || "",
+          Beats: (contact.beats ?? []).join("; "), Sectors: (contact.sectors ?? []).join("; "),
+          Geography: contact.geography, Language: contact.language, Seniority: contact.seniority,
+          "Editorial Status": contact.editorialStatus, "LinkedIn URL": contact.linkedinUrl,
+          "Source URL": contact.sourceUrl, "Source Reference": contact.sourceRef,
+          "Publication Authority": contact.publicationAuthority, "Journalist Authority": contact.journalistAuthority,
+          Confidence: contact.confidence, "Last Verified": contact.lastVerifiedAt?.toISOString().slice(0, 10) ?? "",
+          "Source Status": contact.sourceUrl ? latest.get(`${contact.id}\0${contact.sourceUrl}`)?.outcome ?? "unverified" : "unverified",
+          "Lifecycle Status": "active", Notes: contact.notes, "Review Notes": contact.reviewNotes,
+        };
+        return headers.map((header) => data[header] ?? "");
+      });
+      res.status(200).type("text/csv; charset=utf-8").send(mediaExportCsv(headers, output));
+      return;
+    }
+    const ownerCondition = scope === "full"
+      ? or(isNull(mediaOutletsTable.accountId), eq(mediaOutletsTable.accountId, DEFAULT_ADMIN_USERNAME))
+      : visible === null ? undefined : or(isNull(mediaOutletsTable.accountId), inArray(mediaOutletsTable.accountId, visible));
+    const publications = await db.select().from(mediaOutletsTable).where(and(
+      isNull(mediaOutletsTable.deletedAt),
+      ownerCondition,
+      requestedIds ? inArray(mediaOutletsTable.id, requestedIds.length ? requestedIds : [-1]) : undefined,
+    )).orderBy(asc(mediaOutletsTable.id)).limit(MEDIA_EXPORT_MAX_ROWS + 1);
+    if (publications.length > MEDIA_EXPORT_MAX_ROWS) {
+      res.status(413).json({ error: "The publication collection exceeds the safe CSV export limit; no partial file was created." });
+      return;
+    }
+    if (scope === "selected" && publications.length !== requestedIds!.length) {
+      res.status(403).json({ error: "One or more selected publications are unavailable for export." });
+      return;
+    }
+    // A saved or selected publication is not permission to export every
+    // journalist linked to it. Export linked contacts only in an admin full CSV.
+    const publicationIds = scope === "full" ? publications.map((publication) => publication.id) : [];
+    const linkedRows = publicationIds.length ? await db.select({
+      contact: mediaContactsTable,
+      outletName: mediaOutletsTable.name,
+    }).from(mediaContactsTable)
+      .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
+      .where(and(
+        inArray(mediaContactsTable.outletId, publicationIds),
+        isNull(mediaContactsTable.deletedAt),
+        visible === null ? undefined : or(isNull(mediaContactsTable.accountId), inArray(mediaContactsTable.accountId, visible)),
+      )).limit(MEDIA_EXPORT_MAX_ROWS + 1) : [];
+    if (linkedRows.length > MEDIA_EXPORT_MAX_ROWS) {
+      res.status(413).json({ error: "Linked journalists exceed the safe CSV export limit; no partial file was created." });
+      return;
+    }
+    const journalistsByOutlet = new Map<number, Array<{ name: string; email: string }>>();
+    if (linkedRows.length) {
+      const linkedIds = linkedRows.map(({ contact }) => contact.id);
+      const [departed, matcher, checks] = await Promise.all([
+        departedContactIds(linkedIds, accountId),
+        createSuppressionMatcher(accountId),
+        db.select().from(mediaContactSourceChecksTable)
+          .where(inArray(mediaContactSourceChecksTable.contactId, linkedIds))
+          .orderBy(desc(mediaContactSourceChecksTable.checkedAt), desc(mediaContactSourceChecksTable.id)),
+      ]);
+      const latest = new Map<string, typeof checks[number]>();
+      for (const check of checks) if (!latest.has(`${check.contactId}\0${check.sourceUrl}`)) latest.set(`${check.contactId}\0${check.sourceUrl}`, check);
+      for (const { contact, outletName } of linkedRows) {
+        if (departed.has(contact.id) || isFormerJournalistStatus(contact.editorialStatus)
+            || latest.get(`${contact.id}\0${contact.sourceUrl}`)?.outcome === "unavailable"
+            || matcher({ name: `${contact.firstName} ${contact.lastName}`, email: contact.email, linkedinUrl: contact.linkedinUrl, outlet: outletName ?? "" })) continue;
+        const journalists = journalistsByOutlet.get(contact.outletId!) ?? [];
+        journalists.push({ name: `${contact.firstName} ${contact.lastName}`.trim(), email: contact.email });
+        journalistsByOutlet.set(contact.outletId!, journalists);
+      }
+    }
+    const output = publications.map((publication) => {
+      const journalists = journalistsByOutlet.get(publication.id) ?? [];
+      return [
+        publication.name, publication.category, publication.country, publication.description,
+        safePublicationWebsite(publication.website), safePublicationLinkedinUrl(publication.linkedinUrl),
+        publication.reachBand ? `Source reach value: ${publication.reachBand}` : "", "",
+        journalists.map((journalist) => journalist.name).filter(Boolean).join("; "),
+        journalists.map((journalist) => journalist.email).filter(Boolean).join("; "),
+      ];
+    });
+    const headers = scope === "full"
+      ? MEDIA_EXPORT_PUBLICATION_HEADERS
+      : MEDIA_EXPORT_PUBLICATION_HEADERS.slice(0, -2);
+    res.status(200).type("text/csv; charset=utf-8").send(mediaExportCsv(headers, output.map((row) => row.slice(0, headers.length))));
+  } catch (error) {
+    req.log.error({ err: error }, "Failed to export media database");
+    res.status(500).json({ error: "Failed to export media database." });
+  }
+});
+
 // Distinct category/industry labels used by the contact category filter.  This
 // is deliberately derived from visible contacts rather than the custom
 // category table: sectors are contact-owned data and outlet categories must
@@ -4861,8 +5065,24 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
   }).from(mediaContactsTable)
     .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
     .where(and(inArray(mediaContactsTable.id, shortlistedIds), isNull(mediaContactsTable.deletedAt))) : [];
+  const shortlistedContactIds = decisionContactRows.map((row) => row.contact.id);
+  const [shortlistedDeparted, shortlistedSourceChecks] = await Promise.all([
+    departedContactIds(shortlistedContactIds, accountId),
+    shortlistedContactIds.length
+      ? db.select().from(mediaContactSourceChecksTable)
+        .where(inArray(mediaContactSourceChecksTable.contactId, shortlistedContactIds))
+        .orderBy(desc(mediaContactSourceChecksTable.checkedAt), desc(mediaContactSourceChecksTable.id))
+      : Promise.resolve([]),
+  ]);
+  const latestShortlistedSourceChecks = new Map<string, typeof shortlistedSourceChecks[number]>();
+  for (const check of shortlistedSourceChecks) {
+    const key = `${check.contactId}\0${check.sourceUrl}`;
+    if (!latestShortlistedSourceChecks.has(key)) latestShortlistedSourceChecks.set(key, check);
+  }
   const decisionContacts = decisionContactRows.flatMap((row) => {
     if (row.contact.accountId !== null && visible !== null && !visible.includes(row.contact.accountId)) return [];
+    if (shortlistedDeparted.has(row.contact.id) || isFormerJournalistStatus(row.contact.editorialStatus)
+        || latestShortlistedSourceChecks.get(`${row.contact.id}\0${row.contact.sourceUrl}`)?.outcome === "unavailable") return [];
     const canSeeOutlet = !row.outletDeletedAt && outletVisible(row.outletAccountId, visible);
     const outletFields = canSeeOutlet ? {
       outletName: row.outletName,

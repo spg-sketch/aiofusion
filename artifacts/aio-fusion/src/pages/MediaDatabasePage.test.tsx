@@ -31,11 +31,8 @@ const changedContact = {
 
 let testOutlets: Record<string, unknown>[] = [];
 let importPreviewMode: "legacy" | "review" | "refresh" | "publication" = "legacy";
-let exportAllPagesMode = false;
 let searchTotalOverride = 2;
 let searchEmptyMode = false;
-let searchExportFixtureMode = false;
-let searchExportFailurePage: number | null = null;
 let outletTotalOverride = 0;
 let bookmarkTestRows: Array<Record<string, unknown>> = [];
 let bookmarkTotalOverride: number | null = null;
@@ -90,6 +87,12 @@ describe("MediaDatabasePage source health", () => {
           },
         }), { status: 200 });
       }
+      if (url.includes("/media-db/export") && init?.method === "POST") {
+        return new Response('"First Name","Last Name"\r\n"Jane","Reporter"', {
+          status: 200,
+          headers: { "Content-Type": "text/csv", "Content-Disposition": 'attachment; filename="Media contacts.csv"' },
+        });
+      }
       if (url.includes("/media-db/bookmarks")) {
         if (!init?.method || init.method === "GET") {
           const params = new URL(url, "http://test.local").searchParams;
@@ -129,56 +132,6 @@ describe("MediaDatabasePage source health", () => {
         return new Response(JSON.stringify({ ok: true, sourceCheck: changedContact.sourceCheck }), { status: 200 });
       }
       if (url.includes("/media-db/search")) {
-        const params = new URL(url, "http://test.local").searchParams;
-        if (searchExportFixtureMode && params.get("type") === "publications") {
-          const page = Number(params.get("page") || 1);
-          const pageSize = Number(params.get("pageSize") || 25);
-          if (pageSize === 100 && page === searchExportFailurePage) {
-            return new Response(JSON.stringify({ error: "temporary search failure" }), { status: 503 });
-          }
-          const start = (page - 1) * pageSize;
-          const rowCount = Math.max(0, Math.min(pageSize, searchTotalOverride - start));
-          const results = searchEmptyMode ? [] : Array.from({ length: rowCount }, (_, offset) => {
-            const index = start + offset;
-            const journalist = {
-              ...changedContact,
-              id: 12,
-            };
-            const departed = {
-              ...changedContact,
-              id: 99,
-              firstName: "Departed",
-              lastName: "Journalist",
-              email: "departed@example.com",
-              lifecycleStatus: "departed",
-            };
-            return {
-              type: "outlet", id: 20 + index,
-              outlet: {
-                id: 20 + index,
-                name: index === 0 ? "=Injected Media" : `Publication ${index + 1}`,
-                category: "Energy",
-                website: index === 0 ? "345" : `publication-${index + 1}.example`,
-                description: "Publication description",
-                country: "UK",
-                reachBand: index === 0 ? "29/76" : "National",
-                linkedinUrl: "",
-                verifiedAuthority: index === 0 ? 90 : undefined,
-                linkedJournalists: [journalist, departed],
-                accountId: null,
-              },
-              authority: 0,
-              matchedFields: ["publication"],
-              matchedPhrases: [],
-              reasons: ["Matched publication."],
-            };
-          });
-          return new Response(JSON.stringify({
-            results,
-            total: searchTotalOverride,
-            counts: { contacts: 0, outlets: searchTotalOverride },
-          }), { status: 200 });
-        }
         return new Response(JSON.stringify({
           interpretation: { phrase: "energy", topic: "", location: "", category: "", authority: 0 },
           results: searchEmptyMode ? [] : [{
@@ -193,13 +146,6 @@ describe("MediaDatabasePage source health", () => {
         }), { status: 200 });
       }
       if (url.includes("/contacts")) {
-        if (exportAllPagesMode && new URL(url, "http://test.local").searchParams.get("pageSize") === "200") {
-          const page = new URL(url, "http://test.local").searchParams.get("page");
-          return new Response(JSON.stringify({
-            contacts: page === "1" ? [changedContact] : page === "2" ? [{ ...changedContact, id: 14, email: "=unsafe@example.com", firstName: "Second" }] : [],
-            total: 2,
-          }), { status: 200 });
-        }
         return new Response(JSON.stringify({
           contacts: [changedContact, {
             ...changedContact, id: 13, firstName: "No", lastName: "Source", sourceUrl: "", sourceStatus: "unverified", sourceCheck: null,
@@ -226,11 +172,8 @@ describe("MediaDatabasePage source health", () => {
     localStorage.clear();
     testOutlets = [];
     importPreviewMode = "legacy";
-    exportAllPagesMode = false;
     searchTotalOverride = 2;
     searchEmptyMode = false;
-    searchExportFixtureMode = false;
-    searchExportFailurePage = null;
     outletTotalOverride = 0;
     bookmarkTestRows = [];
     bookmarkTotalOverride = null;
@@ -371,61 +314,57 @@ describe("MediaDatabasePage source health", () => {
     expect(await screen.findByText(/exceeds the safe loading limit of 10,000 items/i)).toBeTruthy();
   });
 
-  it("exports all filtered publication pages with linked journalists and spreadsheet-safe CSV", async () => {
-    searchExportFixtureMode = true;
-    searchTotalOverride = 101;
-    const blobs: Blob[] = [];
-    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: (blob: Blob) => { blobs.push(blob); return "blob:publication-export"; } });
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+  it("exports only explicitly selected visible contacts through the backend", async () => {
     render(<MediaDatabasePage />);
-    await submitPublicationSearch();
-    fireEvent.click(screen.getByRole("button", { name: "Export all matches" }));
+    await browseContacts();
+    expect(screen.queryByRole("button", { name: /Export selected CSV/i })).toBeNull();
+    fireEvent.click(screen.getByLabelText("Select contact 12"));
+    fireEvent.click(screen.getByRole("button", { name: "Export selected CSV (1)" }));
     await waitFor(() => {
-      const exportCalls = vi.mocked(fetch).mock.calls.map(([input]) => String(input))
-        .filter((url) => url.includes("/media-db/search?") && url.includes("pageSize=100"));
-      expect(exportCalls).toHaveLength(2);
-      const pageTwo = new URL(exportCalls[1], "http://test.local").searchParams;
-      expect(pageTwo.get("page")).toBe("2");
-      expect(pageTwo.get("type")).toBe("publications");
-      expect(pageTwo.get("scope")).toBe("saved");
-      expect(pageTwo.get("phrase")).toBe("energy");
-      expect(pageTwo.get("category")).toBe("Energy");
-      expect(pageTwo.get("location")).toBe("UK");
+      const [, init] = vi.mocked(fetch).mock.calls.find(([input]) => String(input).includes("/media-db/export"))!;
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(String(init?.body))).toEqual({ scope: "selected", type: "contacts", ids: [12] });
     });
-    expect(blobs).toHaveLength(1);
-    const exported = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsText(blobs[0]);
-    });
-    expect(exported).toContain("\"Publication\"");
-    expect(exported).toContain("\"'=Injected Media\"");
-    expect(exported).toContain("Source reach value: 29/76");
-    expect(exported).toContain("Jane Reporter");
-    expect(exported).toContain("jane@example.com");
-    expect(exported).not.toContain("departed@example.com");
-    expect(exported).not.toContain(",\"345\",");
-    clickSpy.mockRestore();
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/contacts?") && String(input).includes("pageSize=200"))).toBe(false);
   });
 
-  it("shows a page-specific error when a filtered publication export page fails", async () => {
-    searchExportFixtureMode = true;
-    searchTotalOverride = 101;
-    searchExportFailurePage = 2;
+  it("exports saved connections for the selected record type via the backend", async () => {
+    bookmarkTestRows = [{ type: "publication", targetId: 20 }];
     render(<MediaDatabasePage />);
-    await submitPublicationSearch();
-    fireEvent.click(screen.getByRole("button", { name: "Export all matches" }));
-    expect(await screen.findByText(/Search export stopped on page 2: the server returned 503/i)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(await screen.findByText("Energy Weekly")).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Export saved connections CSV" }).hasAttribute("disabled")).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Export saved connections CSV" }));
+    await waitFor(() => {
+      const [, init] = vi.mocked(fetch).mock.calls.find(([input]) => String(input).includes("/media-db/export"))!;
+      expect(JSON.parse(String(init?.body))).toEqual({ scope: "saved", type: "publications" });
+    });
   });
 
-  it("shows an explicit error when publication search exports exceed the safe cap", async () => {
-    searchExportFixtureMode = true;
-    searchTotalOverride = 10_001;
+  it("shows full CSV controls only to the canonical platform admin and supports both types", async () => {
     render(<MediaDatabasePage />);
-    await submitPublicationSearch();
-    fireEvent.click(screen.getByRole("button", { name: "Export all matches" }));
-    expect(await screen.findByText(/exceeds the safe export limit of 10,000 records/i)).toBeTruthy();
+    await browseContacts();
+    expect(screen.queryByRole("button", { name: "Export full CSV" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Export all matches|Word|Excel/i })).toBeNull();
+
+    cleanup();
+    localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "admin", role: "admin", membershipRole: "owner" }));
+    render(<MediaDatabasePage />);
+    await browseContacts();
+    fireEvent.click(screen.getByRole("button", { name: "Export full CSV" }));
+    await waitFor(() => {
+      const [, init] = vi.mocked(fetch).mock.calls.find(([input]) => String(input).includes("/media-db/export"))!;
+      expect(JSON.parse(String(init?.body))).toEqual({ scope: "full", type: "contacts" });
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Publications \(/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Browse publications" }));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/outlets?"))).toBe(true));
+    fireEvent.click(screen.getByRole("button", { name: "Export full CSV" }));
+    await waitFor(() => {
+      const exports = vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes("/media-db/export"));
+      expect(JSON.parse(String(exports[1][1]?.body))).toEqual({ scope: "full", type: "publications" });
+    });
   });
 
   it("keeps type, collection, sector and region filters when paging and resets them with Clear", async () => {
@@ -505,37 +444,6 @@ describe("MediaDatabasePage source health", () => {
     expect(publicationWebsiteHref("345")).toBeNull();
     expect(publicationWebsiteHref("29/76")).toBeNull();
     expect(publicationWebsiteHref("https://example.com/news")).toBe("https://example.com/news");
-  });
-
-  it("exports every filtered contact page and carries the outlet filter", async () => {
-    exportAllPagesMode = true;
-    testOutlets = [{ id: 2, name: "Example News", category: "Energy", website: "", description: "", country: "UK", reachBand: "", accountId: "account-a" }];
-    const blobs: Blob[] = [];
-    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: (blob: Blob) => { blobs.push(blob); return "blob:test"; } });
-    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: () => undefined });
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
-    render(<MediaDatabasePage />);
-    await browseOutlets();
-    fireEvent.click(screen.getByRole("button", { name: /Contacts \(/i }));
-    await browseContacts();
-    fireEvent.change(screen.getByLabelText("Contact publication filter"), { target: { value: "2" } });
-    const exportStart = vi.mocked(fetch).mock.calls.length;
-    fireEvent.click(screen.getByRole("button", { name: "Excel" }));
-    await waitFor(() => {
-      const exportCalls = vi.mocked(fetch).mock.calls.slice(exportStart).filter(([input, init]) => String(input).includes("/contacts?") && String(input).includes("pageSize=200"));
-      expect(exportCalls).toHaveLength(2);
-      expect(String(exportCalls[0][0])).toContain("outletId=2");
-      expect(String(exportCalls[1][0])).toContain("page=2");
-    });
-    expect(blobs).toHaveLength(1);
-    const exportedText = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsText(blobs[0]);
-    });
-    expect(exportedText).toContain("Second");
-    clickSpy.mockRestore();
   });
 
   it("shows unified explained results and opens a provenance-safe correction report", async () => {

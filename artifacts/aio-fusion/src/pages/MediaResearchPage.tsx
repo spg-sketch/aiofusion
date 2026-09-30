@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Download, FileText, Loader2, Search, Target } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { escapeHtml, apiBase } from "../lib/contentAi";
+import { apiBase } from "../lib/contentAi";
 import { isContentStoreReady, loadArchive, useContentStore } from "../lib/contentStore";
 import * as IntakeForm from "../IntakeForm";
 import { getExactTargetPhrases as getCanonicalExactTargetPhrases, normaliseExactTargetPhrases, type ExactTargetPhrase } from "../lib/exactTargetPhrases";
@@ -247,56 +247,6 @@ export function orderRecommendations(items: Recommendation[]): Recommendation[] 
   ).map((item, index) => ({ ...item, rank: index + 1 }));
 }
 
-export function sanitizeSpreadsheetCell(value: unknown): string {
-  const text = String(value ?? "");
-  return /^[\t\r\n ]*[=+\-@]/.test(text) ? `'${text}` : text;
-}
-
-function researchCsvCell(value: unknown): string {
-  return `"${sanitizeSpreadsheetCell(value).replace(/"/g, '""')}"`;
-}
-
-function exportDate(value: string | null | undefined): string {
-  if (!value) return "";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString().split("T")[0];
-}
-
-export const SHORTLIST_EXPORT_COLUMNS = [
-  "First Name", "Last Name", "Role", "Email", "Outlet", "Category", "Country",
-  "Publication Reach", "Beats", "Sectors", "Geography", "LinkedIn URL",
-  "Source URL", "Source Reference", "Confidence", "Last Verified", "Notes",
-] as const;
-
-export function shortlistExportHtml(contacts: Contact[]): string {
-  const title = "Accepted Media Contacts";
-  const detailFields: Array<[string, (contact: Contact) => unknown]> = [
-    ["Role", (contact) => contact.role],
-    ["Email", (contact) => contact.email],
-    ["Outlet", (contact) => contact.outletName],
-    ["Category", (contact) => contact.outletCategory],
-    ["Country", (contact) => contact.outletCountry],
-    ["Publication reach", (contact) => contact.publicationReach || contact.outletReachBand],
-    ["Beats", (contact) => (contact.beats || []).join("; ")],
-    ["Sectors", (contact) => (contact.sectors || []).join("; ")],
-    ["Geography", (contact) => contact.geography],
-    ["LinkedIn", (contact) => contact.linkedinUrl],
-    ["Source URL", (contact) => contact.sourceUrl],
-    ["Source reference", (contact) => contact.sourceRef],
-    ["Confidence", (contact) => contact.confidence || contact.confidenceLevel],
-    ["Last verified", (contact) => exportDate(contact.lastVerifiedAt)],
-    ["Notes", (contact) => contact.notes],
-  ];
-  const cards = contacts.map((contact, index) => {
-    const name = [contact.firstName, contact.lastName].filter(Boolean).join(" ") || "Unnamed contact";
-    const details = detailFields
-      .map(([label, value]) => `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(String(value(contact) ?? ""))}</p>`)
-      .join("");
-    return `<section class="contact${index ? " page-break" : ""}"><h2>${escapeHtml(name)}</h2>${details}</section>`;
-  }).join("");
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font:11pt Arial,sans-serif;color:#172033}h1{font-size:20pt}h2{font-size:14pt;margin:0 0 8pt}.contact{border:1px solid #cbd5e1;border-radius:6px;padding:12pt;margin:0 0 12pt;break-inside:avoid}.contact p{margin:3pt 0;overflow-wrap:anywhere}.page-break{break-before:page;page-break-before:always}</style></head><body><h1>${title}</h1>${cards}</body></html>`;
-}
-
 function researchRequestError(response: Response, data: Record<string, unknown>, fallback: string): Error {
   if (response.status === 429) {
     return new Error("This request reached the account's AI spend limit or request quota. Ask an account admin to review the limit, or try again after it resets.");
@@ -345,28 +295,6 @@ function readResearchPreload(): string {
   try { return localStorage.getItem("aio.research.preload") || ""; } catch { return ""; }
 }
 
-export function shortlistExportRow(contact: Contact): string[] {
-  return [
-    contact.firstName,
-    contact.lastName,
-    contact.role,
-    contact.email,
-    contact.outletName,
-    contact.outletCategory,
-    contact.outletCountry,
-    contact.publicationReach || contact.outletReachBand,
-    (contact.beats || []).join("; "),
-    (contact.sectors || []).join("; "),
-    contact.geography,
-    contact.linkedinUrl,
-    contact.sourceUrl,
-    contact.sourceRef,
-    contact.confidence || contact.confidenceLevel,
-    exportDate(contact.lastVerifiedAt),
-    contact.notes,
-  ].map((value) => String(value ?? ""));
-}
-
 function MediaResearchPage() {
   const contentVersion = useContentStore();
   const archiveReady = isContentStoreReady();
@@ -392,6 +320,9 @@ function MediaResearchPage() {
   const [visibleRecommendationCount, setVisibleRecommendationCount] = useState(5);
   const [totalMatches, setTotalMatches] = useState(0);
   const [decisions, setDecisions] = useState<Record<number, Decision>>({});
+  const [exportSelection, setExportSelection] = useState<number[] | null>(null);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportError, setExportError] = useState("");
   const [decisionSaving, setDecisionSaving] = useState<Record<string, boolean>>({});
   const [decisionContacts, setDecisionContacts] = useState<Record<number, Contact>>({});
   const [decisionAssessments, setDecisionAssessments] = useState<Record<number, Recommendation["assessment"]>>({});
@@ -417,6 +348,10 @@ function MediaResearchPage() {
     : projectContext.keywords;
   const activeTargetPhrases = resolveArticleTargetPhrases(selected, projectContext.exactPhrases);
   const storyKey = selected?.id || "";
+  useEffect(() => {
+    setExportSelection(null);
+    setExportError("");
+  }, [projectId, storyKey]);
   const discoveryRunKey = aiRunKey(discoveryScope, "media-discover", storyKey || "new-article");
   type DiscoveryRunResult = { items: LiveDiscovery[]; discoveryToken: string };
   type RemoteDiscoveryRun = DiscoveryRunResult & { runId: string; status: "running" | "succeeded" | "failed"; error?: string };
@@ -528,6 +463,7 @@ function MediaResearchPage() {
   const [recommendationHasRun, setRecommendationHasRun] = useState(false);
   const [evaluation, setEvaluation] = useState<RecommendationEvaluation | null>(null);
   const [enrichmentWarning, setEnrichmentWarning] = useState("");
+  const [coverageResult, setCoverageResult] = useState<{ key: string; text: string } | null>(null);
   type RequestHandle = { id: number; key: string; controller: AbortController };
   const requestSequence = useRef(0);
   const recommendationRequest = useRef<RequestHandle | null>(null);
@@ -694,6 +630,7 @@ function MediaResearchPage() {
     setEnriching(true);
     setError("");
     setEnrichmentWarning("");
+    setCoverageResult(null);
     try {
       const response = await fetch(`${apiBase()}/api/store/media-db/recommendations/enrich`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
@@ -711,6 +648,13 @@ function MediaResearchPage() {
       setItems(nextItems);
       const warnings = nextItems.flatMap((item) => item.assessment?.warnings || []);
       setEnrichmentWarning(Array.from(new Set(warnings)).join(" "));
+      const checkedCount = nextItems.slice(0, 5).filter((item) =>
+        item.assessment?.evidence.some((source) => source.attribution === "page_checked" && source.authorMatched)
+      ).length;
+      setCoverageResult({
+        key: requestKey,
+        text: `Coverage check finished. ${checkedCount} of the top ${Math.min(5, nextItems.length)} contacts have a page-checked byline. Evidence confidence has been recalculated; this does not verify current contact details.`,
+      });
       await loadDecisions();
     } catch (reason) {
       if (activeStoryRef.current === requestKey && recommendationLoadSequence.current === loadId) {
@@ -1108,6 +1052,20 @@ function MediaResearchPage() {
     .filter((d) => d.decision === "shortlisted")
     .map((d) => items.find((i) => i.contact.id === d.contactId)?.contact || decisionContacts[d.contactId])
     .filter(Boolean) as Contact[];
+  const acceptedIds = [...new Set(accepted.map((contact) => contact.id))];
+  // Existing story selections count as explicit selections when they fit in
+  // one file. For larger lists the user must choose at most 25 contacts.
+  const exportIds = exportSelection === null
+    ? acceptedIds.length <= 25 ? acceptedIds : []
+    : exportSelection.filter((id) => acceptedIds.includes(id));
+  const toggleExportContact = (id: number) => {
+    setExportSelection((current) => {
+      const chosen = current ?? (acceptedIds.length <= 25 ? acceptedIds : []);
+      return chosen.includes(id)
+        ? chosen.filter((selected) => selected !== id)
+        : chosen.length < 25 ? [...chosen, id] : chosen;
+    });
+  };
     
   const acceptedRecommendations = accepted.map((c) => items.find((i) => i.contact.id === c.id) || {
     rank: 0,
@@ -1136,13 +1094,30 @@ function MediaResearchPage() {
   ];
   const groupedKeys = new Set(liveGroups.flatMap((group) => group.items.map((item) => item.candidateKey)));
   liveGroups.push({ label: "Other or global", items: liveItems.filter((item) => !groupedKeys.has(item.candidateKey)) });
-  const exportAccepted = (format: "xls" | "doc") => {
-    const title = "Accepted Media Contacts";
-    const content = format === "xls"
-      ? [SHORTLIST_EXPORT_COLUMNS, ...accepted.map(shortlistExportRow)].map((row) => row.map(researchCsvCell).join(",")).join("\r\n")
-      : shortlistExportHtml(accepted);
-    const blob = new Blob([content], { type: format === "xls" ? "text/csv;charset=utf-8;" : "application/msword" });
-    const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `${title}.${format === "xls" ? "csv" : "doc"}`; link.click(); URL.revokeObjectURL(url);
+  const exportAccepted = async () => {
+    if (!exportIds.length || exportIds.length > 25 || exportBusy) return;
+    setExportBusy(true);
+    setExportError("");
+    try {
+      const response = await fetch(`${apiBase()}/api/store/media-db/export`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "selected", type: "contacts", ids: exportIds }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(data.error || `CSV export failed with status ${response.status}.`);
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "Accepted Media Contacts.csv";
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (reason) {
+      setExportError(reason instanceof Error ? reason.message : "Could not download the CSV export.");
+    } finally {
+      setExportBusy(false);
+    }
   };
   const editBrief = (patch: Partial<TargetingBrief>) => {
     briefEditRevision.current += 1;
@@ -1300,6 +1275,11 @@ function MediaResearchPage() {
          {discoveryRun?.status === "failed" && <button type="button" data-testid="button-retry-live-search" onClick={() => void discoverLive()} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Retry live search</button>}
        </div>
      </section>}
+     {coverageResult?.key === `${projectId}:${storyKey}` && (
+       <p role="status" className="mb-3 rounded-lg border border-sky-100 bg-sky-50 p-3 text-[12px] text-sky-900">
+         {coverageResult.text}
+       </p>
+     )}
        {(loading || items.length > 0) && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b flex flex-wrap justify-between gap-3" style={{ background: vars.g50, borderColor: vars.g200 }}><div><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Recommended from your Media Database</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{loading ? "Finding and ranking the strongest matches..." : `Showing ${Math.min(visibleRecommendationCount, items.length)} of ${items.length} ranked matches${totalMatches > items.length ? ` from ${totalMatches} relevant connections` : ""}. Results are capped at 25 and the next five are already loaded.`}</p>{evaluation && <p className="text-[11px] mt-2 text-slate-500">Evaluation: {evaluation.evaluated} evaluated · {evaluation.shortlisted} shortlisted · {evaluation.contacted} contacted · {evaluation.responded} responded · {evaluation.placed} placed</p>}</div>
        <div className="flex gap-2">
          {items.length > 0 && recommendationSetId !== null && (
@@ -1325,7 +1305,28 @@ function MediaResearchPage() {
       </div>)}
     </section>}
      {!liveLoading && !loading && !briefLoading && !briefLoadError && !error && recommendationHasRun && items.length === 0 && liveItems.length === 0 && selected && <section className="bg-white rounded-2xl border p-5 mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="font-semibold text-lg" style={{ color: vars.navy }}>No suitable saved contacts found</h2><p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Find new journalists with one explicit live search. Results are unverified discoveries, not contacts, and must be sent for review before any human approval.</p></div><button data-testid="button-find-journalists" disabled={liveLoading || briefLoading || briefReadyKey !== `${projectId}:${storyKey}` || Boolean(briefLoadError)} onClick={() => void discoverLive()} className="px-4 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50" style={{ background: vars.navy }}><Search size={15} className="inline mr-1.5" />Find new journalists</button></div></section>}
-     <section className="bg-white rounded-2xl border overflow-hidden shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 flex flex-wrap justify-between gap-2 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}><div><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Story outreach planning</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>Story selections and outreach context stay separate from reusable Media Database saves. Selecting a contact here does not send a pitch.</p></div>{accepted.length > 0 && <div className="flex gap-2"><button data-testid="button-export-shortlist-csv" onClick={() => exportAccepted("xls")} className="text-[12px] px-3 py-1.5 border rounded-lg bg-white hover:bg-slate-50 transition-colors shadow-sm" style={{ borderColor: vars.g200 }}><Download size={14} className="inline mr-1 text-slate-400" /> Excel</button><button data-testid="button-export-shortlist-word" onClick={() => exportAccepted("doc")} className="text-[12px] px-3 py-1.5 border rounded-lg bg-white hover:bg-slate-50 transition-colors shadow-sm" style={{ borderColor: vars.g200 }}><Download size={14} className="inline mr-1 text-slate-400" /> Word</button></div>}</div>{acceptedRecommendations.length ? acceptedRecommendations.map((r) => contactCard(r, true)) : <p className="p-8 text-[14px] text-center italic" style={{ color: vars.g500 }}>No contacts selected for this story yet. Use “Plan outreach for this story” on a recommendation to make it available here; saving it to My Media Database alone does not mark it as pitched.</p>}</section>
+     <section className="bg-white rounded-2xl border overflow-hidden shadow-sm" style={{ borderColor: vars.g200 }}>
+       <div className="p-5 flex flex-wrap justify-between gap-2 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}>
+         <div>
+           <h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Story outreach planning</h2>
+           <p className="text-[13px] mt-1" style={{ color: vars.g500 }}>Story selections and outreach context stay separate from reusable Media Database saves. Selecting a contact here does not send a pitch.</p>
+         </div>
+         {accepted.length > 0 && <button data-testid="button-export-shortlist-csv" disabled={exportBusy || exportIds.length === 0} onClick={() => void exportAccepted()} className="text-[12px] px-3 py-1.5 border rounded-lg bg-white hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50" style={{ borderColor: vars.g200 }}>
+           <Download size={14} className="inline mr-1 text-slate-400" /> Download selected CSV ({exportIds.length})
+         </button>}
+       </div>
+       {acceptedIds.length > 25 && <p className="mx-5 mt-3 text-[12px] text-slate-600">Choose up to 25 contacts per download. No partial CSV is created automatically.</p>}
+       {exportError && <p role="alert" className="mx-5 mt-3 text-[12px] text-red-700">{exportError}</p>}
+       {acceptedRecommendations.length ? acceptedRecommendations.map((r) =>
+         <div key={r.contact.id}>
+           <label className="flex items-center gap-2 px-5 pt-3 text-[12px] text-slate-700">
+             <input type="checkbox" aria-label={`Select ${r.contact.firstName} ${r.contact.lastName} for CSV`} checked={exportIds.includes(r.contact.id)} disabled={!exportIds.includes(r.contact.id) && exportIds.length >= 25} onChange={() => toggleExportContact(r.contact.id)} />
+             Include in CSV download
+           </label>
+           {contactCard(r, true)}
+         </div>
+       ) : <p className="p-8 text-[14px] text-center italic" style={{ color: vars.g500 }}>No contacts selected for this story yet. Use “Plan outreach for this story” on a recommendation to make it available here; saving it to My Media Database alone does not mark it as pitched.</p>}
+     </section>
     {selected && projectId && <MediaOutreachPanel projectId={projectId} storyKey={storyKey} articleTitle={selected.title} recommendations={acceptedRecommendations} targetPhrases={activeTargetPhrases} />}
   </div>;
 }
