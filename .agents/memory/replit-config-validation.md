@@ -8,3 +8,9 @@ Direct writes to `.replit` are blocked. Write the full modified TOML to a tempor
 **Why:** A direct write was rejected, and printing a normal diff would have exposed a credential-bearing deleted line.
 
 **How to apply:** Use the validated replacement callback for configuration changes, and verify the result using presence checks and `git diff --check`, not a raw diff of sensitive lines.
+
+Setting production-only, non-secret environment variables through Replit's environment tooling can also change the tracked `.replit` file. Do not change them while a release gate is running.
+
+**Why:** The gate's tests and builds passed, but its final source-integrity check correctly rejected a configuration change made during the run.
+
+**How to apply:** Set and verify intended production environment variables first, inspect changed key names without printing values, commit the tracked configuration, and only then start the release gate.

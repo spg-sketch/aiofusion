@@ -93,4 +93,4 @@
 - [AIO Fusion public platform captures](aio-fusion-public-platform-captures.md) — use real app screens from isolated synthetic workspaces; never expose customer data or label mocks as genuine.
 - [Media collection ownership](aio-fusion-media-collection-ownership.md) — shared media stays canonical; account additions and bookmarks stay private to the active workspace, never pooled through agency hierarchy.
 - [Marketing browser verification](marketing-browser-verification.md) — auto-open demo dialog appears after hydration; wait for it before testing hover or links beneath it.
-- [Replit configuration validation](replit-config-validation.md) — replace `.replit` through the validated temp-file callback; avoid printing credential-bearing diffs.
+- [Replit configuration validation](replit-config-validation.md) — avoid credential-bearing diffs; production env changes can modify tracked `.replit`, so commit before a release gate.
