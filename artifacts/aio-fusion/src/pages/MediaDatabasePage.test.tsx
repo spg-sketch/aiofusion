@@ -66,7 +66,7 @@ async function submitPublicationSearch() {
 }
 
 function openImportModal() {
-  const advanced = Array.from(document.querySelectorAll("details")).find((details) => details.querySelector("summary")?.textContent?.includes("Manage my records"));
+  const advanced = Array.from(document.querySelectorAll("details")).find((details) => details.querySelector("summary")?.textContent?.includes("Internal tools"));
   if (advanced && !advanced.open) fireEvent.click(advanced.querySelector("summary")!);
   fireEvent.click(screen.getByRole("button", { name: "Import CSV" }));
 }
@@ -197,17 +197,24 @@ describe("MediaDatabasePage source health", () => {
     expect(isUploadedMediaContact({ ...eightyPercent, provenance: null } as never)).toBe(false);
   });
 
-  it("shows changed and source-less statuses and requires explicit approval", async () => {
+  it("keeps source review out of profiles and requires explicit approval in the manager review dialog", async () => {
     render(<MediaDatabasePage />);
     await browseContacts();
+    expect(screen.queryByRole("columnheader", { name: "Notes" })).toBeNull();
     expect(screen.getByText("Changed")).toBeTruthy();
     expect(screen.getByText("Unverified")).toBeTruthy();
 
     fireEvent.click(screen.getAllByRole("button", { name: "View Profile" })[0]);
     const profile = within(screen.getByRole("dialog", { name: "Journalist Profile" }));
-    expect(screen.getByText(/saved email is no longer shown/i)).toBeTruthy();
+    expect(profile.queryByText(/saved email is no longer shown/i)).toBeNull();
+    expect(profile.queryByText("Public source health")).toBeNull();
+    expect(profile.queryByText("Page verification")).toBeNull();
+    expect(profile.queryByText(/Last checked/)).toBeNull();
+    expect(profile.queryByText(/Source URL:/)).toBeNull();
+    expect(profile.queryByText(/Record provenance:/)).toBeNull();
+    expect(profile.queryByRole("link", { name: "View source" })).toBeNull();
     expect(screen.getAllByText(/Energy Editor/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Climate Correspondent/).length).toBeGreaterThan(0);
+    expect(profile.queryByText(/Climate Correspondent/)).toBeNull();
     expect(screen.queryByText("Workbook assertion")).toBeNull();
     expect(screen.queryByText("v33.xlsx")).toBeNull();
     expect(screen.queryByText("Page check evidence")).toBeNull();
@@ -215,6 +222,13 @@ describe("MediaDatabasePage source health", () => {
     expect(screen.getByText("Journalist authority")).toBeTruthy();
     expect(screen.getByText("Confidence")).toBeTruthy();
 
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Review public source" })[0]);
+    const sourceReview = within(screen.getByRole("dialog", { name: "Review public source" }));
+    expect(sourceReview.getByText("Public source health")).toBeTruthy();
+    expect(sourceReview.getByText(/saved email is no longer shown/i)).toBeTruthy();
+    expect(sourceReview.getAllByText(/Climate Correspondent/).length).toBeGreaterThan(0);
+    expect(sourceReview.getByText("Page check evidence: Jane Reporter - Climate Correspondent")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Accept supported updates" }));
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining("/source-checks/44/approve"),
@@ -423,6 +437,10 @@ describe("MediaDatabasePage source health", () => {
   it("shows the discovery queue to workspace members but instructions only to the canonical Master owner", async () => {
     render(<MediaDatabasePage />);
     await browseContacts();
+    expect(screen.getAllByRole("button", { name: /^(Contacts|Publications) \(/i })).toHaveLength(2);
+    const internalTools = Array.from(document.querySelectorAll("details")).find((details) => details.querySelector("summary")?.textContent?.includes("Internal tools"))!;
+    expect(internalTools.open).toBe(false);
+    fireEvent.click(internalTools.querySelector("summary")!);
     expect(screen.getByRole("button", { name: "Discoveries" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Research instructions" })).toBeNull();
 
@@ -430,6 +448,8 @@ describe("MediaDatabasePage source health", () => {
     localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "admin", role: "admin", membershipRole: "owner" }));
     render(<MediaDatabasePage />);
     await browseContacts();
+    const masterTools = Array.from(document.querySelectorAll("details")).find((details) => details.querySelector("summary")?.textContent?.includes("Internal tools"))!;
+    fireEvent.click(masterTools.querySelector("summary")!);
     expect(screen.getByRole("button", { name: "Discoveries" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Research instructions" })).toBeTruthy();
   });

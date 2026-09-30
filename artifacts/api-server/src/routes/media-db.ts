@@ -453,6 +453,7 @@ router.get("/store/media-db/bookmarks", requirePlatformAuth, async (req: Request
     for (const { bookmark, contact, contactOutlet, publication } of rows) {
       if (bookmark.contactId !== null) {
         if (!contact || contact.deletedAt || departed.has(contact.id)
+            || !outletVisible(contact.accountId, visible)
             || isNumericOnlyJournalistName(contact.firstName, contact.lastName)
             || isFormerJournalistStatus(contact.editorialStatus)
             || latestChecks.get(`${contact.id}\0${contact.sourceUrl}`)?.outcome === "unavailable") continue;
@@ -594,7 +595,7 @@ router.delete("/store/media-db/bookmarks/:type/:id", requirePlatformAuth, async 
 const MEDIA_EXPORT_MAX_ROWS = 10_000;
 const MEDIA_EXPORT_CONTACT_HEADERS = [
   "First Name", "Last Name", "Role", "Email", "Email Status", "Phone", "Mobile",
-  "Outlet", "Category", "Country", "Publication Reach", "Beats", "Sectors",
+  "Outlet", "Outlet Website", "Outlet Description", "Category", "Country", "Publication Reach", "Beats", "Sectors",
   "Geography", "Language", "Seniority", "Editorial Status", "LinkedIn URL",
   "Source URL", "Source Reference", "Publication Authority", "Journalist Authority",
   "Confidence", "Last Verified", "Source Status", "Lifecycle Status", "Notes", "Review Notes",
@@ -706,7 +707,8 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
           "First Name": contact.firstName, "Last Name": contact.lastName, Role: contact.role, Email: contact.email,
           "Email Status": contact.email ? (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email.trim()) ? "Sendable format" : "Review - not sendable") : "",
           Phone: contact.phone, Mobile: contact.mobile,
-          Outlet: outlet?.name ?? "", Category: outlet?.category ?? "", Country: outlet?.country ?? "",
+          Outlet: outlet?.name ?? "", "Outlet Website": safePublicationWebsite(outlet?.website),
+          "Outlet Description": outlet?.description ?? "", Category: outlet?.category ?? "", Country: outlet?.country ?? "",
           "Publication Reach": contact.publicationReach || outlet?.reachBand || "",
           Beats: (contact.beats ?? []).join("; "), Sectors: (contact.sectors ?? []).join("; "),
           Geography: contact.geography, Language: contact.language, Seniority: contact.seniority,
@@ -739,8 +741,9 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
       return;
     }
     // A saved or selected publication is not permission to export every
-    // journalist linked to it. Export linked contacts only in an admin full CSV.
-    const publicationIds = scope === "full" ? publications.map((publication) => publication.id) : [];
+    // journalist linked to it. Non-admin exports may include only contacts
+    // independently saved by this workspace.
+    const publicationIds = publications.map((publication) => publication.id);
     const linkedRows = publicationIds.length ? await db.select({
       contact: mediaContactsTable,
       outletName: mediaOutletsTable.name,
@@ -750,6 +753,11 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
         inArray(mediaContactsTable.outletId, publicationIds),
         isNull(mediaContactsTable.deletedAt),
         visible === null ? undefined : or(isNull(mediaContactsTable.accountId), inArray(mediaContactsTable.accountId, visible)),
+        scope === "full" ? undefined : sql`EXISTS (
+          SELECT 1 FROM media_bookmarks saved_contact
+          WHERE saved_contact.account_id = ${accountId}
+            AND saved_contact.contact_id = ${mediaContactsTable.id}
+        )`,
       )).limit(MEDIA_EXPORT_MAX_ROWS + 1) : [];
     if (linkedRows.length > MEDIA_EXPORT_MAX_ROWS) {
       res.status(413).json({ error: "Linked journalists exceed the safe CSV export limit; no partial file was created." });
@@ -789,7 +797,7 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
     });
     const headers = scope === "full"
       ? MEDIA_EXPORT_PUBLICATION_HEADERS
-      : MEDIA_EXPORT_PUBLICATION_HEADERS.slice(0, -2);
+      : MEDIA_EXPORT_PUBLICATION_HEADERS.filter((header) => header !== "Linked journalist emails");
     res.status(200).type("text/csv; charset=utf-8").send(mediaExportCsv(headers, output.map((row) => row.slice(0, headers.length))));
   } catch (error) {
     req.log.error({ err: error }, "Failed to export media database");
@@ -1820,7 +1828,12 @@ router.get(
       const scopePredicate = scope === "added"
         ? eq(mediaOutletsTable.accountId, workspaceId)
         : scope === "saved"
-          ? sql`EXISTS (SELECT 1 FROM media_bookmarks saved WHERE saved.account_id = ${workspaceId} AND saved.outlet_id = ${mediaOutletsTable.id})`
+          ? and(
+            sql`EXISTS (SELECT 1 FROM media_bookmarks saved WHERE saved.account_id = ${workspaceId} AND saved.outlet_id = ${mediaOutletsTable.id})`,
+            visible === null ? undefined : visible.length
+              ? or(isNull(mediaOutletsTable.accountId), inArray(mediaOutletsTable.accountId, visible))
+              : isNull(mediaOutletsTable.accountId),
+          )
           : visible === null ? undefined : visible.length
             ? or(isNull(mediaOutletsTable.accountId), inArray(mediaOutletsTable.accountId, visible))
             : isNull(mediaOutletsTable.accountId);
@@ -2258,10 +2271,16 @@ router.get(
       const visibility = visible === null ? undefined : visible.length
         ? or(isNull(mediaContactsTable.accountId), inArray(mediaContactsTable.accountId, visible))
         : isNull(mediaContactsTable.accountId);
+      const outletVisibility = visible === null ? undefined : visible.length
+        ? or(isNull(mediaOutletsTable.accountId), inArray(mediaOutletsTable.accountId, visible))
+        : isNull(mediaOutletsTable.accountId);
       const contactScope = scope === "added"
         ? eq(mediaContactsTable.accountId, workspaceId)
         : scope === "saved"
-          ? sql`EXISTS (SELECT 1 FROM media_bookmarks saved WHERE saved.account_id = ${workspaceId} AND saved.contact_id = ${mediaContactsTable.id})`
+          ? and(
+            sql`EXISTS (SELECT 1 FROM media_bookmarks saved WHERE saved.account_id = ${workspaceId} AND saved.contact_id = ${mediaContactsTable.id})`,
+            visibility,
+          )
           : visibility;
       const phrase = interpretation.phrase.toLowerCase();
       const topic = interpretation.topic.toLowerCase();
@@ -2304,13 +2323,13 @@ router.get(
         ) : undefined,
         testSuppressionFallback ? undefined : notSuppressedSql(workspaceId, mediaContactsTable.firstName, mediaContactsTable.lastName, mediaContactsTable.email, mediaContactsTable.linkedinUrl, mediaOutletsTable.name),
       );
-      const outletVisibility = visible === null ? undefined : visible.length
-        ? or(isNull(mediaOutletsTable.accountId), inArray(mediaOutletsTable.accountId, visible))
-        : isNull(mediaOutletsTable.accountId);
       const outletScope = scope === "added"
         ? eq(mediaOutletsTable.accountId, workspaceId)
         : scope === "saved"
-          ? sql`EXISTS (SELECT 1 FROM media_bookmarks saved WHERE saved.account_id = ${workspaceId} AND saved.outlet_id = ${mediaOutletsTable.id})`
+          ? and(
+            sql`EXISTS (SELECT 1 FROM media_bookmarks saved WHERE saved.account_id = ${workspaceId} AND saved.outlet_id = ${mediaOutletsTable.id})`,
+            outletVisibility,
+          )
           : outletVisibility;
       const outletPredicate = and(isNull(mediaOutletsTable.deletedAt), outletScope,
         resultType === "contacts" ? sql`false` : undefined,

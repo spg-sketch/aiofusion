@@ -381,6 +381,7 @@ function MediaDatabasePage() {
   const canSeeDiscoveries = Boolean(session);
   const canEditDiscoveryInstructions = isMaster && (!session?.membershipRole || session.membershipRole === "owner");
   const [activeTab, setActiveTab] = useState<"outlets" | "contacts" | "discoveries" | "corrections" | "instructions">("contacts");
+  const [internalToolsOpen, setInternalToolsOpen] = useState(false);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [allCategories, setAllCategories] = useState<string[]>([]);
@@ -438,6 +439,7 @@ function MediaDatabasePage() {
 
   const [showContactModal, setShowContactModal] = useState(false);
   const [showContactProfile, setShowContactProfile] = useState<Contact | null>(null);
+  const [sourceReviewContact, setSourceReviewContact] = useState<Contact | null>(null);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [contactForm, setContactForm] = useState({
     outletId: "", firstName: "", lastName: "", role: "", email: "", phone: "", notes: "",
@@ -1064,7 +1066,7 @@ function MediaDatabasePage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not check this source.");
       await loadData();
-      setShowContactProfile((current) => current?.id === contact.id ? { ...current, sourceCheck: data.sourceCheck, sourceStatus: data.sourceCheck.outcome } : current);
+      setSourceReviewContact((current) => current?.id === contact.id ? { ...current, sourceCheck: data.sourceCheck, sourceStatus: data.sourceCheck.outcome } : current);
     } catch (error) { setSourceActionError(error instanceof Error ? error.message : "Could not check this source."); }
     setSourceCheckingId(null);
   };
@@ -1079,7 +1081,7 @@ function MediaDatabasePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not apply these updates.");
-      setShowContactProfile(null);
+      setSourceReviewContact(null);
       await loadData();
     } catch (error) { setSourceActionError(error instanceof Error ? error.message : "Could not apply these updates."); }
     setSourceCheckingId(null);
@@ -1294,6 +1296,7 @@ function MediaDatabasePage() {
 
   const outletOptions = outlets.map((o) => ({ id: o.id, name: o.name })).sort((a, b) => a.name.localeCompare(b.name));
   const showCollectionTools = activeTab === "outlets" || activeTab === "contacts";
+  const showInternalTools = showManagement && internalToolsOpen;
   const visibleSearchResults = searchResults.filter((result) => searchType === "contacts"
     ? result.type === "contact"
     : result.type === "outlet");
@@ -1340,7 +1343,7 @@ function MediaDatabasePage() {
            <button onClick={() => { setShowManagement(false); setActiveTab("contacts"); setSearchScope("all"); setSearchType("contacts"); setSearchPage(1); setResultMode("search"); setResultRefreshToken((value) => value + 1); }} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: "rgba(255,255,255,0.45)", color: "#ffffff" }}>Search all media</button>
            <button onClick={() => {
              if (showManagement) openSavedMedia("contacts");
-             else { setShowManagement(true); setResultMode("none"); }
+             else { setShowManagement(true); setResultMode("none"); setActiveTab("contacts"); setInternalToolsOpen(false); }
            }} className="rounded-lg px-3 py-2 text-[12px] font-semibold" style={{ background: vars.accent, color: "#ffffff" }}>{showManagement ? "Back to My Media Database" : "Manage my records"}</button>
          </div>
       </div>
@@ -1400,7 +1403,8 @@ function MediaDatabasePage() {
              {isMaster && <button disabled={exportBusy} onClick={() => void exportMediaCsv("full", searchType)} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Export full CSV</button>}
            </div>
          </div>
-          {exportError && <p role="alert" className="mb-3 rounded-lg bg-white px-3 py-2 text-[12px]" style={{ color: vars.red }}>{exportError}</p>}
+           {exportError && <p role="alert" className="mb-3 rounded-lg bg-white px-3 py-2 text-[12px]" style={{ color: vars.red }}>{exportError}</p>}
+           {searchType === "publications" && <p className="mb-3 text-[11px]" style={{ color: vars.g500 }}>Publication CSVs include linked journalist names only for contacts you have also saved.</p>}
           {!searchLoading && searchActive && searchCounts[searchType === "contacts" ? "contacts" : "outlets"] > 0 && !Array.from(savedMedia).some((key) => key.startsWith(`${searchType === "contacts" ? "contact" : "publication"}:`)) && <p className="mb-3 text-[11px]" style={{ color: vars.g500 }}>No saved {searchType} are available to export for this account.</p>}
           {visibleSearchResults.length > 0 && <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]" style={{ color: vars.g600 }}>
             <button onClick={() => toggleVisibleResultSelection(searchType)} className="underline">{visibleSearchResults.every((result) => selectedMedia.has(`${result.type === "contact" ? "contact" : "publication"}:${result.id}`)) ? "Clear visible selection" : "Select visible results"}</button>
@@ -1534,22 +1538,18 @@ function MediaDatabasePage() {
         {searchTotal > 25 && <div className="flex justify-end items-center gap-3 mt-3 text-[12px]" style={{ color: vars.navy }}><button disabled={searchPage === 1} onClick={() => { setSelectedMedia(new Set()); setSearchPage((page) => page - 1); }} className="px-3 py-1 border rounded disabled:opacity-40">Previous</button><span>Page {searchPage} of {Math.ceil(searchTotal / 25)}</span><button disabled={searchPage * 25 >= searchTotal} onClick={() => { setSelectedMedia(new Set()); setSearchPage((page) => page + 1); }} className="px-3 py-1 border rounded disabled:opacity-40">Next</button></div>}
       </section>}
 
-      {showManagement && <details open className="mb-5 rounded-2xl border bg-white p-4" style={{ borderColor: vars.g200 }}>
-        <summary className="cursor-pointer text-[13px] font-semibold" style={{ color: vars.navy }}>Manage my records</summary>
+      {showManagement && <section className="mb-5 rounded-2xl border bg-white p-4" style={{ borderColor: vars.g200 }}>
+        <h2 className="text-[18px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Manage my records</h2>
       <div className="mt-4">
        {canWriteMediaDatabase && <div className="mb-4 flex flex-wrap gap-2">
          <button onClick={openAddContact} className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold text-white" style={{ background: vars.accent }}><Plus size={13} /> Add contact</button>
          <button onClick={openAddOutlet} className="flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}><Building2 size={13} /> Add publication</button>
-         <button onClick={openImport} className="flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}><Upload size={13} /> Import CSV</button>
        </div>}
       {/* Tabs */}
       <div className="flex gap-1 mb-6 p-1 rounded-xl inline-flex" style={{ background: vars.g100 }}>
         {([
           { id: "outlets" as const, label: `Publications (${outlets.length})` },
           { id: "contacts" as const, label: `Contacts (${contacts.length})` },
-          ...(canSeeDiscoveries ? [{ id: "discoveries" as const, label: "Discoveries" }] : []),
-          ...(isMaster && canWriteMediaDatabase ? [{ id: "corrections" as const, label: `Corrections (${correctionReports.length})` }] : []),
-          ...(canEditDiscoveryInstructions ? [{ id: "instructions" as const, label: "Research instructions" }] : []),
         ]).map(({ id: t, label }) => (
           <button key={t} onClick={() => setActiveTab(t)} className="px-5 py-2 rounded-lg text-[13px] font-bold transition-all capitalize" style={{ background: activeTab === t ? "rgba(201,160,78,0.18)" : "transparent", color: activeTab === t ? "#7A5E25" : vars.g500, boxShadow: activeTab === t ? "0 1px 3px rgba(0,0,0,0.1)" : "none", border: activeTab === t ? `1px solid ${vars.gold}` : "1px solid transparent" }}>
             {label}
@@ -1557,8 +1557,22 @@ function MediaDatabasePage() {
         ))}
       </div>
 
-      {activeTab === "discoveries" && canSeeDiscoveries && <MediaDiscoveryReview onApproved={() => void loadData()} />}
-      {activeTab === "corrections" && isMaster && canWriteMediaDatabase && (
+      {(canWriteMediaDatabase || canSeeDiscoveries || canEditDiscoveryInstructions) && <details className="mb-5 rounded-xl border bg-slate-50 p-3" style={{ borderColor: vars.g200 }} open={internalToolsOpen} onToggle={(event) => {
+        const isOpen = event.currentTarget.open;
+        setInternalToolsOpen(isOpen);
+        if (!isOpen && !["outlets", "contacts"].includes(activeTab)) setActiveTab("contacts");
+      }}>
+        <summary className="cursor-pointer text-[12px] font-semibold" style={{ color: vars.g600 }}>Internal tools</summary>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {canWriteMediaDatabase && <button onClick={() => { setActiveTab("contacts"); openImport(); }} className="flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}><Upload size={13} /> Import CSV</button>}
+          {canSeeDiscoveries && <button onClick={() => setActiveTab("discoveries")} className="rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Discoveries</button>}
+          {isMaster && canWriteMediaDatabase && <button onClick={() => setActiveTab("corrections")} className="rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Corrections ({correctionReports.length})</button>}
+          {canEditDiscoveryInstructions && <button onClick={() => setActiveTab("instructions")} className="rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Research instructions</button>}
+        </div>
+      </details>}
+
+      {showInternalTools && activeTab === "discoveries" && canSeeDiscoveries && <MediaDiscoveryReview onApproved={() => void loadData()} />}
+      {showInternalTools && activeTab === "corrections" && isMaster && canWriteMediaDatabase && (
         <section>
           <div className="mb-4">
             <h2 className="text-[20px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Contact correction queue</h2>
@@ -1613,7 +1627,7 @@ function MediaDatabasePage() {
           )}
         </section>
       )}
-      {activeTab === "instructions" && canEditDiscoveryInstructions && <MediaDiscoveryInstructions />}
+      {showInternalTools && activeTab === "instructions" && canEditDiscoveryInstructions && <MediaDiscoveryInstructions />}
 
       {/* Outlets tab */}
       {activeTab === "outlets" && (
@@ -1639,7 +1653,8 @@ function MediaDatabasePage() {
           </div>}
           {exportBusy && <p role="status" className="mb-2 text-[12px]" style={{ color: vars.g500 }}>Preparing CSV download…</p>}
           {exportError && <p role="alert" className="mb-2 rounded-lg bg-white px-3 py-2 text-[12px]" style={{ color: vars.red }}>{exportError}</p>}
-          {!Array.from(savedMedia).some((key) => key.startsWith("publication:")) && <p className="mb-2 text-[11px]" style={{ color: vars.g500 }}>No saved publications are available to export for this account.</p>}
+           {!Array.from(savedMedia).some((key) => key.startsWith("publication:")) && <p className="mb-2 text-[11px]" style={{ color: vars.g500 }}>No saved publications are available to export for this account.</p>}
+           <p className="mb-2 text-[11px]" style={{ color: vars.g500 }}>Publication CSVs include linked journalist names only for contacts you have also saved.</p>
 
           {filteredOutlets.length === 0 ? (
             <div className="text-center py-16 rounded-2xl border" style={{ borderColor: vars.g200, background: "white" }}>
@@ -1766,7 +1781,6 @@ function MediaDatabasePage() {
                     <th className="text-left px-4 py-3 font-semibold hidden md:table-cell" style={{ color: vars.navy }}>Outlet</th>
                     <th className="text-left px-4 py-3 font-semibold hidden lg:table-cell" style={{ color: vars.navy }}>Email</th>
                     <th className="text-left px-4 py-3 font-semibold hidden lg:table-cell" style={{ color: vars.navy }}>Phone</th>
-                    <th className="text-left px-4 py-3 font-semibold hidden xl:table-cell" style={{ color: vars.navy }}>Notes</th>
                     <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
@@ -1776,7 +1790,7 @@ function MediaDatabasePage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <input type="checkbox" aria-label={`Select contact ${c.id}`} checked={selectedMedia.has(`contact:${c.id}`)} disabled={!selectedMedia.has(`contact:${c.id}`) && selectedMedia.size >= 25} onChange={() => toggleMediaSelection("contact", c.id)} />
-                          <p className="font-semibold" style={{ color: vars.navy }}>{`${c.firstName} ${c.lastName}`.trim()}</p>
+                          <p className="font-semibold" style={{ color: vars.navy }}>{contactDisplayName(c)}</p>
                         </div>
                          {c.outletCategory && <p className="text-[11px] font-light" style={{ color: vars.g500 }}>{c.outletCategory}</p>}
                          {recordVerificationBadge(c)}
@@ -1795,15 +1809,13 @@ function MediaDatabasePage() {
                          {c.lastVerifiedAt && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>Verified {new Date(c.lastVerifiedAt).toLocaleDateString()}</p>}
                       </td>
                       <td className="px-4 py-3 hidden lg:table-cell" style={{ color: vars.g600 }}>{c.phone}</td>
-                      <td className="px-4 py-3 hidden xl:table-cell max-w-[180px]">
-                        {c.notes && <p className="text-[11px] font-light truncate" style={{ color: vars.g500 }} title={c.notes}>{c.notes}</p>}
-                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 justify-end">
                           <button onClick={() => setShowContactProfile(c)} className="px-2 py-1 text-[11px] font-medium rounded border hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}>View Profile</button>
                             {canManageCollectionItem(c, isMaster, canWriteMediaDatabase, session?.username) && <>
+                             <button onClick={() => { setSourceActionError(""); setSourceReviewContact(c); }} className="px-2 py-1 text-[11px] font-medium rounded border hover:bg-slate-50 transition-colors whitespace-nowrap" style={{ borderColor: vars.g200, color: vars.navy }}>Review public source</button>
                              <button onClick={() => openEditContact(c)} className="p-1.5 rounded-lg hover:bg-gray-50" title="Edit"><PenLine size={13} color={vars.g400} /></button>
-                             <button onClick={() => { if (window.confirm(`Delete ${c.firstName} ${c.lastName}?`)) void deleteContact(c.id); }} disabled={deletingContactId === c.id} className="p-1.5 rounded-lg hover:bg-red-50" title="Delete"><Trash2 size={13} color={deletingContactId === c.id ? vars.g300 : vars.red} /></button>
+                             <button onClick={() => { if (window.confirm(`Delete ${contactDisplayName(c)}?`)) void deleteContact(c.id); }} disabled={deletingContactId === c.id} className="p-1.5 rounded-lg hover:bg-red-50" title="Delete"><Trash2 size={13} color={deletingContactId === c.id ? vars.g300 : vars.red} /></button>
                            </>}
                         </div>
                       </td>
@@ -1820,7 +1832,7 @@ function MediaDatabasePage() {
         </div>
       )}
       </div>
-      </details>}
+      </section>}
 
       {showCollectionTools && correctionContact && <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setCorrectionContact(null)} onKeyDown={(event) => { if (event.key === "Escape") setCorrectionContact(null); }}>
         <div role="dialog" aria-modal="true" aria-labelledby="correction-title" className="bg-white rounded-2xl max-w-lg w-full max-h-[calc(100dvh-1.5rem)] overflow-y-auto p-5" onClick={(event) => event.stopPropagation()}>
@@ -2153,32 +2165,9 @@ function MediaDatabasePage() {
                     <div>
                          <div className="flex flex-wrap items-center gap-2">
                            <span className="text-[12px] font-bold" style={{ color: vars.navy }}>Database record</span>
-                           {recordVerificationBadge(showContactProfile, false)}
                          </div>
-                         <div className="flex items-center gap-2 mt-3"><span className="text-[12px] font-bold" style={{ color: vars.navy }}>Public source health</span><span className="text-[10px] uppercase tracking-wide" style={{ color: vars.g500 }}>Page verification</span>{sourceBadge(showContactProfile)}</div>
-                      <p className="text-[11px] mt-1" style={{ color: vars.g500 }}>
-                        {!showContactProfile.sourceUrl ? "No public source is attached to this contact."
-                          : showContactProfile.sourceCheck ? `Last checked ${new Date(showContactProfile.sourceCheck.checkedAt).toLocaleString()}`
-                            : "This source has not been checked yet."}
-                      </p>
-                         {showContactProfile.sourceUrl && <p className="text-[11px] mt-1 break-all" style={{ color: vars.g600 }}>
-                           Source URL: <a href={showContactProfile.sourceUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>{showContactProfile.sourceUrl}</a>
-                         </p>}
                     </div>
-                    {canManageCollectionItem(showContactProfile, isMaster, canWriteMediaDatabase, session?.username) && showContactProfile.sourceUrl && <button onClick={() => void recheckSource(showContactProfile)} disabled={sourceCheckingId === showContactProfile.id} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}><RefreshCw size={13} className={sourceCheckingId === showContactProfile.id ? "animate-spin" : ""} />Check source now</button>}
                   </div>
-                  {sourceActionError && <p className="text-[11px] mt-3" style={{ color: vars.red }}>{sourceActionError}</p>}
-                  {showContactProfile.sourceCheck?.outcome === "unavailable" && <p className="text-[12px] mt-3 text-red-700">{showContactProfile.sourceCheck.errorCode === "page_missing" ? "The saved page could not be found." : "The saved page could not be reached."} Your contact details have not been changed.</p>}
-                  {!!showContactProfile.sourceCheck?.differences.length && (
-                    <div className="mt-3 space-y-2">
-                      {showContactProfile.sourceCheck.differences.map((difference) => <div key={difference.field} className="text-[12px] rounded-lg bg-white border px-3 py-2" style={{ borderColor: vars.g200 }}>
-                        <span className="font-semibold capitalize">{difference.field}: </span>
-                        {difference.kind === "removed" && !difference.observedValue ? `The saved ${difference.field} is no longer shown on the source.`
-                          : <>{difference.storedValue || "(blank)"} → {difference.observedValue}</>}
-                      </div>)}
-                      {canManageCollectionItem(showContactProfile, isMaster, canWriteMediaDatabase, session?.username) && !showContactProfile.sourceCheck.reviewedAt && showContactProfile.sourceCheck.differences.some((difference) => difference.supported && difference.observedValue) && <button onClick={() => void approveSourceUpdates(showContactProfile)} disabled={sourceCheckingId === showContactProfile.id} className="px-3 py-2 rounded-lg text-white text-[12px] font-semibold" style={{ background: vars.accent }}>Accept supported updates</button>}
-                    </div>
-                  )}
                 </div>
               </div>
               <RecommendationCard
@@ -2187,8 +2176,8 @@ function MediaDatabasePage() {
                   score: 100, // Or whatever placeholder score since it's just a profile view
                   reasons: [],
                   contact: contactDisplayName(showContactProfile) === "Name not available"
-                    ? { ...showContactProfile, firstName: "Name not available", lastName: "" }
-                    : showContactProfile,
+                    ? { ...showContactProfile, firstName: "Name not available", lastName: "", sourceUrl: "", sourceRef: "", sourceStatus: undefined, sourceCheck: undefined, lastVerifiedAt: undefined }
+                    : { ...showContactProfile, sourceUrl: "", sourceRef: "", sourceStatus: undefined, sourceCheck: undefined, lastVerifiedAt: undefined },
                 }}
                 isShortlist={true}
                  onEdit={canManageCollectionItem(showContactProfile, isMaster, canWriteMediaDatabase, session?.username) ? () => {
@@ -2200,6 +2189,58 @@ function MediaDatabasePage() {
             </div>
             <div className="px-6 py-4 border-t flex justify-end bg-slate-50" style={{ borderColor: vars.g200 }}>
               <button onClick={() => setShowContactProfile(null)} className="px-4 py-2 rounded-lg text-[13px] font-semibold bg-white border shadow-sm hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCollectionTools && sourceReviewContact && canManageCollectionItem(sourceReviewContact, isMaster, canWriteMediaDatabase, session?.username) && (
+        <div role="dialog" aria-modal="true" aria-label="Review public source" className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setSourceReviewContact(null)}>
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-xl" onClick={(event) => event.stopPropagation()}>
+            <div className="px-6 py-4 flex items-center justify-between border-b" style={{ borderColor: vars.g200, background: vars.g50 }}>
+              <div>
+                <h2 className="text-[16px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Review public source</h2>
+                <p className="mt-1 text-[12px]" style={{ color: vars.g500 }}>{contactDisplayName(sourceReviewContact)}</p>
+              </div>
+              <button aria-label="Close public source review" onClick={() => setSourceReviewContact(null)} className="text-[20px] leading-none px-2 text-slate-400 hover:text-slate-700 transition-colors">&times;</button>
+            </div>
+            <div className="overflow-y-auto p-5">
+              <section className="rounded-xl border p-4" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[12px] font-bold" style={{ color: vars.navy }}>Public source health</span>
+                      <span className="text-[10px] uppercase tracking-wide" style={{ color: vars.g500 }}>Page verification</span>
+                      {sourceBadge(sourceReviewContact)}
+                    </div>
+                    <p className="text-[11px] mt-1" style={{ color: vars.g500 }}>
+                      {!sourceReviewContact.sourceUrl ? "No public source is attached to this contact."
+                        : sourceReviewContact.sourceCheck ? `Last checked ${new Date(sourceReviewContact.sourceCheck.checkedAt).toLocaleString()}`
+                          : "This source has not been checked yet."}
+                    </p>
+                    {sourceReviewContact.sourceUrl && <p className="text-[11px] mt-1 break-all" style={{ color: vars.g600 }}>
+                      Source URL: <a href={sourceReviewContact.sourceUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>{sourceReviewContact.sourceUrl}</a>
+                    </p>}
+                  </div>
+                  {sourceReviewContact.sourceUrl && <button onClick={() => void recheckSource(sourceReviewContact)} disabled={sourceCheckingId === sourceReviewContact.id} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border bg-white text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}><RefreshCw size={13} className={sourceCheckingId === sourceReviewContact.id ? "animate-spin" : ""} />Check source now</button>}
+                </div>
+                {sourceActionError && <p role="alert" className="text-[11px] mt-3" style={{ color: vars.red }}>{sourceActionError}</p>}
+                {sourceReviewContact.sourceCheck?.outcome === "unavailable" && <p className="text-[12px] mt-3 text-red-700">{sourceReviewContact.sourceCheck.errorCode === "page_missing" ? "The saved page could not be found." : "The saved page could not be reached."} Your contact details have not been changed.</p>}
+                {sourceReviewContact.sourceCheck?.observedEvidence?.excerpt && <p className="mt-3 rounded-lg bg-white border px-3 py-2 text-[11px]" style={{ borderColor: vars.g200, color: vars.g600 }}>Page check evidence: {sourceReviewContact.sourceCheck.observedEvidence.excerpt}</p>}
+                {!!sourceReviewContact.sourceCheck?.differences.length && (
+                  <div className="mt-3 space-y-2">
+                    {sourceReviewContact.sourceCheck.differences.map((difference) => <div key={difference.field} className="text-[12px] rounded-lg bg-white border px-3 py-2" style={{ borderColor: vars.g200 }}>
+                      <span className="font-semibold capitalize">{difference.field}: </span>
+                      {difference.kind === "removed" && !difference.observedValue ? `The saved ${difference.field} is no longer shown on the source.`
+                        : <>{difference.storedValue || "(blank)"} → {difference.observedValue}</>}
+                    </div>)}
+                    {!sourceReviewContact.sourceCheck.reviewedAt && sourceReviewContact.sourceCheck.differences.some((difference) => difference.supported && difference.observedValue) && <button onClick={() => void approveSourceUpdates(sourceReviewContact)} disabled={sourceCheckingId === sourceReviewContact.id} className="px-3 py-2 rounded-lg text-white text-[12px] font-semibold" style={{ background: vars.accent }}>Accept supported updates</button>}
+                  </div>
+                )}
+              </section>
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end bg-slate-50" style={{ borderColor: vars.g200 }}>
+              <button onClick={() => setSourceReviewContact(null)} className="px-4 py-2 rounded-lg text-[13px] font-semibold bg-white border shadow-sm hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}>Close</button>
             </div>
           </div>
         </div>

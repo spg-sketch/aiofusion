@@ -376,6 +376,174 @@ describe("media export route regressions", () => {
     expect(response.text).not.toContain("555-1212");
   });
 
+  it("rechecks contact and outlet ownership for saved bookmarks, search, outlet lists, and CSV exports", async () => {
+    const workspace = "visibility-revocation-workspace";
+    const [sharedOutlet] = await db.insert(mediaOutletsTable).values({
+      name: "Visible Shared Outlet",
+      accountId: null,
+    }).returning();
+    const [privateOutlet] = await db.insert(mediaOutletsTable).values({
+      name: "Revoked Private Outlet",
+      accountId: "visibility-revocation-other",
+    }).returning();
+    const [privateContact, hiddenOutletContact] = await db.insert(mediaContactsTable).values([
+      {
+        firstName: "Revoked",
+        lastName: "Contact",
+        outletId: sharedOutlet!.id,
+        accountId: "visibility-revocation-other",
+      },
+      {
+        firstName: "Hidden",
+        lastName: "Outlet Contact",
+        outletId: privateOutlet!.id,
+        accountId: workspace,
+      },
+    ]).returning();
+    const [privatePublication] = await db.insert(mediaOutletsTable).values({
+      name: "Revoked Private Publication",
+      accountId: "visibility-revocation-other",
+    }).returning();
+    await db.insert(mediaBookmarksTable).values([
+      { accountId: workspace, contactId: privateContact!.id, outletId: null },
+      { accountId: workspace, contactId: hiddenOutletContact!.id, outletId: null },
+      { accountId: workspace, contactId: null, outletId: privateOutlet!.id },
+      { accountId: workspace, contactId: null, outletId: privatePublication!.id },
+    ]);
+
+    const bookmarks = await mediaRequest("GET", "/api/store/media-db/bookmarks", workspace);
+    const savedContacts = await mediaRequest("GET", "/api/store/media-db/search?type=contacts&scope=saved", workspace);
+    const savedPublications = await mediaRequest("GET", "/api/store/media-db/search?type=publications&scope=saved", workspace);
+    const legacyOutlets = await mediaRequest("GET", "/api/store/media-db/outlets?scope=saved", workspace);
+    const contactsCsv = await mediaExportRequest(workspace, { scope: "saved", type: "contacts" });
+    const publicationsCsv = await mediaExportRequest(workspace, { scope: "saved", type: "publications" });
+
+    expect(bookmarks.json.total).toBe(1);
+    const bookmarkContact = bookmarks.json.bookmarks[0]!.contact;
+    expect(bookmarks.json.bookmarks[0]!.contactId).toBe(hiddenOutletContact!.id);
+    expect(bookmarkContact.outletName).toBeNull();
+    expect(bookmarkContact.outletWebsite).toBe("");
+    expect(bookmarkContact.outletDescription).toBeNull();
+    expect(savedContacts.json.counts.contacts).toBe(1);
+    const savedContactResult = savedContacts.json.results.find(
+      (result: { type: string; id: number }) => result.type === "contact" && result.id === hiddenOutletContact!.id,
+    );
+    expect(savedContactResult).toBeDefined();
+    expect(savedContactResult.contact.outletName).toBeNull();
+    expect(savedContactResult.contact.outletWebsite).toBeNull();
+    expect(savedContactResult.contact.outletDescription).toBeNull();
+    expect(savedPublications.json.counts.outlets).toBe(0);
+    expect(legacyOutlets.json.total).toBe(0);
+    expect(contactsCsv.status).toBe(200);
+    expect(contactsCsv.text).not.toContain("Revoked");
+    expect(contactsCsv.text).toContain("Hidden");
+    expect(contactsCsv.text).not.toContain("Revoked Private Outlet");
+    expect(contactsCsv.text).not.toContain("Revoked Private");
+    expect(publicationsCsv.status).toBe(200);
+    expect(publicationsCsv.text).not.toContain("Revoked Private");
+    expect(publicationsCsv.text).not.toContain("Revoked Contact");
+  });
+
+  it("exports outlet website and description for saved contacts only when the outlet is visible", async () => {
+    const workspace = "contact-csv-outlet-metadata";
+    const [visibleOutlet, hiddenOutlet] = await db.insert(mediaOutletsTable).values([
+      {
+        name: "CSV Visible Outlet",
+        website: "https://visible.example.test/",
+        description: "Visible outlet details.",
+        accountId: workspace,
+      },
+      {
+        name: "CSV Hidden Outlet",
+        website: "https://hidden.example.test/",
+        description: "Confidential hidden outlet details.",
+        accountId: "contact-csv-other",
+      },
+    ]).returning();
+    const [visibleContact, hiddenOutletContact] = await db.insert(mediaContactsTable).values([
+      { firstName: "Visible", lastName: "CSV Reporter", outletId: visibleOutlet!.id, accountId: workspace },
+      { firstName: "Shared", lastName: "CSV Reporter", outletId: hiddenOutlet!.id, accountId: null },
+    ]).returning();
+    await db.insert(mediaBookmarksTable).values([
+      { accountId: workspace, contactId: visibleContact!.id, outletId: null },
+      { accountId: workspace, contactId: hiddenOutletContact!.id, outletId: null },
+    ]);
+
+    const response = await mediaExportRequest(workspace, { scope: "saved", type: "contacts" });
+    const selectedResponse = await mediaExportRequest(workspace, {
+      scope: "selected",
+      type: "contacts",
+      ids: [visibleContact!.id],
+    });
+    const header = response.text.split("\r\n")[0]!;
+    expect(response.status).toBe(200);
+    expect(selectedResponse.status).toBe(200);
+    expect(header).toContain('"Outlet Website"');
+    expect(header).toContain('"Outlet Description"');
+    expect(response.text).toContain("https://visible.example.test/");
+    expect(response.text).toContain("Visible outlet details.");
+    expect(selectedResponse.text.split("\r\n")[0]).toBe(header);
+    expect(selectedResponse.text).toContain("https://visible.example.test/");
+    expect(selectedResponse.text).toContain("Visible outlet details.");
+    expect(response.text).not.toContain("https://hidden.example.test/");
+    expect(response.text).not.toContain("Confidential hidden outlet details.");
+  });
+
+  it("includes only independently saved visible linked journalists in saved and selected publication CSVs", async () => {
+    const workspace = "publication-csv-journalist-isolation";
+    const [publication] = await db.insert(mediaOutletsTable).values({
+      name: "Journalist Isolation Publication",
+      accountId: workspace,
+    }).returning();
+    const [savedContact, unsavedContact, privateContact] = await db.insert(mediaContactsTable).values([
+      {
+        firstName: "Independently",
+        lastName: "Saved",
+        email: "independently-saved@example.test",
+        outletId: publication!.id,
+        accountId: workspace,
+      },
+      {
+        firstName: "Publication",
+        lastName: "Only",
+        email: "publication-only@example.test",
+        outletId: publication!.id,
+        accountId: workspace,
+      },
+      {
+        firstName: "No",
+        lastName: "Visibility",
+        email: "private-linked@example.test",
+        outletId: publication!.id,
+        accountId: "publication-csv-other",
+      },
+    ]).returning();
+    await db.insert(mediaBookmarksTable).values([
+      { accountId: workspace, contactId: null, outletId: publication!.id },
+      { accountId: workspace, contactId: savedContact!.id, outletId: null },
+    ]);
+
+    const saved = await mediaExportRequest(workspace, { scope: "saved", type: "publications" });
+    const selected = await mediaExportRequest(workspace, {
+      scope: "selected",
+      type: "publications",
+      ids: [publication!.id],
+    });
+    const expectedHeader = '"Publication","Sector","Region","Description","Website","LinkedIn URL","Source reach value","Verified authority","Linked journalist names"';
+    expect(saved.status).toBe(200);
+    expect(selected.status).toBe(200);
+    expect(saved.text.split("\r\n")[0]).toBe(expectedHeader);
+    expect(selected.text.split("\r\n")[0]).toBe(expectedHeader);
+    for (const response of [saved, selected]) {
+      expect(response.text).toContain("Independently Saved");
+      expect(response.text).not.toContain("Publication Only");
+      expect(response.text).not.toContain("No Visibility");
+      expect(response.text).not.toContain("independently-saved@example.test");
+      expect(response.text).not.toContain("publication-only@example.test");
+      expect(response.text).not.toContain("private-linked@example.test");
+    }
+  });
+
   it("rejects oversized and suppressed selected exports and uses publication export headers", async () => {
     const oversized = await mediaExportRequest("selected-export-workspace", {
       scope: "selected", type: "contacts", ids: Array.from({ length: 26 }, (_, index) => index + 1),
@@ -405,7 +573,7 @@ describe("media export route regressions", () => {
     expect(suppressed.status).toBe(403);
     expect(publicationExport.status).toBe(200);
     expect(publicationExport.text.split("\r\n")[0]).toBe(
-      '"Publication","Sector","Region","Description","Website","LinkedIn URL","Source reach value","Verified authority"',
+      '"Publication","Sector","Region","Description","Website","LinkedIn URL","Source reach value","Verified authority","Linked journalist names"',
     );
     expect(publicationExport.text).not.toContain("not-selected@example.test");
   });
