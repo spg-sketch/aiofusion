@@ -6,6 +6,9 @@ const state = vi.hoisted(() => ({
   multiplier: null as string | null,
   baseLimit: 50,
   fairUsageFilter: null as unknown,
+  spendQueryCount: 0,
+  betaRoots: {} as Record<string, string>,
+  billingRoots: {} as Record<string, string>,
 }));
 
 const sendQuotaBreachAlert = vi.hoisted(() => vi.fn(async () => undefined));
@@ -36,7 +39,10 @@ vi.mock("@workspace/db", () => {
               state.fairUsageFilter = condition;
               return Promise.resolve([{ count: state.callCount }]);
             }
-            if ("spent" in selection) return Promise.resolve([{ spent: state.spentGbp }]);
+            if ("spent" in selection) {
+              state.spendQueryCount += 1;
+              return Promise.resolve([{ spent: state.spentGbp }]);
+            }
             return Promise.resolve([]);
           },
           groupBy: () => [],
@@ -61,6 +67,11 @@ vi.mock("drizzle-orm", () => ({
 
 vi.mock("./billing", () => ({
   getProjectActionLimit: vi.fn(async () => state.baseLimit),
+  resolveBillingSlug: vi.fn(async (slug: string) => state.billingRoots[slug] ?? slug),
+  getBillingState: vi.fn(async (slug: string) => ({ slug })),
+  getBetaTrialSummary: vi.fn((billing: { slug: string }) => ({
+    status: state.betaRoots[billing?.slug] ?? "exempt",
+  })),
 }));
 
 vi.mock("./notify-email", () => ({
@@ -78,6 +89,9 @@ describe("fair usage enforcement", () => {
     state.multiplier = null;
     state.baseLimit = 50;
     state.fairUsageFilter = null;
+    state.spendQueryCount = 0;
+    state.betaRoots = {};
+    state.billingRoots = {};
   });
 
   afterEach(() => {
@@ -155,12 +169,48 @@ describe("fair usage enforcement", () => {
       allowed: false,
       spentGbp: 50,
       limitGbp: 50,
+      monitoringOnly: false,
     });
     expect(sendQuotaBreachAlert).not.toHaveBeenCalled();
     expect(sendSpendCapAlert).toHaveBeenCalledWith({
       slug: "spend-limit-account",
       spendGbp: 50,
       limitGbp: 50,
+      monitoringOnly: false,
     });
+  });
+
+  it("measures and alerts above the threshold without blocking active beta or the internal admin", async () => {
+    state.spentGbp = "63.75";
+    state.betaRoots["beta-account"] = "active";
+
+    const { checkMonthlySpendLimit } = await import("./fair-usage");
+    for (const accountId of ["beta-account", "admin"]) {
+      await expect(checkMonthlySpendLimit(accountId)).resolves.toEqual({
+        allowed: true, spentGbp: 63.75, limitGbp: 50, monitoringOnly: true,
+      });
+      expect(sendSpendCapAlert).toHaveBeenCalledWith({
+        slug: accountId, spendGbp: 63.75, limitGbp: 50, monitoringOnly: true,
+      });
+    }
+    expect(state.spendQueryCount).toBe(2);
+  });
+
+  it("inherits an active agency beta for managed clients but keeps paid and expired accounts capped", async () => {
+    state.spentGbp = "52";
+    state.billingRoots["managed-client"] = "beta-agency";
+    state.betaRoots["beta-agency"] = "active";
+    state.betaRoots["expired-account"] = "expired";
+
+    const { checkMonthlySpendLimit } = await import("./fair-usage");
+    await expect(checkMonthlySpendLimit("managed-client")).resolves.toMatchObject({
+      allowed: true, spentGbp: 52, monitoringOnly: true,
+    });
+    for (const accountId of ["paid-account", "expired-account", "not-admin"]) {
+      await expect(checkMonthlySpendLimit(accountId)).resolves.toMatchObject({
+        allowed: false, spentGbp: 52, monitoringOnly: false,
+      });
+    }
+    expect(state.spendQueryCount).toBe(4);
   });
 });

@@ -28,7 +28,10 @@ export const RELEASE_STAGES = [
   ["typecheck", "pnpm run typecheck", RELEASE_STAGE_TIMEOUTS.typecheck],
   // Release checks run sequentially on this eight-CPU workspace. Use more
   // file workers here without raising the default used alongside typechecking.
-  ["api regression suite", "pnpm --filter @workspace/api-server exec vitest run --maxWorkers=4", RELEASE_STAGE_TIMEOUTS["api regression suite"]],
+  // The planner schema test starts its own PGlite instance; under four busy
+  // workers its setup can stall even though it passes when run separately.
+  // Keep it mandatory, but run it alone in the same fail-closed stage.
+  ["api regression suite", "pnpm --filter @workspace/api-server exec vitest run --maxWorkers=4 --exclude src/lib/ensure-planner-content-columns.test.ts && pnpm --filter @workspace/api-server exec vitest run src/lib/ensure-planner-content-columns.test.ts --maxWorkers=1", RELEASE_STAGE_TIMEOUTS["api regression suite"]],
   ["web regression suite", "pnpm --filter @workspace/aio-fusion run test", RELEASE_STAGE_TIMEOUTS["web regression suite"]],
   ["operational script suite", "pnpm --filter @workspace/scripts run test", RELEASE_STAGE_TIMEOUTS["operational script suite"]],
   ["API production build", "pnpm --filter @workspace/api-server run build", RELEASE_STAGE_TIMEOUTS["API production build"]],

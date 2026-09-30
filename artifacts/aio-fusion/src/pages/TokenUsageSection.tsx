@@ -14,6 +14,7 @@ type TokenUsagePayload = {
   thirtyDayCosts?: Record<string, number>;
   currentMonthSpends?: Record<string, number>;
   spendLimits?: Record<string, number | null>;
+  spendMonitoringOnly?: Record<string, boolean>;
   defaultLimit?: number;
   defaultMonthlySpendLimitGbp?: number;
 };
@@ -76,7 +77,7 @@ export function TokenUsageSection({ onViewAccount }: { onViewAccount?: (slug: st
 
   const {
     rows, dailyRows, usersByAccount, statusByAccount, freeAccessByAccount,
-    spikeFlags, thirtyDayCosts, currentMonthSpends, spendLimits,
+    spikeFlags, thirtyDayCosts, currentMonthSpends, spendLimits, spendMonitoringOnly,
     defaultLimit, defaultMonthlySpendLimitGbp
   } = data;
 
@@ -204,18 +205,20 @@ export function TokenUsageSection({ onViewAccount }: { onViewAccount?: (slug: st
   function renderSpendLimitCell(slug: string) {
     const limit = effectiveSpendLimit(slug);
     const spent = currentMonthSpends?.[slug] ?? 0;
+    const monitoringOnly = spendMonitoringOnly?.[slug] === true;
     const unlimited = limit === null;
     const pct = unlimited ? 0 : Math.min(100, (spent / limit) * 100);
     const nearLimit = !unlimited && pct >= 80;
     const overLimit = !unlimited && spent >= limit;
-    const barColor = overLimit ? "#EF4444" : nearLimit ? "#F59E0B" : "#22C55E";
+    const barColor = overLimit && !monitoringOnly ? "#EF4444" : nearLimit ? "#F59E0B" : "#22C55E";
 
     return (
       <div className="min-w-[140px]">
         <div className="flex items-center gap-1.5 mb-0.5">
-          <span className="text-[12px] font-semibold" style={{ color: overLimit ? "#EF4444" : ink }}>£{spent.toFixed(2)}</span>
+          <span className="text-[12px] font-semibold" style={{ color: overLimit && !monitoringOnly ? "#EF4444" : ink }}>£{spent.toFixed(2)}</span>
           <span className="text-[11px]" style={{ color: vars.g400 }}>/ {unlimited ? "no limit" : `£${limit.toFixed(0)}`}</span>
-          {overLimit && <span className="inline-flex items-center gap-0.5 text-[10px] font-bold" style={{ color: "#EF4444" }}><AlertTriangle size={9} /> Over</span>}
+          {monitoringOnly && <span className="text-[10px] font-bold text-amber-700">Monitoring only</span>}
+          {overLimit && <span className="inline-flex items-center gap-0.5 text-[10px] font-bold" style={{ color: monitoringOnly ? "#92400E" : "#EF4444" }}><AlertTriangle size={9} /> {monitoringOnly ? "Above alert" : "Over"}</span>}
         </div>
         {!unlimited && (
           <div className="w-full rounded-full h-1.5" style={{ background: vars.g200 }}>
@@ -265,7 +268,12 @@ export function TokenUsageSection({ onViewAccount }: { onViewAccount?: (slug: st
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
             <h2 className="text-base font-bold mb-1" style={{ color: ink }}>Monthly spend limit - {spendLimitSlug}</h2>
-            <p className="text-sm mb-4 text-gray-500">Set maximum GBP. 0 for no limit, blank for default (£{systemDefault}).</p>
+            <p className="text-sm mb-4 text-gray-500">
+              {spendMonitoringOnly?.[spendLimitSlug]
+                ? "This account is in monitoring-only mode. The value sets an alert threshold; it will not block AI requests while the beta is active or for internal admin use. "
+                : "Set the maximum GBP allowed in a calendar month. "}
+              Enter 0 for no threshold, or leave blank for the default (£{systemDefault}).
+            </p>
             <input type="number" min="0" step="5" value={spendLimitValue} onChange={e => setSpendLimitValue(e.target.value)} placeholder={`e.g. ${systemDefault}`} className="w-full border rounded-lg px-3 py-2 text-sm mb-3" />
             {spendLimitError && <p className="text-xs mb-2 text-red-700">{spendLimitError}</p>}
             <div className="flex gap-2 justify-end">

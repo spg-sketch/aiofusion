@@ -46,6 +46,7 @@ export function TokenUsageAdminPage({
   thirtyDayCosts,
   currentMonthSpends,
   spendLimits,
+  spendMonitoringOnly,
   defaultLimit,
   defaultMonthlySpendLimitGbp,
   loading,
@@ -62,6 +63,7 @@ export function TokenUsageAdminPage({
   thirtyDayCosts?: Record<string, number>;
   currentMonthSpends?: Record<string, number>;
   spendLimits?: Record<string, number | null>;
+  spendMonitoringOnly?: Record<string, boolean>;
   defaultLimit?: number;
   defaultMonthlySpendLimitGbp?: number;
   loading: boolean;
@@ -242,25 +244,27 @@ export function TokenUsageAdminPage({
   function renderSpendLimitCell(slug: string) {
     const limit = effectiveSpendLimit(slug);
     const spent = currentMonthSpends?.[slug] ?? 0;
+    const monitoringOnly = spendMonitoringOnly?.[slug] === true;
     const unlimited = limit === null;
     const pct = unlimited ? 0 : Math.min(100, (spent / limit) * 100);
     const nearLimit = !unlimited && pct >= 80;
     const overLimit = !unlimited && spent >= limit;
 
-    const barColor = overLimit ? "#EF4444" : nearLimit ? "#F59E0B" : "#22C55E";
+    const barColor = overLimit && !monitoringOnly ? "#EF4444" : nearLimit ? "#F59E0B" : "#22C55E";
 
     return (
       <div className="min-w-[140px]">
         <div className="flex items-center gap-1.5 mb-0.5">
-          <span className="text-[12px] font-semibold" style={{ color: overLimit ? "#EF4444" : ink }}>
+          <span className="text-[12px] font-semibold" style={{ color: overLimit && !monitoringOnly ? "#EF4444" : ink }}>
             £{spent.toFixed(2)}
           </span>
           <span className="text-[11px]" style={{ color: vars.g400 }}>
             / {unlimited ? "no limit" : `£${limit.toFixed(0)}`}
           </span>
+          {monitoringOnly && <span className="text-[10px] font-bold" style={{ color: "#92400E" }}>Monitoring only</span>}
           {overLimit && (
-            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold" style={{ color: "#EF4444" }}>
-              <AlertTriangle size={9} /> Over
+            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold" style={{ color: monitoringOnly ? "#92400E" : "#EF4444" }}>
+              <AlertTriangle size={9} /> {monitoringOnly ? "Above alert" : "Over"}
             </span>
           )}
         </div>
@@ -386,7 +390,7 @@ export function TokenUsageAdminPage({
         <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
           <div>
             <h1 className="aio-type-page-title mb-1">Token Usage</h1>
-            <p className="aio-type-body" style={{ color: vars.g500 }}>Estimated Anthropic / OpenAI API cost by account. Spike badges flag accounts whose last-7-day content AI usage is 3× above the prior 7 days. Monthly spend caps block AI requests when exceeded.</p>
+            <p className="aio-type-body" style={{ color: vars.g500 }}>Estimated Anthropic / OpenAI API cost by account. Spike badges flag accounts whose last-7-day content AI usage is 3× above the prior 7 days. Monthly caps block paid accounts when exceeded; active beta and internal admin accounts are monitored without blocking.</p>
           </div>
           <button
             onClick={onRefresh}
@@ -462,7 +466,10 @@ export function TokenUsageAdminPage({
             <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
               <h2 className="text-[16px] font-bold mb-1" style={{ color: ink }}>Monthly spend limit - {spendLimitSlug}</h2>
               <p className="text-[13px] mb-4" style={{ color: vars.g500 }}>
-                Set the maximum GBP this account may spend on AI calls in a calendar month. When the limit is hit, all AI endpoints return a clear error until the next month. Enter <strong>0</strong> to remove the cap, or leave blank to restore the system default (£{systemDefault}/month).
+                 {spendMonitoringOnly?.[spendLimitSlug]
+                   ? "This account is in monitoring-only mode. The value sets an alert threshold and does not block AI requests while beta is active or for internal admin use. "
+                   : "Set the maximum GBP this account may spend on AI calls in a calendar month. Requests are blocked at the cap. "}
+                 Enter <strong>0</strong> to remove the threshold, or leave blank to restore the system default (£{systemDefault}/month).
               </p>
               <input
                 type="number"

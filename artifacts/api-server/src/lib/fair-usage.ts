@@ -2,7 +2,8 @@ import { db, tokenUsageTable, platformMetaTable } from "@workspace/db";
 import { and, gte, lt, sql, eq, inArray } from "drizzle-orm";
 import { logger } from "./logger";
 import { sendSpikeAlert, sendSpendCapAlert } from "./notify-email";
-import { getProjectActionLimit } from "./billing";
+import { getBillingState, getBetaTrialSummary, getProjectActionLimit, resolveBillingSlug } from "./billing";
+import { DEFAULT_ADMIN_USERNAME } from "./platform-auth";
 
 export const DEFAULT_FAIR_USAGE_LIMIT = 50;
 export const SPIKE_RATIO_THRESHOLD = 3;
@@ -13,7 +14,8 @@ export const FAIR_USAGE_ENFORCEMENT_ENABLED = process.env.FAIR_USAGE_ENFORCEMENT
 
 // Default monthly GBP cap per account. Can be overridden per-account by an
 // admin via platform_meta key `spendLimit:monthly:gbp:{slug}`.
-// Set to null to disable the cap system-wide (not recommended).
+// Beta trials and the internal admin workspace measure this threshold without
+// enforcing it; paid and expired accounts still use their configured cap.
 export const DEFAULT_MONTHLY_SPEND_LIMIT_GBP = 50;
 
 // Cooldown: only send one spike email per account per hour (in-process)
@@ -121,19 +123,34 @@ export async function checkFairUsage(accountId: string, projectId?: string | nul
   }
 }
 
-// Checks whether the account has exceeded its monthly GBP spending limit for
-// the current calendar month. Returns the spend and limit for display purposes.
-// When limitGbp is null the account has no cap and is always allowed.
+export async function isSpendCapMonitoringOnly(accountId: string): Promise<boolean> {
+  if (accountId.toLowerCase() === DEFAULT_ADMIN_USERNAME) return true;
+  try {
+    const billingSlug = await resolveBillingSlug(accountId);
+    return getBetaTrialSummary(await getBillingState(billingSlug)).status === "active";
+  } catch (err) {
+    // An unavailable billing lookup must not grant a new exemption.
+    logger.warn({ err, accountId }, "fair-usage: could not resolve beta spend monitoring status");
+    return false;
+  }
+}
+
+// Checks the current calendar month's GBP spend. During an active beta trial
+// (including managed clients) and for the internal admin workspace, retain the
+// configured threshold for reporting/alerts but do not block provider requests.
+// When limitGbp is null the account has no configured cap.
 export async function checkMonthlySpendLimit(accountId: string): Promise<{
   allowed: boolean;
   spentGbp: number;
   limitGbp: number | null;
+  monitoringOnly: boolean;
 }> {
   try {
+    const monitoringOnly = await isSpendCapMonitoringOnly(accountId);
     const limitGbp = await getMonthlySpendLimitGbp(accountId);
-    if (limitGbp === null) {
+    if (limitGbp === null && !monitoringOnly) {
       // Explicitly unlimited - skip the DB query
-      return { allowed: true, spentGbp: 0, limitGbp: null };
+      return { allowed: true, spentGbp: 0, limitGbp: null, monitoringOnly: false };
     }
 
     const now = new Date();
@@ -152,12 +169,15 @@ export async function checkMonthlySpendLimit(accountId: string): Promise<{
       );
 
     const spentGbp = parseFloat(result[0]?.spent ?? "0");
-    const allowed = spentGbp < limitGbp;
+    const overThreshold = limitGbp !== null && spentGbp >= limitGbp;
+    const allowed = monitoringOnly || !overThreshold;
 
-    if (!allowed) {
+    if (overThreshold) {
       logger.warn(
-        { accountId, spentGbp: spentGbp.toFixed(4), limitGbp },
-        "fair-usage: account over monthly GBP spend limit - returning 429",
+        { accountId, spentGbp: spentGbp.toFixed(4), limitGbp, monitoringOnly },
+        monitoringOnly
+          ? "fair-usage: account over monthly GBP spend threshold - monitoring only"
+          : "fair-usage: account over monthly GBP spend limit - returning 429",
       );
       const lastSent = spendLimitCooldown.get(accountId) ?? 0;
       if (Date.now() - lastSent >= SPEND_LIMIT_COOLDOWN_MS) {
@@ -165,15 +185,16 @@ export async function checkMonthlySpendLimit(accountId: string): Promise<{
         void sendSpendCapAlert({
           slug: accountId,
           spendGbp: spentGbp,
-          limitGbp,
+          limitGbp: limitGbp!,
+          monitoringOnly,
         });
       }
     }
 
-    return { allowed, spentGbp, limitGbp };
+    return { allowed, spentGbp, limitGbp, monitoringOnly };
   } catch (err) {
     logger.warn({ err, accountId }, "fair-usage: checkMonthlySpendLimit DB error - allowing through");
-    return { allowed: true, spentGbp: 0, limitGbp: DEFAULT_MONTHLY_SPEND_LIMIT_GBP };
+    return { allowed: true, spentGbp: 0, limitGbp: DEFAULT_MONTHLY_SPEND_LIMIT_GBP, monitoringOnly: false };
   }
 }
 

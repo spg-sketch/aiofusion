@@ -4355,7 +4355,9 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
       const reservationIds = await reserveJournalistCoverageUsageBatch({
         accountId,
         projectId,
-        limitGbp: spend.limitGbp,
+        // Monitoring-only beta/admin spending still creates measured usage
+        // reservations, but must not reject a whole batch at the old cap.
+        limitGbp: spend.monitoringOnly ? null : spend.limitGbp,
         callCount: unsuppressedRows.length,
       });
       const reservations = reservationIds.map((id) => ({ id, attempted: false }));

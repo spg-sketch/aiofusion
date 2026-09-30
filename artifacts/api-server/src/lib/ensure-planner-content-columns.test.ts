@@ -19,7 +19,7 @@ describe("ensurePlannerContentColumns", () => {
   beforeAll(async () => {
     await db.execute(sql`CREATE TABLE archive_items (id varchar PRIMARY KEY)`);
     await db.execute(sql`CREATE TABLE planner_items (id varchar PRIMARY KEY)`);
-  });
+  }, 90_000); // PGlite initialization can contend with other files in the release suite.
 
   afterAll(async () => {
     await pool.end();

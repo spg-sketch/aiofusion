@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { db, auditLocksTable, projectsTable, savedAuditsTable, tokenUsageTable, platformMembershipsTable, platformUsersTable, platformAccountsTable, platformCompaniesTable, platformMetaTable, contactSubmissionsTable } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, sql, gte } from "drizzle-orm";
-import { computeSpikeFlagsForAccounts, getThirtyDayCostByAccount, getCurrentMonthSpendByAccount, getSpendLimitsByAccount, DEFAULT_FAIR_USAGE_LIMIT, DEFAULT_MONTHLY_SPEND_LIMIT_GBP, FAIR_USAGE_ENFORCEMENT_ENABLED } from "../lib/fair-usage";
+import { computeSpikeFlagsForAccounts, getThirtyDayCostByAccount, getCurrentMonthSpendByAccount, getSpendLimitsByAccount, isSpendCapMonitoringOnly, DEFAULT_FAIR_USAGE_LIMIT, DEFAULT_MONTHLY_SPEND_LIMIT_GBP, FAIR_USAGE_ENFORCEMENT_ENABLED } from "../lib/fair-usage";
 import { logger } from "../lib/logger";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { normUsername, isRestrictedMaster, masterSubrole, MASTER_OWNER_REQUIRED_MESSAGE } from "../lib/platform-auth";
@@ -897,6 +897,9 @@ adminRouter.get(
         getCurrentMonthSpendByAccount(),
       ]);
       const spendLimits = await getSpendLimitsByAccount(slugs);
+      const spendMonitoringOnly = Object.fromEntries(
+        await Promise.all(slugs.map(async (slug) => [slug, await isSpendCapMonitoringOnly(slug)] as const)),
+      );
 
       if (slugs.length > 0) {
         try {
@@ -953,6 +956,7 @@ adminRouter.get(
         thirtyDayCosts,
         currentMonthSpends,
         spendLimits,
+        spendMonitoringOnly,
         defaultLimit: DEFAULT_FAIR_USAGE_LIMIT,
         defaultMonthlySpendLimitGbp: DEFAULT_MONTHLY_SPEND_LIMIT_GBP,
         fairUsageEnforcementEnabled: FAIR_USAGE_ENFORCEMENT_ENABLED,

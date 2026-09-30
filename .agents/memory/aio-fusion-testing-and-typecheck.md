@@ -21,3 +21,9 @@ Size the release API stage for the whole suite, not only its longest test. Keep 
 **Why:** PGlite-backed files can queue for a long time. A whole-suite deadline equal to the workbook test budget killed healthy files, while concurrent module loading consumed a short authentication test's entire time budget without an assertion failure.
 
 **How to apply:** When a release gate times out, distinguish stage, file, setup, and assertion deadlines in the logs before adjusting concurrency or test structure. Preserve the release guard and all tests.
+
+When a small PGlite schema test passes alone but repeatedly hangs in its setup hook under the release suite's file concurrency, increasing that hook's timeout is not enough. Run it separately within the same mandatory, fail-closed API stage so neither the full suite nor the schema test is skipped.
+
+**Why:** Contention caused the setup to exceed both the original and a longer timeout, while the identical test passed quickly without concurrent workers.
+
+**How to apply:** Use an explicit exclusion from the parallel invocation followed by an isolated invocation joined with `&&`; keep both under the release stage's deadline and verify the gate includes the isolated result.

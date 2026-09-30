@@ -937,6 +937,7 @@ export async function sendSpendCapAlert(opts: {
   slug: string;
   spendGbp: number;
   limitGbp: number;
+  monitoringOnly?: boolean;
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
@@ -944,32 +945,36 @@ export async function sendSpendCapAlert(opts: {
     return;
   }
 
-  const subject = `[AIO Fusion] Monthly spend cap reached - ${opts.slug}`;
+  const subject = opts.monitoringOnly
+    ? `[AIO Fusion] Monthly spend threshold crossed (monitoring only) - ${opts.slug}`
+    : `[AIO Fusion] Monthly spend cap reached - ${opts.slug}`;
   const text = [
-    `Account ${opts.slug} has hit their monthly GBP spend cap.`,
+    `Account ${opts.slug} has reached their monthly GBP spend ${opts.monitoringOnly ? "monitoring threshold" : "cap"}.`,
     ``,
     `Current month spend: £${opts.spendGbp.toFixed(4)}`,
-    `Monthly cap:         £${opts.limitGbp.toFixed(2)}`,
+    `${opts.monitoringOnly ? "Alert threshold" : "Monthly cap"}: £${opts.limitGbp.toFixed(2)}`,
     ``,
-    `The account is now receiving 429 responses on all AI routes until the cap is raised`,
-    `or the calendar month resets.`,
+    ...(opts.monitoringOnly
+      ? ["Spending is still being measured. AI requests are not blocked by this threshold during active beta or internal testing."]
+      : ["The account is now receiving 429 responses on all AI routes until the cap is raised", "or the calendar month resets."]),
     ``,
     `Admin token usage panel: ${getAppBaseUrl()}`,
   ].join("\n");
 
   const html = buildEmailHtml({
-    label: "Monthly Spend Cap Reached",
+    label: opts.monitoringOnly ? "Monthly Spend Threshold Crossed" : "Monthly Spend Cap Reached",
     bodyHtml: `
       <p style="margin: 0 0 16px 0;">
-        Account <strong>${escHtml(opts.slug)}</strong> has hit their monthly GBP spend cap.
+        Account <strong>${escHtml(opts.slug)}</strong> has reached their monthly GBP spend ${opts.monitoringOnly ? "monitoring threshold" : "cap"}.
       </p>
       ${buildDataRows([
         ["Current month spend", `£${opts.spendGbp.toFixed(4)}`],
-        ["Monthly cap", `£${opts.limitGbp.toFixed(2)}`],
+        [opts.monitoringOnly ? "Alert threshold" : "Monthly cap", `£${opts.limitGbp.toFixed(2)}`],
       ])}
       <p style="margin: 16px 0 0 0; font-size: 13px; color: #475569;">
-        The account is now receiving 429 responses on all AI routes until the cap is raised
-        or the calendar month resets.
+        ${opts.monitoringOnly
+          ? "Spending is still being measured. AI requests are not blocked by this threshold during active beta or internal testing."
+          : "The account is now receiving 429 responses on all AI routes until the cap is raised or the calendar month resets."}
       </p>
     `,
     cta: { text: "Open Admin Panel", href: getAppBaseUrl() },

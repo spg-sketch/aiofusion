@@ -7,7 +7,9 @@ import type { Server } from "node:http";
 const { collectJournalistCoverage, checkFairUsageMock, checkMonthlySpendLimitMock } = vi.hoisted(() => ({
   collectJournalistCoverage: vi.fn(),
   checkFairUsageMock: vi.fn(() => Promise.resolve({ allowed: true, callCount: 0, limit: 50 })),
-  checkMonthlySpendLimitMock: vi.fn(() => Promise.resolve({ allowed: true, spentGbp: 0, limitGbp: 50 })),
+  checkMonthlySpendLimitMock: vi.fn<() => Promise<{
+    allowed: boolean; spentGbp: number; limitGbp: number | null; monitoringOnly?: boolean;
+  }>>(() => Promise.resolve({ allowed: true, spentGbp: 0, limitGbp: 50 })),
 }));
 
 vi.mock("@workspace/db", async () => {
@@ -658,6 +660,15 @@ describe("media recommendation refinement API", () => {
     expect(spendBlocked.status).toBe(429);
     expect(collectJournalistCoverage).toHaveBeenCalledTimes(Math.min(5, generatedBody.items.length));
     expect(await db.select().from(tokenUsageTable).where(eq(tokenUsageTable.operation, "media-recommendations-enrich"))).toHaveLength(successfulUsage.length);
+    checkMonthlySpendLimitMock.mockResolvedValueOnce({
+      allowed: true, spentGbp: 50, limitGbp: 0.00001, monitoringOnly: true,
+    });
+    const monitored = await request("/store/media-db/recommendations/enrich", "workspace-a", {
+      method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "story-1", recommendationSetId: generatedBody.recommendationSet.id }),
+    });
+    expect(monitored.status).toBe(200);
+    expect(collectJournalistCoverage).toHaveBeenCalledTimes(2 * Math.min(5, generatedBody.items.length));
+    expect(await db.select().from(tokenUsageTable).where(eq(tokenUsageTable.operation, "media-recommendations-enrich"))).toHaveLength(2 * successfulUsage.length);
     const saved = await db.select().from(mediaRecommendationSetsTable).where(eq(mediaRecommendationSetsTable.id, generatedBody.recommendationSet.id));
     expect((saved[0].criteria as { evidence: Record<string, unknown[]> }).evidence).toBeDefined();
     expect((await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, "mediaRecommendation:brief:workspace-a:project-1:story-1")))).toHaveLength(1);
