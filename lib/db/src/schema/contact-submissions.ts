@@ -8,7 +8,8 @@ import { boolean, pgTable, serial, text, timestamp, varchar } from "drizzle-orm/
 //  - `goal`        populated for book-demo submissions only
 //  - `subject`     populated for enquiry submissions only
 //  - `message`     populated for enquiry submissions only
-//  - `emailFailed` true when Resend delivery failed; cleared on successful re-send
+//  - `emailFailed` true while either message is not accepted
+//  - null acceptance means legacy delivery history cannot be determined
 export const contactSubmissionsTable = pgTable("contact_submissions", {
   id: serial("id").primaryKey(),
   type: varchar("type", { length: 32 }).notNull(),
@@ -20,6 +21,8 @@ export const contactSubmissionsTable = pgTable("contact_submissions", {
   message: text("message"),
   status: varchar("status", { length: 32 }).notNull().default("pending"),
   emailFailed: boolean("email_failed").notNull().default(false),
+  internalEmailAccepted: boolean("internal_email_accepted"),
+  customerEmailAccepted: boolean("customer_email_accepted"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()

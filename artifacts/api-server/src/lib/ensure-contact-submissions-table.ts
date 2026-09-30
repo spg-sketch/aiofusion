@@ -17,6 +17,8 @@ export async function ensureContactSubmissionsTable(): Promise<void> {
         message      text,
         status       varchar(32)  NOT NULL DEFAULT 'pending',
         email_failed boolean      NOT NULL DEFAULT false,
+        internal_email_accepted boolean,
+        customer_email_accepted boolean,
         created_at   timestamptz  NOT NULL DEFAULT now(),
         updated_at   timestamptz  NOT NULL DEFAULT now()
       )
@@ -72,6 +74,17 @@ export async function ensureContactSubmissionsTable(): Promise<void> {
         END IF;
       END
       $$
+    `);
+
+    // Existing successful rows are known to be delivered; failed rows have no
+    // per-message history and must not be automatically re-sent as a pair.
+    await db.execute(sql`ALTER TABLE contact_submissions ADD COLUMN IF NOT EXISTS internal_email_accepted boolean`);
+    await db.execute(sql`ALTER TABLE contact_submissions ADD COLUMN IF NOT EXISTS customer_email_accepted boolean`);
+    await db.execute(sql`
+      UPDATE contact_submissions
+      SET internal_email_accepted = true, customer_email_accepted = true
+      WHERE email_failed = false
+        AND internal_email_accepted IS NULL AND customer_email_accepted IS NULL
     `);
 
     logger.info({}, "ensureContactSubmissionsTable: table and columns ready");

@@ -17,6 +17,9 @@ type Submission = {
   subject: string | null;
   message: string | null;
   status: "pending" | "actioned";
+  emailFailed: boolean;
+  internalEmailAccepted: boolean | null;
+  customerEmailAccepted: boolean | null;
   createdAt: string;
 };
 
@@ -91,6 +94,22 @@ export function LeadsAdminPage({ onBack }: { onBack: () => void }) {
       })
       .catch(() => setError("Failed to update status. Please try again."))
       .finally(() => setUpdatingId(null));
+  };
+
+  const retryEmails = (id: number) => {
+    setUpdatingId(id);
+    setError(null);
+    void fetch(`${apiBase()}/api/admin/leads/${id}/resend`, {
+      method: "POST", credentials: "include",
+    }).then(async (r) => {
+      if (!r.ok) {
+        const result = await r.json() as { error?: string };
+        throw new Error(result.error ?? "Email retry failed.");
+      }
+      load();
+    }).catch((err: Error) => {
+      setError(err.message);
+    }).finally(() => setUpdatingId(null));
   };
 
   const filtered = submissions.filter((s) => {
@@ -294,6 +313,11 @@ export function LeadsAdminPage({ onBack }: { onBack: () => void }) {
                       >
                         {s.status}
                       </span>
+                      {s.emailFailed && (
+                        <span className="text-[10px] font-bold px-2 py-1 rounded-full" style={{ background: "#fef2f2", color: "#991b1b" }}>
+                          Email pending
+                        </span>
+                      )}
                       <span className="hidden md:flex items-center gap-1 text-[11px]" style={{ color: vars.g400 }}>
                         <Calendar size={11} /> {formatDate(s.createdAt)}
                       </span>
@@ -338,6 +362,29 @@ export function LeadsAdminPage({ onBack }: { onBack: () => void }) {
                       </div>
 
                       <div className="flex items-center gap-3 pt-2">
+                        {s.emailFailed && (
+                          <div className="w-full text-[12px]" style={{ color: "#991b1b" }}>
+                            {s.internalEmailAccepted === null || s.customerEmailAccepted === null
+                              ? "Older delivery history is unknown. Check the email provider before sending anything manually."
+                              : `Awaiting ${[
+                                  !s.internalEmailAccepted && "team alert",
+                                  !s.customerEmailAccepted && "customer confirmation",
+                                ].filter(Boolean).join(" and ")}.`}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 pt-2">
+                        {s.emailFailed && s.internalEmailAccepted !== null && s.customerEmailAccepted !== null && (
+                          <button
+                            disabled={updatingId === s.id}
+                            onClick={() => retryEmails(s.id)}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[12px] font-bold disabled:opacity-50"
+                            style={{ background: "#991b1b", color: "white" }}
+                          >
+                            {updatingId === s.id ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                            Retry pending email
+                          </button>
+                        )}
                         {s.status === "pending" ? (
                           <button
                             disabled={updatingId === s.id}

@@ -94,3 +94,4 @@
 - [Media collection ownership](aio-fusion-media-collection-ownership.md) — shared media stays canonical; account additions and bookmarks stay private to the active workspace, never pooled through agency hierarchy.
 - [Marketing browser verification](marketing-browser-verification.md) — auto-open demo dialog appears after hydration; wait for it before testing hover or links beneath it.
 - [Replit configuration validation](replit-config-validation.md) — avoid credential-bearing diffs; production env changes can modify tracked `.replit`, so commit before a release gate.
+- [Contact email delivery ambiguity](contact-delivery-ambiguity.md) — unknown historical acceptance must not be treated as safe to retry; separate each message's state.

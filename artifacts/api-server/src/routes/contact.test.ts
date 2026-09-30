@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import express from "express";
+import { deliverContactEmails, UnknownContactDelivery } from "./contact-delivery";
 
 // ── Hoisted state + table stubs ──────────────────────────────────────────────
 
@@ -17,6 +18,8 @@ const h = vi.hoisted(() => {
     goal: string;
     status: string;
     emailFailed: boolean;
+    internalEmailAccepted: boolean | null;
+    customerEmailAccepted: boolean | null;
     createdAt: Date;
   };
 
@@ -25,10 +28,12 @@ const h = vi.hoisted(() => {
   const state = {
     rows: [] as SubmissionRow[],
     insertShouldFail: false,
+    updateAcceptedShouldFail: false,
     reset() {
       seq = 1;
       state.rows = [];
       state.insertShouldFail = false;
+      state.updateAcceptedShouldFail = false;
     },
     nextId() {
       return seq++;
@@ -47,11 +52,14 @@ const h = vi.hoisted(() => {
     goal: { __col: "goal" },
     status: { __col: "status" },
     emailFailed: { __col: "emailFailed" },
+    internalEmailAccepted: { __col: "internalEmailAccepted" },
+    customerEmailAccepted: { __col: "customerEmailAccepted" },
     updatedAt: { __col: "updatedAt" },
     createdAt: { __col: "createdAt" },
   };
 
-  return { state, contactSubmissionsTable };
+  class ContactEmailNotAccepted extends Error {}
+  return { state, contactSubmissionsTable, ContactEmailNotAccepted };
 });
 
 // ── Mock @workspace/db ────────────────────────────────────────────────────────
@@ -81,6 +89,8 @@ vi.mock("@workspace/db", () => {
                     goal: String(v.goal ?? ""),
                     status: String(v.status ?? "pending"),
                     emailFailed: Boolean(v.emailFailed ?? false),
+                    internalEmailAccepted: v.internalEmailAccepted as boolean | null,
+                    customerEmailAccepted: v.customerEmailAccepted as boolean | null,
                     createdAt: new Date(),
                   });
                   resolve([{ id }]);
@@ -95,6 +105,20 @@ vi.mock("@workspace/db", () => {
   };
 
   const db = {
+    transaction<T>(fn: (tx: any) => Promise<T>) {
+      return fn(db);
+    },
+    select() {
+      return {
+        from() {
+          return {
+            where() {
+              return { limit() { return Promise.resolve(state.rows.slice(-1)); } };
+            },
+          };
+        },
+      };
+    },
     insert(table: unknown) {
       return makeChain(table);
     },
@@ -103,10 +127,13 @@ vi.mock("@workspace/db", () => {
         set(vals: Record<string, unknown>) {
           return {
             where(_cond: unknown) {
-              if (vals.emailFailed !== undefined && state.rows.length > 0) {
-                state.rows[state.rows.length - 1].emailFailed = Boolean(vals.emailFailed);
-              }
-              return Promise.resolve();
+              const failed = state.updateAcceptedShouldFail &&
+                (vals.internalEmailAccepted === true || vals.customerEmailAccepted === true);
+              if (!failed && state.rows.length > 0) Object.assign(state.rows[state.rows.length - 1], vals);
+              const promise = failed ? Promise.reject(new Error("DB write failed")) : Promise.resolve();
+              return Object.assign(promise, {
+                returning() { return failed ? Promise.reject(new Error("DB write failed")) : Promise.resolve([{ id: state.rows.at(-1)?.id }]); },
+              });
             },
             catch(fn: (err: Error) => void) {
               void fn;
@@ -131,7 +158,7 @@ const emailMocks = vi.hoisted(() => ({
   sendContactFormFailedAlert: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
 }));
 
-vi.mock("../lib/notify-email", () => emailMocks);
+vi.mock("../lib/notify-email", () => ({ ...emailMocks, ContactEmailNotAccepted: h.ContactEmailNotAccepted }));
 
 // ── Mock rate-limit ───────────────────────────────────────────────────────────
 
@@ -191,6 +218,7 @@ describe("POST /contact/book-demo", () => {
     expect(h.state.rows[0].email).toBe("alice@example.com");
     expect(h.state.rows[0].goal).toBe("Improve our AI visibility.");
     expect(h.state.rows[0].emailFailed).toBe(false);
+    expect(h.state.rows[0]).toMatchObject({ internalEmailAccepted: true, customerEmailAccepted: true });
 
     expect(emailMocks.sendBookDemoInternalAlert).toHaveBeenCalledOnce();
     expect(emailMocks.sendBookDemoConfirmation).toHaveBeenCalledOnce();
@@ -203,16 +231,16 @@ describe("POST /contact/book-demo", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(validBody),
     });
-    expect(emailMocks.sendBookDemoInternalAlert).toHaveBeenCalledWith({
+    expect(emailMocks.sendBookDemoInternalAlert).toHaveBeenCalledWith(expect.objectContaining({
       name: "Alice Smith",
       email: "alice@example.com",
       company: "Acme Ltd",
       goal: "Improve our AI visibility.",
-    });
-    expect(emailMocks.sendBookDemoConfirmation).toHaveBeenCalledWith({
+    }));
+    expect(emailMocks.sendBookDemoConfirmation).toHaveBeenCalledWith(expect.objectContaining({
       name: "Alice Smith",
       toEmail: "alice@example.com",
-    });
+    }));
     await close();
   });
 
@@ -369,17 +397,17 @@ describe("POST /contact/enquiry", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(validBody),
     });
-    expect(emailMocks.sendEnquiryInternalAlert).toHaveBeenCalledWith({
+    expect(emailMocks.sendEnquiryInternalAlert).toHaveBeenCalledWith(expect.objectContaining({
       name: "Bob Jones",
       email: "bob@example.com",
       company: "Beta Corp",
       subject: "Partnership question",
       message: "We would like to explore a partnership.",
-    });
-    expect(emailMocks.sendEnquiryConfirmation).toHaveBeenCalledWith({
+    }));
+    expect(emailMocks.sendEnquiryConfirmation).toHaveBeenCalledWith(expect.objectContaining({
       name: "Bob Jones",
       toEmail: "bob@example.com",
-    });
+    }));
     await close();
   });
 
@@ -499,5 +527,106 @@ describe("POST /contact/enquiry", () => {
     expect(r.status).toBe(400);
     expect(h.state.rows).toHaveLength(0);
     await close();
+  });
+});
+
+describe("contact message retries", () => {
+  const cases = [
+    { type: "book-demo", path: "book-demo", body: { name: "Alice", email: "alice@example.com", company: "Acme", goal: "A demo" },
+      internal: emailMocks.sendBookDemoInternalAlert, customer: emailMocks.sendBookDemoConfirmation },
+    { type: "enquiry", path: "enquiry", body: { name: "Alice", email: "alice@example.com", company: "Acme", subject: "Hello", message: "Question" },
+      internal: emailMocks.sendEnquiryInternalAlert, customer: emailMocks.sendEnquiryConfirmation },
+  ];
+
+  for (const { type, path, body, internal, customer } of cases) {
+    for (const failed of ["internal", "customer"] as const) {
+      it(`${type} retries only the ${failed} message across repeated failures and success`, async () => {
+        h.state.reset();
+        vi.resetAllMocks();
+        // Other tests leave mockResolvedValue defaults; resetAllMocks clears them.
+        emailMocks.sendContactFormFailedAlert.mockResolvedValue(undefined);
+        const successful = failed === "internal" ? customer : internal;
+        const failing = failed === "internal" ? internal : customer;
+        successful.mockResolvedValue(undefined);
+        failing.mockRejectedValueOnce(new h.ContactEmailNotAccepted("provider rejected"))
+          .mockRejectedValueOnce(new h.ContactEmailNotAccepted("still unavailable"))
+          .mockResolvedValue(undefined);
+        const { url, close } = await startServer();
+        try {
+          const response = await fetch(`${url}/contact/${path}`, {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+          });
+          expect(response.status).toBe(200);
+          expect(h.state.rows[0]).toMatchObject({
+            emailFailed: true,
+            internalEmailAccepted: failed !== "internal",
+            customerEmailAccepted: failed !== "customer",
+          });
+          expect(await deliverContactEmails(1)).toHaveLength(1);
+          expect(h.state.rows[0].emailFailed).toBe(true);
+          expect(await deliverContactEmails(1)).toEqual([]);
+          expect(h.state.rows[0]).toMatchObject({
+            emailFailed: false, internalEmailAccepted: true, customerEmailAccepted: true,
+          });
+          expect(await deliverContactEmails(1)).toEqual([]);
+          expect(successful).toHaveBeenCalledTimes(1);
+          expect(failing).toHaveBeenCalledTimes(3);
+        } finally {
+          await close();
+        }
+      });
+    }
+  }
+
+  it("refuses automatic retry of a legacy failure with unknown acceptance", async () => {
+    h.state.reset();
+    vi.clearAllMocks();
+    h.state.rows.push({
+      id: 1, type: "book-demo", name: "Alice", email: "alice@example.com",
+      company: "Acme", goal: "Demo", subject: "", message: "", status: "pending",
+      emailFailed: true, internalEmailAccepted: null, customerEmailAccepted: null, createdAt: new Date(),
+    });
+    await expect(deliverContactEmails(1)).rejects.toBeInstanceOf(UnknownContactDelivery);
+    expect(emailMocks.sendBookDemoInternalAlert).not.toHaveBeenCalled();
+    expect(emailMocks.sendBookDemoConfirmation).not.toHaveBeenCalled();
+  });
+
+  it("blocks retry if the provider accepted a message but its response was lost", async () => {
+    h.state.reset();
+    vi.resetAllMocks();
+    emailMocks.sendContactFormFailedAlert.mockResolvedValue(undefined);
+    emailMocks.sendBookDemoInternalAlert.mockRejectedValueOnce(new Error("response lost"));
+    emailMocks.sendBookDemoConfirmation.mockResolvedValue(undefined);
+    const { url, close } = await startServer();
+    try {
+      const response = await fetch(`${url}/contact/book-demo`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Alice", email: "alice@example.com", company: "Acme", goal: "Demo" }),
+      });
+      expect(response.status).toBe(200);
+      expect(h.state.rows[0]).toMatchObject({
+        internalEmailAccepted: null, customerEmailAccepted: true, emailFailed: true,
+      });
+      await expect(deliverContactEmails(1)).rejects.toBeInstanceOf(UnknownContactDelivery);
+      expect(emailMocks.sendBookDemoInternalAlert).toHaveBeenCalledTimes(1);
+      expect(emailMocks.sendBookDemoConfirmation).toHaveBeenCalledTimes(1);
+    } finally { await close(); }
+  });
+
+  it("keeps a pre-send unknown claim if recording provider acceptance fails", async () => {
+    h.state.reset();
+    vi.resetAllMocks();
+    emailMocks.sendBookDemoInternalAlert.mockResolvedValue(undefined);
+    h.state.updateAcceptedShouldFail = true;
+    h.state.rows.push({
+      id: 1, type: "book-demo", name: "Alice", email: "alice@example.com",
+      company: "Acme", goal: "Demo", subject: "", message: "", status: "pending",
+      emailFailed: true, internalEmailAccepted: false, customerEmailAccepted: true, createdAt: new Date(),
+    });
+    await expect(deliverContactEmails(1)).rejects.toThrow("DB write failed");
+    expect(h.state.rows[0].internalEmailAccepted).toBeNull();
+    h.state.updateAcceptedShouldFail = false;
+    await expect(deliverContactEmails(1)).rejects.toBeInstanceOf(UnknownContactDelivery);
+    expect(emailMocks.sendBookDemoInternalAlert).toHaveBeenCalledTimes(1);
   });
 });

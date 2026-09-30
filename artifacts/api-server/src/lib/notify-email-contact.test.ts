@@ -84,7 +84,7 @@ describe("contact form team recipients", () => {
   });
 
   it("rejects provider errors so the saved lead can be flagged for retry", async () => {
-    sendEmail.mockResolvedValueOnce({ data: null, error: { message: "Recipient rejected" } });
+    sendEmail.mockResolvedValueOnce({ data: null, error: { name: "validation_error", message: "Recipient rejected" } });
     await expect(sendBookDemoInternalAlert({
       name: "Alice", email: "alice@example.com", company: "Acme", goal: "Learn more",
     })).rejects.toThrow("Recipient rejected");
@@ -95,5 +95,14 @@ describe("contact form team recipients", () => {
     await expect(sendEnquiryInternalAlert({
       name: "Alice", email: "alice@example.com", company: "Acme", subject: "Question", message: "Hello",
     })).rejects.toThrow("RESEND_API_KEY is not set");
+  });
+
+  it("uses distinct stable keys for each submission message", async () => {
+    await sendBookDemoInternalAlert({
+      submissionId: 42, name: "Alice", email: "alice@example.com", company: "Acme", goal: "Demo",
+    });
+    await sendBookDemoConfirmation({ submissionId: 42, name: "Alice", toEmail: "alice@example.com" });
+    expect(sendEmail.mock.calls[0][1]).toEqual({ idempotencyKey: "contact-42-internal" });
+    expect(sendEmail.mock.calls[1][1]).toEqual({ idempotencyKey: "contact-42-customer" });
   });
 });

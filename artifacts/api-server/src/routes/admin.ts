@@ -4,6 +4,7 @@ import { db, auditLocksTable, projectsTable, savedAuditsTable, tokenUsageTable, 
 import { and, desc, eq, inArray, isNull, sql, gte } from "drizzle-orm";
 import { computeSpikeFlagsForAccounts, getThirtyDayCostByAccount, getCurrentMonthSpendByAccount, getSpendLimitsByAccount, isSpendCapMonitoringOnly, DEFAULT_FAIR_USAGE_LIMIT, DEFAULT_MONTHLY_SPEND_LIMIT_GBP, FAIR_USAGE_ENFORCEMENT_ENABLED } from "../lib/fair-usage";
 import { logger } from "../lib/logger";
+import { deliverContactEmails, UnknownContactDelivery } from "./contact-delivery";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { normUsername, isRestrictedMaster, masterSubrole, MASTER_OWNER_REQUIRED_MESSAGE } from "../lib/platform-auth";
 import { fetchSiteContentWithSubpages, fetchGeoAuditContext } from "../lib/safe-fetch";
@@ -1862,66 +1863,32 @@ adminRouter.post(
       return;
     }
 
-    // Attempt re-send
+    // The delivery helper locks and re-reads the row, so simultaneous retries
+    // cannot both send a message already accepted by the provider.
     try {
-      if (row.type === "book-demo") {
-        await Promise.all([
-          sendBookDemoInternalAlert({
-            name: row.name,
-            email: row.email,
-            company: row.company,
-            goal: row.goal ?? "",
-          }),
-          sendBookDemoConfirmation({ name: row.name, toEmail: row.email }),
-        ]);
-      } else if (row.type === "enquiry") {
-        await Promise.all([
-          sendEnquiryInternalAlert({
-            name: row.name,
-            email: row.email,
-            company: row.company,
-            subject: row.subject ?? "",
-            message: row.message ?? "",
-          }),
-          sendEnquiryConfirmation({ name: row.name, toEmail: row.email }),
-        ]);
-      } else {
-        res.status(400).json({ error: `Unknown submission type: ${row.type}` });
+      const errors = await deliverContactEmails(id);
+      if (errors.length) {
+        logger.error({ errors, id }, "admin/leads/resend: partial email delivery");
+        void sendContactFormFailedAlert({
+          submissionId: id, type: row.type as "book-demo" | "enquiry",
+          name: row.name, email: row.email, company: row.company,
+          error: `Re-send attempt failed: ${errors.join("; ")}`,
+        }).catch(() => {});
+        res.status(500).json({ error: "Email delivery failed. Resend may still be down.", detail: errors.join("; ") });
         return;
       }
     } catch (err) {
-      logger.error({ err, id }, "admin/leads/resend: email delivery failed");
-      // Update the error timestamp so admins know a retry was attempted
-      await db
-        .update(contactSubmissionsTable)
-        .set({ updatedAt: new Date() })
-        .where(eq(contactSubmissionsTable.id, id))
-        .catch(() => {});
-      // Re-alert so the team knows the retry also failed
-      sendContactFormFailedAlert({
-        submissionId: id,
-        type: row.type as "book-demo" | "enquiry",
-        name: row.name,
-        email: row.email,
-        company: row.company,
-        error: `Re-send attempt failed: ${String(err)}`,
-      }).catch(() => {});
-      res.status(500).json({ error: "Email delivery failed. Resend may still be down.", detail: String(err) });
+      if (err instanceof UnknownContactDelivery) {
+        res.status(409).json({ error: err.message });
+        return;
+      }
+      logger.error({ err, id }, "admin/leads/resend: retry could not complete");
+      res.status(500).json({ error: "Could not complete email retry. Check delivery state before retrying." });
       return;
     }
 
-    // Clear the failure flag on success
-    try {
-      await db
-        .update(contactSubmissionsTable)
-        .set({ emailFailed: false, updatedAt: new Date() })
-        .where(eq(contactSubmissionsTable.id, id));
-    } catch (err) {
-      logger.warn({ err, id }, "admin/leads/resend: could not clear email_failed flag (emails did send)");
-    }
-
-    logger.info({ id, type: row.type, by: req.account?.username }, "admin/leads/resend: emails re-sent successfully");
-    res.json({ ok: true, message: "Emails re-sent successfully." });
+    logger.info({ id, type: row.type, by: req.account?.username }, "admin/leads/resend: pending emails accepted");
+    res.json({ ok: true, message: "Pending emails accepted." });
   },
 );
 

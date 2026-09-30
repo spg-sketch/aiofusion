@@ -1,15 +1,9 @@
 import { Router, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import { db, contactSubmissionsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger";
-import {
-  sendBookDemoInternalAlert,
-  sendBookDemoConfirmation,
-  sendEnquiryInternalAlert,
-  sendEnquiryConfirmation,
-  sendContactFormFailedAlert,
-} from "../lib/notify-email";
+import { sendContactFormFailedAlert } from "../lib/notify-email";
+import { deliverContactEmails } from "./contact-delivery";
 
 const contactRouter = Router();
 
@@ -77,7 +71,8 @@ contactRouter.post(
     try {
       const [row] = await db
         .insert(contactSubmissionsTable)
-        .values({ type: "book-demo", name, email, company, goal, emailFailed: false })
+        .values({ type: "book-demo", name, email, company, goal, emailFailed: true,
+          internalEmailAccepted: false, customerEmailAccepted: false })
         .returning({ id: contactSubmissionsTable.id });
       savedId = row.id;
       logger.info({ savedId, email }, "contact/book-demo: submission saved to DB");
@@ -90,28 +85,19 @@ contactRouter.post(
     // ── Step 2: Attempt email delivery (non-fatal) ───────────────────────────
     // Submission is already persisted; email failure sets the flag and notifies admins.
     try {
-      await Promise.all([
-        sendBookDemoInternalAlert({ name, email, company, goal }),
-        sendBookDemoConfirmation({ name, toEmail: email }),
-      ]);
-      logger.info({ savedId, email }, "contact/book-demo: emails dispatched");
+      const errors = await deliverContactEmails(savedId);
+      if (errors.length) {
+        logger.warn({ savedId, errors }, "contact/book-demo: partial email delivery");
+        void sendContactFormFailedAlert({
+          submissionId: savedId, type: "book-demo", name, email, company, error: errors.join("; "),
+        }).catch(() => {});
+      }
     } catch (err) {
       logger.error(
         { err, savedId, email },
         `contact/book-demo: email delivery failed (non-fatal, submission #${savedId} already saved)`,
       );
-      // Mark the row so admins can re-send from the leads panel
-      db.update(contactSubmissionsTable)
-        .set({ emailFailed: true, updatedAt: new Date() })
-        .where(eq(contactSubmissionsTable.id, savedId))
-        .catch((updateErr) =>
-          logger.warn(
-            { updateErr, savedId },
-            `contact/book-demo: could not mark email_failed on row #${savedId}`,
-          ),
-        );
-      // Alert the team so no lead is silently dropped
-      sendContactFormFailedAlert({
+      void sendContactFormFailedAlert({
         submissionId: savedId,
         type: "book-demo",
         name,
@@ -170,7 +156,8 @@ contactRouter.post(
     try {
       const [row] = await db
         .insert(contactSubmissionsTable)
-        .values({ type: "enquiry", name, email, company, subject, message, emailFailed: false })
+        .values({ type: "enquiry", name, email, company, subject, message, emailFailed: true,
+          internalEmailAccepted: false, customerEmailAccepted: false })
         .returning({ id: contactSubmissionsTable.id });
       savedId = row.id;
       logger.info({ savedId, email }, "contact/enquiry: submission saved to DB");
@@ -182,26 +169,19 @@ contactRouter.post(
 
     // ── Step 2: Attempt email delivery (non-fatal) ───────────────────────────
     try {
-      await Promise.all([
-        sendEnquiryInternalAlert({ name, email, company, subject, message }),
-        sendEnquiryConfirmation({ name, toEmail: email }),
-      ]);
-      logger.info({ savedId, email }, "contact/enquiry: emails dispatched");
+      const errors = await deliverContactEmails(savedId);
+      if (errors.length) {
+        logger.warn({ savedId, errors }, "contact/enquiry: partial email delivery");
+        void sendContactFormFailedAlert({
+          submissionId: savedId, type: "enquiry", name, email, company, error: errors.join("; "),
+        }).catch(() => {});
+      }
     } catch (err) {
       logger.error(
         { err, savedId, email },
         `contact/enquiry: email delivery failed (non-fatal, submission #${savedId} already saved)`,
       );
-      db.update(contactSubmissionsTable)
-        .set({ emailFailed: true, updatedAt: new Date() })
-        .where(eq(contactSubmissionsTable.id, savedId))
-        .catch((updateErr) =>
-          logger.warn(
-            { updateErr, savedId },
-            `contact/enquiry: could not mark email_failed on row #${savedId}`,
-          ),
-        );
-      sendContactFormFailedAlert({
+      void sendContactFormFailedAlert({
         submissionId: savedId,
         type: "enquiry",
         name,

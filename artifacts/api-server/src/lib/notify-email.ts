@@ -94,9 +94,25 @@ function getClient(): Resend | null {
 
 // Resend reports API rejections in { error } instead of always throwing.
 // Only an accepted message with an ID may be reported as sent.
-async function sendCheckedEmail(resend: Resend, message: Parameters<Resend["emails"]["send"]>[0]): Promise<void> {
-  const result = await resend.emails.send(message);
-  if (result.error) throw new Error(`Email provider rejected send: ${result.error.message}`);
+export class ContactEmailNotAccepted extends Error {}
+async function sendCheckedEmail(resend: Resend, message: Parameters<Resend["emails"]["send"]>[0], idempotencyKey?: string): Promise<void> {
+  const result = idempotencyKey
+    ? await resend.emails.send(message, { idempotencyKey })
+    : await resend.emails.send(message);
+  if (result.error) {
+    // Only explicit request rejection is proof that no email was accepted.
+    // Server errors, concurrent idempotency responses and incomplete responses
+    // may represent acceptance whose receipt did not reach us.
+    const definitiveCodes = new Set([
+      "validation_error", "missing_api_key", "restricted_api_key", "invalid_api_key",
+      "invalid_attachment", "invalid_from_address", "invalid_access",
+      "invalid_parameter", "invalid_region", "missing_required_field",
+      "monthly_quota_exceeded", "daily_quota_exceeded", "rate_limit_exceeded",
+    ]);
+    const message = `Email provider rejected send: ${result.error.message}`;
+    if (definitiveCodes.has(result.error.name)) throw new ContactEmailNotAccepted(message);
+    throw new Error(message);
+  }
   if (!result.data?.id) throw new Error("Email provider did not confirm message acceptance");
 }
 
@@ -1147,6 +1163,7 @@ export async function sendPasswordChangedEmail(opts: {
   }
 }
 export async function sendBookDemoInternalAlert(opts: {
+  submissionId?: number;
   name: string;
   email: string;
   company: string;
@@ -1154,7 +1171,7 @@ export async function sendBookDemoInternalAlert(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    throw new Error("RESEND_API_KEY is not set - book demo internal alert not sent");
+    throw new ContactEmailNotAccepted("RESEND_API_KEY is not set - book demo internal alert not sent");
   }
 
   const subject = `[AIO Fusion] Demo request - ${opts.company || opts.name}`;
@@ -1187,17 +1204,18 @@ export async function sendBookDemoInternalAlert(opts: {
     subject,
     text,
     html,
-  });
+  }, opts.submissionId ? `contact-${opts.submissionId}-internal` : undefined);
   logger.info({ email: opts.email }, "notify-email: book demo internal alert sent");
 }
 
 export async function sendBookDemoConfirmation(opts: {
+  submissionId?: number;
   name: string;
   toEmail: string;
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    throw new Error("RESEND_API_KEY is not set - book demo confirmation not sent");
+    throw new ContactEmailNotAccepted("RESEND_API_KEY is not set - book demo confirmation not sent");
   }
 
   const subject = `We've received your demo request - AIO Fusion`;
@@ -1231,11 +1249,13 @@ export async function sendBookDemoConfirmation(opts: {
     cta: { text: "Visit AIO Fusion", href: getAppBaseUrl() },
   });
 
-  await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html });
+  await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html },
+    opts.submissionId ? `contact-${opts.submissionId}-customer` : undefined);
   logger.info({ toEmail: opts.toEmail }, "notify-email: book demo confirmation sent");
 }
 
 export async function sendEnquiryInternalAlert(opts: {
+  submissionId?: number;
   name: string;
   email: string;
   company: string;
@@ -1244,7 +1264,7 @@ export async function sendEnquiryInternalAlert(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    throw new Error("RESEND_API_KEY is not set - enquiry internal alert not sent");
+    throw new ContactEmailNotAccepted("RESEND_API_KEY is not set - enquiry internal alert not sent");
   }
 
   const emailSubject = `[AIO Fusion] Enquiry - ${opts.subject}`;
@@ -1285,7 +1305,7 @@ export async function sendEnquiryInternalAlert(opts: {
     subject: emailSubject,
     text,
     html,
-  });
+  }, opts.submissionId ? `contact-${opts.submissionId}-internal` : undefined);
   logger.info({ email: opts.email }, "notify-email: enquiry internal alert sent");
 }
 
@@ -1502,7 +1522,7 @@ export async function sendContactFormFailedAlert(opts: {
   const subject = `[AIO Fusion] ALERT - Contact form email delivery failed (#${opts.submissionId})`;
   const text = [
     `A contact form submission was received and saved to the database, but`,
-    `the confirmation and alert emails failed to send.`,
+    `one or both contact emails were not accepted.`,
     ``,
     `Submission ID: #${opts.submissionId}`,
     `Type:          ${typeLabel}`,
@@ -1551,12 +1571,13 @@ export async function sendContactFormFailedAlert(opts: {
 }
 
 export async function sendEnquiryConfirmation(opts: {
+  submissionId?: number;
   name: string;
   toEmail: string;
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    throw new Error("RESEND_API_KEY is not set - enquiry confirmation not sent");
+    throw new ContactEmailNotAccepted("RESEND_API_KEY is not set - enquiry confirmation not sent");
   }
 
   const subject = `We've received your message - AIO Fusion`;
@@ -1588,7 +1609,8 @@ export async function sendEnquiryConfirmation(opts: {
     cta: { text: "Visit AIO Fusion", href: getAppBaseUrl() },
   });
 
-  await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html });
+  await sendCheckedEmail(resend, { from: fromAddress(), to: [opts.toEmail], subject, text, html },
+    opts.submissionId ? `contact-${opts.submissionId}-customer` : undefined);
   logger.info({ toEmail: opts.toEmail }, "notify-email: enquiry confirmation sent");
 }
 
