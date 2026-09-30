@@ -81,7 +81,6 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
   const [optimisingField, setOptimisingField] = useState<CreatorFieldKey | null>(null);
   const [creatorChars, setCreatorChars] = useState(0);
   const [creatorError, setCreatorError] = useState("");
-  const [generating, setGenerating] = useState(false);
   const [generateChars, setGenerateChars] = useState(0);
   const [generated, setGenerated] = useState(false);
   const [draftSnapshot, setDraftSnapshot] = useState<{ articleHeadline: string; standfirst: string; transcript: string } | null>(null);
@@ -215,6 +214,7 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
   type CreatorFieldResult = { next?: string; log?: unknown[] };
   const draftRunKey = aiRunKey(runScope, "content-draft", sourceArchiveId || "new-article");
   const draftRun = useAiRun<CreatorDraftInput, CreatorDraftResult>(draftRunKey);
+  const generating = draftRun?.status === "running";
   const fieldRunKeys = {
     headline: aiRunKey(runScope, "content-optimise", `${sourceArchiveId || "new-article"}:headline`),
     standfirst: aiRunKey(runScope, "content-optimise", `${sourceArchiveId || "new-article"}:standfirst`),
@@ -287,7 +287,6 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
     setSavedBaseline(entry.run.input.editorSnapshot);
   }, [headlineRun, standfirstRun, pitchRun, transcriptRun, actionNotesRun, sourceArchiveId, editorSnapshot, savedBaseline]);
   useEffect(() => {
-    setGenerating(draftRun?.status === "running");
     if (draftRun?.status === "failed") {
       setCreatorError(draftRun.error || "The draft could not be generated right now. Please try again.");
       return;
@@ -676,6 +675,8 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
       subjectId: sourceArchiveId || "new-article",
       input,
       estimateSeconds: getAuditDurationSeconds("content-draft"),
+      timeoutMs: 110_000,
+      timeoutMessage: "The draft did not finish in time. Your original copy is unchanged. Please try again.",
       execute: (progress) => streamContent("/api/content/generate", input.request, (chars) => {
         setGenerateChars(chars);
         progress(chars);

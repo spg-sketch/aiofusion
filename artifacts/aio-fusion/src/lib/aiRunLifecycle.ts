@@ -31,6 +31,8 @@ type StartOptions<TInput, TResult> = {
   subjectId?: string;
   input: TInput;
   estimateSeconds: number;
+  timeoutMs?: number;
+  timeoutMessage?: string;
   execute: (progress: (value: number) => void) => Promise<TResult>;
   onSuccess?: (result: TResult, run: AiRun<TInput, TResult>) => void | Promise<void>;
 };
@@ -125,7 +127,32 @@ export function startAiRun<TInput, TResult>(
   runs.set(options.key, run);
   emit();
 
-  void options.execute((value) => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cleanupDeadline = () => {
+    if (timer) clearTimeout(timer);
+    window.removeEventListener("focus", checkDeadline);
+    document.removeEventListener("visibilitychange", checkDeadline);
+  };
+  const checkDeadline = () => {
+    if (!options.timeoutMs || Date.now() - run.startedAt < options.timeoutMs) return;
+    cleanupDeadline();
+    const current = runs.get(options.key);
+    if (!current || current.id !== run.id || current.status !== "running" || identityFor(current.scope) !== activeIdentity) return;
+    runs.set(options.key, {
+      ...current,
+      status: "failed",
+      completedAt: Date.now(),
+      error: options.timeoutMessage || "The request timed out. Your original copy is unchanged. Please try again.",
+    });
+    emit();
+  };
+  if (options.timeoutMs) {
+    timer = setTimeout(checkDeadline, options.timeoutMs);
+    window.addEventListener("focus", checkDeadline);
+    document.addEventListener("visibilitychange", checkDeadline);
+  }
+
+  const progress = (value: number) => {
     const current = runs.get(options.key);
     if (!current || current.id !== run.id || current.status !== "running") return;
     const updated = {
@@ -134,7 +161,16 @@ export function startAiRun<TInput, TResult>(
     };
     runs.set(options.key, updated);
     emit();
-  }).then(async (result) => {
+  };
+  // An executor can throw before it returns a promise. That must still end the
+  // run, rather than leaving the UI in a permanent "running" state.
+  let request: Promise<TResult>;
+  try {
+    request = options.execute(progress);
+  } catch (error) {
+    request = Promise.reject(error);
+  }
+  void request.then(async (result) => {
     const current = runs.get(options.key) as AiRun<TInput, TResult> | undefined;
     if (!current || current.status !== "running" || current.id !== run.id || identityFor(current.scope) !== activeIdentity) return;
     await options.onSuccess?.(result, current);
@@ -150,7 +186,7 @@ export function startAiRun<TInput, TResult>(
     emit();
   }).catch((error: unknown) => {
     const current = runs.get(options.key) as AiRun<TInput, TResult> | undefined;
-    if (!current || current.id !== run.id || identityFor(current.scope) !== activeIdentity) return;
+    if (!current || current.status !== "running" || current.id !== run.id || identityFor(current.scope) !== activeIdentity) return;
     const failed: AiRun<TInput, TResult> = {
       ...current,
       status: "failed",
@@ -159,7 +195,7 @@ export function startAiRun<TInput, TResult>(
     };
     runs.set(options.key, failed);
     emit();
-  });
+  }).finally(cleanupDeadline);
 
   return run;
 }

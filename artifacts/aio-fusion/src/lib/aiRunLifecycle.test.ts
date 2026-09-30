@@ -139,4 +139,34 @@ describe("AI run lifecycle", () => {
     expect(first.id).not.toBe(retry.id);
     expect(getAiRun(key)?.result).toEqual({ bodyCopy: "New draft" });
   });
+
+  it("ends a stalled draft at its wall-clock deadline and ignores a late result", async () => {
+    const scope = { sessionId: "person", workspaceId: "workspace", projectId: "project" };
+    setAiRunIdentity(scope.sessionId, scope.workspaceId);
+    const key = aiRunKey(scope, "content-draft", "article");
+    let resolveLate!: (value: { bodyCopy: string }) => void;
+    startAiRun({
+      key, scope, operation: "content-draft", input: {}, estimateSeconds: 30,
+      timeoutMs: 110_000,
+      execute: () => new Promise((resolve) => { resolveLate = resolve; }),
+    });
+    await vi.advanceTimersByTimeAsync(110_000);
+    expect(getAiRun(key)).toMatchObject({ status: "failed", error: expect.stringContaining("timed out") });
+    resolveLate({ bodyCopy: "Late draft" });
+    await Promise.resolve();
+    expect(getAiRun(key)?.status).toBe("failed");
+  });
+
+  it("turns a synchronous executor error into a visible failed run", async () => {
+    const scope = { sessionId: "person", workspaceId: "workspace", projectId: "project" };
+    setAiRunIdentity(scope.sessionId, scope.workspaceId);
+    const key = aiRunKey(scope, "content-draft");
+    startAiRun({
+      key, scope, operation: "content-draft", input: {}, estimateSeconds: 30,
+      execute: () => { throw new Error("Could not start"); },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(getAiRun(key)).toMatchObject({ status: "failed", error: "Could not start" });
+  });
 });

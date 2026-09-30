@@ -9,6 +9,12 @@ Long-running AI work within an open tab belongs to an app-level lifecycle rather
 
 **How to apply:** Keep request execution and exactly-once completion effects outside page mount lifetimes. Pages subscribe to retained snapshots, derive elapsed time from `Date.now() - startedAt`, and restore results only into the captured subject. Clear all runs at authentication or workspace boundaries.
 
+For browser-streamed content drafting, a server-side model completion is not proof that the page received a terminal result. The in-tab run needs its own wall-clock failure boundary, separate from the transport's abort timer, and the page should derive its loading display directly from that run rather than mirror it in local state.
+
+**Why:** A live generation completed on the server in about a minute while the browser still displayed the final progress stage more than nine minutes beyond its estimate. The exact response-delivery failure was not observable from the available server log, so neither a successful model stop reason nor a client-side fetch timeout alone was enough to explain the stuck page.
+
+**How to apply:** End an overdue run visibly, keep the original editor inputs intact, and ignore any completion that arrives after failure or identity change. Do not mistake this safeguard for recovery of a draft whose response was lost.
+
 For audit work that can exceed an HTTP proxy limit, the app-level lifecycle is only the presentation layer. The server must return a durable run ID before doing the expensive work, persist progress and terminal state, and expose identity-scoped discovery and status endpoints. The page polls by run ID and attaches to an existing running project audit when it remounts.
 
 **Why:** A retained browser promise still depends on the original HTTP connection. Proxy timeouts, refreshes and route changes must not cancel server work or turn a successful saved audit into a transport failure.
