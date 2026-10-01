@@ -1297,6 +1297,26 @@ function MediaDatabasePage() {
   const outletOptions = outlets.map((o) => ({ id: o.id, name: o.name })).sort((a, b) => a.name.localeCompare(b.name));
   const showCollectionTools = activeTab === "outlets" || activeTab === "contacts";
   const showInternalTools = showManagement && internalToolsOpen;
+  const activeNavigation = showManagement ? "manage" : searchActive && searchScope === "saved" ? "saved" : "search";
+  const navigationButtonStyle = (section: typeof activeNavigation) => ({
+    background: activeNavigation === section ? vars.accent : undefined,
+    borderColor: activeNavigation === section ? vars.accent : "rgba(255,255,255,0.45)",
+    color: "#ffffff",
+  });
+  const navigationButtonClass = "media-database-nav-button rounded-lg border px-3 py-2 text-[12px] font-semibold";
+  const openSearchMedia = () => {
+    setShowManagement(false);
+    setActiveTab("contacts");
+    setSearchScope("all");
+    setSearchType("contacts");
+    setSearchPage(1);
+    setSelectedMedia(new Set());
+    setResultMode("none");
+    setResultMessage("");
+    setSearchResults([]);
+    setSearchTotal(0);
+    setSearchCounts({ contacts: 0, outlets: 0 });
+  };
   const visibleSearchResults = searchResults.filter((result) => searchType === "contacts"
     ? result.type === "contact"
     : result.type === "outlet");
@@ -1337,15 +1357,11 @@ function MediaDatabasePage() {
           <h1 className="text-[28px] font-semibold mb-1" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Media Database</h1>
         </div>
          <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>Find media contacts and publications, then save the records your team wants to follow.</p>
-         <div className="mt-3 flex flex-wrap gap-2">
-           <button onClick={() => openSavedMedia("contacts")} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: "rgba(255,255,255,0.45)", color: "#ffffff" }}>My Media Database</button>
-           <button onClick={() => openSavedMedia("publications")} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: "rgba(255,255,255,0.45)", color: "#ffffff" }}>Saved publications</button>
-            <button onClick={() => { setShowManagement(false); setActiveTab("contacts"); setSearchScope("all"); setSearchType("contacts"); setSearchPage(1); setSelectedMedia(new Set()); setResultMode("none"); setResultMessage(""); }} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: "rgba(255,255,255,0.45)", color: "#ffffff" }}>Search all media</button>
-           <button onClick={() => {
-             if (showManagement) openSavedMedia("contacts");
-             else { setShowManagement(true); setResultMode("none"); setActiveTab("contacts"); setInternalToolsOpen(false); }
-           }} className="rounded-lg px-3 py-2 text-[12px] font-semibold" style={{ background: vars.accent, color: "#ffffff" }}>{showManagement ? "Back to My Media Database" : "Manage my records"}</button>
-         </div>
+         <nav aria-label="Media Database sections" className="mt-3 flex flex-wrap gap-2">
+           <button onClick={openSearchMedia} aria-current={activeNavigation === "search" ? "page" : undefined} className={navigationButtonClass} style={navigationButtonStyle("search")}>Search Media Database</button>
+           <button onClick={() => openSavedMedia("contacts")} aria-current={activeNavigation === "saved" ? "page" : undefined} className={navigationButtonClass} style={navigationButtonStyle("saved")}>My Media Database</button>
+           <button onClick={() => { setShowManagement(true); setResultMode("none"); setActiveTab("contacts"); setInternalToolsOpen(false); }} aria-current={activeNavigation === "manage" ? "page" : undefined} className={navigationButtonClass} style={navigationButtonStyle("manage")}>Manage my records</button>
+         </nav>
       </div>
       {loadError && <div role="alert" className="mb-4 rounded-xl border bg-white px-4 py-3 text-[13px]" style={{ borderColor: "#FECACA", color: vars.red }}>
         {loadError} <button onClick={() => void loadData()} className="ml-2 font-semibold underline">Try again</button>
@@ -1539,7 +1555,10 @@ function MediaDatabasePage() {
       </section>}
 
       {showManagement && <section className="mb-5 rounded-2xl border bg-white p-4" style={{ borderColor: vars.g200 }}>
-        <h2 className="text-[18px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Manage my records</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-[18px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Manage my records</h2>
+          <button onClick={() => openSavedMedia("contacts")} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.accent }}>Back to My Media Database</button>
+        </div>
       <div className="mt-4">
        {canWriteMediaDatabase && <div className="mb-4 flex flex-wrap gap-2">
          <button onClick={openAddContact} className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold text-white" style={{ background: vars.accent }}><Plus size={13} /> Add contact</button>

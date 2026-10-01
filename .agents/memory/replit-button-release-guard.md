@@ -26,3 +26,9 @@ Tracked generated files must be deterministic before a clean-tree release gate r
 **Why:** A running preview server reordered an otherwise unchanged generated component registry, making source state dirty. The release check recorded failed evidence, and the Publish-button build correctly rejected it before compilation.
 
 **How to apply:** Keep discovery/output ordering stable and verify a clean checkout after preview workflows start. Regenerate passing release evidence for the current source revision before publishing; do not bypass the managed build guard.
+
+Task-completion validation runs before the completion callback creates its commit.
+
+**Why:** A completion attempt with verified but uncommitted UI changes failed the clean-source release gate even though the full tests, type check and external code review passed.
+
+**How to apply:** When completion includes the release gate, explicitly commit the verified change batch before requesting completion. Do not skip validation or relax the clean-source safeguard to work around the callback ordering.

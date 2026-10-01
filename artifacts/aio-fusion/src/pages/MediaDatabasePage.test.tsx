@@ -261,6 +261,65 @@ describe("MediaDatabasePage source health", () => {
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/search"))).toBe(false);
   });
 
+  it("starts with Search Media Database first and selected in pink, without the saved-publications shortcut", () => {
+    render(<MediaDatabasePage />);
+    const navigation = within(screen.getByRole("navigation", { name: "Media Database sections" }));
+    expect(navigation.getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Search Media Database", "My Media Database", "Manage my records",
+    ]);
+    const searchButton = navigation.getByRole("button", { name: "Search Media Database" });
+    expect(searchButton).toHaveAttribute("aria-current", "page");
+    expect(searchButton.style.backgroundColor).toBe("rgb(165, 47, 96)");
+    expect(searchButton.style.color).toBe("rgb(255, 255, 255)");
+    expect(navigation.getAllByRole("button").filter((button) => button.hasAttribute("aria-current"))).toHaveLength(1);
+    expect(navigation.getByRole("button", { name: "Manage my records" }).style.backgroundColor).toBe("");
+    expect(screen.queryByRole("button", { name: "Saved publications" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Search all media" })).toBeNull();
+  });
+
+  it("moves the selected pink navigation between saved media, management and search without remounting buttons", async () => {
+    render(<MediaDatabasePage />);
+    const navElement = screen.getByRole("navigation", { name: "Media Database sections" });
+    const navigation = within(navElement);
+    const searchButton = navigation.getByRole("button", { name: "Search Media Database" });
+    const savedButton = navigation.getByRole("button", { name: "My Media Database" });
+    const manageButton = navigation.getByRole("button", { name: "Manage my records" });
+    const expectSelected = (selected: HTMLElement) => {
+      for (const button of [searchButton, savedButton, manageButton]) {
+        expect(button.getAttribute("aria-current")).toBe(button === selected ? "page" : null);
+        expect(button.style.backgroundColor).toBe(button === selected ? "rgb(165, 47, 96)" : "");
+      }
+    };
+    fireEvent.click(savedButton);
+    await screen.findByText("1 contacts found");
+    expectSelected(savedButton);
+    fireEvent.click(manageButton);
+    expect(screen.getByRole("heading", { name: "Manage my records" })).toBeTruthy();
+    expectSelected(manageButton);
+    fireEvent.click(screen.getByRole("button", { name: "Back to My Media Database" }));
+    expectSelected(savedButton);
+    fireEvent.click(searchButton);
+    expectSelected(searchButton);
+    expect(navigation.getByRole("button", { name: "Search Media Database" })).toBe(searchButton);
+    expect(screen.queryByText(/contacts found/)).toBeNull();
+    fireEvent.click(manageButton);
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    await screen.findByText("Jane Reporter");
+    expectSelected(searchButton);
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expectSelected(searchButton);
+  });
+
+  it("resets the selected section and results when the page is re-entered", () => {
+    const { unmount } = render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Manage my records" }));
+    unmount();
+    render(<MediaDatabasePage />);
+    expect(screen.getByRole("button", { name: "Search Media Database" })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("heading", { name: "Manage my records" })).toBeNull();
+    expect(screen.queryByText(/contacts found/)).toBeNull();
+  });
+
   it("searches all collections on submission and lets the account save shared records separately", async () => {
     render(<MediaDatabasePage />);
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
@@ -293,7 +352,7 @@ describe("MediaDatabasePage source health", () => {
     expect(await screen.findByRole("cell", { name: "Jane" })).toBeTruthy();
     const searchCalls = () => vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes("/media-db/search")).length;
     const callsBefore = searchCalls();
-    fireEvent.click(screen.getByRole("button", { name: "Search all media" }));
+    fireEvent.click(screen.getByRole("button", { name: "Search Media Database" }));
     await new Promise((resolve) => window.setTimeout(resolve, 0));
     expect(screen.queryByRole("cell", { name: "Jane" })).toBeNull();
     expect(screen.queryByText(/contacts found/)).toBeNull();
@@ -581,7 +640,8 @@ describe("MediaDatabasePage source health", () => {
   it("shows saved publications in sector tables with honest website and reach labels", async () => {
     bookmarkTestRows = [{ type: "publication", targetId: 20 }];
     render(<MediaDatabasePage />);
-    fireEvent.click(screen.getByRole("button", { name: "Saved publications" }));
+    fireEvent.click(screen.getByRole("button", { name: "My Media Database" }));
+    fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
     expect(await screen.findByRole("columnheader", { name: "Publication" })).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "Linked journalists" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Visit" })).toHaveAttribute("href", "https://energy.example/");
