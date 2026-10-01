@@ -22,6 +22,7 @@ import { createElement } from "react";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { fetchPrerenderInsights, validatePrerenderInsights } from "./marketing/prerenderInsights";
 
 import LandingPageC from "./marketing/LandingPage";
 import ForInhousePage from "./marketing/ForInhousePage";
@@ -166,9 +167,7 @@ function injectIntoTemplate(
 // ---------------------------------------------------------------------------
 // Sitemap generation
 // ---------------------------------------------------------------------------
-function buildSitemap(lastmod: string, articleSlugs: string[]): string {
-  const configuredDomain = process.env.CANONICAL_DOMAIN?.replace(/^https?:\/\//, "").replace(/\/+$/, "");
-  const BASE = configuredDomain ? `https://${configuredDomain}` : "https://aiofusion.ai";
+function buildSitemap(lastmod: string, articleUrls: string[], BASE: string): string {
   const urls: string[] = [];
 
   for (const { slug, priority } of PUBLIC_ROUTES) {
@@ -178,9 +177,9 @@ function buildSitemap(lastmod: string, articleSlugs: string[]): string {
     );
   }
 
-  for (const articleSlug of articleSlugs) {
+  for (const articleUrl of articleUrls) {
     urls.push(
-      `  <url>\n    <loc>${BASE}/insights/${articleSlug}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <priority>0.8</priority>\n  </url>`,
+      `  <url>\n    <loc>${escHtml(articleUrl)}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <priority>0.8</priority>\n  </url>`,
     );
   }
 
@@ -195,7 +194,7 @@ export interface PrerenderOptions {
   distPublic?: string;
   /** Use a known snapshot instead of making a network request. */
   publishedInsights?: PublicInsight[];
-  /** Set to null to guarantee that a test never performs an API lookup. */
+  /** Explicit offline fixture mode; null uses checked-in articles without a lookup. */
   canonicalDomain?: string | null;
   /** Keep generated dates deterministic in regression tests. */
   lastmod?: string;
@@ -225,41 +224,33 @@ export async function runPrerender(options: PrerenderOptions = {}): Promise<Prer
     ?.replace(/^https?:\/\//, "")
     .replace(/\/+$/, "");
   const hasControlledSnapshot = Object.prototype.hasOwnProperty.call(options, "publishedInsights");
+  const siteOrigin = `https://${configuredDomain || "aiofusion.ai"}`;
+  const useCheckedInSnapshot = !hasControlledSnapshot && options.canonicalDomain === null;
   const hiddenPublicInsightSlugs = new Set<string>(HIDDEN_PUBLIC_INSIGHT_SLUGS);
+  delete globalThis.__AIO_PRERENDER_INSIGHTS__;
   if (hasControlledSnapshot) {
-    publishedInsights = (options.publishedInsights ?? []).filter(
+    publishedInsights = validatePrerenderInsights(options.publishedInsights).filter(
       (article) => !hiddenPublicInsightSlugs.has(article.slug),
     );
     globalThis.__AIO_PRERENDER_INSIGHTS__ = publishedInsights;
-  } else {
-    delete globalThis.__AIO_PRERENDER_INSIGHTS__;
-    if (configuredDomain) {
-      try {
-        const response = await fetch(`https://${configuredDomain}/api/insights`, {
-          signal: AbortSignal.timeout(15_000),
-        });
-        if (response.ok) {
-          publishedInsights = (await response.json() as PublicInsight[]).filter(
-            (article) => !hiddenPublicInsightSlugs.has(article.slug),
-          );
-          globalThis.__AIO_PRERENDER_INSIGHTS__ = publishedInsights;
-          console.log(`  ✓  Loaded ${publishedInsights.length} published Insights stories`);
-        }
-      } catch {
-        console.warn("  !  Published Insights API unavailable; using the checked-in SEO snapshot");
-      }
-    }
+  } else if (!useCheckedInSnapshot) {
+    publishedInsights = (await fetchPrerenderInsights(siteOrigin)).filter(
+      (article) => !hiddenPublicInsightSlugs.has(article.slug),
+    );
+    globalThis.__AIO_PRERENDER_INSIGHTS__ = publishedInsights;
+    console.log(`  ✓  Loaded ${publishedInsights.length} published Insights stories`);
   }
 
-  const articleSlugs = publishedInsights.length
-    ? publishedInsights
+  const articleSlugs = useCheckedInSnapshot
+    ? ARTICLE_SLUGS
+    : publishedInsights
         .filter((article) =>
           !hiddenPublicInsightSlugs.has(article.slug) &&
           !article.externalUrl &&
           article.body.length > 0,
         )
-        .map((article) => article.slug)
-    : ARTICLE_SLUGS;
+        .map((article) => article.slug);
+  const sitemapArticleUrls: string[] = [];
 
   let ok = 0;
   let errors = 0;
@@ -287,7 +278,7 @@ export async function runPrerender(options: PrerenderOptions = {}): Promise<Prer
       errors++;
       return;
     }
-    if (!html.includes(`href="${meta.canonical}"`)) {
+    if (!html.includes(`href="${escAttr(meta.canonical)}"`)) {
       console.error(`  ✗  Route "${label}" is missing its canonical link (${meta.canonical})`);
       errors++;
       return;
@@ -347,7 +338,7 @@ export async function runPrerender(options: PrerenderOptions = {}): Promise<Prer
     const published = publishedInsights.find((article) => article.slug === articleSlug);
     const story = published ?? FALLBACK_INSIGHTS.find((article) => article.slug === articleSlug);
     const meta: ArticleMeta | undefined = story
-      ? articleMeta(story, `https://${configuredDomain || "aiofusion.ai"}`)
+      ? articleMeta(story, siteOrigin)
       : undefined;
     if (!meta) {
       console.error(`  ✗  No article metadata for "${articleSlug}"`);
@@ -391,12 +382,16 @@ export async function runPrerender(options: PrerenderOptions = {}): Promise<Prer
       errors++;
     }
     writeRoute(path.join(distPublic, "insights", articleSlug, "index.html"), finalHtml);
+    const localUrl = `${siteOrigin}/insights/${encodeURIComponent(articleSlug)}`;
+    if (meta.canonical === localUrl) {
+      sitemapArticleUrls.push(localUrl);
+    }
   }
 
   // Write sitemap.xml
   const sitemapPath = path.join(distPublic, "sitemap.xml");
-  fs.writeFileSync(sitemapPath, buildSitemap(lastmod, articleSlugs), "utf-8");
-  console.log(`  ✓  /sitemap.xml  (${PUBLIC_ROUTES.length + articleSlugs.length} URLs, lastmod ${lastmod})`);
+  fs.writeFileSync(sitemapPath, buildSitemap(lastmod, sitemapArticleUrls, siteOrigin), "utf-8");
+  console.log(`  ✓  /sitemap.xml  (${PUBLIC_ROUTES.length + sitemapArticleUrls.length} URLs, lastmod ${lastmod})`);
 
   // Summary
   if (errors > 0) {

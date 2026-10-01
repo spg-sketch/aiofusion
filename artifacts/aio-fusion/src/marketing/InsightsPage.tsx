@@ -80,7 +80,7 @@ function publicInsights(rows: PublicInsight[]): PublicInsight[] {
 }
 
 function initialInsights(): PublicInsight[] {
-  return globalThis.__AIO_PRERENDER_INSIGHTS__?.length
+  return globalThis.__AIO_PRERENDER_INSIGHTS__ !== undefined
     ? publicInsights(globalThis.__AIO_PRERENDER_INSIGHTS__)
     : FALLBACK_INSIGHTS;
 }

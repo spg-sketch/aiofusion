@@ -7,7 +7,13 @@ Published Insights content is authoritative in PostgreSQL, while the static fron
 
 **Why:** The public frontend is a static artifact, so browser-side fetching alone cannot make editorial changes visible to crawlers or visitors without JavaScript.
 
-**How to apply:** Publish the API artifact before rebuilding the web artifact when editorial changes must be included in prerendered HTML. If the API cannot be reached during build, the build intentionally uses the checked-in story snapshot rather than emitting empty pages.
+**How to apply:** Publish the API artifact before rebuilding the web artifact when editorial changes must be included in prerendered HTML. Unavailable or invalid CMS input must fail the build, not silently substitute checked-in stories. A valid empty CMS snapshot is authoritative. Checked-in content is reserved for explicit offline fixtures.
+
+Include only self-canonical local article pages in the sitemap, while retaining static HTML and source canonicals for syndicated articles.
+
+**Why:** Advertising duplicate local URLs in the sitemap contradicts their canonical tags and confuses indexing signals.
+
+**How to apply:** Compare sitemap article destinations with the canonical actually rendered in their HTML, using the same configured site origin.
 
 Do not infer an article's original publication date from its import, build or render time. Undated legacy stories must remain visibly undated until an editor supplies a verified date; preserve historical dates rather than bulk-backfilling them.
 
