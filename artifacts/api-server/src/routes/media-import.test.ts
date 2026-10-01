@@ -2157,3 +2157,170 @@ describe("media import route regressions", () => {
       ]));
   });
 });
+
+describe("manual contact publication names", () => {
+  it("creates a trimmed private publication for typed names and reuses exact case-insensitive names", async () => {
+    const workspace = "manual-typed-outlet-create";
+    const first = await mediaRequest("POST", "/api/store/media-db/contacts", workspace, {
+      firstName: "Typed",
+      lastName: "Reporter",
+      outletId: null,
+      outletName: "  Typed Name Daily  ",
+    });
+    expect(first.status).toBe(200);
+
+    const [publication] = await db.select().from(mediaOutletsTable)
+      .where(eq(mediaOutletsTable.id, first.json.contact.outletId));
+    expect(publication).toMatchObject({ name: "Typed Name Daily", accountId: workspace });
+    const [visibleContact] = (await mediaRequest("GET", "/api/store/media-db/contacts", workspace)).json.contacts
+      .filter((contact: { id: number }) => contact.id === first.json.contact.id);
+    expect(visibleContact).toMatchObject({ outletId: publication!.id, outletName: "Typed Name Daily" });
+
+    const second = await mediaRequest("POST", "/api/store/media-db/contacts", workspace, {
+      firstName: "Another",
+      lastName: "Reporter",
+      outletName: "typed name daily",
+    });
+    expect(second.status).toBe(200);
+    expect(second.json.contact.outletId).toBe(publication!.id);
+    const workspacePublications = await db.select().from(mediaOutletsTable)
+      .where(eq(mediaOutletsTable.accountId, workspace));
+    expect(workspacePublications.filter((outlet) => outlet.name.toLowerCase() === "typed name daily")).toHaveLength(1);
+  });
+
+  it("prefers workspace publications, falls back only to shared publications, and never reuses another private workspace's name", async () => {
+    const workspace = "manual-typed-outlet-scope";
+    const [otherPrivate, shared, own] = await db.insert(mediaOutletsTable).values([
+      { name: "Scope Preference Daily", accountId: "manual-typed-outlet-other" },
+      { name: "Scope Preference Daily", accountId: null },
+      { name: "Scope Preference Daily", accountId: workspace },
+    ]).returning();
+    const preferred = await mediaRequest("POST", "/api/store/media-db/contacts", workspace, {
+      firstName: "Same",
+      lastName: "Owner",
+      outletName: " scope preference daily ",
+    });
+    expect(preferred.status).toBe(200);
+    expect(preferred.json.contact.outletId).toBe(own!.id);
+
+    const [sharedFallback] = await db.insert(mediaOutletsTable).values({
+      name: "Shared Fallback Daily",
+      accountId: null,
+    }).returning();
+    const fallback = await mediaRequest("POST", "/api/store/media-db/contacts", workspace, {
+      firstName: "Shared",
+      lastName: "Fallback",
+      outletName: "shared fallback daily",
+    });
+    expect(fallback.status).toBe(200);
+    expect(fallback.json.contact.outletId).toBe(sharedFallback!.id);
+
+    const [otherOnly] = await db.insert(mediaOutletsTable).values({
+      name: "Private Name Isolation Daily",
+      accountId: "manual-typed-outlet-other",
+    }).returning();
+    const isolated = await mediaRequest("POST", "/api/store/media-db/contacts", workspace, {
+      firstName: "Private",
+      lastName: "Isolation",
+      outletName: "private name isolation daily",
+    });
+    expect(isolated.status).toBe(200);
+    expect(isolated.json.contact.outletId).not.toBe(otherOnly!.id);
+    const [newPrivate] = await db.select().from(mediaOutletsTable)
+      .where(eq(mediaOutletsTable.id, isolated.json.contact.outletId));
+    expect(newPrivate).toMatchObject({ name: "private name isolation daily", accountId: workspace });
+    expect(otherPrivate!.accountId).not.toBe(workspace);
+    expect(shared!.accountId).toBeNull();
+  });
+
+  it("supports typed publication edits and unlinking while preserving outletId callers", async () => {
+    const workspace = "manual-typed-outlet-edit";
+    const [legacyOutlet] = await db.insert(mediaOutletsTable).values({
+      name: "Legacy Outlet Id Publication",
+      accountId: workspace,
+    }).returning();
+    const legacy = await mediaRequest("POST", "/api/store/media-db/contacts", workspace, {
+      firstName: "Legacy",
+      lastName: "Caller",
+      outletId: legacyOutlet!.id,
+    });
+    expect(legacy.status).toBe(200);
+    expect(legacy.json.contact.outletId).toBe(legacyOutlet!.id);
+
+    const edited = await mediaRequest("PUT", `/api/store/media-db/contacts/${legacy.json.contact.id}`, workspace, {
+      outletId: null,
+      outletName: "  Edited Typed Publication  ",
+    });
+    expect(edited.status).toBe(200);
+    const [editedOutlet] = await db.select().from(mediaOutletsTable)
+      .where(eq(mediaOutletsTable.id, edited.json.contact.outletId));
+    expect(editedOutlet).toMatchObject({ name: "Edited Typed Publication", accountId: workspace });
+
+    const unlinked = await mediaRequest("PUT", `/api/store/media-db/contacts/${legacy.json.contact.id}`, workspace, {
+      outletName: "   ",
+    });
+    expect(unlinked.status).toBe(200);
+    expect(unlinked.json.contact.outletId).toBeNull();
+    const [storedContact] = await db.select().from(mediaContactsTable)
+      .where(eq(mediaContactsTable.id, legacy.json.contact.id));
+    expect(storedContact!.outletId).toBeNull();
+  });
+
+  it("rejects malformed and overlong names, and creates no publication for a suppressed typed identity", async () => {
+    const workspace = "manual-typed-outlet-validation";
+    const malformed = await mediaRequest("POST", "/api/store/media-db/contacts", workspace, {
+      firstName: "Invalid",
+      outletName: 42 as unknown as string,
+    });
+    const oversized = await mediaRequest("POST", "/api/store/media-db/contacts", workspace, {
+      firstName: "Invalid",
+      outletName: "x".repeat(201),
+    });
+    expect(malformed.status).toBe(400);
+    expect(oversized.status).toBe(400);
+
+    const suppressedOutletName = "Suppressed Typed Publication";
+    await db.insert(mediaSuppressionsTable).values({
+      scope: "workspace",
+      accountId: workspace,
+      nameHash: privacyHash("Privacy Reporter"),
+      outletHash: privacyHash(suppressedOutletName),
+      reason: "typed outlet regression",
+    });
+    const rejected = await mediaRequest("POST", "/api/store/media-db/contacts", workspace, {
+      firstName: "Privacy",
+      lastName: "Reporter",
+      outletId: null,
+      outletName: ` ${suppressedOutletName} `,
+    });
+    expect(rejected.status).toBe(409);
+    expect(await db.select().from(mediaOutletsTable)
+      .where(eq(mediaOutletsTable.accountId, workspace))).toHaveLength(0);
+    expect(await db.select().from(mediaContactsTable)
+      .where(eq(mediaContactsTable.accountId, workspace))).toHaveLength(0);
+  });
+
+  it("keeps typed publications in the shared scope for writable Master and rejects read-only Master mutation", async () => {
+    const shared = await mediaRequest("POST", "/api/store/media-db/contacts", "admin", {
+      firstName: "Shared",
+      lastName: "Typed",
+      outletId: null,
+      outletName: "Master Typed Publication",
+    }, "owner", "admin");
+    expect(shared.status).toBe(200);
+    const [sharedOutlet] = await db.select().from(mediaOutletsTable)
+      .where(eq(mediaOutletsTable.id, shared.json.contact.outletId));
+    expect(sharedOutlet).toMatchObject({ name: "Master Typed Publication", accountId: null });
+    expect(shared.json.contact.accountId).toBeNull();
+
+    const readOnly = await mediaRequest("POST", "/api/store/media-db/contacts", "admin", {
+      firstName: "Blocked",
+      lastName: "Master",
+      outletId: null,
+      outletName: "Blocked Master Typed Publication",
+    }, "viewer", "admin");
+    expect(readOnly.status).toBe(403);
+    expect(await db.select().from(mediaOutletsTable)
+      .where(eq(mediaOutletsTable.name, "Blocked Master Typed Publication"))).toHaveLength(0);
+  });
+});

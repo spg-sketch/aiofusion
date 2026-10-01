@@ -13,7 +13,7 @@ vi.mock("../IntakeForm", () => ({
 import { MediaDatabasePage, contactCompletenessPercent, contactDisplayName, contactExportRow, importOutcomesWithErrors, importPlanHasWork, isUploadedMediaContact, publicationWebsiteHref, sanitizeSpreadsheetCell } from "./MediaDatabasePage";
 
 const changedContact = {
-  id: 12, outletId: 2, firstName: "Jane", lastName: "Reporter", role: "Energy Editor",
+  id: 12, outletId: 2, outletName: "Existing Outlet", firstName: "Jane", lastName: "Reporter", role: "Energy Editor",
   email: "jane@example.com", phone: "", notes: "", accountId: "account-a",
   sourceUrl: "https://example.com/jane", sourceRef: "Contacts:2", sourceStatus: "changed",
   beats: ["energy", "climate"], sectors: ["Energy", "Environment"], geography: "UK", confidence: "High",
@@ -36,6 +36,7 @@ let searchEmptyMode = false;
 let outletTotalOverride = 0;
 let bookmarkTestRows: Array<Record<string, unknown>> = [];
 let bookmarkTotalOverride: number | null = null;
+let contactSaveFailure = false;
 
 async function browseContacts() {
   const manageButton = screen.queryByRole("button", { name: "Manage my records" });
@@ -55,13 +56,14 @@ async function browseOutlets() {
 }
 
 async function submitPublicationSearch() {
+  bookmarkTestRows = [{ type: "publication", targetId: 20 }];
   await waitFor(() => expect(Array.from((screen.getByLabelText("Sector filter") as HTMLSelectElement).options).some((option) => option.value === "Energy")).toBe(true));
   fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
   fireEvent.change(screen.getByLabelText("Media collection scope"), { target: { value: "saved" } });
   fireEvent.change(screen.getByLabelText("Sector filter"), { target: { value: "Energy" } });
   fireEvent.change(screen.getByLabelText("Region filter"), { target: { value: "UK" } });
-  fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "energy" } });
-  fireEvent.click(screen.getByRole("button", { name: "Search" }));
+  fireEvent.change(screen.getByTestId("input-media-search"), { target: { value: "energy" } });
+  fireEvent.click(screen.getByTestId("button-search-media"));
   expect(await screen.findByText("=Injected Media")).toBeTruthy();
 }
 
@@ -106,7 +108,21 @@ describe("MediaDatabasePage source health", () => {
             pageSize,
           }), { status: 200 });
         }
-        return new Response(JSON.stringify({ bookmarks: [] }), { status: 200 });
+        const bookmarkUrl = new URL(url, "http://test.local");
+        const pathParts = bookmarkUrl.pathname.split("/");
+        const recordType = pathParts[pathParts.length - 2];
+        const targetIdValue = pathParts[pathParts.length - 1];
+        const type = recordType === "publication" ? "publication" : "contact";
+        const targetId = Number(targetIdValue);
+        if (init.method === "PUT") {
+          bookmarkTestRows = [
+            ...bookmarkTestRows.filter((bookmark) => !(bookmark.type === type && Number(bookmark.targetId) === targetId)),
+            { type, targetId },
+          ];
+        } else if (init.method === "DELETE") {
+          bookmarkTestRows = bookmarkTestRows.filter((bookmark) => !(bookmark.type === type && Number(bookmark.targetId) === targetId));
+        }
+        return new Response(JSON.stringify({ bookmarks: bookmarkTestRows }), { status: 200 });
       }
       if (url.includes("/media-db/import")) {
         const request = JSON.parse(String(init?.body ?? "{}")) as { commit?: boolean; collectionScope?: string };
@@ -137,18 +153,32 @@ describe("MediaDatabasePage source health", () => {
       if (url.includes("/media-db/search")) {
         const searchParams = new URL(url, "http://test.local").searchParams;
         const isPublicRelationsSearch = searchParams.get("category") === "Public Relations (PR)";
+        const allResults = [{
+          type: "contact", id: 12, contact: changedContact, authority: 75,
+          matchedFields: ["role"], matchedPhrases: ["energy"],
+          reasons: ["Matched role.", "Contains the exact phrase \"energy\"."],
+        }, {
+          type: "outlet", id: 20, outlet: { id: 20, name: isPublicRelationsSearch ? "PR Weekly" : "Energy Weekly", category: isPublicRelationsSearch ? "Public Relations (PR)" : "Energy", website: "energy.example", description: "", country: "UK", reachBand: "National", linkedinUrl: "https://linkedin.com/company/energy-weekly", linkedJournalists: [changedContact], accountId: null },
+          authority: 0, matchedFields: ["publication"], matchedPhrases: [], reasons: ["Matched publication."],
+        }];
+        const requestedType = searchParams.get("type");
+        let results = allResults.filter((result) => requestedType === "publications" ? result.type === "outlet" : result.type === "contact");
+        if (searchParams.get("scope") === "saved") {
+          results = results.filter((result) => bookmarkTestRows.some((bookmark) => bookmark.type === (result.type === "outlet" ? "publication" : "contact") && Number(bookmark.targetId) === result.id));
+        }
+        if (searchEmptyMode) results = [];
         return new Response(JSON.stringify({
           interpretation: { phrase: "energy", topic: "", location: "", category: "", authority: 0 },
-          results: searchEmptyMode ? [] : [{
-            type: "contact", id: 12, contact: changedContact, authority: 75,
-            matchedFields: ["role"], matchedPhrases: ["energy"],
-            reasons: ["Matched role.", "Contains the exact phrase \"energy\"."],
-          }, {
-            type: "outlet", id: 20, outlet: { id: 20, name: isPublicRelationsSearch ? "PR Weekly" : "Energy Weekly", category: isPublicRelationsSearch ? "Public Relations (PR)" : "Energy", website: "energy.example", description: "", country: "UK", reachBand: "National", linkedinUrl: "https://linkedin.com/company/energy-weekly", linkedJournalists: [changedContact], accountId: null },
-            authority: 0, matchedFields: ["publication"], matchedPhrases: [], reasons: ["Matched publication."],
-          }],
-           total: searchTotalOverride, counts: { contacts: searchEmptyMode ? 0 : 1, outlets: searchEmptyMode ? 0 : 1 },
+          results,
+          total: searchParams.get("scope") === "saved"
+            ? bookmarkTestRows.filter((bookmark) => bookmark.type === (requestedType === "publications" ? "publication" : "contact")).length
+            : searchTotalOverride,
+          counts: { contacts: results.filter((result) => result.type === "contact").length, outlets: results.filter((result) => result.type === "outlet").length },
         }), { status: 200 });
+      }
+      if (url.includes("/contacts") && (init?.method === "POST" || init?.method === "PUT")) {
+        if (contactSaveFailure) return new Response(JSON.stringify({ error: "Contact save rejected." }), { status: 400 });
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
       if (url.includes("/contacts")) {
         return new Response(JSON.stringify({
@@ -182,6 +212,7 @@ describe("MediaDatabasePage source health", () => {
     outletTotalOverride = 0;
     bookmarkTestRows = [];
     bookmarkTotalOverride = null;
+    contactSaveFailure = false;
     vi.unstubAllGlobals();
   });
 
@@ -261,6 +292,48 @@ describe("MediaDatabasePage source health", () => {
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/search"))).toBe(false);
   });
 
+  it("keeps the lower Search button after every advanced filter, pink, and submits all filter values", async () => {
+    bookmarkTestRows = [{ type: "publication", targetId: 20 }];
+    render(<MediaDatabasePage />);
+    await waitFor(() => expect(Array.from((screen.getByLabelText("Sector filter") as HTMLSelectElement).options)
+      .some((option) => option.value === "Energy")).toBe(true));
+
+    const firstSearch = screen.getByTestId("button-search-media");
+    const bottomSearch = screen.getByTestId("button-search-media-bottom");
+    const topic = screen.getByPlaceholderText("e.g. fintech");
+    const authority = screen.getByPlaceholderText("0-100");
+    const sector = screen.getByLabelText("Sector filter");
+    const region = screen.getByLabelText("Region filter");
+    for (const filter of [sector, region, topic, authority]) {
+      expect(filter.compareDocumentPosition(bottomSearch) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    expect(firstSearch.compareDocumentPosition(bottomSearch) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(bottomSearch.style.backgroundColor).toBe("rgb(165, 47, 96)");
+
+    fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
+    fireEvent.change(screen.getByLabelText("Media collection scope"), { target: { value: "saved" } });
+    fireEvent.change(sector, { target: { value: "Energy" } });
+    fireEvent.change(region, { target: { value: "UK" } });
+    fireEvent.change(screen.getByTestId("input-media-search"), { target: { value: "energy press" } });
+    fireEvent.change(topic, { target: { value: "renewables" } });
+    fireEvent.change(authority, { target: { value: "72" } });
+    fireEvent.click(bottomSearch);
+
+    expect(await screen.findByText("Energy Weekly")).toBeTruthy();
+    await waitFor(() => {
+      const search = vi.mocked(fetch).mock.calls
+        .map(([input]) => new URL(String(input), "http://test.local"))
+        .find((url) => url.pathname.endsWith("/media-db/search")
+          && url.searchParams.get("phrase") === "energy press"
+          && url.searchParams.get("topic") === "renewables");
+      expect(search?.searchParams.get("type")).toBe("publications");
+      expect(search?.searchParams.get("scope")).toBe("saved");
+      expect(search?.searchParams.get("category")).toBe("Energy");
+      expect(search?.searchParams.get("location")).toBe("UK");
+      expect(search?.searchParams.get("authority")).toBe("72");
+    });
+  });
+
   it("starts with Search Media Database first and selected in pink, without the saved-publications shortcut", () => {
     render(<MediaDatabasePage />);
     const navigation = within(screen.getByRole("navigation", { name: "Media Database sections" }));
@@ -271,6 +344,8 @@ describe("MediaDatabasePage source health", () => {
     expect(searchButton).toHaveAttribute("aria-current", "page");
     expect(searchButton.style.backgroundColor).toBe("rgb(165, 47, 96)");
     expect(searchButton.style.color).toBe("rgb(255, 255, 255)");
+    expect(screen.getByLabelText("Search the media database")).toBeTruthy();
+    expect(screen.queryByText("SEARCH MY MEDIA DATABASE")).toBeNull();
     expect(navigation.getAllByRole("button").filter((button) => button.hasAttribute("aria-current"))).toHaveLength(1);
     expect(navigation.getByRole("button", { name: "Manage my records" }).style.backgroundColor).toBe("");
     expect(screen.queryByRole("button", { name: "Saved publications" })).toBeNull();
@@ -278,6 +353,7 @@ describe("MediaDatabasePage source health", () => {
   });
 
   it("moves the selected pink navigation between saved media, management and search without remounting buttons", async () => {
+    bookmarkTestRows = [{ type: "contact", targetId: 12 }];
     render(<MediaDatabasePage />);
     const navElement = screen.getByRole("navigation", { name: "Media Database sections" });
     const navigation = within(navElement);
@@ -293,17 +369,24 @@ describe("MediaDatabasePage source health", () => {
     fireEvent.click(savedButton);
     await screen.findByText("1 contacts found");
     expectSelected(savedButton);
+    expect(screen.getByText("SEARCH MY MEDIA DATABASE")).toBeTruthy();
+    expect(screen.queryByLabelText("Search the media database")).toBeNull();
     fireEvent.click(manageButton);
     expect(screen.getByRole("heading", { name: "Manage my records" })).toBeTruthy();
+    expect(navigation.getByRole("button", { name: "Manage my records" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Back to My Media Database" })).toBeNull();
     expectSelected(manageButton);
-    fireEvent.click(screen.getByRole("button", { name: "Back to My Media Database" }));
+    fireEvent.click(navigation.getByRole("button", { name: "My Media Database" }));
     expectSelected(savedButton);
+    expect(screen.getByText("SEARCH MY MEDIA DATABASE")).toBeTruthy();
     fireEvent.click(searchButton);
     expectSelected(searchButton);
+    expect(screen.getByLabelText("Search the media database")).toBeTruthy();
+    expect(screen.queryByText("SEARCH MY MEDIA DATABASE")).toBeNull();
     expect(navigation.getByRole("button", { name: "Search Media Database" })).toBe(searchButton);
     expect(screen.queryByText(/contacts found/)).toBeNull();
     fireEvent.click(manageButton);
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(screen.getByTestId("button-search-media"));
     await screen.findByText("Jane Reporter");
     expectSelected(searchButton);
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));
@@ -322,7 +405,7 @@ describe("MediaDatabasePage source health", () => {
 
   it("searches all collections on submission and lets the account save shared records separately", async () => {
     render(<MediaDatabasePage />);
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(screen.getByTestId("button-search-media"));
     expect(await screen.findByText("Jane Reporter")).toBeTruthy();
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => {
       const url = new URL(String(input), "http://test.local");
@@ -337,8 +420,8 @@ describe("MediaDatabasePage source health", () => {
 
   it("supports Enter submission and displays result metadata in white", async () => {
     render(<MediaDatabasePage />);
-    fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "energy" } });
-    fireEvent.keyDown(screen.getByLabelText("Search the media database"), { key: "Enter" });
+    fireEvent.change(screen.getByTestId("input-media-search"), { target: { value: "energy" } });
+    fireEvent.keyDown(screen.getByTestId("input-media-search"), { key: "Enter" });
     expect(await screen.findByText("Jane Reporter")).toBeTruthy();
     expect(screen.getByText("1 contacts found").style.color).toBe("rgb(255, 255, 255)");
     expect(screen.getByText("0/25 selected").parentElement?.style.color).toBe("rgb(255, 255, 255)");
@@ -357,7 +440,7 @@ describe("MediaDatabasePage source health", () => {
     expect(screen.queryByRole("cell", { name: "Jane" })).toBeNull();
     expect(screen.queryByText(/contacts found/)).toBeNull();
     expect(searchCalls()).toBe(callsBefore);
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(screen.getByTestId("button-search-media"));
     expect(await screen.findByText("Jane Reporter")).toBeTruthy();
   });
 
@@ -367,8 +450,8 @@ describe("MediaDatabasePage source health", () => {
       .some((option) => option.value === "Public Relations (PR)")).toBe(true));
     fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
     fireEvent.change(screen.getByLabelText("Sector filter"), { target: { value: "Public Relations (PR)" } });
-    fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "public relations" } });
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.change(screen.getByTestId("input-media-search"), { target: { value: "public relations" } });
+    fireEvent.click(screen.getByTestId("button-search-media"));
 
     expect(await screen.findByText("PR Weekly")).toBeTruthy();
     const search = vi.mocked(fetch).mock.calls.map(([input]) => new URL(String(input), "http://test.local"))
@@ -413,11 +496,11 @@ describe("MediaDatabasePage source health", () => {
     render(<MediaDatabasePage />);
     fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
     fireEvent.change(screen.getByLabelText("Media collection scope"), { target: { value: "all" } });
-    fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "energy" } });
+    fireEvent.change(screen.getByTestId("input-media-search"), { target: { value: "energy" } });
     await new Promise((resolve) => window.setTimeout(resolve, 250));
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/search"))).toBe(false);
     expect(vi.mocked(fetch).mock.calls.some(([input]) => new URL(String(input), "http://test.local").searchParams.get("phrase") === "energy")).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(screen.getByTestId("button-search-media"));
     expect(await screen.findByText("Energy Weekly")).toBeTruthy();
     expect(screen.getByText("Currently linked journalists (1)")).toBeTruthy();
     expect(screen.getAllByRole("link", { name: "LinkedIn" })[0]).toHaveAttribute("href", "https://linkedin.com/company/energy-weekly");
@@ -429,8 +512,8 @@ describe("MediaDatabasePage source health", () => {
   it("saves and unsaves a search result using the account bookmark endpoints", async () => {
     render(<MediaDatabasePage />);
     fireEvent.change(screen.getByLabelText("Media collection scope"), { target: { value: "all" } });
-    fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "energy" } });
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.change(screen.getByTestId("input-media-search"), { target: { value: "energy" } });
+    fireEvent.click(screen.getByTestId("button-search-media"));
     expect(await screen.findByText("Jane Reporter")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Save to My Media Database" }));
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(
@@ -445,6 +528,53 @@ describe("MediaDatabasePage source health", () => {
     ));
   });
 
+  it.each([
+    ["contact", "Jane Reporter", "button-save-media-contact-12"],
+    ["publication", "Energy Weekly", "button-save-media-publication-20"],
+  ] as const)("persists a bookmarked %s through My Media Database and a fresh page mount", async (type, title, saveTestId) => {
+    render(<MediaDatabasePage />);
+    if (type === "publication") {
+      fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
+    }
+    fireEvent.change(screen.getByTestId("input-media-search"), { target: { value: "energy" } });
+    fireEvent.click(screen.getByTestId("button-search-media"));
+    expect(await screen.findByText(title)).toBeTruthy();
+    fireEvent.click(screen.getByTestId(saveTestId));
+
+    await waitFor(() => expect(bookmarkTestRows).toEqual([
+      { type, targetId: type === "contact" ? 12 : 20 },
+    ]));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining(`/api/store/media-db/bookmarks/${type === "publication" ? "publication" : "contact"}/${type === "contact" ? 12 : 20}`),
+      expect.objectContaining({ method: "PUT", credentials: "include" }),
+    ));
+
+    const openMyMediaDatabase = async () => {
+      fireEvent.click(screen.getByRole("button", { name: "My Media Database" }));
+      if (type === "publication") {
+        fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
+      }
+      await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => {
+        const url = new URL(String(input), "http://test.local");
+        return url.pathname.endsWith("/media-db/search") && url.searchParams.get("scope") === "saved"
+          && url.searchParams.get("type") === (type === "publication" ? "publications" : "contacts");
+      })).toBe(true));
+      if (type === "contact") {
+        expect((await screen.findByText(/\d+ contacts found/)).textContent).toBe("1 contacts found");
+        expect(await screen.findByRole("cell", { name: "Jane" })).toBeTruthy();
+        expect(screen.getByRole("cell", { name: "Reporter" })).toBeTruthy();
+      } else {
+        expect(await screen.findByRole("cell", { name: title })).toBeTruthy();
+      }
+    };
+    await openMyMediaDatabase();
+
+    cleanup();
+    render(<MediaDatabasePage />);
+    await openMyMediaDatabase();
+    expect(bookmarkTestRows).toEqual([{ type, targetId: type === "contact" ? 12 : 20 }]);
+  });
+
   it("loads saved media across bookmark pages beyond the first page", async () => {
     bookmarkTestRows = Array.from({ length: 100 }, (_, index) => ({ type: "contact", targetId: index + 1000 }));
     bookmarkTestRows.push({ type: "publication", targetId: 20 });
@@ -455,7 +585,7 @@ describe("MediaDatabasePage source health", () => {
       expect(requests.some((url) => url.includes("/media-db/bookmarks?") && url.includes("page=2") && url.includes("pageSize=100"))).toBe(true);
     });
     fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(screen.getByTestId("button-search-media"));
     expect(await screen.findByText("Energy Weekly")).toBeTruthy();
     expect(await screen.findByRole("button", { name: "Remove from My Media Database" })).toBeTruthy();
   });
@@ -484,7 +614,7 @@ describe("MediaDatabasePage source health", () => {
     bookmarkTestRows = [{ type: "publication", targetId: 20 }];
     render(<MediaDatabasePage />);
     fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(screen.getByTestId("button-search-media"));
     expect(await screen.findByText("Energy Weekly")).toBeTruthy();
     await waitFor(() => expect(screen.getByRole("button", { name: "Export saved connections CSV" }).hasAttribute("disabled")).toBe(false));
     fireEvent.click(screen.getByRole("button", { name: "Export saved connections CSV" }));
@@ -520,6 +650,7 @@ describe("MediaDatabasePage source health", () => {
   });
 
   it("keeps type, collection, sector and region filters when paging and resets them with Clear", async () => {
+    bookmarkTestRows = Array.from({ length: 50 }, (_, index) => ({ type: "publication", targetId: 20 + index }));
     searchTotalOverride = 50;
     render(<MediaDatabasePage />);
     await waitFor(() => expect(Array.from((screen.getByLabelText("Sector filter") as HTMLSelectElement).options).some((option) => option.value === "Energy")).toBe(true));
@@ -527,8 +658,8 @@ describe("MediaDatabasePage source health", () => {
     fireEvent.change(screen.getByLabelText("Media collection scope"), { target: { value: "saved" } });
     fireEvent.change(screen.getByLabelText("Sector filter"), { target: { value: "Energy" } });
     fireEvent.change(screen.getByLabelText("Region filter"), { target: { value: "UK" } });
-    fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "energy" } });
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.change(screen.getByTestId("input-media-search"), { target: { value: "energy" } });
+    fireEvent.click(screen.getByTestId("button-search-media"));
     expect(await screen.findByText("Energy Weekly")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() => {
@@ -543,7 +674,7 @@ describe("MediaDatabasePage source health", () => {
     expect(screen.queryByText("Energy Weekly")).toBeNull();
     expect(screen.queryByText(/publications found/)).toBeNull();
     expect(screen.queryByText("No matching contacts")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(screen.getByTestId("button-search-media"));
     await waitFor(() => {
       const requests = vi.mocked(fetch).mock.calls.map(([input]) => String(input)).filter((url) => url.includes("/media-db/search?"));
       const cleared = requests.length ? new URL(requests[requests.length - 1], "http://test.local").searchParams : undefined;
@@ -559,8 +690,8 @@ describe("MediaDatabasePage source health", () => {
     searchEmptyMode = true;
     render(<MediaDatabasePage />);
     fireEvent.change(screen.getByLabelText("Media collection scope"), { target: { value: "all" } });
-    fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "nothing" } });
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.change(screen.getByTestId("input-media-search"), { target: { value: "nothing" } });
+    fireEvent.click(screen.getByTestId("button-search-media"));
     expect(await screen.findByText("No matching contacts")).toBeTruthy();
     expect(screen.getByText("Media Database")).toBeTruthy();
   });
@@ -666,11 +797,82 @@ describe("MediaDatabasePage source health", () => {
     confirm.mockRestore();
   });
 
+  it("saves a free-typed publication name on a new contact and closes the form", async () => {
+    render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Manage my records" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add contact" }));
+
+    const publication = screen.getByRole("textbox", { name: "Publication / outlet" }) as HTMLInputElement;
+    expect(publication).toHaveAttribute("id", "contact-publication-name");
+    expect(publication.tagName).toBe("INPUT");
+    expect(publication).not.toHaveAttribute("list");
+    expect(document.querySelector("datalist")).toBeNull();
+    fireEvent.change(screen.getByPlaceholderText("Jane"), { target: { value: "Alex" } });
+    fireEvent.change(screen.getByPlaceholderText("Smith"), { target: { value: "Editor" } });
+    fireEvent.change(publication, { target: { value: "  Independent Review  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save contact" }));
+
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input, init]) =>
+      String(input).endsWith("/media-db/contacts") && init?.method === "POST")).toBe(true));
+    const [, post] = vi.mocked(fetch).mock.calls.find(([input, init]) =>
+      String(input).endsWith("/media-db/contacts") && init?.method === "POST")!;
+    expect(JSON.parse(String(post?.body))).toMatchObject({
+      firstName: "Alex",
+      lastName: "Editor",
+      outletId: null,
+      outletName: "Independent Review",
+    });
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Add contact" })).toBeNull());
+  });
+
+  it("preserves an existing publication link unless its name is changed to a free-typed outlet", async () => {
+    render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Manage my records" }));
+    await browseContacts();
+
+    fireEvent.click(screen.getAllByTitle("Edit")[0]);
+    const publication = screen.getByRole("textbox", { name: "Publication / outlet" });
+    expect(publication).toHaveValue("Existing Outlet");
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input, init]) =>
+      String(input).endsWith("/media-db/contacts/12") && init?.method === "PUT")).toBe(true));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Edit contact" })).toBeNull());
+
+    fireEvent.click(screen.getAllByTitle("Edit")[0]);
+    fireEvent.change(screen.getByRole("textbox", { name: "Publication / outlet" }), {
+      target: { value: "  New Independent Outlet  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([input, init]) =>
+      String(input).endsWith("/media-db/contacts/12") && init?.method === "PUT")).toHaveLength(2));
+
+    const updateBodies = vi.mocked(fetch).mock.calls
+      .filter(([input, init]) => String(input).endsWith("/media-db/contacts/12") && init?.method === "PUT")
+      .map(([, init]) => JSON.parse(String(init?.body)));
+    expect(updateBodies[0]).toMatchObject({ outletId: "2" });
+    expect(updateBodies[0]).not.toHaveProperty("outletName");
+    expect(updateBodies[1]).toMatchObject({ outletId: null, outletName: "New Independent Outlet" });
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Edit contact" })).toBeNull());
+  });
+
+  it("keeps a failed contact save open and exposes its server error", async () => {
+    contactSaveFailure = true;
+    render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Manage my records" }));
+    await browseContacts();
+    fireEvent.click(screen.getAllByTitle("Edit")[0]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Contact save rejected.");
+    expect(screen.getByRole("heading", { name: "Edit contact" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Publication / outlet" })).toHaveValue("Existing Outlet");
+  });
+
   it("confirms submitted correction reports are pending internal review", async () => {
     render(<MediaDatabasePage />);
     fireEvent.change(screen.getByLabelText("Media collection scope"), { target: { value: "all" } });
-    fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "energy" } });
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.change(screen.getByTestId("input-media-search"), { target: { value: "energy" } });
+    fireEvent.click(screen.getByTestId("button-search-media"));
     expect(await screen.findByText("Jane Reporter")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Flag incorrect details" }));
     fireEvent.click(screen.getByLabelText("role"));
@@ -684,8 +886,8 @@ describe("MediaDatabasePage source health", () => {
     render(<MediaDatabasePage />);
     await browseContacts();
     fireEvent.change(screen.getByLabelText("Media collection scope"), { target: { value: "all" } });
-    fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "energy" } });
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.change(screen.getByTestId("input-media-search"), { target: { value: "energy" } });
+    fireEvent.click(screen.getByTestId("button-search-media"));
     expect(await screen.findByText("Jane Reporter")).toBeTruthy();
     expect(screen.getByText("1 contacts found")).toBeTruthy();
     expect(screen.getByText("Matched role")).toBeTruthy();
@@ -859,9 +1061,9 @@ describe("MediaDatabasePage source health", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
     fireEvent.change(screen.getByLabelText("Media collection scope"), { target: { value: "all" } });
-    fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "energy" } });
+    fireEvent.change(screen.getByTestId("input-media-search"), { target: { value: "energy" } });
     fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(screen.getByTestId("button-search-media"));
     expect(await screen.findByText("Energy Weekly")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Mark as departed" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Flag incorrect details" })).toBeNull();

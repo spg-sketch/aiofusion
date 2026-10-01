@@ -442,13 +442,14 @@ function MediaDatabasePage() {
   const [sourceReviewContact, setSourceReviewContact] = useState<Contact | null>(null);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [contactForm, setContactForm] = useState({
-    outletId: "", firstName: "", lastName: "", role: "", email: "", phone: "", notes: "",
+    outletId: "", outletName: "", firstName: "", lastName: "", role: "", email: "", phone: "", notes: "",
     mobile: "", linkedinUrl: "", twitterHandle: "", beats: "", sectors: "", geography: "",
     language: "", seniority: "", editorialStatus: "", sourceUrl: "", sourceRef: "",
     publicationReach: "", publicationAuthority: "", journalistAuthority: "", confidence: "",
     lastVerifiedAt: ""
   });
   const [contactSaving, setContactSaving] = useState(false);
+  const [contactSaveError, setContactSaveError] = useState("");
   const [deletingContactId, setDeletingContactId] = useState<number | null>(null);
   const [sourceCheckingId, setSourceCheckingId] = useState<number | null>(null);
   const [sourceActionError, setSourceActionError] = useState("");
@@ -989,15 +990,10 @@ function MediaDatabasePage() {
 
   const openAddContact = () => {
     if (!canWriteMediaDatabase) return;
-    if (!outlets.length) {
-      void fetch(`${apiBase()}/api/store/media-db/outlets?page=1&pageSize=50`, { credentials: "include" })
-        .then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not load publications.")))
-        .then((data) => setOutlets(data.outlets ?? []))
-        .catch(() => setResultMessage("Publications could not be loaded. You can still save the contact without a linked publication."));
-    }
     setEditingContact(null);
+    setContactSaveError("");
     setContactForm({
-      outletId: "", firstName: "", lastName: "", role: "", email: "", phone: "", notes: "",
+      outletId: "", outletName: "", firstName: "", lastName: "", role: "", email: "", phone: "", notes: "",
       mobile: "", linkedinUrl: "", twitterHandle: "", beats: "", sectors: "", geography: "",
       language: "", seniority: "", editorialStatus: "", sourceUrl: "", sourceRef: "",
       publicationReach: "", publicationAuthority: "", journalistAuthority: "", confidence: "",
@@ -1008,8 +1004,10 @@ function MediaDatabasePage() {
   const openEditContact = (c: Contact) => {
     if (!canManageCollectionItem(c, isMaster, canWriteMediaDatabase, session?.username)) return;
     setEditingContact(c);
+    setContactSaveError("");
     setContactForm({
       outletId: c.outletId ? String(c.outletId) : "",
+      outletName: c.outletName || outlets.find((outlet) => outlet.id === c.outletId)?.name || "",
       firstName: c.firstName || "", lastName: c.lastName || "", role: c.role || "",
       email: c.email || "", phone: c.phone || "", notes: c.notes || "",
       mobile: c.mobile || "", linkedinUrl: c.linkedinUrl || "", twitterHandle: c.twitterHandle || "",
@@ -1027,9 +1025,12 @@ function MediaDatabasePage() {
   const saveContact = async () => {
     if (!canWriteMediaDatabase || (editingContact && !canManageCollectionItem(editingContact, isMaster, canWriteMediaDatabase, session?.username)) || (!contactForm.firstName.trim() && !contactForm.lastName.trim()) || contactSaving) return;
     setContactSaving(true);
+    setContactSaveError("");
     try {
       const payload = {
         ...contactForm,
+        outletId: contactForm.outletId || null,
+        outletName: contactForm.outletId ? undefined : contactForm.outletName.trim(),
         beats: contactForm.beats.split(",").map(s => s.trim()).filter(Boolean),
         sectors: contactForm.sectors.split(",").map(s => s.trim()).filter(Boolean),
         publicationAuthority: contactForm.publicationAuthority || undefined,
@@ -1038,9 +1039,17 @@ function MediaDatabasePage() {
       const resp = editingContact
         ? await fetch(`${apiBase()}/api/store/media-db/contacts/${editingContact.id}`, { method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
         : await fetch(`${apiBase()}/api/store/media-db/contacts`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      if (resp.ok) { setShowContactModal(false); await loadData(); }
-    } catch {}
-    setContactSaving(false);
+      if (!resp.ok) {
+        const error = await resp.json().catch(() => ({}));
+        throw new Error(error.error || "Could not save this contact.");
+      }
+      setShowContactModal(false);
+      await loadData();
+    } catch (error) {
+      setContactSaveError(error instanceof Error ? error.message : "Could not save this contact.");
+    } finally {
+      setContactSaving(false);
+    }
   };
   const deleteContact = async (id: number, savedContact?: Contact) => {
     const contact = savedContact ?? contacts.find((item) => item.id === id);
@@ -1370,7 +1379,7 @@ function MediaDatabasePage() {
 
       {showCollectionTools && <section className="mb-5 rounded-2xl border bg-white shadow-sm" style={{ borderColor: vars.g200 }}>
         <div className="p-4 sm:p-5">
-          <label htmlFor="media-primary-search" className="block text-[12px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: vars.navy }}>Search the media database</label>
+          <label htmlFor="media-primary-search" className="block text-[12px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: vars.navy }}>{searchScope === "saved" ? "SEARCH MY MEDIA DATABASE" : "Search the media database"}</label>
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Search
               <select data-testid="select-search-record-type" aria-label="Search record type" value={searchType} onChange={(event) => { setSelectedMedia(new Set()); setSearchType(event.target.value as "contacts" | "publications"); setSearchPage(1); }} className="ml-2 rounded-lg border bg-white px-3 py-2 text-[12px]" style={{ borderColor: vars.g200 }}>
@@ -1407,6 +1416,9 @@ function MediaDatabasePage() {
              <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Topic<input value={searchTopic} onChange={(event) => { setSearchTopic(event.target.value); setSearchPage(1); }} placeholder="e.g. fintech" className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-[13px] font-normal" style={{ borderColor: vars.g200 }} /></label>
              <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Minimum authority<input type="number" min="0" max="100" value={searchAuthority} onChange={(event) => { setSearchAuthority(event.target.value); setSearchPage(1); }} placeholder="0-100" className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-[13px] font-normal" style={{ borderColor: vars.g200 }} /></label>
            </div>
+            <div className="mt-4 flex justify-end">
+              <button data-testid="button-search-media-bottom" onClick={runSearch} className="rounded-lg px-4 py-2 text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Search</button>
+            </div>
         </div>
       </section>}
 
@@ -1557,7 +1569,6 @@ function MediaDatabasePage() {
       {showManagement && <section className="mb-5 rounded-2xl border bg-white p-4" style={{ borderColor: vars.g200 }}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-[18px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Manage my records</h2>
-          <button onClick={() => openSavedMedia("contacts")} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.accent }}>Back to My Media Database</button>
         </div>
       <div className="mt-4">
        {canWriteMediaDatabase && <div className="mb-4 flex flex-wrap gap-2">
@@ -2288,11 +2299,14 @@ function MediaDatabasePage() {
                   ))}
                 </div>
                 <div className="mb-4">
-                  <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>Publication / outlet</label>
-                  <SearchableOutletPicker
-                    outlets={outletOptions}
-                    value={contactForm.outletId}
-                    onChange={(id) => setContactForm((f) => ({ ...f, outletId: id }))}
+                  <label htmlFor="contact-publication-name" className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>Publication / outlet</label>
+                  <input
+                    id="contact-publication-name"
+                    value={contactForm.outletName}
+                    onChange={(event) => setContactForm((form) => ({ ...form, outletId: "", outletName: event.target.value }))}
+                    placeholder="Type the publication name"
+                    className="w-full px-3 py-2 rounded-lg border text-[13px] outline-none focus:border-slate-400"
+                    style={{ borderColor: vars.g200 }}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -2374,6 +2388,7 @@ function MediaDatabasePage() {
               </section>
             </div>
 
+            {contactSaveError && <p role="alert" className="px-6 pb-3 text-[13px]" style={{ color: vars.red }}>{contactSaveError}</p>}
             <div className="px-6 py-4 border-t flex gap-2 justify-end bg-slate-50" style={{ borderColor: vars.g200 }}>
               <button onClick={() => setShowContactModal(false)} className="px-4 py-2 rounded-lg text-[13px] font-semibold border bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}>Cancel</button>
               <button onClick={() => void saveContact()} disabled={(!contactForm.firstName.trim() && !contactForm.lastName.trim()) || contactSaving} className="flex items-center gap-2 px-5 py-2 rounded-lg text-[13px] font-semibold text-white transition-all disabled:opacity-50" style={{ background: vars.accent }}>

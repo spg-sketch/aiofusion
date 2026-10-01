@@ -2021,12 +2021,52 @@ const RICH_CONTACT_STRING_FIELDS = [
   "publicationAuthority", "journalistAuthority", "confidence", "reviewNotes",
 ] as const;
 
+const MANUAL_PUBLICATION_NAME_MAX_LENGTH = 200;
+
 function cleanContactStrings(body: Record<string, unknown>): Record<string, string> {
   const values: Record<string, string> = {};
   for (const field of RICH_CONTACT_STRING_FIELDS) {
     if (typeof body[field] === "string") values[field] = body[field].trim().slice(0, field === "notes" || field === "reviewNotes" ? 8000 : 2000);
   }
   return values;
+}
+
+async function findOrCreateManualContactOutlet(
+  tx: any,
+  name: string,
+  accountId: string | null,
+): Promise<number> {
+  const normalizedName = name.toLowerCase();
+  const findActive = async (ownerAccountId: string | null) => {
+    const ownerCondition = ownerAccountId === null
+      ? isNull(mediaOutletsTable.accountId)
+      : eq(mediaOutletsTable.accountId, ownerAccountId);
+    return tx.select({ id: mediaOutletsTable.id })
+      .from(mediaOutletsTable)
+      .where(and(
+        ownerCondition,
+        isNull(mediaOutletsTable.deletedAt),
+        sql`lower(trim(${mediaOutletsTable.name})) = ${normalizedName}`,
+      ))
+      .orderBy(asc(mediaOutletsTable.id))
+      .limit(1);
+  };
+
+  const [sameOwner] = await findActive(accountId);
+  if (sameOwner) return sameOwner.id;
+
+  // Workspace contacts may link to canonical shared publications, but may
+  // never discover or reuse another workspace's private publication by name.
+  if (accountId !== null) {
+    const [shared] = await findActive(null);
+    if (shared) return shared.id;
+  }
+
+  const [created] = await tx.insert(mediaOutletsTable)
+    .values({ name, accountId })
+    .returning({ id: mediaOutletsTable.id });
+  if (!created) throw new Error("Failed to create publication");
+  return created.id;
 }
 
 function cleanContactArray(value: unknown): string[] | undefined {
@@ -3115,6 +3155,15 @@ router.post(
     try {
       const body = (req.body ?? {}) as Record<string, unknown>;
       const { outletId, firstName, lastName } = body;
+      if (body.outletName !== undefined && typeof body.outletName !== "string") {
+        res.status(400).json({ error: "Outlet name must be a string" });
+        return;
+      }
+      const typedOutletName = typeof body.outletName === "string" ? body.outletName.trim() : undefined;
+      if (typedOutletName && typedOutletName.length > MANUAL_PUBLICATION_NAME_MAX_LENGTH) {
+        res.status(400).json({ error: `Outlet name must be ${MANUAL_PUBLICATION_NAME_MAX_LENGTH} characters or fewer` });
+        return;
+      }
       if (!firstName && !lastName) {
         res.status(400).json({ error: "Contact must have at least a first or last name" });
         return;
@@ -3154,7 +3203,12 @@ router.post(
       const lastVerifiedAt = cleanVerifiedDate(body.lastVerifiedAt);
       const [created] = await db.transaction(async (tx) => {
         await acquirePrivacyIdentityLock(tx, "manual-contact");
-        const submittedOutletName = resolvedOutletId ? (await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, resolvedOutletId)).limit(1))[0]?.name : "";
+        const usesTypedOutletName = Boolean(typedOutletName) && !outletId;
+        const submittedOutletName = usesTypedOutletName
+          ? typedOutletName!
+          : resolvedOutletId
+            ? (await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, resolvedOutletId)).limit(1))[0]?.name ?? ""
+            : "";
         if (await isSuppressedWithDb(tx, {
           name: `${typeof firstName === "string" ? firstName : ""} ${typeof lastName === "string" ? lastName : ""}`,
           email: typeof stringValues.email === "string" ? stringValues.email : "",
@@ -3162,6 +3216,9 @@ router.post(
           outlet: submittedOutletName,
           accountId: normUsername(req.account!.username),
         })) throw new Error("SUPPRESSED_CONTACT");
+        if (usesTypedOutletName) {
+          resolvedOutletId = await findOrCreateManualContactOutlet(tx, typedOutletName!, accountId);
+        }
         return tx.insert(mediaContactsTable)
         .values({
           outletId: resolvedOutletId,
@@ -3210,9 +3267,22 @@ router.put(
       }
       const body = (req.body ?? {}) as Record<string, unknown>;
       const { outletId } = body;
+      if (body.outletName !== undefined && typeof body.outletName !== "string") {
+        res.status(400).json({ error: "Outlet name must be a string" });
+        return;
+      }
+      const typedOutletName = typeof body.outletName === "string" ? body.outletName.trim() : undefined;
+      if (typedOutletName && typedOutletName.length > MANUAL_PUBLICATION_NAME_MAX_LENGTH) {
+        res.status(400).json({ error: `Outlet name must be ${MANUAL_PUBLICATION_NAME_MAX_LENGTH} characters or fewer` });
+        return;
+      }
+      const useTypedOutletName = Boolean(typedOutletName) && !outletId;
+      const explicitlyClearOutlet = typedOutletName === "";
       // Validate outletId if supplied - caller must be able to see that outlet.
       let resolvedOutletId = row.outletId;
-      if (outletId !== undefined) {
+      if (explicitlyClearOutlet) {
+        resolvedOutletId = null;
+      } else if (outletId !== undefined && !useTypedOutletName) {
         if (!outletId) {
           resolvedOutletId = null;
         } else {
@@ -3242,7 +3312,11 @@ router.put(
       const beats = cleanContactArray(body.beats);
       const sectors = cleanContactArray(body.sectors);
       const lastVerifiedAt = cleanVerifiedDate(body.lastVerifiedAt);
-      const outletName = resolvedOutletId ? (await db.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, resolvedOutletId)).limit(1))[0]?.name ?? "" : "";
+      const outletName = useTypedOutletName
+        ? typedOutletName!
+        : resolvedOutletId
+          ? (await db.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, resolvedOutletId)).limit(1))[0]?.name ?? ""
+          : "";
       const proposed = { ...row, ...stringValues, firstName: typeof body.firstName === "string" ? body.firstName : row.firstName, lastName: typeof body.lastName === "string" ? body.lastName : row.lastName, linkedinUrl: typeof body.linkedinUrl === "string" ? body.linkedinUrl : row.linkedinUrl, email: typeof body.email === "string" ? body.email : row.email };
       if (await isContactSuppressed({ ...proposed, outlet: outletName, accountId: normUsername(req.account!.username) })) {
         res.status(409).json({ error: "This contact is unavailable for processing." });
@@ -3250,8 +3324,15 @@ router.put(
       }
       const updated = await db.transaction(async (tx) => {
         await acquirePrivacyIdentityLock(tx, "manual-contact");
-        const txOutletName = resolvedOutletId ? (await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, resolvedOutletId)).limit(1))[0]?.name ?? "" : "";
+        const txOutletName = useTypedOutletName
+          ? typedOutletName!
+          : resolvedOutletId
+            ? (await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, resolvedOutletId)).limit(1))[0]?.name ?? ""
+            : "";
         if (await isSuppressedWithDb(tx, { ...proposed, outlet: txOutletName, accountId: normUsername(req.account!.username) })) throw new Error("SUPPRESSED_CONTACT");
+        if (useTypedOutletName) {
+          resolvedOutletId = await findOrCreateManualContactOutlet(tx, typedOutletName!, row.accountId);
+        }
         const [updated] = await tx.update(mediaContactsTable)
         .set({
           outletId: resolvedOutletId,
