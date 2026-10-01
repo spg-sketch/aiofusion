@@ -32,6 +32,7 @@ const unauthorizedBody = { error: "unauthorized" };
 let activeWorkspace = "myagency";
 let visibleProjects: unknown[] = [];
 let projectListFailure = false;
+let queuedProjectLists: unknown[][] = [];
 
 function agencyMeResponse() {
   return makeResponse({
@@ -89,6 +90,7 @@ beforeEach(() => {
   activeWorkspace = "myagency";
   visibleProjects = [];
   projectListFailure = false;
+  queuedProjectLists = [];
 
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     const urlStr = String(url);
@@ -99,6 +101,9 @@ beforeEach(() => {
     // "unauthorized" branch and re-bootstrap the session.
     if (urlStr.includes("/api/store/projects") && method === "GET") {
       if (projectListFailure) return makeResponse({ error: "temporarily unavailable" }, 503);
+      if (queuedProjectLists.length > 0) {
+        return makeResponse({ projects: queuedProjectLists.shift(), deletedIds: [] });
+      }
       return makeResponse({ projects: visibleProjects, deletedIds: [] });
     }
     return makeResponse(unauthorizedBody, 401);
@@ -189,6 +194,82 @@ describe("project hub excludes managed clients without projects", () => {
     expect(screen.getByRole("button", { name: /Stable Project/i })).toBeInTheDocument();
     expect(screen.queryByText(/No projects yet/i)).not.toBeInTheDocument();
   });
+
+  it("keeps the active project selected when a background list transiently omits it", async () => {
+    const project = {
+      id: "active-refresh-project",
+      name: "Active Refresh Project",
+      owner: "myagency",
+      logo: null,
+      updatedAt: null,
+      data: { id: "active-refresh-project", name: "Active Refresh Project", owner: "myagency" },
+    };
+    visibleProjects = [project];
+    window.history.replaceState({}, "", "/project-hub");
+    const { default: App } = await import("./App");
+    render(<App />);
+
+    const card = await screen.findByRole("button", { name: /Active Refresh Project/i });
+    await act(async () => { card.click(); });
+    expect((await screen.findAllByText("Active Refresh Project")).length).toBeGreaterThan(0);
+    expect(localStorage.getItem("aio.activeProjectId")).toBe("active-refresh-project");
+
+    const projectReadsBefore = vi.mocked(fetch).mock.calls.filter(
+      ([url]) => String(url).includes("/api/store/projects") && !String(url).includes("/intake"),
+    ).length;
+    queuedProjectLists = [[], [project]];
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    await waitFor(() => {
+      const reads = vi.mocked(fetch).mock.calls.filter(
+        ([url]) => String(url).includes("/api/store/projects") && !String(url).includes("/intake"),
+      ).length;
+      expect(reads).toBe(projectReadsBefore + 2);
+    });
+    expect(localStorage.getItem("aio.activeProjectId")).toBe("active-refresh-project");
+    expect((await screen.findAllByText("Active Refresh Project")).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/No projects yet/i)).not.toBeInTheDocument();
+  }, 30000);
+
+  it("redirects from the active project when two successful background lists omit it", async () => {
+    const project = {
+      id: "confirmed-removed-project",
+      name: "Confirmed Removed Project",
+      owner: "myagency",
+      logo: null,
+      updatedAt: null,
+      data: { id: "confirmed-removed-project", name: "Confirmed Removed Project", owner: "myagency" },
+    };
+    visibleProjects = [project];
+    window.history.replaceState({}, "", "/project-hub");
+    const { default: App } = await import("./App");
+    render(<App />);
+
+    const card = await screen.findByRole("button", { name: /Confirmed Removed Project/i });
+    await act(async () => { card.click(); });
+    expect((await screen.findAllByText("Confirmed Removed Project")).length).toBeGreaterThan(0);
+    expect(localStorage.getItem("aio.activeProjectId")).toBe("confirmed-removed-project");
+
+    const projectReadsBefore = vi.mocked(fetch).mock.calls.filter(
+      ([url]) => String(url).includes("/api/store/projects") && !String(url).includes("/intake"),
+    ).length;
+    queuedProjectLists = [[], []];
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    await waitFor(() => {
+      expect(localStorage.getItem("aio.activeProjectId")).toBeNull();
+      expect(screen.getByText(/No projects yet/i)).toBeInTheDocument();
+    });
+    const projectReadsAfter = vi.mocked(fetch).mock.calls.filter(
+      ([url]) => String(url).includes("/api/store/projects") && !String(url).includes("/intake"),
+    ).length;
+    expect(projectReadsAfter).toBe(projectReadsBefore + 2);
+    expect(screen.queryByText("Confirmed Removed Project")).not.toBeInTheDocument();
+  }, 30000);
 
   it("shows a retry-only unknown state when the first project load fails", async () => {
     projectListFailure = true;

@@ -666,7 +666,13 @@ function App() {
         refreshAuthoritativeSession.current();
         return;
       }
-      const [result] = await Promise.all([syncProjectsOnLoad({ signal }), refreshAccountsCache(signal)]);
+      const projectSyncOptions = options.background
+        ? { signal, activeProjectId: activeClientRef.current?.id }
+        : { signal };
+      const [result] = await Promise.all([
+        syncProjectsOnLoad(projectSyncOptions),
+        refreshAccountsCache(signal),
+      ]);
       if (signal.aborted || generation !== authRequestGeneration.current) return;
       if (result === "unauthorized") {
         // Server session has expired mid-use. Re-check with /api/platform/me;

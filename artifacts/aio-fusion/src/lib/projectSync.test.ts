@@ -154,6 +154,107 @@ describe("confirmed project deletion", () => {
   });
 });
 
+describe("active project omission confirmation", () => {
+  const ACTIVE = {
+    id: "active-project",
+    name: "Active Project",
+    data: { id: "active-project", name: "Active Project" },
+    logo: "server-logo",
+    owner: "current",
+    updatedAt: null,
+  };
+
+  beforeEach(() => {
+    localStorage.setItem("aio.projects.v1", JSON.stringify([{
+      id: "active-project",
+      name: "Active Project",
+      owner: "current",
+    }]));
+    localStorage.setItem("aio.clientLogos.v1", JSON.stringify({ "active-project": "cached-logo" }));
+  });
+
+  it("uses a second successful pull when the first transiently omits the active project", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ projects: [], deletedIds: [] })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ projects: [ACTIVE], deletedIds: [] })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await syncProjectsOnLoad({ activeProjectId: "active-project" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({ projects: [{ id: "active-project", name: "Active Project" }] });
+    expect(JSON.parse(localStorage.getItem("aio.projects.v1")!)).toEqual([
+      expect.objectContaining({ id: "active-project", name: "Active Project" }),
+    ]);
+  });
+
+  it("drops a project omitted by both successful pulls instead of preserving the cached copy", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      new Response(JSON.stringify({ projects: [], deletedIds: [] })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await syncProjectsOnLoad({ activeProjectId: "active-project" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({ projects: [], logos: {} });
+    expect(JSON.parse(localStorage.getItem("aio.projects.v1")!)).toEqual([]);
+    expect(JSON.parse(localStorage.getItem("aio.clientLogos.v1")!)).toEqual({});
+  });
+
+  it("treats an explicit deletion tombstone as authoritative without confirming", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ projects: [], deletedIds: ["active-project"] })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await syncProjectsOnLoad({ activeProjectId: "active-project" });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(result).toEqual({ projects: [], logos: {} });
+    expect(JSON.parse(localStorage.getItem("aio.projects.v1")!)).toEqual([]);
+  });
+
+  it.each([
+    { status: 503, expected: null },
+    { status: 401, expected: "unauthorized" },
+  ] as const)("keeps the old cache when confirmation returns HTTP $status", async ({ status, expected }) => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ projects: [], deletedIds: [] })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: "unavailable" }), { status }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(await syncProjectsOnLoad({ activeProjectId: "active-project" })).toBe(expected);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(localStorage.getItem("aio.projects.v1")!)).toEqual([
+      { id: "active-project", name: "Active Project", owner: "current" },
+    ]);
+    expect(JSON.parse(localStorage.getItem("aio.clientLogos.v1")!)).toEqual({
+      "active-project": "cached-logo",
+    });
+  });
+
+  it("does not accept a confirmation response after its signal is aborted", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ projects: [], deletedIds: [] })))
+      .mockImplementationOnce(async () => {
+        controller.abort();
+        return new Response(JSON.stringify({ projects: [ACTIVE], deletedIds: [] }));
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(await syncProjectsOnLoad({
+      signal: controller.signal,
+      activeProjectId: "active-project",
+    })).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(localStorage.getItem("aio.projects.v1")!)).toEqual([
+      { id: "active-project", name: "Active Project", owner: "current" },
+    ]);
+  });
+});
+
 describe("syncProjectsOnLoad - owner column is authoritative", () => {
   it("overwrites the stale owner inside the data blob with the server's owner column after a hand-off", async () => {
     // The agency created the project (data blob says owner: "agency"), then

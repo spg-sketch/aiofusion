@@ -415,7 +415,7 @@ function MediaDatabasePage() {
   const [searchPage, setSearchPage] = useState(1);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchType, setSearchType] = useState<"contacts" | "publications">("contacts");
-  const [searchScope, setSearchScope] = useState<"all" | "added" | "saved">("saved");
+  const [searchScope, setSearchScope] = useState<"all" | "added" | "saved">("all");
   const [savedMedia, setSavedMedia] = useState<Set<string>>(new Set());
   const [bookmarkError, setBookmarkError] = useState("");
   const [bookmarkBusy, setBookmarkBusy] = useState<string | null>(null);

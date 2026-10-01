@@ -135,6 +135,8 @@ describe("MediaDatabasePage source health", () => {
         return new Response(JSON.stringify({ ok: true, sourceCheck: changedContact.sourceCheck }), { status: 200 });
       }
       if (url.includes("/media-db/search")) {
+        const searchParams = new URL(url, "http://test.local").searchParams;
+        const isPublicRelationsSearch = searchParams.get("category") === "Public Relations (PR)";
         return new Response(JSON.stringify({
           interpretation: { phrase: "energy", topic: "", location: "", category: "", authority: 0 },
           results: searchEmptyMode ? [] : [{
@@ -142,7 +144,7 @@ describe("MediaDatabasePage source health", () => {
             matchedFields: ["role"], matchedPhrases: ["energy"],
             reasons: ["Matched role.", "Contains the exact phrase \"energy\"."],
           }, {
-            type: "outlet", id: 20, outlet: { id: 20, name: "Energy Weekly", category: "Energy", website: "energy.example", description: "", country: "UK", reachBand: "National", linkedinUrl: "https://linkedin.com/company/energy-weekly", linkedJournalists: [changedContact], accountId: null },
+            type: "outlet", id: 20, outlet: { id: 20, name: isPublicRelationsSearch ? "PR Weekly" : "Energy Weekly", category: isPublicRelationsSearch ? "Public Relations (PR)" : "Energy", website: "energy.example", description: "", country: "UK", reachBand: "National", linkedinUrl: "https://linkedin.com/company/energy-weekly", linkedJournalists: [changedContact], accountId: null },
             authority: 0, matchedFields: ["publication"], matchedPhrases: [], reasons: ["Matched publication."],
           }],
            total: searchTotalOverride, counts: { contacts: searchEmptyMode ? 0 : 1, outlets: searchEmptyMode ? 0 : 1 },
@@ -165,7 +167,7 @@ describe("MediaDatabasePage source health", () => {
           pageSize: query.get("pageSize"),
         }), { status: 200 });
       }
-      if (url.includes("/media-categories")) return new Response(JSON.stringify({ standard: ["Energy"], custom: [] }), { status: 200 });
+      if (url.includes("/media-categories")) return new Response(JSON.stringify({ standard: ["Energy", "Public Relations (PR)"], custom: [] }), { status: 200 });
       return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
     }));
   });
@@ -245,15 +247,43 @@ describe("MediaDatabasePage source health", () => {
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 
-  it("shows the account's saved contacts by default", async () => {
+  it("searches all collections by default and lets the account save shared records separately", async () => {
     render(<MediaDatabasePage />);
-    expect(await screen.findByRole("columnheader", { name: "First name" })).toBeTruthy();
+    expect(await screen.findByText("Jane Reporter")).toBeTruthy();
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => {
       const url = new URL(String(input), "http://test.local");
-      return url.pathname.endsWith("/media-db/search") && url.searchParams.get("scope") === "saved";
+      return url.pathname.endsWith("/media-db/search") && url.searchParams.get("scope") === "all";
     })).toBe(true));
+    expect((screen.getByLabelText("Media collection scope") as HTMLSelectElement).value).toBe("all");
+    expect(screen.getByRole("button", { name: "Save to My Media Database" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "My Media Database" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Manage my records" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Browse contacts" })).toBeNull();
+  });
+
+  it("searches Public Relations publications across collections before optionally bookmarking them", async () => {
+    render(<MediaDatabasePage />);
+    await waitFor(() => expect(Array.from((screen.getByLabelText("Sector filter") as HTMLSelectElement).options)
+      .some((option) => option.value === "Public Relations (PR)")).toBe(true));
+    fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
+    fireEvent.change(screen.getByLabelText("Sector filter"), { target: { value: "Public Relations (PR)" } });
+    fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "public relations" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(await screen.findByText("PR Weekly")).toBeTruthy();
+    const search = vi.mocked(fetch).mock.calls.map(([input]) => new URL(String(input), "http://test.local"))
+      .find((url) => url.pathname.endsWith("/media-db/search")
+        && url.searchParams.get("type") === "publications"
+        && url.searchParams.get("category") === "Public Relations (PR)");
+    expect(search?.searchParams.get("scope")).toBe("all");
+    expect(search?.searchParams.get("phrase")).toBe("public relations");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save to My Media Database" }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/store/media-db/bookmarks/publication/20"),
+      expect.objectContaining({ method: "PUT", credentials: "include" }),
+    ));
+    expect(await screen.findByRole("button", { name: "Remove from My Media Database" })).toBeTruthy();
   });
 
   it("loads contacts only after an explicit browse action", async () => {
@@ -523,6 +553,7 @@ describe("MediaDatabasePage source health", () => {
   it("allows edit and delete for workspace-owned contacts directly from My Media Database", async () => {
     bookmarkTestRows = [{ type: "contact", targetId: 12 }];
     render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByRole("button", { name: "My Media Database" }));
     expect(await screen.findByRole("button", { name: "Edit" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));

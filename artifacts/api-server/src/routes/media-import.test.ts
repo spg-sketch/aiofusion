@@ -178,7 +178,7 @@ import {
   platformAccountsTable,
   projectsTable,
 } from "@workspace/db";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { privacyHash } from "../lib/journalist-privacy";
 import mediaRouter from "./media-db";
 
@@ -1275,6 +1275,70 @@ describe("media import route regressions", () => {
       type: "contact", id: sharedJournalist!.id,
     }, "viewer")).status).toBe(403);
     expect(await db.select().from(mediaBookmarksTable).where(eq(mediaBookmarksTable.accountId, "media-parent-430"))).toHaveLength(1);
+  });
+
+  it("searches shared Public Relations publications alongside only the active account's additions and bookmarks", async () => {
+    const activeAccount = "pr-publication-search-owner";
+    const otherAccount = "pr-publication-search-other";
+    await db.insert(platformAccountsTable).values([
+      { username: activeAccount, passwordHash: "", role: "agency", parent: null },
+      { username: otherAccount, passwordHash: "", role: "agency", parent: null },
+    ]);
+    const [sharedPublication, activePrivatePublication, otherPrivatePublication] = await db.insert(mediaOutletsTable).values([
+      { name: "Shared PR Publication", category: "Public Relations (PR)", accountId: null },
+      { name: "Active PR Publication", category: "Public Relations (PR)", accountId: activeAccount },
+      { name: "Other PR Publication", category: "Public Relations (PR)", accountId: otherAccount },
+    ]).returning();
+    const category = encodeURIComponent("Public Relations (PR)");
+
+    const initiallySaved = await mediaRequest(
+      "GET",
+      `/api/store/media-db/search?type=publications&scope=saved&category=${category}`,
+      activeAccount,
+    );
+    const activeSearch = await mediaRequest(
+      "GET",
+      `/api/store/media-db/search?type=publications&scope=all&category=${category}`,
+      activeAccount,
+    );
+    expect(initiallySaved.json.results).toEqual([]);
+    expect(activeSearch.json.results.map((result: any) => result.id).sort()).toEqual(
+      [sharedPublication!.id, activePrivatePublication!.id].sort(),
+    );
+    expect(activeSearch.json.results.map((result: any) => result.id)).not.toContain(otherPrivatePublication!.id);
+
+    const saved = await mediaRequest(
+      "PUT",
+      `/api/store/media-db/bookmarks/publication/${sharedPublication!.id}`,
+      activeAccount,
+    );
+    expect(saved.status).toBe(200);
+    const savedSearch = await mediaRequest(
+      "GET",
+      `/api/store/media-db/search?type=publications&scope=saved&category=${category}`,
+      activeAccount,
+    );
+    const otherAccountSearch = await mediaRequest(
+      "GET",
+      `/api/store/media-db/search?type=publications&scope=all&category=${category}`,
+      otherAccount,
+    );
+    const otherAccountBookmarks = await mediaRequest("GET", "/api/store/media-db/bookmarks", otherAccount);
+
+    expect(savedSearch.json.results.map((result: any) => result.id)).toEqual([sharedPublication!.id]);
+    expect(otherAccountSearch.json.results.map((result: any) => result.id).sort()).toEqual(
+      [sharedPublication!.id, otherPrivatePublication!.id].sort(),
+    );
+    expect(otherAccountSearch.json.results.map((result: any) => result.id)).not.toContain(activePrivatePublication!.id);
+    expect(otherAccountBookmarks.json.total).toBe(0);
+    expect(await db.select().from(mediaOutletsTable).where(inArray(mediaOutletsTable.id, [
+      sharedPublication!.id, activePrivatePublication!.id, otherPrivatePublication!.id,
+    ]))).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: sharedPublication!.id, accountId: null }),
+      expect.objectContaining({ id: activePrivatePublication!.id, accountId: activeAccount }),
+      expect.objectContaining({ id: otherPrivatePublication!.id, accountId: otherAccount }),
+    ]));
+    expect(await db.select().from(mediaBookmarksTable).where(eq(mediaBookmarksTable.accountId, activeAccount))).toHaveLength(1);
   });
 
   it("returns shared contacts to agency and client search/recommendations without unrelated private records", async () => {

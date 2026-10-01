@@ -434,15 +434,33 @@ async function fetchRemoteIntake(id: string): Promise<{ intake: unknown; updated
 // up any project that only exists locally (so nothing is ever lost), drop any
 // project that was deleted elsewhere, and return the merged result so the hub
 // can re-render. localStorage is updated as the local cache.
-export async function syncProjectsOnLoad(options: { signal?: AbortSignal } = {}): Promise<
+export async function syncProjectsOnLoad(options: {
+  signal?: AbortSignal;
+  activeProjectId?: string;
+} = {}): Promise<
   { projects: StoredProject[]; logos: Record<string, string> } | null | "unauthorized"
 > {
-  const server = await pullProjects(options.signal);
+  let server = await pullProjects(options.signal);
   if (server === "unauthorized") return "unauthorized"; // session expired
   if (!server) return null; // offline or API unavailable - keep local only
   // A session/workspace switch superseded this pull. It must not merge the
   // previous identity's response into browser caches.
   if (options.signal?.aborted) return null;
+
+  // A transiently incomplete list must not revoke the project that is currently
+  // open in the hub. Confirm an omission with one fresh authoritative read
+  // before changing the local cache. A server tombstone is already explicit
+  // removal evidence and remains authoritative without a second request.
+  if (
+    options.activeProjectId &&
+    !server.projects.some((project) => project.id === options.activeProjectId) &&
+    !server.deletedIds.includes(options.activeProjectId)
+  ) {
+    server = await pullProjects(options.signal);
+    if (server === "unauthorized") return "unauthorized";
+    if (!server) return null;
+    if (options.signal?.aborted) return null;
+  }
 
   const localProjects = readJson<StoredProject[]>(PROJECTS_KEY, []);
   const localLogos = readJson<Record<string, string>>(LOGOS_KEY, {});
