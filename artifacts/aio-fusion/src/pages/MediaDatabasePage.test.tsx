@@ -247,8 +247,23 @@ describe("MediaDatabasePage source health", () => {
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 
-  it("searches all collections by default and lets the account save shared records separately", async () => {
+  it("opens with search controls only and does not query results until Search is submitted", async () => {
     render(<MediaDatabasePage />);
+    await waitFor(() => expect(Array.from((screen.getByLabelText("Sector filter") as HTMLSelectElement).options)
+      .some((option) => option.value === "Energy")).toBe(true));
+    expect(screen.queryByText("Jane Reporter")).toBeNull();
+    expect(screen.queryByText(/contacts found/)).toBeNull();
+    expect(screen.queryByText("No matching contacts")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Select visible results" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Export saved connections CSV" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
+    fireEvent.change(screen.getByLabelText("Media collection scope"), { target: { value: "added" } });
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/search"))).toBe(false);
+  });
+
+  it("searches all collections on submission and lets the account save shared records separately", async () => {
+    render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(await screen.findByText("Jane Reporter")).toBeTruthy();
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => {
       const url = new URL(String(input), "http://test.local");
@@ -259,6 +274,32 @@ describe("MediaDatabasePage source health", () => {
     expect(screen.getByRole("button", { name: "My Media Database" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Manage my records" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Browse contacts" })).toBeNull();
+  });
+
+  it("supports Enter submission and displays result metadata in white", async () => {
+    render(<MediaDatabasePage />);
+    fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "energy" } });
+    fireEvent.keyDown(screen.getByLabelText("Search the media database"), { key: "Enter" });
+    expect(await screen.findByText("Jane Reporter")).toBeTruthy();
+    expect(screen.getByText("1 contacts found").style.color).toBe("rgb(255, 255, 255)");
+    expect(screen.getByText("0/25 selected").parentElement?.style.color).toBe("rgb(255, 255, 255)");
+    expect(screen.getByText("No saved contacts are available to export for this account.").style.color).toBe("rgb(255, 255, 255)");
+  });
+
+  it("returns from saved media to a search-only view without querying all media", async () => {
+    bookmarkTestRows = [{ type: "contact", targetId: 12 }];
+    render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByRole("button", { name: "My Media Database" }));
+    expect(await screen.findByRole("cell", { name: "Jane" })).toBeTruthy();
+    const searchCalls = () => vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes("/media-db/search")).length;
+    const callsBefore = searchCalls();
+    fireEvent.click(screen.getByRole("button", { name: "Search all media" }));
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(screen.queryByRole("cell", { name: "Jane" })).toBeNull();
+    expect(screen.queryByText(/contacts found/)).toBeNull();
+    expect(searchCalls()).toBe(callsBefore);
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(await screen.findByText("Jane Reporter")).toBeTruthy();
   });
 
   it("searches Public Relations publications across collections before optionally bookmarking them", async () => {
@@ -313,12 +354,9 @@ describe("MediaDatabasePage source health", () => {
     render(<MediaDatabasePage />);
     fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
     fireEvent.change(screen.getByLabelText("Media collection scope"), { target: { value: "all" } });
-    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => {
-      const url = new URL(String(input), "http://test.local");
-      return url.pathname.endsWith("/media-db/search") && url.searchParams.get("type") === "publications" && url.searchParams.get("scope") === "all";
-    })).toBe(true));
     fireEvent.change(screen.getByLabelText("Search the media database"), { target: { value: "energy" } });
     await new Promise((resolve) => window.setTimeout(resolve, 250));
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/search"))).toBe(false);
     expect(vi.mocked(fetch).mock.calls.some(([input]) => new URL(String(input), "http://test.local").searchParams.get("phrase") === "energy")).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect(await screen.findByText("Energy Weekly")).toBeTruthy();
@@ -443,6 +481,10 @@ describe("MediaDatabasePage source health", () => {
       expect(nextPage?.get("location")).toBe("UK");
     });
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(screen.queryByText("Energy Weekly")).toBeNull();
+    expect(screen.queryByText(/publications found/)).toBeNull();
+    expect(screen.queryByText("No matching contacts")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
     await waitFor(() => {
       const requests = vi.mocked(fetch).mock.calls.map(([input]) => String(input)).filter((url) => url.includes("/media-db/search?"));
       const cleared = requests.length ? new URL(requests[requests.length - 1], "http://test.local").searchParams : undefined;

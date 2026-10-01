@@ -389,7 +389,7 @@ function MediaDatabasePage() {
   const loadRequestSequence = useRef(0);
   const searchRequestSequence = useRef(0);
   const loadControllerRef = useRef<AbortController | null>(null);
-  const [resultMode, setResultMode] = useState<"none" | "browse" | "search">("search");
+  const [resultMode, setResultMode] = useState<"none" | "browse" | "search">("none");
   const [resultMessage, setResultMessage] = useState("");
   const [resultRefreshToken, setResultRefreshToken] = useState(0);
   const [outletSearch, setOutletSearch] = useState("");
@@ -1340,7 +1340,7 @@ function MediaDatabasePage() {
          <div className="mt-3 flex flex-wrap gap-2">
            <button onClick={() => openSavedMedia("contacts")} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: "rgba(255,255,255,0.45)", color: "#ffffff" }}>My Media Database</button>
            <button onClick={() => openSavedMedia("publications")} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: "rgba(255,255,255,0.45)", color: "#ffffff" }}>Saved publications</button>
-           <button onClick={() => { setShowManagement(false); setActiveTab("contacts"); setSearchScope("all"); setSearchType("contacts"); setSearchPage(1); setResultMode("search"); setResultRefreshToken((value) => value + 1); }} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: "rgba(255,255,255,0.45)", color: "#ffffff" }}>Search all media</button>
+            <button onClick={() => { setShowManagement(false); setActiveTab("contacts"); setSearchScope("all"); setSearchType("contacts"); setSearchPage(1); setSelectedMedia(new Set()); setResultMode("none"); setResultMessage(""); }} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: "rgba(255,255,255,0.45)", color: "#ffffff" }}>Search all media</button>
            <button onClick={() => {
              if (showManagement) openSavedMedia("contacts");
              else { setShowManagement(true); setResultMode("none"); setActiveTab("contacts"); setInternalToolsOpen(false); }
@@ -1384,7 +1384,7 @@ function MediaDatabasePage() {
                 <option value="">All regions</option><option value="UK">UK</option><option value="US">US</option>
               </select>
             </label>
-            <button data-testid="button-clear-media-search" onClick={() => { setSearchPhrase(""); setSearchTopic(""); setSearchLocation(""); setSearchCategory(""); setSearchAuthority(""); setSearchType("contacts"); setSearchScope("all"); setSearchPage(1); setResultMessage(""); setResultRefreshToken((value) => value + 1); }} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Clear</button>
+            <button data-testid="button-clear-media-search" onClick={() => { setSearchPhrase(""); setSearchTopic(""); setSearchLocation(""); setSearchCategory(""); setSearchAuthority(""); setSearchType("contacts"); setSearchScope("all"); setSearchPage(1); setResultMessage(""); setSelectedMedia(new Set()); setResultMode("none"); setSearchResults([]); setSearchTotal(0); setSearchCounts({ contacts: 0, outlets: 0 }); }} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Clear</button>
             {bookmarkError && <span role="alert" className="text-[11px]" style={{ color: vars.red }}>{bookmarkError}</span>}
           </div>
            <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -1396,7 +1396,7 @@ function MediaDatabasePage() {
 
       {showCollectionTools && searchActive && <section className="mb-6">
         <div className="flex items-center justify-between gap-3 mb-3">
-          <p className="text-[13px]" style={{ color: vars.g500 }}>{searchLoading ? "Searching..." : resultMessage || `${searchType === "contacts" ? searchCounts.contacts : searchCounts.outlets} ${searchType} found`}</p>
+          <p className="text-[13px]" style={{ color: "#ffffff" }}>{searchLoading ? "Searching..." : resultMessage || `${searchType === "contacts" ? searchCounts.contacts : searchCounts.outlets} ${searchType} found`}</p>
            <div className="flex flex-wrap items-center justify-end gap-2">
              <button disabled={exportBusy || !Array.from(savedMedia).some((key) => key.startsWith(`${searchType === "contacts" ? "contact" : "publication"}:`))} onClick={() => void exportMediaCsv("saved", searchType)} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Export saved connections CSV</button>
              {selectedIdsFor(searchType).length > 0 && <button disabled={exportBusy} onClick={() => void exportMediaCsv("selected", searchType, selectedIdsFor(searchType))} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Export selected CSV ({selectedIdsFor(searchType).length})</button>}
@@ -1404,9 +1404,9 @@ function MediaDatabasePage() {
            </div>
          </div>
            {exportError && <p role="alert" className="mb-3 rounded-lg bg-white px-3 py-2 text-[12px]" style={{ color: vars.red }}>{exportError}</p>}
-           {searchType === "publications" && <p className="mb-3 text-[11px]" style={{ color: vars.g500 }}>Publication CSVs include linked journalist names only for contacts you have also saved.</p>}
-          {!searchLoading && searchActive && searchCounts[searchType === "contacts" ? "contacts" : "outlets"] > 0 && !Array.from(savedMedia).some((key) => key.startsWith(`${searchType === "contacts" ? "contact" : "publication"}:`)) && <p className="mb-3 text-[11px]" style={{ color: vars.g500 }}>No saved {searchType} are available to export for this account.</p>}
-          {visibleSearchResults.length > 0 && <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]" style={{ color: vars.g600 }}>
+            {searchType === "publications" && <p className="mb-3 text-[11px]" style={{ color: "#ffffff" }}>Publication CSVs include linked journalist names only for contacts you have also saved.</p>}
+          {!searchLoading && searchActive && searchCounts[searchType === "contacts" ? "contacts" : "outlets"] > 0 && !Array.from(savedMedia).some((key) => key.startsWith(`${searchType === "contacts" ? "contact" : "publication"}:`)) && <p className="mb-3 text-[11px]" style={{ color: "#ffffff" }}>No saved {searchType} are available to export for this account.</p>}
+          {visibleSearchResults.length > 0 && <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]" style={{ color: "#ffffff" }}>
             <button onClick={() => toggleVisibleResultSelection(searchType)} className="underline">{visibleSearchResults.every((result) => selectedMedia.has(`${result.type === "contact" ? "contact" : "publication"}:${result.id}`)) ? "Clear visible selection" : "Select visible results"}</button>
             <span>{selectedMedia.size}/25 selected</span>
           </div>}
@@ -1535,7 +1535,7 @@ function MediaDatabasePage() {
           })}
           {!searchLoading && !resultMessage && visibleSearchResults.length === 0 && <div className="rounded-2xl border bg-white py-12 text-center" style={{ borderColor: vars.g200 }}><Search size={28} className="mx-auto mb-2" color={vars.g300} /><p className="font-semibold" style={{ color: vars.navy }}>No matching {searchType}</p><p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Clear a filter or broaden the search.</p></div>}
          </div>}
-        {searchTotal > 25 && <div className="flex justify-end items-center gap-3 mt-3 text-[12px]" style={{ color: vars.navy }}><button disabled={searchPage === 1} onClick={() => { setSelectedMedia(new Set()); setSearchPage((page) => page - 1); }} className="px-3 py-1 border rounded disabled:opacity-40">Previous</button><span>Page {searchPage} of {Math.ceil(searchTotal / 25)}</span><button disabled={searchPage * 25 >= searchTotal} onClick={() => { setSelectedMedia(new Set()); setSearchPage((page) => page + 1); }} className="px-3 py-1 border rounded disabled:opacity-40">Next</button></div>}
+        {searchTotal > 25 && <div className="flex justify-end items-center gap-3 mt-3 text-[12px]" style={{ color: "#ffffff" }}><button disabled={searchPage === 1} onClick={() => { setSelectedMedia(new Set()); setSearchPage((page) => page - 1); }} className="px-3 py-1 border rounded disabled:opacity-40">Previous</button><span>Page {searchPage} of {Math.ceil(searchTotal / 25)}</span><button disabled={searchPage * 25 >= searchTotal} onClick={() => { setSelectedMedia(new Set()); setSearchPage((page) => page + 1); }} className="px-3 py-1 border rounded disabled:opacity-40">Next</button></div>}
       </section>}
 
       {showManagement && <section className="mb-5 rounded-2xl border bg-white p-4" style={{ borderColor: vars.g200 }}>
