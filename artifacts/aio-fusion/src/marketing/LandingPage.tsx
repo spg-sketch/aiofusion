@@ -79,7 +79,7 @@ export default function LandingPageC({
   const { articles, loading: articlesLoading, error: articlesError } = useLatestInsights();
   const paper = "#F5F8F8";
   const ink = "#102B36";
-  const accent = "#C8497A";
+  const accent = vars.accent;
   const accentDark = "#A33860";
   const accentTint = "#F4B4CD";
   const accentSoft = "#FBE3ED";

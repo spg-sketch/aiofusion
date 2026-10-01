@@ -6,7 +6,7 @@ import { PAGE_META } from "./pageMeta";
 import { vars } from "./vars";
 
 const NAVY = "#102B36";
-const RASPBERRY = "#C8497A";
+const RASPBERRY = vars.accent;
 const CREAM = "#FBF6EC";
 const CREAM_DEEP = "#e2e8f0";
 
@@ -34,8 +34,8 @@ function Field({ label, id, required, children, hint }: FieldProps) {
 const inputCls =
   "w-full rounded-xl border px-4 py-3 text-[14px] outline-none transition-all " +
   "focus:ring-2 focus:ring-offset-0 bg-white";
-const inputStyle = { borderColor: vars.g200, color: NAVY };
-const inputFocusCls = "focus:border-[#C8497A]";
+const inputStyle = { borderColor: vars.fieldBorder, color: NAVY };
+const inputFocusCls = "focus:ring-[#A52F60]";
 
 export function BookDemoForm() {
   const [name, setName] = useState("");

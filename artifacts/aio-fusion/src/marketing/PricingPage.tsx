@@ -15,7 +15,7 @@ export default function PricingPage({
 }) {
   const paper = "#F5F8F8";
   const ink = "#102B36";
-  const accent = "#C8497A";
+  const accent = vars.accent;
   const accentSoft = "#FBE3ED";
   const teal = vars.teal;
   const agenticGold = "#7C6A3A";

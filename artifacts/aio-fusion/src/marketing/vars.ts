@@ -1,12 +1,13 @@
 export const vars = {
   navy: "#0a1628",
-  accent: "#C8497A",
+  // Accessible pink for text on white/soft pink and controls with white text.
+  accent: "#A52F60",
   teal: "#4f8fff",
   slate: "#0a1628",
   green: "#22c55e",
   amber: "#f59e0b",
   red: "#ef4444",
-  coral: "#C8497A",
+  coral: "#A52F60",
   coralSoft: "#FBE3ED",
   gold: "#C9A04E",
   cream: "#f8fafc",
@@ -16,6 +17,7 @@ export const vars = {
   g50: "#FAFAFA",
   g100: "#F1F5F9",
   g200: "#E2E8F0",
+  fieldBorder: "#64748B",
   g300: "#CBD5E1",
   g400: "#64748B",
   g500: "#475569",

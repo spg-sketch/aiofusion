@@ -1,4 +1,5 @@
 import MarketingNav from "./MarketingNav";
+import { vars } from "./vars";
 
 export default function MarketingPage({
   title,
@@ -22,7 +23,7 @@ export default function MarketingPage({
 }) {
   const cream = "#F5F8F8";
   const ink = "#102B36";
-  const raspberry = "#C8497A";
+  const raspberry = vars.accent;
   const accentSoft = "#FBE3ED";
   const base = import.meta.env.BASE_URL;
 

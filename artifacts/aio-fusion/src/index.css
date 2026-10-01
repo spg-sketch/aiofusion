@@ -311,14 +311,22 @@
   right: 0;
   bottom: 0;
   height: 2px;
-  background: #C8497A;
+  background: #FBE3ED;
   transform: scaleX(0);
   transform-origin: left center;
   transition: transform 180ms ease;
 }
 .marketing-nav-link:hover,
 .marketing-nav-link:focus-visible {
-  color: #C8497A;
+  color: #FBE3ED;
+}
+.marketing-nav-link:focus-visible {
+  outline: 2px solid #FBE3ED;
+  outline-offset: 4px;
+}
+/* Keep the public login CTA accessible without changing app-wide buttons. */
+nav[aria-label="Main navigation"] .aio-button--primary {
+  background: #A52F60;
 }
 .marketing-nav-link:hover::after,
 .marketing-nav-link:focus-visible::after {
