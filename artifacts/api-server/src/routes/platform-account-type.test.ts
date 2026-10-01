@@ -347,6 +347,54 @@ describe("POST /api/platform/settings/account-type", () => {
     }
   });
 
+  it("returns billing to a durable access checkpoint without clearing company details", async () => {
+    const username = "back-to-beta";
+    await seed(username, "client", false);
+    await db.update(platformCompaniesTable).set({
+      displayName: "Saved company", billingAddress: "Saved address", billingEmail: "billing@example.test",
+    }).where(eq(platformCompaniesTable.slug, username));
+    await db.insert(platformMetaTable).values({
+      key: `account:onboarding:v1:${username}`, value: JSON.stringify({ step: "billing", accessChoice: "paid" }),
+    });
+    const srv = makeApp({ username, role: "client", membershipRole: "owner" }).listen(0);
+    await new Promise<void>((resolve) => srv.once("listening", resolve));
+    const url = `http://localhost:${(srv.address() as AddressInfo).port}/api/platform/onboarding`;
+    try {
+      const back = await fetch(`${url}/back-to-access`, { method: "POST" });
+      expect(back.status).toBe(200);
+      expect(await back.json()).toMatchObject({ state: { step: "access" } });
+      expect(await (await fetch(url)).json()).toMatchObject({ state: { step: "access" } });
+      const [company] = await db.select().from(platformCompaniesTable).where(eq(platformCompaniesTable.slug, username));
+      expect(company).toMatchObject({ displayName: "Saved company", billingAddress: "Saved address", billingEmail: "billing@example.test" });
+      const beta = await fetch(`${url}/access`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ choice: "beta" }),
+      });
+      expect(beta.status).toBe(200);
+      expect(await beta.json()).toMatchObject({ state: { step: "first_project", accessChoice: "beta" } });
+    } finally { srv.close(); }
+  });
+
+  it("rejects backtracking for active access, completed setup, non-owners and earlier steps", async () => {
+    for (const kind of ["paid", "beta", "complete", "viewer", "earlier"] as const) {
+      const username = `back-blocked-${kind}`;
+      await seed(username, "client", kind === "complete");
+      await db.insert(platformMetaTable).values({
+        key: `account:onboarding:v1:${username}`,
+        value: JSON.stringify({ step: kind === "earlier" ? "workspace_basics" : "billing", accessChoice: "paid" }),
+      });
+      if (kind === "paid") await db.update(platformCompaniesTable).set({ subscriptionStatus: "active", plan: "inhouse" }).where(eq(platformCompaniesTable.slug, username));
+      if (kind === "beta") await db.execute(`UPDATE platform_companies SET beta_trial_started_at = now(), beta_trial_ends_at = now() + interval '60 days' WHERE slug = 'back-blocked-beta'`);
+      const srv = makeApp({ username, role: "client", membershipRole: kind === "viewer" ? "viewer" : "owner" }).listen(0);
+      await new Promise<void>((resolve) => srv.once("listening", resolve));
+      try {
+        const res = await fetch(`http://localhost:${(srv.address() as AddressInfo).port}/api/platform/onboarding/back-to-access`, { method: "POST" });
+        expect(res.status, kind).toBe(409);
+        const [stored] = await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, `account:onboarding:v1:${username}`));
+        expect(JSON.parse(stored!.value).step).toBe(kind === "earlier" ? "workspace_basics" : "billing");
+      } finally { srv.close(); }
+    }
+  });
+
   it("finishes onboarding without forcing a project after beta or paid access is active", async () => {
     await seed("finish-beta", "agency", false);
     await seed("finish-paid", "client", false);

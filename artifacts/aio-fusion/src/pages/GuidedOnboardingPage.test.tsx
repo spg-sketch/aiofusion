@@ -150,6 +150,75 @@ describe("GuidedOnboardingPage", () => {
     expect(screen.getByText("Billing")).toBeInTheDocument();
   });
 
+  it("returns from billing to the saved access step and can then choose beta", async () => {
+    let step = "billing";
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/onboarding/back-to-access")) {
+        step = "access";
+        return response({ state: { step } });
+      }
+      if (url.endsWith("/api/platform/onboarding/access")) {
+        return response({ state: { step: "first_project", accessChoice: "beta" } });
+      }
+      if (url.endsWith("/api/platform/onboarding")) return response({ state: { step, accessChoice: step === "billing" ? "paid" : undefined } });
+      if (url.endsWith("/api/platform/me")) return response({ accountProfile: {} });
+      if (url.endsWith("/api/platform/billing/subscription")) return response({
+        status: "none", applicablePlan: "inhouse", entitled: false,
+        trial: { status: "eligible" }, includedProjects: 1, checkoutAvailable: true,
+        companyRecordComplete: false, projects: [], unassignedAddons: [], tierPrices: {},
+        prices: { annual: { yearlyTotal: 100 }, quarterly: { perQuarter: 30, yearlyTotal: 120 } },
+      });
+      if (init?.method === "POST") throw new Error(`Unexpected write: ${url}`);
+      return response({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { onComplete } = renderSetup("cancelled");
+    fireEvent.click(await screen.findByRole("button", { name: "Back to trial or plan" }));
+    expect(await screen.findByText("Choose how to start")).toBeInTheDocument();
+    expect(screen.queryByText("Billing and payment")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Paid plan/i })).toHaveAttribute("aria-pressed", "false");
+
+    // A reload resumes the server checkpoint, rather than restoring billing.
+    cleanup();
+    renderSetup(undefined, onComplete);
+    expect(await screen.findByText("Choose how to start")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /60-day beta/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Continue$/ }));
+    await waitFor(() => expect(onComplete).toHaveBeenCalledWith("profile"));
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/onboarding/access"), expect.objectContaining({
+      body: JSON.stringify({ choice: "beta" }),
+    }));
+  });
+
+  it("keeps billing visible if returning to trial or plan fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/onboarding/back-to-access")) return { ok: false, json: async () => ({ error: "Please try again." }) } as Response;
+      if (url.endsWith("/onboarding")) return response({ state: { step: "billing", accessChoice: "paid" } });
+      if (url.endsWith("/me")) return response({ accountProfile: {} });
+      return response({});
+    }));
+    renderSetup();
+    fireEvent.click(await screen.findByRole("button", { name: "Back to trial or plan" }));
+    expect(await screen.findByText("Please try again.")).toBeInTheDocument();
+    expect(screen.getByText("Billing and payment")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back to trial or plan" })).toBeEnabled();
+  });
+
+  it("does not offer a back option while confirming a successful payment", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/onboarding")) return response({ state: { step: "billing", accessChoice: "paid" } });
+      if (url.endsWith("/me")) return response({ accountProfile: {} });
+      if (url.endsWith("/reconcile-checkout")) return response({ status: "pending" });
+      return response({});
+    }));
+    renderSetup("success", undefined, "cs_test_pending");
+    expect(await screen.findByTestId("payment-confirmation-pending-page")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back to trial or plan" })).not.toBeInTheDocument();
+  });
+
   it("keeps paid checkout cancellation at the billing step", async () => {
     vi.stubGlobal("fetch", vi.fn()
       .mockResolvedValueOnce(response({ state: { step: "billing", accessChoice: "paid" } }))

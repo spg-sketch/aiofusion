@@ -262,6 +262,7 @@ export function SubscriptionCard({
   checkoutSessionId,
   onboarding = false,
   onAccessActivated,
+  onCheckoutStartingChange,
   confirmationOnly = false,
   confirmationLoadingView,
 }: {
@@ -269,6 +270,7 @@ export function SubscriptionCard({
   checkoutSessionId?: string | null;
   onboarding?: boolean;
   onAccessActivated?: (summary: SubscriptionActivationSummary) => void;
+  onCheckoutStartingChange?: (starting: boolean) => void;
   /**
    * Keep the checkout reconciliation mounted without rendering the billing
    * card. Guided onboarding uses this while the return page is still being
@@ -445,6 +447,7 @@ export function SubscriptionCard({
 
   async function startCheckout() {
     setStarting(true);
+    onCheckoutStartingChange?.(true);
     setError(null);
     try {
       const res = await fetch(`${apiBase()}/api/platform/billing/checkout`, {
@@ -463,6 +466,7 @@ export function SubscriptionCard({
       setError("Network error. Please try again.");
     } finally {
       setStarting(false);
+      onCheckoutStartingChange?.(false);
     }
   }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, Check, Loader2, CreditCard, Play, AlertTriangle, AlertCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2, CreditCard, Play, AlertTriangle, AlertCircle } from "lucide-react";
 import AccountTypeSelectPage from "./AccountTypeSelectPage";
 import { FocusedOnboardingShell } from "./FocusedOnboardingShell";
 import { BillingDetailsCard } from "../components/BillingDetailsCard";
@@ -64,6 +64,7 @@ export function GuidedOnboardingPage({
   const [selectedAccessChoice, setSelectedAccessChoice] = useState<"beta" | "paid" | null>(null);
   const [onboardingRole, setOnboardingRole] = useState<"agency" | "client" | null>(accountRole ?? null);
   const [busy, setBusy] = useState(false);
+  const [checkoutStarting, setCheckoutStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activationSummary, setActivationSummary] = useState<SubscriptionActivationSummary | null>(null);
   const loadGeneration = useRef(0);
@@ -170,6 +171,13 @@ export function GuidedOnboardingPage({
   async function continueWithAccessChoice() {
     if (!selectedAccessChoice) return;
     const next = await post("/api/platform/onboarding/access", { choice: selectedAccessChoice });
+    if (next?.step === "first_project") await complete();
+  }
+
+  async function returnToAccessChoice() {
+    if (busy || checkoutStarting || checkoutResult === "success") return;
+    const next = await post("/api/platform/onboarding/back-to-access", {});
+    if (next?.step === "access") setSelectedAccessChoice(null);
     if (next?.step === "first_project") await complete();
   }
 
@@ -429,6 +437,18 @@ export function GuidedOnboardingPage({
 
       {state.step === "billing" && (
         <div className="animate-in fade-in duration-700 w-full max-w-3xl mx-auto">
+          {checkoutResult !== "success" && (
+            <button
+              type="button"
+              disabled={busy || checkoutStarting}
+              onClick={() => void returnToAccessChoice()}
+              className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-[#C8497A] disabled:opacity-50 disabled:cursor-not-allowed"
+              data-testid="button-back-to-access"
+            >
+              {busy ? <Loader2 size={16} className="animate-spin" /> : <ArrowLeft size={16} />}
+              Back to trial or plan
+            </button>
+          )}
           <h2 className="fo-page-heading text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
             Billing and payment
           </h2>
@@ -443,15 +463,16 @@ export function GuidedOnboardingPage({
             </div>
           )}
 
-          <div className="space-y-8">
+          <fieldset disabled={busy} className="space-y-8 min-w-0">
             <BillingDetailsCard />
             <SubscriptionCard
               checkoutResult={checkoutResult}
               checkoutSessionId={checkoutSessionId}
               onboarding
               onAccessActivated={handleAccessActivated}
+              onCheckoutStartingChange={setCheckoutStarting}
             />
-          </div>
+          </fieldset>
           
           {error && (
             <div className="mt-8 p-4 rounded-xl bg-red-50 text-red-700 text-sm font-medium border border-red-100 flex items-start gap-3">

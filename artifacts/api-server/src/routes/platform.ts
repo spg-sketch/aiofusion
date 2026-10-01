@@ -2839,6 +2839,28 @@ router.post("/platform/onboarding/workspace-basics", requirePlatformAuth, async 
   }
 });
 
+router.post("/platform/onboarding/back-to-access", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    const username = normUsername(req.account!.username);
+    if (!(await isOnboardingOwner(req))) {
+      res.status(409).json({ error: "This workspace does not require onboarding." });
+      return;
+    }
+    const current = await resolvedOnboardingState(username);
+    if (current.step !== "billing" && current.step !== "access") {
+      res.status(409).json({ error: "Your access is already active or this setup step is not available.", state: current });
+      return;
+    }
+    // Only reset the decision checkpoint, never company details or billing.
+    const state: OnboardingState = { step: "access" };
+    await writeOnboardingState(username, state);
+    res.json({ ok: true, state });
+  } catch (err) {
+    logger.error({ err }, "onboarding: failed to return to access choice");
+    res.status(500).json({ error: "Could not return to trial or plan. Please try again." });
+  }
+});
+
 router.post("/platform/onboarding/access", requirePlatformAuth, async (req: Request, res: Response) => {
   try {
     const username = normUsername(req.account!.username);
