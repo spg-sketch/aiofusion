@@ -250,13 +250,17 @@ export default function ArticleDetailView({
           <div>
             <p className="text-[14px] font-semibold" style={{ color: vars.navy }}>AIO Fusion Insights Team</p>
             <p className="text-[12px] font-light" style={{ color: vars.g500 }}>PR & GEO Practitioners</p>
-            <p className="text-[12px] font-light mt-1" style={{ color: vars.g500 }}>
-              Published{" "}
-              <time dateTime={article.datePublished}>{formatArticleDate(article.datePublished)}</time>
-              {" · "}
-              Updated{" "}
-              <time dateTime={article.dateModified}>{formatArticleDate(article.dateModified)}</time>
-            </p>
+            {(article.datePublished || article.dateModified) && (
+              <p className="text-[12px] font-light mt-1" style={{ color: vars.g500 }}>
+                {article.datePublished && <>Published{" "}
+                  <time dateTime={article.datePublished}>{formatArticleDate(article.datePublished)}</time>
+                </>}
+                {article.datePublished && article.dateModified && " · "}
+                {article.dateModified && <>Updated{" "}
+                  <time dateTime={article.dateModified}>{formatArticleDate(article.dateModified)}</time>
+                </>}
+              </p>
+            )}
           </div>
         </div>
 

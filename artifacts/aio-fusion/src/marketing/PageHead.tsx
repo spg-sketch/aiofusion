@@ -7,7 +7,7 @@
  * HTML template (this component never runs server-side).
  */
 import { useEffect } from "react";
-import { structuredDataFor, type PageMeta } from "./pageMeta";
+import { PAGE_JSON_LD_ATTRIBUTE, structuredDataFor, type PageMeta } from "./pageMeta";
 
 const OG_IMAGE = "https://aiofusion.ai/opengraph.jpg";
 
@@ -36,7 +36,7 @@ function upsertLink(rel: string, href: string): void {
   el.setAttribute("href", href);
 }
 
-const LD_JSON_ATTR = "data-pagehead-managed";
+const LD_JSON_ATTR = PAGE_JSON_LD_ATTRIBUTE;
 
 function upsertJsonLd(data: unknown): void {
   let el = document.querySelector<HTMLScriptElement>(

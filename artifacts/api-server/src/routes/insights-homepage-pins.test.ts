@@ -245,6 +245,107 @@ describe("Insights homepage pin API", () => {
     expect(JSON.parse(String(h.state.meta[0]?.value))).toEqual(["one", "two", "three"]);
   });
 
+  it("rejects a published story without a verified calendar publication date", async () => {
+    const response = await request("/api/admin/insights", {
+      method: "POST",
+      body: JSON.stringify({
+        ...article("undated"),
+        datePublished: "2026-02-30",
+        pinned: false,
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: expect.stringMatching(/verified publication date/i),
+    });
+    expect(h.state.articles.map((row) => row.id)).toEqual(["one", "two", "three"]);
+  });
+
+  it("rejects a new published story when no publication date is supplied", async () => {
+    const input = article("undated");
+    delete input.datePublished;
+    const response = await request("/api/admin/insights", {
+      method: "POST",
+      body: JSON.stringify({ ...input, pinned: false }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: expect.stringMatching(/verified publication date/i),
+    });
+    expect(h.state.articles.map((row) => row.id)).toEqual(["one", "two", "three"]);
+  });
+
+  it("accepts an explicit verified publication date and assigns the create timestamp on the server", async () => {
+    const response = await request("/api/admin/insights", {
+      method: "POST",
+      body: JSON.stringify({
+        ...article("dated-story"),
+        datePublished: "2026-09-01",
+        dateModified: "1900-01-01T00:00:00.000Z",
+        pinned: false,
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const created = await response.json() as { datePublished: string; dateModified: string };
+    expect(created.datePublished).toBe("2026-09-01");
+    expect(created.dateModified).not.toBe("1900-01-01T00:00:00.000Z");
+    expect(created.dateModified).toMatch(/^\d{4}-\d{2}-\d{2}T.*Z$/);
+  });
+
+  it("rejects clearing the verified date from a story that remains published", async () => {
+    const previousDate = h.state.articles[0]?.datePublished;
+    const response = await request("/api/admin/insights/one", {
+      method: "PATCH",
+      body: JSON.stringify({
+        ...article("one"),
+        datePublished: null,
+        pinned: true,
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: expect.stringMatching(/verified publication date/i),
+    });
+    expect(h.state.articles[0]?.datePublished).toBe(previousDate);
+  });
+
+  it("sets the modification timestamp on the server when story content changes", async () => {
+    const previousModified = h.state.articles[0]?.dateModified;
+    const response = await request("/api/admin/insights/one", {
+      method: "PATCH",
+      body: JSON.stringify({
+        ...article("one"),
+        title: "Changed story title",
+        dateModified: "1900-01-01T00:00:00.000Z",
+        pinned: true,
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const updated = h.state.articles[0];
+    expect(updated?.dateModified).not.toBe("1900-01-01T00:00:00.000Z");
+    expect(updated?.dateModified).not.toBe(previousModified);
+    expect(updated?.dateModified).toBe((updated?.updatedAt as Date).toISOString());
+  });
+
+  it("preserves the modification timestamp when content is unchanged", async () => {
+    const previousModified = h.state.articles[0]?.dateModified;
+    const response = await request("/api/admin/insights/one", {
+      method: "PATCH",
+      body: JSON.stringify({
+        ...article("one"),
+        pinned: false,
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(h.state.articles[0]?.dateModified).toBe(previousModified);
+  });
+
   it("unpins a story atomically when it becomes a draft", async () => {
     const response = await request("/api/admin/insights/one", {
       method: "PATCH",

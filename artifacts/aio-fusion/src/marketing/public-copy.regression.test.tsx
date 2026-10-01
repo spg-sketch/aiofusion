@@ -107,15 +107,15 @@ describe("public metadata, discovery copy and article identity", () => {
     });
     expect(ARTICLE_META["battle-b2b-ai-authority"]).toMatchObject({
       articleTitle: "The battle for AI authority has begun",
-      title: "The battle for AI authority has begun | AIO Fusion Insights",
+      title: "The Battle for AI Authority | AIO Fusion",
       description:
         "Generative AI is becoming part of business research and supplier discovery. Learn why PR now shapes how brands are represented.",
       canonical: "https://aiofusion.ai/insights/battle-b2b-ai-authority",
     });
     expect(ARTICLE_META["ai-changing-b2b-visibility"]).toMatchObject({
-      articleTitle: "AI Is Changing the Rules of Visibility",
+      articleTitle: "AI Is Changing the Rules of Visibility: Here's What Actually Matters Now",
       title:
-        "AI Is Changing the Rules of Visibility: Here's What Actually Matters Now | AIO Fusion Insights",
+        "How AI Is Changing Brand Visibility | AIO Fusion",
       description:
         "AI-generated answers often rely on third-party sources when describing markets and suppliers. Learn what matters for visibility now.",
       canonical: "https://aiofusion.ai/insights/ai-changing-b2b-visibility",
@@ -123,7 +123,7 @@ describe("public metadata, discovery copy and article identity", () => {
     expect(ARTICLE_META["ai-proves-pr-drives-sales"]).toMatchObject({
       articleTitle: "Will AI finally prove that PR drives sales through earned media awareness?",
       title:
-        "Will AI finally prove that PR drives sales through earned media awareness? | AIO Fusion Insights",
+        "Can AI Prove PR Drives Sales? | AIO Fusion",
       canonical: "https://aiofusion.ai/insights/ai-proves-pr-drives-sales",
     });
   });

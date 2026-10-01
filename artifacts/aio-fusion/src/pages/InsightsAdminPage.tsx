@@ -152,16 +152,35 @@ export function buildStoryPayload(
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
-  return {
-    ...storyData,
-    slug: storyData.slug.trim() || generatedSlug || 'untitled-story',
-    title,
-    excerpt: storyData.excerpt || '',
-    tag: storyData.tag || 'Uncategorized',
-    coverImageAlt: storyData.coverImageAlt || '',
-    status,
-    pinned: status === 'published' && storyData.pinned === true,
+  const { dateModified: _serverOwnedDateModified, ...editableStoryData } = storyData as InsightArticleInput & {
+    dateModified?: string | null;
   };
+  const publicationDate = editableStoryData.datePublished;
+  return {
+    ...editableStoryData,
+    datePublished: publicationDate ? publicationDate.substring(0, 10) : publicationDate,
+    slug: editableStoryData.slug.trim() || generatedSlug || 'untitled-story',
+    title,
+    excerpt: editableStoryData.excerpt || '',
+    tag: editableStoryData.tag || 'Uncategorized',
+    coverImageAlt: editableStoryData.coverImageAlt || '',
+    status,
+    pinned: status === 'published' && editableStoryData.pinned === true,
+  };
+}
+
+export function isValidPublicationDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith('0000')) {
+    return false;
+  }
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function publicationDateForEditor(value: string | null | undefined): string | null | undefined {
+  if (!value) return value;
+  const dateOnly = value.substring(0, 10);
+  return isValidPublicationDate(dateOnly) ? dateOnly : value;
 }
 
 const AutoResizeTextarea = ({ value, onChange, className, ...props }: any) => {
@@ -315,7 +334,10 @@ interface StoryEditorProps {
 }
 
 function StoryEditor({ id, initialData, onSave, onDelete, getMediaUrl }: StoryEditorProps) {
-  const [data, setData] = useState<InsightArticleInput>(initialData);
+  const [data, setData] = useState<InsightArticleInput>(() => ({
+    ...initialData,
+    datePublished: publicationDateForEditor(initialData.datePublished),
+  }));
   const [templateId, setTemplateId] = useState<StoryTemplateId | 'custom'>(id === 'new' ? 'standard' : 'custom');
   const [tab, setTab] = useState<'content' | 'meta'>('content');
   const [isSaving, setIsSaving] = useState(false);
@@ -325,7 +347,10 @@ function StoryEditor({ id, initialData, onSave, onDelete, getMediaUrl }: StoryEd
 
   // Reset data when ID changes (switching stories)
   useEffect(() => {
-    setData(initialData);
+    setData({
+      ...initialData,
+      datePublished: publicationDateForEditor(initialData.datePublished),
+    });
     setTab('content');
     setTemplateId(id === 'new' ? 'standard' : 'custom');
   }, [id]);
@@ -345,6 +370,11 @@ function StoryEditor({ id, initialData, onSave, onDelete, getMediaUrl }: StoryEd
   };
 
   const handleSaveAction = async (status: 'draft' | 'published') => {
+    if (status === 'published' && !isValidPublicationDate(data.datePublished)) {
+      setSaveError('Enter the verified original publication date in YYYY-MM-DD form before publishing.');
+      setIsSaved(false);
+      return;
+    }
     setIsSaving(true);
     setSaveError(null);
     try {
@@ -649,7 +679,20 @@ function StoryEditor({ id, initialData, onSave, onDelete, getMediaUrl }: StoryEd
                   </p>
                 </div>
                 
-                <Input label="Override Publish Date" type="date" value={data.datePublished ? data.datePublished.substring(0,10) : ''} onChange={(e: any) => setData({...data, datePublished: e.target.value ? e.target.value + "T00:00:00Z" : null})} />
+                <div className="mb-6">
+                  <label className="block text-sm font-semibold text-[#0a1628] mb-2" htmlFor="insight-publication-date">Verified Publication Date</label>
+                  <input
+                    id="insight-publication-date"
+                    aria-label="Verified publication date"
+                    type="date"
+                    value={data.datePublished ? data.datePublished.substring(0, 10) : ''}
+                    onChange={(event) => setData({ ...data, datePublished: event.target.value || null })}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#4f8fff]/20 focus:border-[#4f8fff] transition-all"
+                  />
+                  <p className="mt-2 text-xs leading-relaxed text-gray-500">
+                    Required to publish. Enter the source’s verified original publication date; no date is filled in automatically.
+                  </p>
+                </div>
               </div>
 
                 <div className="col-span-2 mt-2 rounded-xl border border-[#C8497A]/20 bg-[#C8497A]/5 p-4">
@@ -848,7 +891,11 @@ export function InsightsAdminPage({ onBack }: { onBack: () => void }) {
                         </span>
                       )}
                     </div>
-                    <span className="text-gray-400 font-semibold">{new Date(story.updatedAt || story.createdAt || Date.now()).toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'})}</span>
+                    <span className="text-gray-400 font-semibold">
+                      {story.updatedAt || story.createdAt
+                        ? new Date(story.updatedAt || story.createdAt!).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                        : 'Not saved'}
+                    </span>
                   </div>
                 </button>
               ))

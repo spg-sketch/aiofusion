@@ -86,6 +86,44 @@ function isHttpUrl(value: string | null | undefined): boolean {
   }
 }
 
+function isValidInsightPublicationDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith("0000")) {
+    return false;
+  }
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function hasArticleContentChanged(
+  existing: InsightArticleRow,
+  input: ReturnType<typeof UpdateAdminInsightBody.parse>,
+): boolean {
+  const fields = [
+    "slug",
+    "title",
+    "excerpt",
+    "tag",
+    "externalUrl",
+    "datePublished",
+    "body",
+    "coverMediaId",
+    "coverImageAlt",
+    "seoTitle",
+    "seoDescription",
+    "focusKeyphrase",
+    "canonicalUrl",
+    "status",
+  ] as const;
+  return fields.some((field) => {
+    const next = input[field];
+    if (next === undefined) return false;
+    const previous = existing[field];
+    return field === "body"
+      ? JSON.stringify(next) !== JSON.stringify(previous)
+      : next !== previous;
+  });
+}
+
 async function validMediaReferences(
   coverMediaId: string | null | undefined,
   body: InsightBlock[],
@@ -180,6 +218,15 @@ router.post("/admin/insights", requirePlatformAuth, async (req, res) => {
     return;
   }
   const input = parsed.data;
+  if (
+    (input.datePublished != null && !isValidInsightPublicationDate(input.datePublished)) ||
+    (input.status === "published" && !isValidInsightPublicationDate(input.datePublished))
+  ) {
+    res.status(400).json({
+      error: "A valid verified publication date (YYYY-MM-DD) is required to publish this story",
+    });
+    return;
+  }
   const body = input.body as InsightBlock[];
   if (
     !isHttpUrl(input.externalUrl) ||
@@ -193,6 +240,7 @@ router.post("/admin/insights", requirePlatformAuth, async (req, res) => {
     const id = randomUUID();
     const row = await db.transaction(async (tx) => {
       await lockHomepagePins(tx);
+      const now = new Date();
       const pinnedIds = await readHomepagePinnedIds(tx);
       const nextPinnedIds = addOrRemoveHomepagePin(
         pinnedIds,
@@ -208,7 +256,8 @@ router.post("/admin/insights", requirePlatformAuth, async (req, res) => {
           coverImageUrl: null,
           id,
           canonicalUrl: input.canonicalUrl || canonicalFor(input.slug),
-          publishedAt: input.status === "published" ? new Date() : null,
+          dateModified: now.toISOString(),
+          publishedAt: input.status === "published" ? now : null,
         })
         .returning();
       await writeHomepagePinnedIds(tx, nextPinnedIds);
@@ -233,6 +282,15 @@ router.patch("/admin/insights/:id", requirePlatformAuth, async (req, res) => {
     return;
   }
   const input = parsed.data;
+  if (
+    (input.datePublished != null && !isValidInsightPublicationDate(input.datePublished)) ||
+    (input.status === "published" && input.datePublished === null)
+  ) {
+    res.status(400).json({
+      error: "A valid verified publication date (YYYY-MM-DD) is required to publish this story",
+    });
+    return;
+  }
   const body = input.body as InsightBlock[];
   if (
     !isHttpUrl(input.externalUrl) ||
@@ -257,6 +315,16 @@ router.patch("/admin/insights/:id", requirePlatformAuth, async (req, res) => {
         .limit(1);
       if (!existing) return null;
 
+      const publicationDate = input.datePublished === undefined
+        ? existing.datePublished
+        : input.datePublished;
+      if (
+        input.status === "published" &&
+        !isValidInsightPublicationDate(publicationDate)
+      ) {
+        throw new Error("A valid verified publication date (YYYY-MM-DD) is required to publish this story");
+      }
+
       const pinnedIds = await readHomepagePinnedIds(tx);
       const existingPinned = pinnedIds.includes(existing.id);
       const requestedPinned = input.pinned === undefined ? existingPinned : input.pinned;
@@ -266,6 +334,8 @@ router.patch("/admin/insights/:id", requirePlatformAuth, async (req, res) => {
         input.status === "published" && requestedPinned === true,
       );
       const { pinned: _pinned, ...articleInput } = input;
+      const now = new Date();
+      const contentChanged = hasArticleContentChanged(existing, input);
       const [updated] = await tx
         .update(insightArticlesTable)
         .set({
@@ -273,10 +343,11 @@ router.patch("/admin/insights/:id", requirePlatformAuth, async (req, res) => {
           body,
           coverImageUrl: null,
           canonicalUrl: input.canonicalUrl || canonicalFor(input.slug),
-          updatedAt: new Date(),
+          updatedAt: now,
+          dateModified: contentChanged ? now.toISOString() : existing.dateModified,
           publishedAt:
             input.status === "published"
-              ? existing.publishedAt ?? new Date()
+              ? existing.publishedAt ?? now
               : existing.publishedAt,
         })
         .where(eq(insightArticlesTable.id, existing.id))
@@ -292,6 +363,10 @@ router.patch("/admin/insights/:id", requirePlatformAuth, async (req, res) => {
   } catch (error) {
     if (error instanceof HomepagePinLimitError) {
       res.status(409).json({ error: error.message });
+      return;
+    }
+    if (error instanceof Error && error.message.startsWith("A valid verified publication date")) {
+      res.status(400).json({ error: error.message });
       return;
     }
     req.log.warn({ err: error }, "Unable to update Insights story");

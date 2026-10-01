@@ -752,8 +752,12 @@ components:
         excerpt: { type: string }
         tag: { type: string }
         externalUrl: { type: [string, 'null'] }
-        datePublished: { type: [string, 'null'] }
-        dateModified: { type: [string, 'null'] }
+        datePublished:
+          type: [string, 'null']
+          description: Verified original publication date in YYYY-MM-DD form.
+        dateModified:
+          type: [string, 'null']
+          description: Server-owned content modification timestamp, updated when editorial content changes.
         body:
           type: array
           items:
@@ -778,8 +782,10 @@ components:
         excerpt: { type: string }
         tag: { type: string }
         externalUrl: { type: [string, 'null'] }
-        datePublished: { type: [string, 'null'] }
-        dateModified: { type: [string, 'null'] }
+        datePublished:
+          type: [string, 'null']
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Verified original publication date in YYYY-MM-DD form. Required when status is published.
         body:
           type: array
           items:

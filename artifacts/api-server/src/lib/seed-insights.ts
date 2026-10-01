@@ -10,6 +10,7 @@ type SeedRow = {
   id: string;
   slug: string;
   title: string;
+  seoTitle?: string;
   tag: string;
   excerpt: string;
   datePublished: string;
@@ -68,7 +69,7 @@ export async function seedInsights(): Promise<void> {
       coverMediaId: row.imgSrc,
       coverImageUrl: row.coverImageUrl,
       coverImageAlt: row.title,
-      seoTitle: `${row.title} | AIO Fusion`,
+      seoTitle: row.seoTitle ?? `${row.title} | AIO Fusion`,
       seoDescription: row.excerpt,
       focusKeyphrase: row.tag === "Guidance" ? "AIO Fusion guidance" : "AI visibility",
       canonicalUrl: `https://${domain}/insights/${row.slug}`,

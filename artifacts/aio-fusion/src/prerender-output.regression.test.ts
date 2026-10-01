@@ -9,6 +9,8 @@ import {
 } from "./marketing/pageMeta";
 import { runPrerender } from "./prerender-entry";
 import type { PublicInsight } from "./marketing/InsightsPage";
+import { articleMeta } from "./marketing/InsightsPage";
+import { structuredDataFor } from "./marketing/pageMeta";
 
 const temporaryDirectories: string[] = [];
 
@@ -68,6 +70,40 @@ afterEach(() => {
 });
 
 describe("controlled prerender output", () => {
+  it("marks page schema for client ownership and keeps CMS dates and breadcrumb identical to client metadata", async () => {
+    const directory = makeOutputFixture();
+    const story = publishedFixture("verified-date-fixture", "Verified article date", "Controlled date evidence.");
+    const undated = {
+      ...publishedFixture("legacy-undated-fixture", "Legacy undated article", "No invented publication date."),
+      datePublished: null,
+      dateModified: null,
+    };
+    await runPrerender({
+      distPublic: directory,
+      canonicalDomain: null,
+      lastmod: "2026-10-01",
+      publishedInsights: [story, undated],
+    });
+    for (const article of [story, undated]) {
+      const html = readRoute(directory, `insights/${article.slug}`);
+      const scripts = [...html.matchAll(/<script type="application\/ld\+json" data-pagehead-managed>(.*?)<\/script>/gs)];
+      expect(scripts).toHaveLength(1);
+      const schema = JSON.parse(scripts[0][1]);
+      expect(schema).toEqual(JSON.parse(JSON.stringify(structuredDataFor(articleMeta(article)))));
+      expect(schema[1].itemListElement.at(-1).name).toBe(article.title);
+      if (article.datePublished) {
+        expect(html).toContain(`<time dateTime="${article.datePublished}">`);
+        expect(html).toContain(`<time dateTime="${article.dateModified}">`);
+        expect(schema[0].datePublished).toBe(article.datePublished);
+        expect(schema[0].dateModified).toBe(article.dateModified);
+      } else {
+        expect(html).not.toContain("<time");
+        expect(schema[0]).not.toHaveProperty("datePublished");
+        expect(schema[0]).not.toHaveProperty("dateModified");
+      }
+    }
+  });
+
   it("uses the checked-in article snapshot when no published-content snapshot is supplied", async () => {
     const directory = makeOutputFixture();
     const result = await runPrerender({

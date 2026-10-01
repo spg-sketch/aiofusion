@@ -8,7 +8,8 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, cleanup, act } from "@testing-library/react";
 import { PageHead } from "./PageHead";
-import { PAGE_META, ARTICLE_META } from "./pageMeta";
+import { PAGE_META, ARTICLE_META, structuredDataFor } from "./pageMeta";
+import { articleMeta, type PublicInsight } from "./InsightsPage";
 
 const LD_SEL = 'script[type="application/ld+json"][data-pagehead-managed]';
 
@@ -21,6 +22,43 @@ afterEach(() => {
 });
 
 describe("PageHead JSON-LD management", () => {
+  it("adopts a direct-load script, updates it for another article, then replaces/removes it on non-article pages", () => {
+    const first = ARTICLE_META["battle-b2b-ai-authority"];
+    const script = document.createElement("script");
+    script.type = "application/ld+json";
+    script.setAttribute("data-pagehead-managed", "");
+    script.textContent = JSON.stringify(structuredDataFor(first));
+    document.head.appendChild(script);
+    const { rerender } = render(<PageHead meta={first} />);
+    expect(document.head.querySelectorAll(LD_SEL)).toHaveLength(1);
+    expect(document.head.querySelector(LD_SEL)).toBe(script);
+
+    const second = articleMeta({
+      slug: "controlled-cms-story",
+      title: "Controlled CMS story",
+      excerpt: "Verified CMS metadata fixture.",
+      seoTitle: "CMS Story | AIO Fusion",
+      datePublished: "2026-09-01",
+      dateModified: "2026-09-02T12:00:00.000Z",
+      canonicalUrl: null,
+      coverImageUrl: null,
+    } as PublicInsight);
+    rerender(<PageHead meta={second} />);
+    expect(document.head.querySelectorAll(LD_SEL)).toHaveLength(1);
+    const data = JSON.parse(script.textContent!);
+    expect(data[0].headline).toBe(second.articleTitle);
+    expect(data[0].datePublished).toBe(second.datePublished);
+    expect(data[1].itemListElement.at(-1).name).toBe(second.articleTitle);
+    expect(script.textContent).not.toContain(first.articleTitle);
+
+    rerender(<PageHead meta={PAGE_META.pricing} />);
+    expect(document.head.querySelector(LD_SEL)).toBe(script);
+    expect(JSON.parse(script.textContent!)["@type"]).toBe("WebPage");
+    expect(script.textContent).not.toContain("BreadcrumbList");
+    rerender(<PageHead meta={PAGE_META.contact} />);
+    expect(document.head.querySelector(LD_SEL)).toBeNull();
+  });
+
   it("injects a ld+json script when meta has jsonLd", () => {
     render(<PageHead meta={PAGE_META["landing"]} />);
     const script = document.head.querySelector(LD_SEL);

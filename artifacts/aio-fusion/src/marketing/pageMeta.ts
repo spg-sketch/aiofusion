@@ -1,17 +1,26 @@
 /** Per-page SEO metadata used by PageHead (client) and the prerender script (build-time). */
 import type { PublicView } from "../types";
 
-export interface PageMeta {
+interface BasePageMeta {
   title: string;
   description: string;
   canonical: string;
   ogTitle?: string;
   ogDescription?: string;
-  ogType?: string;
   datePublished?: string;
   dateModified?: string;
   jsonLd?: Record<string, unknown> | Array<Record<string, unknown>>;
 }
+
+/** Article metadata must carry the visible title for its breadcrumb. */
+export interface ArticleMeta extends BasePageMeta {
+  ogType: "article";
+  articleTitle: string;
+  excerpt: string;
+}
+
+export type PageMeta = (BasePageMeta & { ogType?: "website" }) | ArticleMeta;
+export const PAGE_JSON_LD_ATTRIBUTE = "data-pagehead-managed";
 
 const BASE = "https://aiofusion.ai";
 const OG_IMAGE = `${BASE}/opengraph.jpg`;
@@ -25,7 +34,6 @@ export function structuredDataFor(meta: PageMeta): Record<string, unknown> | Arr
     datePublished: meta.datePublished,
     dateModified: meta.dateModified,
   }));
-  const articleMeta = meta as ArticleMeta;
   return [
     ...articleSchema,
     {
@@ -47,7 +55,7 @@ export function structuredDataFor(meta: PageMeta): Record<string, unknown> | Arr
         {
           "@type": "ListItem",
           position: 3,
-          name: articleMeta.articleTitle,
+          name: meta.articleTitle,
           item: meta.canonical,
         },
       ],
@@ -248,15 +256,10 @@ export const PAGE_META: Record<PublicPageMetaKey, PageMeta> = {
   },
 };
 
-export interface ArticleMeta extends PageMeta {
-  articleTitle: string;
-  excerpt: string;
-}
-
 export const ARTICLE_META: Record<string, ArticleMeta> = {
   "pr-professionals-not-threat": {
     articleTitle: "PR professionals should not see AI as a threat",
-    title: "PR professionals should not see AI as a threat | AIO Fusion Insights",
+    title: "PR Professionals and AI: Opportunity, Not Threat | AIO Fusion",
     description:
       "Why AI will elevate the role of PR and marketing professionals, not replace them. AI removes administrative burden so that what remains is the part only humans can do.",
     canonical: `${BASE}/insights/pr-professionals-not-threat`,
@@ -286,7 +289,7 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
   "thought-leadership-engine-ai-visibility": {
     articleTitle: "Why thought leadership is the engine of AI visibility",
     title:
-      "Why thought leadership is the engine of AI visibility | AIO Fusion Insights",
+      "Thought Leadership and AI Visibility | AIO Fusion",
     description:
       "AI systems draw on third-party authority signals. Learn why thought leadership and earned media can help a brand become easier to recognise and cite.",
     canonical: `${BASE}/insights/thought-leadership-engine-ai-visibility`,
@@ -315,7 +318,7 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
   },
   "battle-b2b-ai-authority": {
     articleTitle: "The battle for AI authority has begun",
-    title: "The battle for AI authority has begun | AIO Fusion Insights",
+    title: "The Battle for AI Authority | AIO Fusion",
     description:
       "Generative AI is becoming part of business research and supplier discovery. Learn why PR now shapes how brands are represented.",
     canonical: `${BASE}/insights/battle-b2b-ai-authority`,
@@ -345,7 +348,7 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
   "agentic-media-relations": {
     articleTitle: "Why agentic media relations is coming faster than you think",
     title:
-      "Why agentic media relations is coming faster than you think | AIO Fusion Insights",
+      "Agentic Media Relations: The Future of PR | AIO Fusion",
     description:
       "AI agents pitching journalists. Journalists using agents to find stories. The future of PR is closer than the industry realises.",
     canonical: `${BASE}/insights/agentic-media-relations`,
@@ -373,9 +376,9 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     },
   },
   "ai-changing-b2b-visibility": {
-    articleTitle: "AI Is Changing the Rules of Visibility",
+    articleTitle: "AI Is Changing the Rules of Visibility: Here's What Actually Matters Now",
     title:
-      "AI Is Changing the Rules of Visibility: Here's What Actually Matters Now | AIO Fusion Insights",
+      "How AI Is Changing Brand Visibility | AIO Fusion",
     description:
       "AI-generated answers often rely on third-party sources when describing markets and suppliers. Learn what matters for visibility now.",
     canonical: `${BASE}/insights/ai-changing-b2b-visibility`,
@@ -407,7 +410,7 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     articleTitle:
       "Will AI finally prove that PR drives sales through earned media awareness?",
     title:
-      "Will AI finally prove that PR drives sales through earned media awareness? | AIO Fusion Insights",
+      "Can AI Prove PR Drives Sales? | AIO Fusion",
     description:
       "The attribution problem that has haunted PR for decades is about to be solved, and AI is the reason why.",
     canonical: `${BASE}/insights/ai-proves-pr-drives-sales`,

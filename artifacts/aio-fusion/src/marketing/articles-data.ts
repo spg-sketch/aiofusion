@@ -13,8 +13,8 @@ export interface Article {
   title: string;
   tag: string;
   excerpt: string;
-  datePublished: string;
-  dateModified: string;
+  datePublished?: string;
+  dateModified?: string;
   imgSrc: string;
   sections: ArticleSection[];
 }

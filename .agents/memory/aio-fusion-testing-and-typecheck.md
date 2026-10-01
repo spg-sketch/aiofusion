@@ -45,3 +45,9 @@ Async browser-download tests must wait for delayed object-URL cleanup before res
 **Why:** A test can pass its assertions and still fail the full release gate when a cleanup timer fires after Vitest restores the mocked `URL` to jsdom's incomplete implementation.
 
 **How to apply:** Assert that the revocation callback ran before the test exits, rather than only asserting that the download started.
+
+App refresh tests must count collection GET requests, not every URL containing the collection prefix.
+
+**Why:** Active-project navigation can trigger nested autosave mutations while a background list is refreshing. Prefix-only counters mistake those writes for extra list reads and fail depending on timing.
+
+**How to apply:** Match the exact collection pathname and HTTP method when asserting omission/reconfirmation read counts; retain the selected-project and two-read behavior checks.

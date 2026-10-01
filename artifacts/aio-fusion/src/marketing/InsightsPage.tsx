@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowUpRight, BookOpen } from "lucide-react";
 import MarketingPage from "./MarketingPage";
 import { PageHead } from "./PageHead";
-import { HIDDEN_PUBLIC_INSIGHT_SLUGS, PAGE_META, type PageMeta } from "./pageMeta";
+import { ARTICLE_META, HIDDEN_PUBLIC_INSIGHT_SLUGS, PAGE_META, type ArticleMeta } from "./pageMeta";
 import { articleCanonicalUrl } from "./articleCanonical";
 import { vars } from "./vars";
 import ArticleDetailView from "./ArticleDetailView";
@@ -34,7 +34,7 @@ declare global {
 
 const hiddenPublicInsightSlugs = new Set<string>(HIDDEN_PUBLIC_INSIGHT_SLUGS);
 
-const FALLBACK_INSIGHTS: PublicInsight[] = [
+export const FALLBACK_INSIGHTS: PublicInsight[] = [
   ...NEW_ARTICLES.map((article) => ({
     id: article.id,
     slug: article.id,
@@ -42,13 +42,13 @@ const FALLBACK_INSIGHTS: PublicInsight[] = [
     excerpt: article.excerpt,
     tag: article.tag,
     externalUrl: null,
-    datePublished: article.datePublished,
-    dateModified: article.dateModified,
+    datePublished: article.datePublished ?? null,
+    dateModified: article.dateModified ?? null,
     body: article.sections,
     coverImageUrl: `/images/insights/${article.imgSrc}.webp`,
     coverImageAlt: article.title,
-    seoTitle: `${article.title} | AIO Fusion`,
-    seoDescription: article.excerpt,
+    seoTitle: ARTICLE_META[article.id]?.title ?? `${article.title} | AIO Fusion`,
+    seoDescription: ARTICLE_META[article.id]?.description ?? article.excerpt,
     focusKeyphrase: article.tag === "Guidance" ? "AIO Fusion guidance" : "AI visibility",
     canonicalUrl: `https://aiofusion.ai/insights/${article.id}`,
     status: "published",
@@ -90,13 +90,15 @@ function apiPath(path: string): string {
   return `${base.replace(/\/+$/, "")}/api${path}`;
 }
 
-function articleMeta(article: PublicInsight): PageMeta {
+export function articleMeta(article: PublicInsight, canonicalBase = `https://${import.meta.env.VITE_CANONICAL_DOMAIN || "aiofusion.ai"}`): ArticleMeta {
   const canonical = articleCanonicalUrl(
     article.canonicalUrl,
     article.slug,
-    `https://${import.meta.env.VITE_CANONICAL_DOMAIN || "aiofusion.ai"}`,
+    canonicalBase,
   );
   return {
+    articleTitle: article.title,
+    excerpt: article.excerpt,
     title: article.seoTitle || article.title,
     description: article.seoDescription || article.excerpt,
     canonical,
@@ -104,7 +106,7 @@ function articleMeta(article: PublicInsight): PageMeta {
     ogDescription: article.excerpt,
     ogType: "article",
     datePublished: article.datePublished || undefined,
-    dateModified: article.dateModified || article.datePublished || undefined,
+    dateModified: article.dateModified || undefined,
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",
@@ -166,8 +168,8 @@ export default function InsightsPage(props: {
       title: openArticle.title,
       tag: openArticle.tag,
       excerpt: openArticle.excerpt,
-      datePublished: openArticle.datePublished || new Date().toISOString().slice(0, 10),
-      dateModified: openArticle.dateModified || openArticle.datePublished || new Date().toISOString().slice(0, 10),
+      datePublished: openArticle.datePublished || undefined,
+      dateModified: openArticle.dateModified || undefined,
       imgSrc: openArticle.coverImageUrl || "",
       sections: openArticle.body,
     };

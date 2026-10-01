@@ -31,6 +31,7 @@ describe("public page / prerender consistency", () => {
       const meta = PAGE_META[view];
       expect(meta, `PAGE_META missing for "${view}"`).toBeTruthy();
       expect(meta.title.trim()).not.toBe("");
+      expect(meta.title.length, `search title too long for "${slug}"`).toBeLessThanOrEqual(65);
       expect(meta.description.trim()).not.toBe("");
       expect(meta.canonical).toBe(
         slug === "" ? "https://aiofusion.ai/" : `https://aiofusion.ai/${slug}`,
@@ -44,11 +45,13 @@ describe("public page / prerender consistency", () => {
       const meta = ARTICLE_META[slug];
       expect(meta, `ARTICLE_META missing for "${slug}"`).toBeTruthy();
       expect(meta.title.trim()).not.toBe("");
+      expect(meta.title.length, `article search title too long for "${slug}"`).toBeLessThanOrEqual(65);
       expect(meta.description.trim()).not.toBe("");
       expect(meta.articleTitle.trim()).not.toBe("");
       expect(meta.canonical).toBe(`https://aiofusion.ai/insights/${slug}`);
       const article = NEW_ARTICLES.find((candidate) => candidate.id === slug);
       expect(article, `article content missing for "${slug}"`).toBeTruthy();
+      expect(meta.articleTitle).toBe(article?.title);
       expect(meta.datePublished).toBe(article?.datePublished);
       expect(meta.dateModified).toBe(article?.dateModified);
       expect(meta.datePublished).toMatch(/^\d{4}-\d{2}-\d{2}$/);

@@ -20,7 +20,7 @@ vi.mock('@workspace/api-client-react', () => ({
   getListAdminInsightMediaQueryKey: () => ['insight-media'],
 }));
 
-import { buildStoryPayload, createStoryTemplate, InsightsAdminPage } from './InsightsAdminPage';
+import { buildStoryPayload, createStoryTemplate, InsightsAdminPage, isValidPublicationDate } from './InsightsAdminPage';
 
 afterEach(() => {
   cleanup();
@@ -88,6 +88,30 @@ describe('Insights CMS story templates', () => {
     expect(buildStoryPayload(story, 'draft').pinned).toBe(false);
   });
 
+  it('accepts only real YYYY-MM-DD calendar dates as verified publication dates', () => {
+    expect(isValidPublicationDate('2024-02-29')).toBe(true);
+    expect(isValidPublicationDate('2026-02-29')).toBe(false);
+    expect(isValidPublicationDate('2026-09-01T00:00:00Z')).toBe(false);
+    expect(isValidPublicationDate(null)).toBe(false);
+  });
+
+  it('does not send a server-owned modification timestamp in a story payload', () => {
+    const payload = buildStoryPayload({
+      slug: 'timestamp-check',
+      title: 'Timestamp check',
+      excerpt: '',
+      tag: 'Insights',
+      body: [],
+      coverImageAlt: '',
+      dateModified: '1900-01-01T00:00:00.000Z',
+      datePublished: '2026-09-01T00:00:00.000Z',
+      status: 'draft',
+    } as any, 'draft');
+
+    expect(payload.datePublished).toBe('2026-09-01');
+    expect(payload).not.toHaveProperty('dateModified');
+  });
+
   it('shows the homepage feature control in Settings & SEO', () => {
     render(<InsightsAdminPage onBack={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: /write new story/i }));
@@ -134,6 +158,10 @@ describe('Insights CMS story templates', () => {
     fireEvent.change(screen.getByPlaceholderText('Enter story title...'), {
       target: { value: 'CMS Publish Check' },
     });
+    fireEvent.click(screen.getByRole('button', { name: /settings & seo/i }));
+    fireEvent.change(screen.getByLabelText('Verified publication date'), {
+      target: { value: '2026-09-01' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
 
     await waitFor(() => expect(cmsMocks.create).toHaveBeenCalledTimes(1));
@@ -141,8 +169,21 @@ describe('Insights CMS story templates', () => {
       data: expect.objectContaining({
         title: 'CMS Publish Check',
         slug: 'cms-publish-check',
+        datePublished: '2026-09-01',
         status: 'published',
       }),
     });
+  });
+
+  it('does not call the publish endpoint when the publication date is missing', async () => {
+    render(<InsightsAdminPage onBack={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /write new story/i }));
+    fireEvent.change(screen.getByPlaceholderText('Enter story title...'), {
+      target: { value: 'Undated Story' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+    expect(cmsMocks.create).not.toHaveBeenCalled();
+    expect(await screen.findByRole('alert')).toHaveTextContent(/verified original publication date/i);
   });
 });

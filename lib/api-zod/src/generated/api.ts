@@ -117,8 +117,8 @@ export const ListPublishedInsightsResponseItem = zod.object({
   "excerpt": zod.string(),
   "tag": zod.string(),
   "externalUrl": zod.string().nullish(),
-  "datePublished": zod.string().nullish(),
-  "dateModified": zod.string().nullish(),
+  "datePublished": zod.string().nullish().describe('Verified original publication date in YYYY-MM-DD form.'),
+  "dateModified": zod.string().nullish().describe('Server-owned content modification timestamp, updated when editorial content changes.'),
   "body": zod.array(zod.object({
   "type": zod.string(),
   "text": zod.string().optional(),
@@ -156,8 +156,8 @@ export const GetPublishedInsightResponse = zod.object({
   "excerpt": zod.string(),
   "tag": zod.string(),
   "externalUrl": zod.string().nullish(),
-  "datePublished": zod.string().nullish(),
-  "dateModified": zod.string().nullish(),
+  "datePublished": zod.string().nullish().describe('Verified original publication date in YYYY-MM-DD form.'),
+  "dateModified": zod.string().nullish().describe('Server-owned content modification timestamp, updated when editorial content changes.'),
   "body": zod.array(zod.object({
   "type": zod.string(),
   "text": zod.string().optional(),
@@ -190,8 +190,8 @@ export const ListAdminInsightsResponseItem = zod.object({
   "excerpt": zod.string(),
   "tag": zod.string(),
   "externalUrl": zod.string().nullish(),
-  "datePublished": zod.string().nullish(),
-  "dateModified": zod.string().nullish(),
+  "datePublished": zod.string().nullish().describe('Verified original publication date in YYYY-MM-DD form.'),
+  "dateModified": zod.string().nullish().describe('Server-owned content modification timestamp, updated when editorial content changes.'),
   "body": zod.array(zod.object({
   "type": zod.string(),
   "text": zod.string().optional(),
@@ -220,6 +220,7 @@ export const ListAdminInsightsResponse = zod.array(ListAdminInsightsResponseItem
  */
 
 
+export const createAdminInsightBodyDatePublishedRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
 
 
 export const CreateAdminInsightBody = zod.object({
@@ -228,8 +229,7 @@ export const CreateAdminInsightBody = zod.object({
   "excerpt": zod.string(),
   "tag": zod.string(),
   "externalUrl": zod.string().nullish(),
-  "datePublished": zod.string().nullish(),
-  "dateModified": zod.string().nullish(),
+  "datePublished": zod.string().regex(createAdminInsightBodyDatePublishedRegExp).nullish().describe('Verified original publication date in YYYY-MM-DD form. Required when status is published.'),
   "body": zod.array(zod.object({
   "type": zod.string(),
   "text": zod.string().optional(),
@@ -256,8 +256,8 @@ export const CreateAdminInsightResponse = zod.object({
   "excerpt": zod.string(),
   "tag": zod.string(),
   "externalUrl": zod.string().nullish(),
-  "datePublished": zod.string().nullish(),
-  "dateModified": zod.string().nullish(),
+  "datePublished": zod.string().nullish().describe('Verified original publication date in YYYY-MM-DD form.'),
+  "dateModified": zod.string().nullish().describe('Server-owned content modification timestamp, updated when editorial content changes.'),
   "body": zod.array(zod.object({
   "type": zod.string(),
   "text": zod.string().optional(),
@@ -289,6 +289,7 @@ export const UpdateAdminInsightParams = zod.object({
 
 
 
+export const updateAdminInsightBodyDatePublishedRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
 
 
 export const UpdateAdminInsightBody = zod.object({
@@ -297,8 +298,7 @@ export const UpdateAdminInsightBody = zod.object({
   "excerpt": zod.string(),
   "tag": zod.string(),
   "externalUrl": zod.string().nullish(),
-  "datePublished": zod.string().nullish(),
-  "dateModified": zod.string().nullish(),
+  "datePublished": zod.string().regex(updateAdminInsightBodyDatePublishedRegExp).nullish().describe('Verified original publication date in YYYY-MM-DD form. Required when status is published.'),
   "body": zod.array(zod.object({
   "type": zod.string(),
   "text": zod.string().optional(),
@@ -325,8 +325,8 @@ export const UpdateAdminInsightResponse = zod.object({
   "excerpt": zod.string(),
   "tag": zod.string(),
   "externalUrl": zod.string().nullish(),
-  "datePublished": zod.string().nullish(),
-  "dateModified": zod.string().nullish(),
+  "datePublished": zod.string().nullish().describe('Verified original publication date in YYYY-MM-DD form.'),
+  "dateModified": zod.string().nullish().describe('Server-owned content modification timestamp, updated when editorial content changes.'),
   "body": zod.array(zod.object({
   "type": zod.string(),
   "text": zod.string().optional(),

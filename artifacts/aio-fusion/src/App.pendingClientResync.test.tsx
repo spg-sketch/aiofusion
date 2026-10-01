@@ -214,19 +214,20 @@ describe("project hub excludes managed clients without projects", () => {
     expect((await screen.findAllByText("Active Refresh Project")).length).toBeGreaterThan(0);
     expect(localStorage.getItem("aio.activeProjectId")).toBe("active-refresh-project");
 
-    const projectReadsBefore = vi.mocked(fetch).mock.calls.filter(
-      ([url]) => String(url).includes("/api/store/projects") && !String(url).includes("/intake"),
-    ).length;
+    // Count only GETs to the collection endpoint, not nested project mutations.
+    const projectListReadCount = () => vi.mocked(fetch).mock.calls.filter(([url, init]) => {
+      const method = ((init as RequestInit | undefined)?.method ?? "GET").toUpperCase();
+      return method === "GET"
+        && new URL(String(url), window.location.href).pathname === "/api/store/projects";
+    }).length;
+    const projectReadsBefore = projectListReadCount();
     queuedProjectLists = [[], [project]];
     await act(async () => {
       window.dispatchEvent(new Event("focus"));
     });
 
     await waitFor(() => {
-      const reads = vi.mocked(fetch).mock.calls.filter(
-        ([url]) => String(url).includes("/api/store/projects") && !String(url).includes("/intake"),
-      ).length;
-      expect(reads).toBe(projectReadsBefore + 2);
+      expect(projectListReadCount()).toBe(projectReadsBefore + 2);
     });
     expect(localStorage.getItem("aio.activeProjectId")).toBe("active-refresh-project");
     expect((await screen.findAllByText("Active Refresh Project")).length).toBeGreaterThan(0);

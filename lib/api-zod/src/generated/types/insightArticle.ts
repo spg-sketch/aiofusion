@@ -15,9 +15,15 @@ export interface InsightArticle {
   tag: string;
   /** @nullable */
   externalUrl?: string | null;
-  /** @nullable */
+  /**
+     * Verified original publication date in YYYY-MM-DD form.
+     * @nullable
+     */
   datePublished?: string | null;
-  /** @nullable */
+  /**
+     * Server-owned content modification timestamp, updated when editorial content changes.
+     * @nullable
+     */
   dateModified?: string | null;
   body: InsightBlock[];
   /** @nullable */

@@ -22,13 +22,12 @@ import { createElement } from "react";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { articleCanonicalUrl } from "./marketing/articleCanonical";
 
 import LandingPageC from "./marketing/LandingPage";
 import ForInhousePage from "./marketing/ForInhousePage";
 import ForAgenciesPage from "./marketing/ForAgenciesPage";
 import ForAgentsPage from "./marketing/ForAgentsPage";
-import InsightsPage from "./marketing/InsightsPage";
+import InsightsPage, { articleMeta, FALLBACK_INSIGHTS } from "./marketing/InsightsPage";
 import AboutPage from "./marketing/AboutPage";
 import ContactPage from "./marketing/ContactPage";
 import PricingPage from "./marketing/PricingPage";
@@ -39,7 +38,7 @@ import TermsConditionsPage from "./marketing/TermsConditionsPage";
 
 import {
   PAGE_META,
-  ARTICLE_META,
+  PAGE_JSON_LD_ATTRIBUTE,
   HIDDEN_PUBLIC_INSIGHT_SLUGS,
   PUBLIC_PAGE_DEFINITIONS,
   PUBLIC_ROUTES,
@@ -124,7 +123,7 @@ function buildHeadTags(meta: PageMeta): string {
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${escAttr(ogTitle)}" />
   <meta name="twitter:description" content="${escAttr(ogDesc)}" />
-  <meta name="twitter:image" content="${escAttr(OG_IMAGE)}" />${ldJson ? `\n  <script type="application/ld+json">${ldJson}</script>` : ""}`;
+  <meta name="twitter:image" content="${escAttr(OG_IMAGE)}" />${ldJson ? `\n  <script type="application/ld+json" ${PAGE_JSON_LD_ATTRIBUTE}>${ldJson}</script>` : ""}`;
 }
 
 function escHtml(s: string): string {
@@ -346,33 +345,10 @@ export async function runPrerender(options: PrerenderOptions = {}): Promise<Prer
   // Render each complete article
   for (const articleSlug of articleSlugs) {
     const published = publishedInsights.find((article) => article.slug === articleSlug);
-    const canonical = articleCanonicalUrl(
-      published?.canonicalUrl ?? null,
-      published?.slug ?? articleSlug,
-      `https://${configuredDomain || "aiofusion.ai"}`,
-    );
-    const meta: ArticleMeta | undefined = published ? {
-      articleTitle: published.title,
-      excerpt: published.excerpt,
-      title: published.seoTitle || published.title,
-      description: published.seoDescription || published.excerpt,
-      canonical,
-      ogTitle: published.title,
-      ogDescription: published.excerpt,
-      ogType: "article",
-      datePublished: published.datePublished || undefined,
-      dateModified: published.dateModified || published.datePublished || undefined,
-      jsonLd: {
-        "@context": "https://schema.org",
-        "@type": "Article",
-        headline: published.title,
-        description: published.excerpt,
-        image: published.coverImageUrl || undefined,
-        mainEntityOfPage: canonical,
-        author: { "@type": "Organization", name: "AIO Fusion" },
-        publisher: { "@type": "Organization", name: "AIO Fusion" },
-      },
-    } : ARTICLE_META[articleSlug];
+    const story = published ?? FALLBACK_INSIGHTS.find((article) => article.slug === articleSlug);
+    const meta: ArticleMeta | undefined = story
+      ? articleMeta(story, `https://${configuredDomain || "aiofusion.ai"}`)
+      : undefined;
     if (!meta) {
       console.error(`  ✗  No article metadata for "${articleSlug}"`);
       errors++;

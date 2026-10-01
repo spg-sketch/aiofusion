@@ -230,9 +230,15 @@ export interface InsightArticle {
   tag: string;
   /** @nullable */
   externalUrl?: string | null;
-  /** @nullable */
+  /**
+     * Verified original publication date in YYYY-MM-DD form.
+     * @nullable
+     */
   datePublished?: string | null;
-  /** @nullable */
+  /**
+     * Server-owned content modification timestamp, updated when editorial content changes.
+     * @nullable
+     */
   dateModified?: string | null;
   body: InsightBlock[];
   /** @nullable */
@@ -271,10 +277,12 @@ export interface InsightArticleInput {
   tag: string;
   /** @nullable */
   externalUrl?: string | null;
-  /** @nullable */
+  /**
+     * Verified original publication date in YYYY-MM-DD form. Required when status is published.
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
   datePublished?: string | null;
-  /** @nullable */
-  dateModified?: string | null;
   body: InsightBlock[];
   /** @nullable */
   coverMediaId?: string | null;
@@ -366,6 +374,7 @@ projectId: ProjectIdParameter;
  */
 storyKey: StoryKeyParameter;
 };
+
 export type ListMediaDiscoveriesParams = {
 status?: ListMediaDiscoveriesStatus;
 /**

@@ -9,6 +9,12 @@ Published Insights content is authoritative in PostgreSQL, while the static fron
 
 **How to apply:** Publish the API artifact before rebuilding the web artifact when editorial changes must be included in prerendered HTML. If the API cannot be reached during build, the build intentionally uses the checked-in story snapshot rather than emitting empty pages.
 
+Do not infer an article's original publication date from its import, build or render time. Undated legacy stories must remain visibly undated until an editor supplies a verified date; preserve historical dates rather than bulk-backfilling them.
+
+**Why:** An import or page build is not evidence of publication, and fabricated freshness dates mislead readers and search engines.
+
+**How to apply:** Require editorial verification at publishing boundaries, keep modification evidence server-owned, and use the same date values for visible time labels and structured data.
+
 Public audience repositioning must not broaden business-buyer research into consumer claims or silently rewrite factual pullquotes. Preserve those quotations pending editorial approval, even when surrounding promotional copy becomes audience-neutral.
 
 **Why:** The request to remove narrow website positioning explicitly excluded changing quotations and expanding the scope of research evidence.
