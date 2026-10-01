@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import {
   appendReleaseHistory,
   assertReleaseEnvironment,
+  assertFullReleaseEvidence,
   assertReleaseEvidenceCurrent,
   getGitSourceState,
   readCurrentReleaseEvidence,
@@ -32,6 +33,15 @@ const MATCHING_SOURCE = {
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sourceState = async () => MATCHING_SOURCE;
 const execFileAsync = promisify(execFile);
+const fullEvidence = (overrides = {}) => ({
+  status: "passed",
+  environment: "staging",
+  ...MATCHING_SOURCE,
+  startedAt: "2026-09-23T12:00:00.000Z",
+  finishedAt: "2026-09-23T12:01:00.000Z",
+  stages: RELEASE_STAGES.map(([name]) => ({ name, status: "passed", durationMs: 1 })),
+  ...overrides,
+});
 
 test("keeps every release-blocking stage in the required order", () => {
   assert.deepEqual(RELEASE_STAGES.map(([name]) => name), [
@@ -324,6 +334,51 @@ test("accepts passed evidence for the matching clean revision", () => {
   }, MATCHING_SOURCE), true);
 });
 
+test("validates the complete staging evidence contract", () => {
+  assert.equal(assertFullReleaseEvidence(fullEvidence()), true);
+
+  const skippedStages = fullEvidence();
+  skippedStages.stages[2] = { ...skippedStages.stages[2], status: "skipped" };
+  const skippedFlag = fullEvidence();
+  skippedFlag.stages[2] = { ...skippedFlag.stages[2], skipped: true };
+  const timedOutStages = fullEvidence();
+  timedOutStages.stages[2] = { ...timedOutStages.stages[2], timedOut: true };
+  const outOfOrderStages = fullEvidence();
+  [outOfOrderStages.stages[0], outOfOrderStages.stages[1]] = [
+    outOfOrderStages.stages[1],
+    outOfOrderStages.stages[0],
+  ];
+  const malformedDuration = fullEvidence();
+  malformedDuration.stages[0] = { ...malformedDuration.stages[0], durationMs: Number.NaN };
+  const negativeDuration = fullEvidence();
+  negativeDuration.stages[0] = { ...negativeDuration.stages[0], durationMs: -1 };
+  const malformedChronology = fullEvidence({
+    startedAt: "2026-09-23T12:02:00.000Z",
+    finishedAt: "2026-09-23T12:01:00.000Z",
+  });
+  const malformedTimestamp = fullEvidence({ startedAt: "yesterday" });
+
+  const rejected = [
+    [fullEvidence({ stages: RELEASE_STAGES.slice(0, -1).map(([name]) => ({ name, status: "passed", durationMs: 1 })) }), /every required release stage/],
+    [fullEvidence({ environment: "production" }), /exact staging environment/],
+    [fullEvidence({ status: "failed" }), /passed gate/],
+    [skippedStages, /every required release stage/],
+    [skippedFlag, /every required release stage/],
+    [timedOutStages, /every required release stage/],
+    [outOfOrderStages, /every required release stage/],
+    [malformedDuration, /valid nonnegative duration/],
+    [negativeDuration, /valid nonnegative duration/],
+    [malformedChronology, /start and finish chronology/],
+    [malformedTimestamp, /start and finish chronology/],
+    [fullEvidence({ gitTree: "not-a-tree" }), /valid Git revision/],
+    [fullEvidence({ sourceState: "dirty" }), /valid Git revision/],
+    [fullEvidence({ failedStage: "typecheck" }), /failedStage/],
+  ];
+  for (const [evidence, message] of rejected) {
+    assert.throws(() => assertFullReleaseEvidence(evidence), message);
+  }
+});
+
 test("rejects stale evidence for a different revision", () => {
   assert.throws(() => assertReleaseEvidenceCurrent({
     status: "passed",
@@ -373,7 +428,7 @@ test("rejects evidence from dirty source and matching evidence with new uncommit
 test("publishes staging when latest evidence passed for the matching clean revision", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "release-publish-"));
   const evidencePath = path.join(dir, "latest.json");
-  await writeFile(evidencePath, JSON.stringify({ status: "passed", ...MATCHING_SOURCE }));
+  await writeFile(evidencePath, JSON.stringify(fullEvidence()));
   let publications = 0;
   let publicationMetadata;
   const history = [];
@@ -404,7 +459,7 @@ test("records a non-sensitive publication rejection for an approved revision", a
   const history = [];
   await assert.rejects(runStagingPublication({
     env: { RELEASE_ENVIRONMENT: "staging" },
-    readEvidence: async () => ({ status: "passed", ...MATCHING_SOURCE }),
+    readEvidence: async () => fullEvidence(),
     getSourceState: sourceState,
     publish: async () => {
       throw new Error("publisher exposed details that must not be copied");
@@ -420,13 +475,13 @@ test("blocks staging publication for failed, stale, or dirty release evidence", 
   const blockedCases = [
     {
       name: "failed evidence",
-      evidence: { status: "failed", ...MATCHING_SOURCE },
+      evidence: fullEvidence({ status: "failed" }),
       currentSource: MATCHING_SOURCE,
       message: /passed gate/,
     },
     {
       name: "another revision",
-      evidence: { status: "passed", ...MATCHING_SOURCE },
+      evidence: fullEvidence(),
       currentSource: {
         ...MATCHING_SOURCE,
         gitRevision: "fedcba9876543210fedcba9876543210fedcba98",
@@ -436,13 +491,13 @@ test("blocks staging publication for failed, stale, or dirty release evidence", 
     },
     {
       name: "recorded dirty source",
-      evidence: { status: "passed", ...MATCHING_SOURCE, sourceState: "dirty" },
+      evidence: fullEvidence({ sourceState: "dirty" }),
       currentSource: MATCHING_SOURCE,
-      message: /source state was dirty/,
+      message: /valid Git revision/,
     },
     {
       name: "current dirty source",
-      evidence: { status: "passed", ...MATCHING_SOURCE },
+      evidence: fullEvidence(),
       currentSource: { ...MATCHING_SOURCE, sourceState: "dirty" },
       message: /current source state is dirty/,
     },
@@ -490,7 +545,7 @@ test("managed staging build passes only the approved revision to its build comma
     args: ["run", "build"],
     env: { RELEASE_ENVIRONMENT: "staging" },
     validateEvidence: async () => ({
-      evidence: { status: "passed", ...MATCHING_SOURCE },
+      evidence: fullEvidence(),
       currentSource: MATCHING_SOURCE,
     }),
     spawnProcess: (command, args, options) => {
@@ -518,7 +573,7 @@ test("managed staging build never starts when release evidence is rejected", asy
     env: { RELEASE_ENVIRONMENT: "staging" },
     validateEvidence: async () => {
       const error = new Error("Release evidence is stale because it covers a different Git revision.");
-      error.releaseEvidence = { status: "passed", ...MATCHING_SOURCE };
+      error.releaseEvidence = fullEvidence();
       throw error;
     },
     spawnProcess: () => {
@@ -531,15 +586,52 @@ test("managed staging build never starts when release evidence is rejected", asy
   assert.equal(history[0].gitRevision, MATCHING_SOURCE.gitRevision);
 });
 
+test("managed builds and publication reject incomplete full evidence before execution", async () => {
+  const incomplete = fullEvidence({
+    stages: RELEASE_STAGES.slice(0, -1).map(([name]) => ({ name, status: "passed", durationMs: 1 })),
+  });
+
+  let spawned = false;
+  const managedHistory = [];
+  await assert.rejects(runManagedStagingBuild({
+    command: "pnpm",
+    env: { RELEASE_ENVIRONMENT: "staging" },
+    validateEvidence: async () => readCurrentReleaseEvidence({
+      readEvidence: async () => incomplete,
+      getSourceState: sourceState,
+    }),
+    spawnProcess: () => {
+      spawned = true;
+    },
+    recordHistory: async (entry) => managedHistory.push(entry),
+  }), /every required release stage/);
+  assert.equal(spawned, false);
+  assert.equal(managedHistory[0].status, "rejected");
+
+  let publications = 0;
+  const publicationHistory = [];
+  await assert.rejects(runStagingPublication({
+    env: { RELEASE_ENVIRONMENT: "staging" },
+    readEvidence: async () => incomplete,
+    getSourceState: sourceState,
+    publish: async () => {
+      publications += 1;
+    },
+    recordHistory: async (entry) => publicationHistory.push(entry),
+  }), /every required release stage/);
+  assert.equal(publications, 0);
+  assert.equal(publicationHistory[0].status, "rejected");
+});
+
 test("reads current evidence through the shared release policy", async () => {
   const accepted = await readCurrentReleaseEvidence({
-    readEvidence: async () => ({ status: "passed", ...MATCHING_SOURCE }),
+    readEvidence: async () => fullEvidence(),
     getSourceState: sourceState,
   });
   assert.equal(accepted.evidence.gitRevision, MATCHING_SOURCE.gitRevision);
 
   await assert.rejects(readCurrentReleaseEvidence({
-    readEvidence: async () => ({ status: "failed", ...MATCHING_SOURCE }),
+    readEvidence: async () => fullEvidence({ status: "failed" }),
     getSourceState: sourceState,
   }), /passed gate/);
 });
@@ -563,14 +655,9 @@ test("staging verification runs the real guarded entry point and invokes the pub
   await execFileAsync("git", ["config", "user.name", "Release Verification"], { cwd });
   await execFileAsync("git", ["add", ".gitignore", "publisher.mjs"], { cwd });
   await execFileAsync("git", ["commit", "-m", "verification fixture"], { cwd });
-  const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd });
-  const gitRevision = stdout.trim();
-  const evidence = `${JSON.stringify({
-    status: "passed",
-    environment: "staging",
-    gitRevision,
-    sourceState: "clean",
-  }, null, 2)}\n`;
+  const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD", "HEAD^{tree}"], { cwd });
+  const [gitRevision, gitTree] = stdout.trim().split(/\s+/);
+  const evidence = `${JSON.stringify(fullEvidence({ gitRevision, gitTree }), null, 2)}\n`;
   await writeFile(evidencePath, evidence);
   const verifiedRevisions = [];
 
@@ -582,6 +669,18 @@ test("staging verification runs the real guarded entry point and invokes the pub
       ...process.env,
       RELEASE_ENVIRONMENT: "staging",
       RELEASE_BASE_URL: "https://staging.aiofusion.ai",
+    },
+    write: async (filePath, contents, options) => {
+      if (filePath === evidencePath && typeof contents === "string") {
+        const rewrittenEvidence = JSON.parse(contents);
+        if (rewrittenEvidence.gitRevision !== gitRevision) {
+          // A different revision with the same clean Git tree is reusable
+          // evidence; make this stale-evidence probe change the tree as well.
+          rewrittenEvidence.gitTree = `${gitTree[0] === "0" ? "1" : "0"}${gitTree.slice(1)}`;
+          contents = `${JSON.stringify(rewrittenEvidence, null, 2)}\n`;
+        }
+      }
+      await writeFile(filePath, contents, options);
     },
     verifyRevision: async (baseUrl, revision) => {
       verifiedRevisions.push({ baseUrl, revision });
@@ -605,12 +704,10 @@ test("staging verification fails before publication for stale evidence", async (
       RELEASE_ENVIRONMENT: "staging",
       RELEASE_BASE_URL: "https://staging.aiofusion.ai",
     },
-    read: async () => JSON.stringify({
-      status: "passed",
-      ...MATCHING_SOURCE,
+    read: async () => JSON.stringify(fullEvidence({
       gitRevision: "fedcba9876543210fedcba9876543210fedcba98",
       gitTree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    }),
+    })),
     getSourceState: sourceState,
     runPublisher: async () => {
       publisherCalls += 1;
@@ -632,7 +729,7 @@ test("staging verification records the observed mismatched health revision", asy
       RELEASE_ENVIRONMENT: "staging",
       RELEASE_BASE_URL: "https://staging.aiofusion.ai",
     },
-    read: async () => JSON.stringify({ status: "passed", ...MATCHING_SOURCE }),
+    read: async () => JSON.stringify(fullEvidence()),
     getSourceState: sourceState,
     runPublisher: async () => ({ code: 0, signal: null }),
     verifyRevision: async () => {
@@ -659,7 +756,7 @@ test("staging verification rejects a returned health response with the wrong rev
       RELEASE_ENVIRONMENT: "staging",
       RELEASE_BASE_URL: "https://staging.aiofusion.ai",
     },
-    read: async () => JSON.stringify({ status: "passed", ...MATCHING_SOURCE }),
+    read: async () => JSON.stringify(fullEvidence()),
     getSourceState: sourceState,
     runPublisher: async () => ({ code: 0, signal: null }),
     verifyRevision: async () => ({ observedRevision }),

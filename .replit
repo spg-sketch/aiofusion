@@ -15,7 +15,7 @@ args = ["pnpm", "store", "prune"]
 env = { "CI" = "true" }
 
 [workflows]
-runButton = "Project"
+runButton = "release-candidate"
 
 [[workflows.workflow]]
 name = "Project"
@@ -30,12 +30,12 @@ args = "release-candidate"
 name = "release-candidate"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "RELEASE_ENVIRONMENT=staging pnpm run release:check"
-
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "RELEASE_ENVIRONMENT=staging pnpm run release:ready"
 
 [[workflows.workflow]]
 name = "test"
@@ -46,18 +46,29 @@ task = "shell.exec"
 args = "pnpm --filter @workspace/api-server run test && pnpm --filter @workspace/aio-fusion run test"
 
 [workflows.workflow.metadata]
-isValidation = true
+outputType = "console"
 
 [[workflows.workflow]]
 name = "typecheck"
 author = "agent"
 
-[workflows.workflow.metadata]
-isValidation = true
-
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "pnpm run typecheck"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "release-full"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "RELEASE_ENVIRONMENT=staging pnpm run release:check"
+
+[workflows.workflow.metadata]
+outputType = "console"
 
 [agent]
 stack = "PNPM_WORKSPACE"

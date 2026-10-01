@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import { execFile } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -108,6 +109,58 @@ export function assertReleaseEvidenceCurrent(evidence, currentSource) {
   return true;
 }
 
+export function assertFullReleaseEvidence(
+  evidence,
+  { environment = "staging", requiredStages = RELEASE_STAGES } = {},
+) {
+  if (!evidence || evidence.status !== "passed") {
+    throw new Error("Release evidence must show a passed gate.");
+  }
+  if (typeof environment !== "string" || evidence.environment !== environment) {
+    throw new Error(`Release evidence must target the exact ${environment} environment.`);
+  }
+  if (Object.hasOwn(evidence, "failedStage")) {
+    throw new Error("Passed release evidence must not include a failedStage.");
+  }
+  if (!GIT_REVISION_PATTERN.test(evidence.gitRevision ?? "")
+    || !GIT_REVISION_PATTERN.test(evidence.gitTree ?? "")
+    || evidence.sourceState !== "clean") {
+    throw new Error("Release evidence must contain valid Git revision, tree, and clean source fields.");
+  }
+
+  const parseTimestamp = (value) => {
+    if (typeof value !== "string") return Number.NaN;
+    const timestamp = Date.parse(value);
+    return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value
+      ? timestamp
+      : Number.NaN;
+  };
+  const startedAt = parseTimestamp(evidence.startedAt);
+  const finishedAt = parseTimestamp(evidence.finishedAt);
+  if (!Number.isFinite(startedAt) || !Number.isFinite(finishedAt) || finishedAt < startedAt) {
+    throw new Error("Release evidence must contain a valid start and finish chronology.");
+  }
+
+  if (!Array.isArray(requiredStages)
+    || !Array.isArray(evidence.stages)
+    || evidence.stages.length !== requiredStages.length) {
+    throw new Error("Release evidence must contain every required release stage in order.");
+  }
+  for (let index = 0; index < requiredStages.length; index += 1) {
+    const requiredStage = requiredStages[index];
+    const stage = evidence.stages[index];
+    const requiredName = Array.isArray(requiredStage) ? requiredStage[0] : requiredStage;
+    if (!stage || stage.name !== requiredName || stage.status !== "passed"
+      || stage.skipped === true || stage.timedOut === true) {
+      throw new Error("Release evidence must contain every required release stage in order, all passed without skips or timeouts.");
+    }
+    if (!Number.isFinite(stage.durationMs) || stage.durationMs < 0) {
+      throw new Error(`Release evidence stage ${requiredName} must have a valid nonnegative duration.`);
+    }
+  }
+  return true;
+}
+
 function safeUtcKey(isoTime) {
   return isoTime.replaceAll(":", "-");
 }
@@ -169,6 +222,13 @@ export async function readCurrentReleaseEvidence({
     throw new Error(`Release evidence ${detail}: ${evidencePath}`, { cause: error });
   }
 
+  try {
+    assertFullReleaseEvidence(evidence);
+  } catch (error) {
+    error.releaseEvidence = evidence;
+    throw error;
+  }
+
   const currentSource = await getSourceState();
   try {
     assertReleaseEvidenceCurrent(evidence, currentSource);
@@ -197,6 +257,7 @@ export async function runStagingPublication({
   let evidence;
   try {
     evidence = await readEvidence(evidencePath);
+    assertFullReleaseEvidence(evidence);
     const currentSource = await getSourceState();
     assertReleaseEvidenceCurrent(evidence, currentSource);
     await publish({
@@ -275,6 +336,7 @@ export async function runReleaseGate({
   historyRoot = path.join(path.dirname(evidencePath), "history"),
 } = {}) {
   const startedAt = now().toISOString();
+  const checkId = randomUUID();
   let environment;
   let result;
   let source = {};
@@ -288,6 +350,11 @@ export async function runReleaseGate({
     }
     safeguardFailure = "environment safeguards";
     environment = assertReleaseEnvironment(env);
+    // Fresh execution revokes prior approval before any stages launch. If the
+    // process is killed, this durable running state still blocks publication.
+    await writeReleaseEvidence(evidencePath, {
+      status: "running", checkId, environment, ...source, startedAt, stages: [],
+    });
     for (const [name, command, configuredTimeoutMs] of stages) {
       const timeoutMs = configuredTimeoutMs ?? defaultStageTimeoutMs;
       const stageStart = now();
@@ -317,10 +384,11 @@ export async function runReleaseGate({
       throw new Error("Git revision or tree changed while release stages were running.");
     }
     assertReleaseEvidenceCurrent({ status: "passed", ...source }, finalSource);
-    result = { status: "passed", environment, ...source, startedAt, finishedAt: now().toISOString(), stages: results };
+    result = { status: "passed", checkId, environment, ...source, startedAt, finishedAt: now().toISOString(), stages: results };
   } catch (error) {
     result = {
       status: "failed",
+      checkId,
       environment: environment ?? env.RELEASE_ENVIRONMENT ?? "invalid",
       ...source,
       startedAt,
@@ -331,6 +399,7 @@ export async function runReleaseGate({
   } finally {
     result ??= {
       status: "failed",
+      checkId,
       environment: environment ?? env.RELEASE_ENVIRONMENT ?? "invalid",
       ...source,
       startedAt,
@@ -338,8 +407,7 @@ export async function runReleaseGate({
       stages: results,
       failedStage: safeguardFailure,
     };
-    await mkdir(path.dirname(evidencePath), { recursive: true });
-    await writeFile(evidencePath, `${JSON.stringify(result, null, 2)}\n`, { mode: 0o600 });
+    await writeReleaseEvidence(evidencePath, result);
     if (GIT_REVISION_PATTERN.test(result.gitRevision ?? "")) {
       await recordHistory({
         gitRevision: result.gitRevision,
@@ -358,6 +426,17 @@ export async function runReleaseGate({
     }
   }
   return result;
+}
+
+async function writeReleaseEvidence(evidencePath, evidence) {
+  await mkdir(path.dirname(evidencePath), { recursive: true });
+  const temporaryPath = `${evidencePath}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+    await rename(temporaryPath, evidencePath);
+  } finally {
+    await rm(temporaryPath, { force: true });
+  }
 }
 
 export async function getFreePort() {

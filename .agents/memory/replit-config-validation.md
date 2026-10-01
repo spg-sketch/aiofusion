@@ -14,3 +14,16 @@ Setting production-only, non-secret environment variables through Replit's envir
 **Why:** The gate's tests and builds passed, but its final source-integrity check correctly rejected a configuration change made during the run.
 
 **How to apply:** Set and verify intended production environment variables first, inspect changed key names without printing values, commit the tracked configuration, and only then start the release gate.
+
+Workflow callbacks can automatically add every configured manual workflow to the
+reserved `Project` aggregate. Clearing validation metadata alone does not keep the
+Run button from launching tests, typechecking and a fresh full gate together.
+`configureWorkflow` does not update that reserved aggregate.
+
+**Why:** Consolidating completion validation still left the default Run action
+executing the redundant checks in parallel.
+
+**How to apply:** Inspect only the workflow section. Use a schema-validated
+configuration replacement to select the intended Run workflow and narrow the
+legacy aggregate. Preserve manual workflows, and regression-check both validation
+metadata and the Run entry point after further workflow changes.

@@ -8,7 +8,7 @@ Run this from the repository root:
 RELEASE_ENVIRONMENT=staging pnpm run release:check
 ```
 
-This is the only command that establishes a release candidate. Developer `test` and `typecheck` commands remain available for faster feedback, but they are not release approval.
+This explicit command always executes the complete release gate, even when the current version already has passing approval. Developer `test` and `typecheck` commands remain available for faster feedback, but they are not release approval.
 
 The command is fail-fast and runs these required stages in order:
 
@@ -30,6 +30,49 @@ gate. Release commands run in their own process group; timeout cleanup sends
 exit during the cleanup grace period. This prevents hanging child processes from
 surviving the release check.
 
+## Faster completion and publishing readiness
+
+During editing, run the affected component or operational tests and use the manual
+`test` and `typecheck` workflows as appropriate. Focused checks never authorise
+publication. Once the final changes are verified and committed, run:
+
+```bash
+RELEASE_ENVIRONMENT=staging pnpm run release:ready
+```
+
+This command uses the same full-evidence and current-source policy as managed
+publishing. If complete passing staging evidence already covers the current clean
+tracked Git tree, it reports **Current version approved** without rerunning suites.
+Otherwise it reports **New checks required** and runs every stage of the full gate.
+A dirty checkout is rejected promptly: commit the verified changes first. Readiness
+does not make commits, publish, or replace reviewer approval.
+
+The `release-candidate` completion validation now invokes `release:ready` alone.
+The main Run action and its legacy Project aggregate also launch only readiness.
+The separate API/web test and typecheck commands are manual workflows, not
+additional completion validations. This avoids running those suites again alongside
+the full gate. The `release-full` manual workflow, `release:check`, and
+`release:ready --force` explicitly request fresh execution of every stage.
+
+Readiness and explicit fresh checks share a repository lock. Concurrent readiness
+requests for the same candidate report **Checks running**, wait, then validate the
+shared result. A shared failure reports **Checks failed**, rather than immediately
+starting an identical run again. A fresh failed run replaces prior success and
+blocks approval. Before any fresh stages launch, the gate atomically replaces
+previous approval with non-approved running evidence, so interruption cannot
+restore old success. Source changes while waiting or during execution also block
+approval.
+
+If a process is interrupted, readiness fails closed instead of guessing whether
+its detached workers have stopped. Confirm the interrupted process and its test
+workers are no longer running before removing `release-evidence/readiness.lock`
+and retrying. Never remove a live owner's lock.
+
+Reusing approval removes duplicate verification time, not deployment build time.
+The Publish build must still validate approval, compile the artifacts, and complete
+its normal startup checks. Replit controls when its workflows and deployment
+processes run; readiness does not alter platform scheduling.
+
 ## Isolation and environment boundaries
 
 - Release-candidate validation targets `staging` only.
@@ -46,7 +89,7 @@ Every candidate also creates an immutable JSON summary under `release-evidence/h
 
 The gate refuses to start from a dirty checkout. After every stage passes, it reads Git state again and fails if `HEAD` changed or any tracked or untracked source change appeared during the run.
 
-The release is **NO-GO** if any stage failed, did not run, was skipped, timed out, or used the wrong environment. Evidence is also **NO-GO** when its Git revision differs from the revision being published, when the evidence says `sourceState: "dirty"`, or when the current checkout has uncommitted changes. Reviewers must compare `git rev-parse HEAD` with `gitRevision` in the evidence and confirm `git status --porcelain` is empty. Any commit or uncommitted release change after the gate requires a new release check.
+The release is **NO-GO** if any stage failed, did not run, was skipped, timed out, or used the wrong environment. Full approval also requires all mandatory stages in order, valid durations, valid start/end timestamps, clean recorded source, and a valid source revision/tree. Evidence is **NO-GO** when it covers a different source tree or when the current checkout has uncommitted changes. Reviewers must confirm `git status --porcelain` is empty and compare the current revision and tree with the evidence. A clean source-identical bookkeeping commit can reuse approval; any tracked source change requires a new full release check.
 
 After all stages pass, the application reviewer gives explicit approval to publish to staging. Run the approved staging publisher through the guarded entry point:
 
@@ -56,7 +99,7 @@ RELEASE_ENVIRONMENT=staging pnpm run release:publish -- <staging-publish-command
 
 This guarded command is the only supported staging publication entry point for operators and repository-managed automation. Never invoke a staging publisher directly from a workflow, package script, runbook or shell. The release gate runs `pnpm run release:validate-automation` and fails if repository workflow configuration or the root package scripts contain a direct publisher invocation.
 
-The guarded command reads `release-evidence/latest.json` and stops before invoking the publisher if the gate failed, the evidence covers another Git revision, the recorded source was dirty, or the current checkout is dirty. After validation, it supplies the verified revision to the staging publisher as `RELEASE_GIT_REVISION`. The staging publication command must preserve that environment value in the deployed API runtime. It does not replace reviewer approval. Production publication still requires the business owner and release owner approval in the cutover runbook.
+The guarded command reads `release-evidence/latest.json` and stops before invoking the publisher if the full gate evidence is failed, incomplete, malformed, for the wrong environment or source, or if the recorded/current source is dirty. After validation, it supplies the verified revision to the staging publisher as `RELEASE_GIT_REVISION`. The staging publication command must preserve that environment value in the deployed API runtime. It does not replace reviewer approval. Production publication still requires the business owner and release owner approval in the cutover runbook.
 
 Before relying on a new or changed repository publication workflow, run the dedicated staging-only verification with current passing evidence and the real staging publisher:
 
@@ -70,7 +113,7 @@ The verification publishes once through the guarded entry point, waits for stagi
 
 This command applies only when staging has a non-interactive publisher command. The Replit Publish button cannot be passed to the shell guard, so both managed artifact production builds run `scripts/release-managed-build.mjs` instead. That build entry point applies the same missing, failed, dirty and revision-mismatch checks before either artifact build starts. It also embeds the approved revision into the API bundle so `/api/healthz` reports the exact revision accepted by the managed build.
 
-For a normal button-based staging publication, first create current passing evidence with `release:check`, then click Publish without changing or committing any files. The managed build fails closed if the evidence is absent, invalid, failed, dirty or for a different revision. Any source change after approval requires a new release check.
+For a normal button-based staging publication, first confirm readiness with `release:ready`, then click Publish without changing any source files. A new candidate receives a complete gate run; an unchanged approved candidate reuses its existing evidence. The managed build still fails closed if evidence is absent, invalid, incomplete, failed, dirty, wrong-environment or for different source. It never substitutes focused tests for full approval. Any source change after approval requires a new full release check.
 
 ## Staging sign-off
 
