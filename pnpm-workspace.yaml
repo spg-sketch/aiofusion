@@ -43,9 +43,16 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 overrides:
-  # Security patches (force minimum safe versions to clear dep audit findings)
-  fast-uri: '>=3.1.5'
-  brace-expansion: '^2.0.3'
+  # Keep security overrides here, not duplicated in the root package.json.
+  # Exact patched versions prevent lower-bound overrides crossing major versions.
+  fast-uri: '4.1.5'
+  brace-expansion: '2.1.7'
+  undici: '8.10.2'
+  ip-address: '10.7.1'
+  markdown-it: '14.3.1'
+  nodemailer: '10.0.9'
+  '@vitest/mocker': '4.1.11'
+  qs: '6.16.0'
   body-parser: '>=2.3.0'
   linkify-it: '>=5.0.2'
   'nanoid@>=4.0.0 <5.1.16': '>=5.1.16'
@@ -59,7 +66,7 @@ overrides:
   vite: '>=7.3.5'
   form-data: '>=4.0.6'
   uuid: '>=11.1.1'
-  js-yaml: '>=4.2.0'
+  js-yaml: '4.3.2'
   '@babel/core': '>=7.29.6'
   yaml: '^2.8.3'
   '@esbuild-kit/esm-loader': npm:tsx@^4.21.0

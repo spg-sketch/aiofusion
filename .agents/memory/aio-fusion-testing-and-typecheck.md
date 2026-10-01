@@ -39,3 +39,9 @@ Async browser-download tests must wait for delayed object-URL cleanup before res
 **Why:** A test can pass its assertions and still fail the full release gate when a cleanup timer fires after Vitest restores the mocked `URL` to jsdom's incomplete implementation.
 
 **How to apply:** Assert that the revocation callback ran before the test exits, rather than only asserting that the download started.
+
+Vitest 4's `vi.restoreAllMocks()` restores spies but does not clear call history on standalone `vi.fn()` mocks. Clear shared module-level test doubles explicitly between cases.
+
+**Why:** The security-driven Vitest upgrade exposed accumulated call counts in otherwise passing UI tests. Treating restoration as history cleanup hid test-order coupling under Vitest 3.
+
+**How to apply:** Use `mockClear()` for reusable mocks whose implementations should survive, or `mockReset()` followed by explicit implementation setup. Preserve exact call-count assertions rather than relaxing them.

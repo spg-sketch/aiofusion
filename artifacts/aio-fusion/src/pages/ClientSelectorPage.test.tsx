@@ -23,6 +23,7 @@ vi.mock("../lib/auditSync", () => ({
 }));
 
 beforeEach(() => {
+  loadServerAuditsForProjectMock.mockClear();
   vi.spyOn(global, "fetch").mockResolvedValue(new Response(null, { status: 404 }));
   loadServerAuditsForProjectMock.mockResolvedValue([]);
 });

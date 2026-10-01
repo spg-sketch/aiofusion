@@ -43,6 +43,10 @@ vi.mock("../lib/auth", () => ({
 // Silence fetch calls from the admin useEffects (token-usage, audit-locks).
 beforeEach(() => {
   sessionStorage.clear();
+  mockLoadStoredProjects.mockClear();
+  mockGetLocalUsers.mockClear();
+  mockGetPendingAccounts.mockClear();
+  mockServerImpersonate.mockClear();
   mockLoadStoredProjects.mockReturnValue([]);
   mockServerImpersonate.mockResolvedValue({
     ok: true as const,
