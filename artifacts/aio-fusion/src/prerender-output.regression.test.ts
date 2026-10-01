@@ -87,7 +87,7 @@ describe("controlled prerender output", () => {
       publishedInsights: [story, undated],
     });
     for (const article of [story, undated]) {
-      const html = readRoute(directory, `insights/${slug}`);
+      const html = readRoute(directory, `insights/${article.slug}`);
       const scripts = [...html.matchAll(/<script type="application\/ld\+json" data-pagehead-managed>(.*?)<\/script>/gs)];
       expect(scripts).toHaveLength(1);
       const schema = JSON.parse(scripts[0][1]);
@@ -109,68 +109,32 @@ describe("controlled prerender output", () => {
   it("keeps static HTML for non-self-canonical CMS stories but excludes them from the sitemap", async () => {
     const directory = makeOutputFixture();
     const fixture = [
-      publishedFixture(
-        "battle-b2b-ai-authority",
-        "A controlled B2B authority story",
-        "A local fixture excerpt for the B2B authority route.",
-      ),
+      publishedFixture("self-canonical-story", "Self canonical", "Original story."),
       {
-        ...publishedFixture(
-          "ai-changing-b2b-visibility",
-          "A controlled visibility story",
-          "A local fixture excerpt for the visibility route.",
-        ),
-        canonicalUrl: "https://staging.aiofusion.ai/insights/ai-changing-b2b-visibility",
+        ...publishedFixture("external-canonical-story", "Syndicated story", "A republished story."),
+        canonicalUrl: "https://publisher.example/original?edition=1&language=en",
       },
-      ...HIDDEN_PUBLIC_INSIGHT_SLUGS.map((slug) =>
-        publishedFixture(slug, `Hidden ${slug}`, `This story is retained but not public: ${slug}.`),
-      ),
       {
-        ...publishedFixture(
-          "external-guide",
-          "External guide",
-          "This external story must not get a local article route.",
-        ),
-        externalUrl: "https://example.test/external-guide",
-        body: [],
+        ...publishedFixture("local-duplicate", "Local duplicate", "Another local copy."),
+        canonicalUrl: "https://staging.aiofusion.ai/insights/self-canonical-story",
       },
     ];
     const result = await runPrerender({
       distPublic: directory,
-      canonicalDomain: null,
+      canonicalDomain: "staging.aiofusion.ai",
       publishedInsights: fixture,
-      lastmod: "2026-08-08",
     });
 
-    expect(result.articleSlugs).toEqual([
-      "battle-b2b-ai-authority",
-      "ai-changing-b2b-visibility",
-    ]);
+    expect(result.articleSlugs).toEqual(fixture.map((article) => article.slug));
     expect(result.errors).toBe(0);
-
-    for (const [slug, title, excerpt] of [
-      [
-        "battle-b2b-ai-authority",
-        "A controlled B2B authority story",
-        "A local fixture excerpt for the B2B authority route.",
-      ],
-      [
-        "ai-changing-b2b-visibility",
-        "A controlled visibility story",
-        "A local fixture excerpt for the visibility route.",
-      ],
-    ] as const) {
-      const html = readRoute(directory, `insights/${slug}`);
-      expect(html).toContain(`<title>${title} | AIO Fusion</title>`);
-      expect(html).toContain(`name="description" content="${excerpt}"`);
-      expect(html).toContain(`href="https://aiofusion.ai/insights/${slug}"`);
-      expect(html).not.toContain(`https://staging.aiofusion.ai/insights/${slug}`);
-      expect(html).toContain(`<h1`);
-      expect(html).toContain(title);
-      expect(html).toContain(excerpt);
-      expect(html).toContain('"@type":"Article"');
-    }
-
+    const syndicatedHtml = readRoute(directory, "insights/external-canonical-story");
+    expect(syndicatedHtml).toContain(
+      '<link rel="canonical" href="https://publisher.example/original?edition=1&amp;language=en"',
+    );
+    expect(syndicatedHtml).toContain("A republished story.");
+    expect(readRoute(directory, "insights/local-duplicate")).toContain(
+      '<link rel="canonical" href="https://staging.aiofusion.ai/insights/self-canonical-story"',
+    );
     const sitemap = readRoute(directory, "sitemap.xml");
     expect(sitemap).toContain("<loc>https://staging.aiofusion.ai/insights/self-canonical-story</loc>");
     expect(sitemap).not.toContain("/insights/external-canonical-story");
@@ -178,38 +142,96 @@ describe("controlled prerender output", () => {
     expect(sitemap).not.toContain("publisher.example");
   });
 
-  it("fetches and renders CMS-only routes, including their sitemap entries", async () => {
+  it("fetches CMS-only routes and renders every valid body block", async () => {
     const directory = makeOutputFixture();
     const article: PublicInsight = {
-      ...publishedFixture("valid-blocks", "Valid story", "Complete body."),
+      ...publishedFixture("new-cms-only-story", "New CMS story", "Fresh editorial content."),
       body: [
-        { type: "heading", text: "Heading" },
-        { type: "subheading", text: "Subheading" },
-        { type: "paragraph", text: "Visible paragraph." },
-        { type: "pullquote", text: "Quote" },
-        { type: "stat", text: "A statistic" },
-        { type: "list", items: ["One item"] },
+        { type: "heading", text: "CMS heading" },
+        { type: "subheading", text: "CMS subheading" },
+        { type: "paragraph", text: "Fresh editorial content." },
+        { type: "pullquote", text: "A CMS quote." },
+        { type: "stat", text: "42% CMS statistic" },
+        { type: "list", items: ["First CMS list item", "Second CMS list item"] },
         { type: "image", mediaId: "valid-media-reference", url: null },
       ],
     };
-    const fetchMock = vi.fn().mockRejectedValue(new Error("Unavailable"));
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [article],
+    });
     vi.stubGlobal("fetch", fetchMock);
     const result = await runPrerender({
       distPublic: directory,
-      canonicalDomain: null,
-      publishedInsights: fixture,
-      lastmod: "2026-08-08",
+      canonicalDomain: "cms.example",
     });
-    expect(result.articleSlugs).toEqual([]);
-    expect(readRoute(directory, "sitemap.xml")).not.toContain("/insights/");
-    expect(readRoute(directory, "insights")).not.toContain("battle-b2b-ai-authority");
-    expect(fs.readdirSync(path.join(directory, "insights"))).toEqual(["index.html"]);
+
+    expect(fetchMock).toHaveBeenCalledWith("https://cms.example/api/insights", {
+      signal: expect.any(AbortSignal),
+    });
+    expect(result.articleSlugs).toEqual([article.slug]);
+    const html = readRoute(directory, `insights/${article.slug}`);
+    for (const content of [
+      "CMS heading",
+      "CMS subheading",
+      "Fresh editorial content.",
+      "A CMS quote.",
+      "42% CMS statistic",
+      "First CMS list item",
+      "Second CMS list item",
+    ]) {
+      expect(html).toContain(content);
+    }
+    expect(readRoute(directory, "sitemap.xml")).toContain(
+      "<loc>https://cms.example/insights/new-cms-only-story</loc>",
+    );
   });
 
-  it("uses the checked-in article snapshot when no published-content snapshot is supplied", async () => {
+  it.each([
+    ["HTTP failure", () => Promise.resolve({ ok: false, status: 503 })],
+    ["unreachable API", () => Promise.reject(new Error("Network unavailable"))],
+    ["timeout", () => Promise.reject(new DOMException("Timed out", "TimeoutError"))],
+    ["invalid JSON", () => Promise.resolve({ ok: true, json: async () => { throw new SyntaxError("Invalid JSON"); } })],
+    ["invalid envelope", () => Promise.resolve({ ok: true, json: async () => ({ articles: [] }) })],
+    ["invalid record", () => Promise.resolve({ ok: true, json: async () => [{ slug: "incomplete-record" }] })],
+    ["duplicate slug", () => Promise.resolve({
+      ok: true,
+      json: async () => Array(2).fill(publishedFixture("duplicate", "Story", "Excerpt")),
+    })],
+  ])("fails before publishing any static files on %s", async (_label, fetchImplementation) => {
     const directory = makeOutputFixture();
     const originalShell = readRoute(directory, "");
     vi.stubGlobal("fetch", vi.fn(fetchImplementation));
+    await expect(runPrerender({
+      distPublic: directory,
+      canonicalDomain: "cms.example",
+    })).rejects.toThrow("refusing to publish stale article coverage");
+    expect(fs.readdirSync(directory)).toEqual(["index.html"]);
+    expect(readRoute(directory, "")).toBe(originalShell);
+    expect(globalThis.__AIO_PRERENDER_INSIGHTS__).toBeUndefined();
+  });
+
+  it.each([
+    ["heading", { type: "heading" }],
+    ["subheading", { type: "subheading" }],
+    ["paragraph", { type: "paragraph" }],
+    ["pullquote", { type: "pullquote" }],
+    ["stat", { type: "stat" }],
+    ["list", { type: "list" }],
+    ["image", { type: "image", url: null }],
+    ["unknown", { type: "unknown" }],
+  ])("rejects malformed %s body blocks before writing any static files", async (_label, block) => {
+    const directory = makeOutputFixture();
+    const originalShell = readRoute(directory, "");
+    const article = {
+      ...publishedFixture("malformed-body", "Malformed story", "Invalid body fixture."),
+      body: [block],
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [article],
+    }));
+
     await expect(runPrerender({
       distPublic: directory,
       canonicalDomain: "cms.example",
@@ -228,18 +250,16 @@ describe("controlled prerender output", () => {
       "https://aiofusion.ai/api/insights",
     );
     expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fs.readdirSync(directory)).toEqual(["index.html"]);
   });
 
-  it.each(["paragraph", "heading", "subheading", "pullquote", "stat", "list", "image"])(
-    "rejects %s blocks without their required payload before writing files",
-    async (type) => {
+  it.each(["API", "controlled snapshot"])("uses an empty %s snapshot without resurrecting checked-in stories", async (source) => {
     const directory = makeOutputFixture();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => [] }));
     const result = await runPrerender({
       distPublic: directory,
-      canonicalDomain: null,
-      publishedInsights: fixture,
-      lastmod: "2026-08-08",
+      canonicalDomain: "cms.example",
+      ...(source === "controlled snapshot" ? { publishedInsights: [] } : {}),
     });
     expect(result.articleSlugs).toEqual([]);
     expect(readRoute(directory, "sitemap.xml")).not.toContain("/insights/");
@@ -249,13 +269,15 @@ describe("controlled prerender output", () => {
 
   it("uses the checked-in article snapshot when no published-content snapshot is supplied", async () => {
     const directory = makeOutputFixture();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
     const result = await runPrerender({
       distPublic: directory,
       canonicalDomain: null,
-      publishedInsights: fixture,
       lastmod: "2026-08-08",
     });
 
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(result.articleSlugs).toEqual(ARTICLE_SLUGS);
     expect(result.errors).toBe(0);
     for (const shellPath of ["admin/index.html", "platform/index.html", "project-hub/index.html", "404.html"]) {
@@ -283,7 +305,7 @@ describe("controlled prerender output", () => {
     );
   });
 
-  it("renders only complete local published stories and their generated Article metadata", async () => {
+  it("renders only complete local published stories and excludes hidden and private routes from discovery", async () => {
     const directory = makeOutputFixture();
     const fixture = [
       publishedFixture(
@@ -341,14 +363,20 @@ describe("controlled prerender output", () => {
       const html = readRoute(directory, `insights/${slug}`);
       expect(html).toContain(`<title>${title} | AIO Fusion</title>`);
       expect(html).toContain(`name="description" content="${excerpt}"`);
-      expect(html).toContain(`href="https://aiofusion.ai/insights/${slug}"`);
-      expect(html).not.toContain(`https://staging.aiofusion.ai/insights/${slug}`);
       expect(html).toContain(`<h1`);
       expect(html).toContain(title);
       expect(html).toContain(excerpt);
       expect(html).toContain('"@type":"Article"');
     }
 
+    const selfCanonicalHtml = readRoute(directory, "insights/battle-b2b-ai-authority");
+    expect(selfCanonicalHtml).toContain(
+      'href="https://aiofusion.ai/insights/battle-b2b-ai-authority"',
+    );
+    const changingHtml = readRoute(directory, "insights/ai-changing-b2b-visibility");
+    expect(changingHtml).toContain(
+      'href="https://aiofusion.ai/insights/ai-changing-b2b-visibility"',
+    );
     const sitemap = readRoute(directory, "sitemap.xml");
     expect(sitemap).toContain("https://aiofusion.ai/insights/battle-b2b-ai-authority");
     expect(sitemap).toContain("https://aiofusion.ai/insights/ai-changing-b2b-visibility");
