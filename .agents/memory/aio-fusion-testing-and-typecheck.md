@@ -5,6 +5,12 @@ description: Vitest testing gotchas and keeping release validation reliable unde
 
 # Testing and release checks
 
+After a checkpoint restores dependency manifests and the lockfile, synchronize installed dependencies with the restored lockfile before generating release evidence.
+
+**Why:** Restoring source after security updates left newer installed packages in place. Tests against those packages would not validate what the restored lockfile installs during publishing.
+
+**How to apply:** Use a frozen-lockfile dependency synchronization without changing the restored dependency declarations, then verify the tree is clean before running the release gate.
+
 Vitest is the test runner. `pnpm --filter @workspace/api-server run test` (node env) and `pnpm --filter @workspace/aio-fusion run test` (jsdom env) both work; a combined `test` validation command runs both.
 
 **Gotchas worth keeping:**
