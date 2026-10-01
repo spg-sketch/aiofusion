@@ -42,6 +42,12 @@ const EXPECTED_ARTICLE_IDS = [
 ] as const;
 
 describe("public homepage and pricing copy", () => {
+  it("includes the For Agents link in the homepage footer", () => {
+    const doc = documentFrom(renderToStaticMarkup(<LandingPage {...marketingProps} />));
+    const link = Array.from(doc.querySelectorAll("footer nav a")).find((anchor) => anchor.textContent === "For Agents");
+    expect(link).toBeTruthy();
+    expect(link?.getAttribute("href")).toMatch(/\/for-agents$/);
+  });
   it("keeps the homepage copy and renders the latest CMS discovery cards", () => {
     globalThis.__AIO_PRERENDER_INSIGHTS__ = [
       { id: "older", slug: "older", title: "Older CMS story", datePublished: "2026-01-01", status: "published", pinned: false },

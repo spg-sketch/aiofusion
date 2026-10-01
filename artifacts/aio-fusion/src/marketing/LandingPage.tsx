@@ -407,6 +407,7 @@ export default function LandingPageC({
               <a href="#features" className="hover:opacity-60">Features</a>
               <a href={`${base}for-inhouse`} onClick={(e) => { e.preventDefault(); onNavigate("for-inhouse"); }} className="hover:opacity-60">For In-house</a>
               <a href={`${base}for-agencies`} onClick={(e) => { e.preventDefault(); onNavigate("for-agencies"); }} className="hover:opacity-60">For PR Agencies</a>
+              <a href={`${base}for-agents`} onClick={(e) => { e.preventDefault(); onNavigate("for-agents"); }} className="hover:opacity-60">For Agents</a>
               <a href={`${base}insights`} onClick={(e) => { e.preventDefault(); onNavigate("insights"); }} className="hover:opacity-60">Insights</a>
               <a href={`${base}contact`} onClick={(e) => { e.preventDefault(); onNavigate("contact"); }} className="hover:opacity-60">Contact</a>
               <a href={`${base}about`} onClick={(e) => { e.preventDefault(); onNavigate("about"); }} className="hover:opacity-60">About</a>
