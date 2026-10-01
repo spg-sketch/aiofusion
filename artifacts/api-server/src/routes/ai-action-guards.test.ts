@@ -804,6 +804,8 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /platform/setup/account-type",
   "GET /platform/onboarding",
   "POST /platform/onboarding/workspace-basics",
+  // Authenticated onboarding-owner gate; this navigation action does not run AI.
+  "POST /platform/onboarding/back-to-access",
   "POST /platform/onboarding/access",
   "POST /platform/onboarding/complete",
   "POST /platform/settings/account-type",
