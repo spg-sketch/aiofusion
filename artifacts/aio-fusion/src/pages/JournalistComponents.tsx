@@ -2,6 +2,7 @@ import React from "react";
 import { vars } from "../marketing/vars";
 import { Mail, Phone, MapPin, Globe, ExternalLink, Linkedin, Twitter, Clock, Edit, Check, Bookmark, Database, Target, Award, Shield, FileText, ChevronDown, ChevronRight, AlertCircle, Ban, Loader2 } from "lucide-react";
 import { MiniDonut } from "./shared";
+import { MediaResearchResultSummary } from "./MediaResearchResultSummary";
 
 export type Contact = {
   id: number;
@@ -457,6 +458,7 @@ export function RecommendationCard({
   savedToDatabase = false,
   onSaveToDatabase,
   bookmarkLoading = false,
+  researchSummary = false,
 }: {
   item: Recommendation;
   decision?: Decision;
@@ -480,14 +482,23 @@ export function RecommendationCard({
   savedToDatabase?: boolean;
   onSaveToDatabase?: () => void;
   bookmarkLoading?: boolean;
+  researchSummary?: boolean;
 }) {
   const c = item.contact;
   const contactName = [c.firstName, c.lastName].map((part) => part?.trim()).filter(Boolean).join(" ");
   const hasRecordedName = contactName.length > 0;
   const latestDiscovery = c.provenance?.latestPublicDiscovery;
+  const suggestedAngle = item.assessment?.suggestedAngle || item.phraseAttributions?.[0]?.suggestedPlacementAngle || c.mediaOpportunities?.[0]?.angle || latestDiscovery?.mediaOpportunities?.[0]?.angle;
   return (
     <div className="p-5 border-b last:border-b-0 bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200 }}>
-      <div className="flex flex-wrap gap-4 items-start justify-between">
+      {researchSummary && <MediaResearchResultSummary
+        item={item}
+        linkedinUrl={safeExternalHttpUrl(c.linkedinUrl)}
+        publicationUrl={safeExternalHttpUrl(c.outletWebsite)}
+        emailHref={isSendableContactEmail(c.email) ? `mailto:${c.email.trim()}` : null}
+        suggestedAngle={suggestedAngle}
+      />}
+      {!researchSummary && <div className="flex flex-wrap gap-4 items-start justify-between">
         <div className="flex-1 min-w-[280px]">
           <div className="flex items-center gap-3 mb-1">
             <h3 className="text-[18px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
@@ -649,7 +660,7 @@ export function RecommendationCard({
             assessment={item.assessment}
             compact={compact}
             simplified={isShortlist}
-            suggestedAngle={item.assessment?.suggestedAngle || item.phraseAttributions?.[0]?.suggestedPlacementAngle || c.mediaOpportunities?.[0]?.angle || latestDiscovery?.mediaOpportunities?.[0]?.angle}
+            suggestedAngle={suggestedAngle}
           />
 
           {!isShortlist && c.notes && (
@@ -716,7 +727,7 @@ export function RecommendationCard({
             )}
           </div>}
         </div>
-      </div>
+      </div>}
 
       {(!isShortlist && onAccept) || onToggleRestriction || onSaveToDatabase ? (
         <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-4 border-t" style={{ borderColor: vars.g100 }}>

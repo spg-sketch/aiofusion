@@ -7,7 +7,7 @@ Rank editorial suitability separately from contact readiness and evidence confid
 
 **Why:** The previous keyword-plus-email formula saturated at 100 and conflated ease of contact with suitability. A specialist outlet can be a better audience match than a larger publication.
 
-**How to apply:** Keep fixed factor budgets and show weighted-model coverage alongside fit. Feedback can change ordering, not the underlying evidence assessment. Treat the weights as an initial heuristic, not calibrated placement probabilities.
+**How to apply:** Keep fixed factor budgets and show weighted-model coverage alongside fit in detailed review surfaces. Feedback can change ordering, not the underlying evidence assessment. Treat the weights as an initial heuristic, not calibrated placement probabilities.
 
 Missing personal identity is a data-quality limitation, not an editorial-fit factor. Keep unnamed records eligible when their topic and outlet evidence is useful, but apply one bounded reduction to the persisted recommendation base score, retain its explanation through feedback reranking, and require identity review before outreach.
 
@@ -38,3 +38,9 @@ Recommendation ranking writes must be exact-set and atomic with their criteria s
 **Why:** Criteria-only compare-and-swap does not detect feedback-only rank changes, and reranking "the latest set" can update a different set when generation overlaps enrichment. Pre-provider contact snapshots can also become deleted or suppressed before commit.
 
 **How to apply:** Pass the intended set ID through every rerank. Creation and enrichment transactions must build their response from the same committed set rows. Reapply project, contact and outlet workspace visibility after every slow operation and immediately before response serialization. Exclude records whose outlet became hidden or deleted, prune every contact-keyed criteria map to the final eligible IDs, and never return historical evidence or outlet fields for excluded contacts. Treat zero as a valid base score, not a missing value.
+
+Media Research recommendations and story shortlist use a short contact summary. Omit match explanations, evidence confidence, contact readiness, evidence/contact-check detail and imported notes there without deleting the underlying information or changing the detailed Media Database view. Keep do-not-contact protections visible.
+
+**Why:** The user requested simpler Media Research results with only contact/publication fields, reach, Editorial fit and a suggested pitch angle. Imported source reach is not a measured AI Authority score, and the reference circular indicator was a match-score indicator.
+
+**How to apply:** Keep the summary scoped to Media Research. A circular Editorial fit indicator must use the actual assessment fit, never the legacy ranking score or imported reach. Missing values stay explicit; do not invent angles, links or authority scores. Explain optional public-web discovery separately from database matches and retain human review before saving a new contact.

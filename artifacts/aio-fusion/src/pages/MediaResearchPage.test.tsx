@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -379,12 +379,14 @@ describe("MediaResearchPage live discovery", () => {
     
      fireEvent.click(screen.getByTestId("button-recommend-contacts"));
      await waitFor(() => expect(requests.filter((request) => request.url.endsWith("/store/media-db/recommendations")).length).toBe(1));
-     const discoverButton = screen.getByRole("button", { name: "Expand with live search" });
+     const discoverButton = screen.getByRole("button", { name: "Find additional journalists online" });
+     expect(discoverButton.getAttribute("aria-describedby")).toBe("research-live-search-help");
+     expect(screen.getByText(/Optional: search beyond your Media Database.*Public web discoveries.*not added to your Media Database automatically/i)).toBeTruthy();
      fireEvent.click(discoverButton);
 
     expect(await screen.findByText("Jane Reporter")).toBeTruthy();
-    expect(screen.getByText("Phrase fit and recorded topic overlap")).toBeTruthy();
-     expect(screen.getAllByText("Recorded topic/keyword overlap:").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Phrase fit and recorded topic overlap")).toBeNull();
+    expect(screen.getAllByText("Recorded topic/keyword overlap:").length).toBeGreaterThan(0);
     const recommendationRequests = requests.filter((request) => request.url.endsWith("/store/media-db/recommendations"));
     expect(recommendationRequests).toHaveLength(1);
     expect(recommendationRequests[0].body).toMatchObject({ projectId: "project-1", storyKey: "story-1" });
@@ -1025,7 +1027,7 @@ describe("MediaResearchPage live discovery", () => {
     await waitFor(() => expect(requests.some((request) => request.url.includes("/recommendations/brief?") && request.url.includes("projectId=project-1") && request.url.includes("storyKey=story-2"))).toBe(true));
   });
 
-  it("retains the complete enrichment result, including checked coverage evidence", async () => {
+  it("updates the research result without publishing its retained coverage evidence", async () => {
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
     expect(await screen.findByText("Decision Contact")).toBeTruthy();
@@ -1033,12 +1035,14 @@ describe("MediaResearchPage live discovery", () => {
     expect(await screen.findByText("Enriched Contact")).toBeTruthy();
     expect(screen.getByRole("status").textContent).toMatch(/1 of the top 1 contacts have a page-checked byline/i);
     expect(screen.getByRole("status").textContent).toMatch(/does not verify current contact details/i);
-    fireEvent.click(screen.getByText("Evidence and contact checks"));
-    expect(screen.getByText("Recent energy coverage")).toBeTruthy();
-    expect(screen.getByText("Author matched")).toBeTruthy();
-    expect(screen.getByText("Page checked")).toBeTruthy();
-    expect(screen.getByText(/Checked:/)).toBeTruthy();
-    expect(screen.getByText(/Energy transition/)).toBeTruthy();
+    const summary = screen.getByTestId("research-result-summary-91");
+    expect(within(summary).getByText("84%")).toBeTruthy();
+    expect(within(summary).getByText("Energy editor")).toBeTruthy();
+    expect(screen.queryByText("Evidence and contact checks")).toBeNull();
+    expect(screen.queryByText("Recent energy coverage")).toBeNull();
+    expect(screen.queryByText("Author matched")).toBeNull();
+    expect(screen.queryByText("Page checked")).toBeNull();
+    expect(screen.queryByText(/Energy transition/)).toBeNull();
   });
 
   it("restores recommendation readiness after removing a contact restriction", async () => {
