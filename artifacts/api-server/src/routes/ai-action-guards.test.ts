@@ -986,6 +986,8 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /store/media-db/contacts/:id/corrections",
   "POST /store/media-db/contacts/:id/source-check",
   "POST /store/media-db/contacts/:id/source-checks/:checkId/approve",
+  // Read-only review uses its own writable-Master authorization, not paid-AI gating.
+  "GET /store/media-db/identity-review",
   "GET /store/media-db/corrections",
   "POST /store/media-db/corrections/:reportId/source-check",
   "POST /store/media-db/corrections/:reportId/resolve",
