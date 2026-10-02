@@ -12,12 +12,14 @@ import {
   db,
   insightArticlesTable,
   insightMediaTable,
+  howtoEntriesTable,
   type InsightArticleRow,
   type InsightBlock,
 } from "@workspace/db";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { InsightObjectStorage } from "../lib/insight-object-storage";
 import { canAccessInsightsCms } from "../lib/insights-cms-access";
+import { lockSharedMediaReferences } from "../lib/shared-media-reference-lock";
 import {
   addOrRemoveHomepagePin,
   HomepagePinLimitError,
@@ -127,6 +129,7 @@ function hasArticleContentChanged(
 async function validMediaReferences(
   coverMediaId: string | null | undefined,
   body: InsightBlock[],
+  database: typeof db = db,
 ): Promise<boolean> {
   const ids = new Set<string>();
   if (coverMediaId) ids.add(coverMediaId);
@@ -134,7 +137,7 @@ async function validMediaReferences(
     if (block.type === "image") ids.add(block.mediaId);
   }
   if (ids.size === 0) return true;
-  const media = await db
+  const media = await database
     .select({ id: insightMediaTable.id, contentType: insightMediaTable.contentType })
     .from(insightMediaTable)
     .where(isNull(insightMediaTable.deletedAt));
@@ -239,6 +242,10 @@ router.post("/admin/insights", requirePlatformAuth, async (req, res) => {
   try {
     const id = randomUUID();
     const row = await db.transaction(async (tx) => {
+      await lockSharedMediaReferences(tx);
+      if (!(await validMediaReferences(input.coverMediaId, body, tx as unknown as typeof db))) {
+        throw new Error("invalid-media-reference");
+      }
       await lockHomepagePins(tx);
       const now = new Date();
       const pinnedIds = await readHomepagePinnedIds(tx);
@@ -265,6 +272,10 @@ router.post("/admin/insights", requirePlatformAuth, async (req, res) => {
     });
     res.status(201).json((await serializeArticles([row]))[0]);
   } catch (error) {
+    if (error instanceof Error && error.message === "invalid-media-reference") {
+      res.status(400).json({ error: "Invalid story links or media references" });
+      return;
+    }
     if (error instanceof HomepagePinLimitError) {
       res.status(409).json({ error: error.message });
       return;
@@ -304,6 +315,7 @@ router.patch("/admin/insights/:id", requirePlatformAuth, async (req, res) => {
   const articleId = Array.isArray(idParam) ? idParam[0] ?? "" : idParam ?? "";
   try {
     const row = await db.transaction(async (tx) => {
+      await lockSharedMediaReferences(tx);
       await lockHomepagePins(tx);
       // Re-read after taking the singleton lock. A delete can commit between
       // an unlocked preflight read and this transaction; in that case there
@@ -314,6 +326,9 @@ router.patch("/admin/insights/:id", requirePlatformAuth, async (req, res) => {
         .where(eq(insightArticlesTable.id, articleId))
         .limit(1);
       if (!existing) return null;
+      if (!(await validMediaReferences(input.coverMediaId === undefined ? existing.coverMediaId : input.coverMediaId, body, tx as unknown as typeof db))) {
+        throw new Error("invalid-media-reference");
+      }
 
       const publicationDate = input.datePublished === undefined
         ? existing.datePublished
@@ -361,6 +376,10 @@ router.patch("/admin/insights/:id", requirePlatformAuth, async (req, res) => {
     }
     res.json((await serializeArticles([row]))[0]);
   } catch (error) {
+    if (error instanceof Error && error.message === "invalid-media-reference") {
+      res.status(400).json({ error: "Invalid story links or media references" });
+      return;
+    }
     if (error instanceof HomepagePinLimitError) {
       res.status(409).json({ error: error.message });
       return;
@@ -397,6 +416,44 @@ router.get("/admin/insights/media", requirePlatformAuth, async (req, res) => {
     .where(isNull(insightMediaTable.deletedAt))
     .orderBy(desc(insightMediaTable.createdAt));
   res.json(rows);
+});
+
+router.delete("/admin/insights/media/:id", requirePlatformAuth, async (req, res) => {
+  if (!requireInsightsAdmin(req, res)) return;
+  const rawMediaId = req.params["id"];
+  const mediaId = Array.isArray(rawMediaId) ? rawMediaId[0] ?? "" : rawMediaId ?? "";
+  const result = await db.transaction(async (tx) => {
+    await lockSharedMediaReferences(tx);
+    const [media] = await tx.select({ id: insightMediaTable.id })
+      .from(insightMediaTable)
+      .where(and(eq(insightMediaTable.id, mediaId), isNull(insightMediaTable.deletedAt)))
+      .limit(1);
+    if (!media) return "missing" as const;
+    const insights = await tx.select({ coverMediaId: insightArticlesTable.coverMediaId, body: insightArticlesTable.body })
+      .from(insightArticlesTable);
+    const howto = await tx.select({ body: howtoEntriesTable.body }).from(howtoEntriesTable);
+    const referencedByInsight = insights.some((article) =>
+      article.coverMediaId === mediaId ||
+      (article.body as InsightBlock[]).some((block) => block.type === "image" && block.mediaId === mediaId),
+    );
+    const referencedByHowto = howto.some((entry) =>
+      (entry.body as import("@workspace/db").HowtoBlock[]).some((block) => block.type === "image" && block.mediaId === mediaId),
+    );
+    if (referencedByInsight || referencedByHowto) return "referenced" as const;
+    await tx.update(insightMediaTable)
+      .set({ deletedAt: new Date() })
+      .where(eq(insightMediaTable.id, mediaId));
+    return "deleted" as const;
+  });
+  if (result === "missing") {
+    res.status(404).json({ error: "Media not found" });
+    return;
+  }
+  if (result === "referenced") {
+    res.status(409).json({ error: "Media is still referenced by Insights or How-to content" });
+    return;
+  }
+  res.status(204).end();
 });
 
 router.post("/admin/insights/media/metadata", requirePlatformAuth, async (req, res) => {

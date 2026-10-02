@@ -11,6 +11,7 @@ import { pipeline } from "node:stream/promises";
 const root = resolve(import.meta.dirname, "../..");
 const publicDir = resolve(root, "artifacts/aio-fusion/dist/public");
 const featureMode = process.argv.includes("--features");
+const howtoMode = process.argv.includes("--howto");
 const liveAi = featureMode && process.env.AIO_FEATURE_LIVE_AI === "1";
 const liveAiEnv = {};
 if (liveAi) {
@@ -79,10 +80,10 @@ process.on("exit", cleanup);
 process.on("SIGTERM", () => { cleanup(); process.exit(0); });
 process.on("SIGINT", () => { cleanup(); process.exit(0); });
 
-if (featureMode || !existsSync(join(publicDir, "index.html"))) {
+if (featureMode || howtoMode || !existsSync(join(publicDir, "index.html"))) {
   if (run("pnpm", ["--filter", "@workspace/aio-fusion", "run", "build"]).status !== 0) throw new Error("web build failed");
 }
-if (featureMode || !existsSync(resolve(root, "artifacts/api-server/dist/index.mjs"))) {
+if (featureMode || howtoMode || !existsSync(resolve(root, "artifacts/api-server/dist/index.mjs"))) {
   if (run("pnpm", ["--filter", "@workspace/api-server", "run", "build"]).status !== 0) throw new Error("API build failed");
 }
 if (run("initdb", ["-D", pgDir, "--username=release", "--auth=trust", "--no-locale"]).status !== 0) throw new Error("initdb failed");
@@ -125,6 +126,24 @@ INSERT INTO projects (id,name,data,owner)
 VALUES ('other-workspace','Other workspace project','{"client":"other-workspace"}','other-workspace')
 ON CONFLICT (id) DO NOTHING;`;
 if (run("psql", ["-h", "127.0.0.1", "-p", String(port), "-U", "release", "-d", "release", "-v", "ON_ERROR_STOP=1", "-c", sql], { env: { DATABASE_URL: dbUrl } }).status !== 0) throw new Error("seed failed");
+if (howtoMode) {
+  // Synthetic, verified editorial identity. This is not an administrator and
+  // has no project access. Never seed or modify a real staff/customer account.
+  const editorialSql = `
+    WITH editorial_user AS (
+      INSERT INTO platform_users (email,name,password_hash,email_verified,google_id)
+      VALUES ('howto-editor@aiofusion.ai','How-to Test Editor','${hash}',true,'howto-isolated-google-subject')
+      RETURNING id
+    )
+    INSERT INTO platform_memberships (user_id,company_id,company_slug,role,project_access)
+    SELECT editorial_user.id,c.id,c.slug,'content','[]'
+    FROM editorial_user,platform_companies c WHERE c.slug='release-workspace';
+  `;
+  if (run("psql", ["-h", "127.0.0.1", "-p", String(port), "-U", "release", "-d", "release",
+    "-v", "ON_ERROR_STOP=1", "-c", editorialSql], { env: { DATABASE_URL: dbUrl } }).status !== 0) throw new Error("isolated editorial seed failed");
+  if (run("pnpm", ["--filter", "@workspace/api-server", "run", "migrate:howto"],
+    { env: { DATABASE_URL: dbUrl, DEPLOYMENT_ENV: "test" } }).status !== 0) throw new Error("How-to seed migration failed");
+}
 if (featureMode) {
   const betaSql = `
     ALTER TABLE platform_companies

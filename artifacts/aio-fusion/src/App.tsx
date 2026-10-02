@@ -37,7 +37,7 @@ import { PendingInvitesBanner } from "./components/PendingInvitesBanner";
 import type { AcceptedInvitation } from "./components/InvitationResult";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { BackToAgencyLink } from "./components/BackToAgencyLink";
-import { isInsightsAdminPath } from "./lib/adminRoute";
+import { isHowtoAdminPath, isInsightsAdminPath } from "./lib/adminRoute";
 import { vars } from "./marketing/vars";
 import { PUBLIC_PAGE_DEFINITIONS } from "./marketing/pageMeta";
 import { GuidedOnboardingPage } from "./pages/GuidedOnboardingPage";
@@ -229,6 +229,9 @@ const LeadsAdminPage = lazy(() =>
 const InsightsAdminPage = lazy(() =>
   import("./pages/InsightsAdminPage").then((m) => ({ default: m.InsightsAdminPage }))
 );
+const HowtoAdminPage = lazy(() =>
+  import("./pages/HowtoAdminPage").then((m) => ({ default: m.HowtoAdminPage }))
+);
 
 const IntakePage = lazy(() => import("./IntakeForm"));
 const ReportPage = lazy(() => import("./ReportPage"));
@@ -406,11 +409,13 @@ function publicViewFromLocation(): PublicView | null {
   return SLUG_TO_VIEW[slugFromLocation()] ?? null;
 }
 
-function directViewFromLocation(): PublicView | "insights-admin" | "platform-home" | "platform" | "not-found" {
+function directViewFromLocation(): PublicView | "insights-admin" | "howto-admin" | "guidance" | "platform-home" | "platform" | "not-found" {
   const protectedDestination = protectedDestinationFromLocation();
   if (protectedDestination === "project-hub") return "platform";
   if (protectedDestination === "platform") return "platform-home";
   if (isInsightsAdminPath(window.location.pathname, appBase())) return "insights-admin";
+  if (isHowtoAdminPath(window.location.pathname, appBase())) return "howto-admin";
+  if (slugFromLocation() === "guidance") return "guidance";
   const publicView = publicViewFromLocation();
   if (publicView) return publicView;
   return slugFromLocation() ? "not-found" : "landing";
@@ -466,6 +471,8 @@ function isAuthenticationLanding(): boolean {
 
 function viewToUrl(v: string, insightsArticleId?: string | null): string {
   if (v === "insights-admin") return appBase() + "admin";
+  if (v === "howto-admin") return appBase() + "admin/howto";
+  if (v === "guidance") return appBase() + "guidance";
   if (v === "platform") return appBase() + "project-hub";
   if (v === "platform-home") return appBase() + "platform";
   if (v === "insights" && insightsArticleId) {
@@ -476,7 +483,7 @@ function viewToUrl(v: string, insightsArticleId?: string | null): string {
 
 
 function App() {
-  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "insights-admin" | "privacy-admin" | "sub-accounts" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security" | "privacy-policy" | "journalist-privacy" | "terms-conditions" | "not-found">(() =>
+  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "insights-admin" | "howto-admin" | "privacy-admin" | "sub-accounts" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security" | "privacy-policy" | "journalist-privacy" | "terms-conditions" | "not-found">(() =>
     isAuthenticationLanding() ? "platform-home" : directViewFromLocation(),
   );
   // One owner for every in-flight authority/cache request. Identity changes
@@ -1739,7 +1746,7 @@ function App() {
   useEffect(() => {
     if (authLoading) return;
     const deniedUsersAdmin = view === "users-admin" && (!session || session.role !== "admin");
-    const deniedInsightsAdmin = view === "insights-admin" && (!session || session.insightsCmsAccess !== true);
+    const deniedInsightsAdmin = (view === "insights-admin" || view === "howto-admin") && (!session || session.insightsCmsAccess !== true);
     if (deniedUsersAdmin || deniedInsightsAdmin) {
       replaceNextNav.current = true;
       warmRoute(loadPlatformHomePage);
@@ -1857,6 +1864,45 @@ function App() {
       </Suspense>
     );
   }
+
+  const unsavedPrompt = (
+    <UnsavedChangesDialog
+      open={Boolean(unsavedDialog)}
+      replacing={unsavedDialog?.replacing}
+      destinationLabel={unsavedEditorRef.current?.editor === "howto" ? "How-to Library" : "Content Library"}
+      busy={unsavedEditorRef.current?.busy ?? false}
+      saving={unsavedSaving}
+      error={unsavedError}
+      onStay={() => {
+        if (unsavedSaving) return;
+        setUnsavedDialog(null);
+        setUnsavedError("");
+      }}
+      onDiscard={() => {
+        const pending = unsavedDialog;
+        unsavedEditorRef.current = null;
+        setUnsavedDialog(null);
+        setUnsavedError("");
+        pending?.run();
+      }}
+      onSave={() => {
+        const editor = unsavedEditorRef.current;
+        const pending = unsavedDialog;
+        if (!editor || !pending || unsavedSaving || editor.busy) return;
+        setUnsavedSaving(true);
+        setUnsavedError("");
+        void editor.save().then((result) => {
+          if (!result.ok) {
+            setUnsavedError(result.error || "Your changes could not be saved. Try again.");
+            return;
+          }
+          setUnsavedDialog(null);
+          pending.run();
+        }).catch(() => setUnsavedError("Your changes could not be saved. Try again."))
+          .finally(() => setUnsavedSaving(false));
+      }}
+    />
+  );
 
   // A payment return is not a fresh sign-in. Keep the same neutral payment
   // presentation while /me establishes authority instead of briefly showing
@@ -1985,6 +2031,7 @@ function App() {
             })}
             onManageSubAccounts={() => requireSessionThen(openAccountSettings)}
             onInsightsAdmin={() => { if (session?.insightsCmsAccess) transitionToView("insights-admin"); }}
+            onHowtoAdmin={() => { if (session?.insightsCmsAccess) transitionToView("howto-admin"); }}
             onCreateProject={beginCreateProject}
             onContinueToProjects={() => requireSessionThen(() => transitionToView("platform"))}
             onArchivedProjects={() => requireSessionThen(() => transitionToView("archived-projects"))}
@@ -2026,6 +2073,16 @@ function App() {
   if (view === "insights-admin") {
     if (!session || session.insightsCmsAccess !== true) return null;
     return <InsightsAdminPage onBack={() => transitionToView("platform-home")} />;
+  }
+  if (view === "howto-admin") {
+    if (!session || session.insightsCmsAccess !== true) return null;
+    return <Suspense fallback={<RouteLoading fullScreen />}>
+      <HowtoAdminPage
+        onBack={() => transitionToView("guidance")}
+        onRegisterUnsavedEditor={registerUnsavedEditor}
+      />
+      {unsavedPrompt}
+    </Suspense>;
   }
   if (view === "privacy-admin") {
     if (!session || session.role !== "admin") return null;
@@ -2109,7 +2166,7 @@ function App() {
     );
   }
   if (view === "guidance") {
-    return <GuidancePage onBack={() => transitionToView("platform-home")} />;
+    return <GuidancePage onBack={() => transitionToView("platform-home")} canManage={session?.insightsCmsAccess === true} onManage={() => transitionToView("howto-admin")} />;
   }
   if (view === "archived-projects") {
     return <ArchivedProjectsPage onBack={() => transitionToView("platform-home")} />;
@@ -2287,40 +2344,7 @@ function App() {
           {currentPage === "media-database" && <MediaDatabasePage />}
         </Suspense>
       </main>
-      <UnsavedChangesDialog
-        open={Boolean(unsavedDialog)}
-        replacing={unsavedDialog?.replacing}
-        busy={unsavedEditorRef.current?.busy ?? false}
-        saving={unsavedSaving}
-        error={unsavedError}
-        onStay={() => {
-          if (unsavedSaving) return;
-          setUnsavedDialog(null);
-          setUnsavedError("");
-        }}
-        onDiscard={() => {
-          const pending = unsavedDialog;
-          unsavedEditorRef.current = null;
-          setUnsavedDialog(null);
-          setUnsavedError("");
-          pending?.run();
-        }}
-        onSave={() => {
-          const editor = unsavedEditorRef.current;
-          const pending = unsavedDialog;
-          if (!editor || !pending || unsavedSaving || editor.busy) return;
-          setUnsavedSaving(true);
-          setUnsavedError("");
-          void editor.save().then((result) => {
-            if (!result.ok) {
-              setUnsavedError(result.error || "Your changes could not be saved. Try again.");
-              return;
-            }
-            setUnsavedDialog(null);
-            pending.run();
-          }).finally(() => setUnsavedSaving(false));
-        }}
-      />
+      {unsavedPrompt}
     </div>
     </>
   );

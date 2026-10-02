@@ -12,6 +12,7 @@
     "demo-run": "tsx scripts/demo-run.ts",
     "george-smoke-test": "tsx scripts/george-smoke-test.ts",
     "cms-smoke-test": "tsx scripts/cms-smoke-test.ts",
+    "migrate:howto": "tsx scripts/migrate-howto.ts",
     "migrate:insights:task-290": "tsx scripts/migrate-insights-task-290.ts",
     "seed:media-development": "MEDIA_DEVELOPMENT_SEED=1 tsx scripts/seed-media-development.ts",
     "seed:media-development:remove": "MEDIA_DEVELOPMENT_SEED=1 tsx scripts/seed-media-development.ts --remove"

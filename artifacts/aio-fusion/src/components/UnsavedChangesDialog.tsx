@@ -13,6 +13,7 @@ export function UnsavedChangesDialog({
   busy,
   saving,
   error,
+  destinationLabel = "Content Library",
   onSave,
   onDiscard,
   onStay,
@@ -22,6 +23,7 @@ export function UnsavedChangesDialog({
   busy: boolean;
   saving: boolean;
   error: string;
+  destinationLabel?: string;
   onSave: () => void;
   onDiscard: () => void;
   onStay: () => void;
@@ -40,8 +42,10 @@ export function UnsavedChangesDialog({
           <AlertDialogDescription>
             {replacing
               ? "Retrieving this item will replace the content currently in the editor."
-              : "You have changes that have not been saved to Content Library."}
-            {busy ? " AI work is still running. Stay on this page to keep waiting, or leave without saving to discard its result." : ""}
+              : `You have changes that have not been saved to ${destinationLabel}.`}
+            {busy ? (destinationLabel === "How-to Library"
+              ? " A library change is still being saved. Wait for confirmation before leaving."
+              : " AI work is still running. Stay on this page to keep waiting, or leave without saving to discard its result.") : ""}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
@@ -49,7 +53,7 @@ export function UnsavedChangesDialog({
           <button type="button" onClick={onStay} disabled={saving} className="aio-button aio-button--outline">
             Stay on this page
           </button>
-          <button type="button" onClick={onDiscard} disabled={saving} className="aio-button aio-button--outline">
+          <button type="button" onClick={onDiscard} disabled={saving || (busy && destinationLabel === "How-to Library")} className="aio-button aio-button--outline">
             Leave without saving
           </button>
           <button type="button" onClick={onSave} disabled={saving || busy} className="aio-button aio-button--primary">

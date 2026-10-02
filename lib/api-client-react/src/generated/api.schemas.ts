@@ -222,6 +222,171 @@ export interface InsightBlock {
   [key: string]: unknown;
  }
 
+export interface HowtoInlineRun {
+  /** @maxLength 12000 */
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+  href?: string;
+}
+
+export type HowtoBlock = {
+  type: 'heading' | 'paragraph' | 'tip';
+  /** @maxItems 100 */
+  runs: HowtoInlineRun[];
+} | {
+  type: 'step';
+  /**
+     * @minimum 1
+     * @maximum 100
+     */
+  number: number;
+  /** @maxLength 300 */
+  title: string;
+  /** @maxItems 100 */
+  runs: HowtoInlineRun[];
+} | {
+  type: 'list';
+  /**
+     * @maxItems 100
+     * @items.maxLength 4000
+     */
+  items: string[];
+} | {
+  type: 'image';
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  mediaId: string;
+  /** @maxLength 1000 */
+  altText: string;
+  /** @maxLength 2000 */
+  caption?: string;
+  /** @nullable */
+  url?: string | null;
+} | {
+  type: 'video';
+  /** @maxLength 2000 */
+  url: string;
+  /** @maxLength 2000 */
+  caption?: string;
+};
+
+export type HowtoEntryType = typeof HowtoEntryType[keyof typeof HowtoEntryType];
+
+
+export const HowtoEntryType = {
+  Article: 'Article',
+  Guide: 'Guide',
+  Video: 'Video',
+} as const;
+
+export type HowtoEntryStatus = typeof HowtoEntryStatus[keyof typeof HowtoEntryStatus];
+
+
+export const HowtoEntryStatus = {
+  draft: 'draft',
+  published: 'published',
+} as const;
+
+export interface HowtoEntry {
+  id: string;
+  title: string;
+  description: string;
+  type: HowtoEntryType;
+  readTime: string;
+  displayOrder: number;
+  status: HowtoEntryStatus;
+  /** @maxItems 300 */
+  body: HowtoBlock[];
+  createdAt: string;
+  updatedAt: string;
+  /** @nullable */
+  publishedAt: string | null;
+}
+
+export type HowtoEntryInputType = typeof HowtoEntryInputType[keyof typeof HowtoEntryInputType];
+
+
+export const HowtoEntryInputType = {
+  Article: 'Article',
+  Guide: 'Guide',
+  Video: 'Video',
+} as const;
+
+export type HowtoEntryInputStatus = typeof HowtoEntryInputStatus[keyof typeof HowtoEntryInputStatus];
+
+
+export const HowtoEntryInputStatus = {
+  draft: 'draft',
+  published: 'published',
+} as const;
+
+export interface HowtoEntryInput {
+  /**
+     * @maxLength 100
+     * @pattern ^[a-z0-9]+(?:-[a-z0-9]+)*$
+     */
+  id: string;
+  /**
+     * @minLength 1
+     * @maxLength 300
+     */
+  title: string;
+  /** @maxLength 2000 */
+  description: string;
+  type: HowtoEntryInputType;
+  /** @maxLength 100 */
+  readTime: string;
+  /**
+     * @minimum 0
+     * @maximum 1000000
+     */
+  displayOrder: number;
+  status: HowtoEntryInputStatus;
+  /** @maxItems 300 */
+  body: HowtoBlock[];
+}
+
+export type HowtoEntryPatchType = typeof HowtoEntryPatchType[keyof typeof HowtoEntryPatchType];
+
+
+export const HowtoEntryPatchType = {
+  Article: 'Article',
+  Guide: 'Guide',
+  Video: 'Video',
+} as const;
+
+export type HowtoEntryPatchStatus = typeof HowtoEntryPatchStatus[keyof typeof HowtoEntryPatchStatus];
+
+
+export const HowtoEntryPatchStatus = {
+  draft: 'draft',
+  published: 'published',
+} as const;
+
+export interface HowtoEntryPatch {
+  /**
+     * @minLength 1
+     * @maxLength 300
+     */
+  title?: string;
+  /** @maxLength 2000 */
+  description?: string;
+  type?: HowtoEntryPatchType;
+  /** @maxLength 100 */
+  readTime?: string;
+  /**
+     * @minimum 0
+     * @maximum 1000000
+     */
+  displayOrder?: number;
+  status?: HowtoEntryPatchStatus;
+  /** @maxItems 300 */
+  body?: HowtoBlock[];
+}
+
 export interface InsightArticle {
   id: string;
   slug: string;

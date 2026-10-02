@@ -28,6 +28,9 @@ import type {
   GetMediaRecommendationsParams,
   HandleBrowserLoginCallbackParams,
   HealthStatus,
+  HowtoEntry,
+  HowtoEntryInput,
+  HowtoEntryPatch,
   InsightArticle,
   InsightArticleInput,
   InsightMedia,
@@ -709,6 +712,549 @@ export function useListPublishedInsights<TData = Awaited<ReturnType<typeof listP
 
 
 
+export const getListPublishedHowtoUrl = () => {
+
+
+
+
+  return `/api/howto`
+}
+
+/**
+ * @summary List published How-to entries
+ */
+export const listPublishedHowto = async ( options?: Parameters<typeof customFetch>[1]): Promise<HowtoEntry[]> => {
+
+  return customFetch<HowtoEntry[]>(getListPublishedHowtoUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPublishedHowtoQueryKey = () => {
+    return [
+    `/api/howto`
+    ] as const;
+    }
+
+
+export const getListPublishedHowtoQueryOptions = <TData = Awaited<ReturnType<typeof listPublishedHowto>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPublishedHowto>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPublishedHowtoQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPublishedHowto>>> = ({ signal }) => listPublishedHowto({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPublishedHowto>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPublishedHowtoQueryResult = NonNullable<Awaited<ReturnType<typeof listPublishedHowto>>>
+export type ListPublishedHowtoQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List published How-to entries
+ */
+
+export function useListPublishedHowto<TData = Awaited<ReturnType<typeof listPublishedHowto>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPublishedHowto>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPublishedHowtoQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPublishedHowtoUrl = (id: string,) => {
+
+
+
+
+  return `/api/howto/${id}`
+}
+
+/**
+ * @summary Get a published How-to entry
+ */
+export const getPublishedHowto = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<HowtoEntry> => {
+
+  return customFetch<HowtoEntry>(getGetPublishedHowtoUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublishedHowtoQueryKey = (id: string,) => {
+    return [
+    `/api/howto/${id}`
+    ] as const;
+    }
+
+
+export const getGetPublishedHowtoQueryOptions = <TData = Awaited<ReturnType<typeof getPublishedHowto>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublishedHowto>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublishedHowtoQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublishedHowto>>> = ({ signal }) => getPublishedHowto(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublishedHowto>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublishedHowtoQueryResult = NonNullable<Awaited<ReturnType<typeof getPublishedHowto>>>
+export type GetPublishedHowtoQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a published How-to entry
+ */
+
+export function useGetPublishedHowto<TData = Awaited<ReturnType<typeof getPublishedHowto>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublishedHowto>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublishedHowtoQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListAdminHowtoUrl = () => {
+
+
+
+
+  return `/api/admin/howto`
+}
+
+/**
+ * @summary List all How-to entries for editors
+ */
+export const listAdminHowto = async ( options?: Parameters<typeof customFetch>[1]): Promise<HowtoEntry[]> => {
+
+  return customFetch<HowtoEntry[]>(getListAdminHowtoUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAdminHowtoQueryKey = () => {
+    return [
+    `/api/admin/howto`
+    ] as const;
+    }
+
+
+export const getListAdminHowtoQueryOptions = <TData = Awaited<ReturnType<typeof listAdminHowto>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminHowto>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAdminHowtoQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminHowto>>> = ({ signal }) => listAdminHowto({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdminHowto>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAdminHowtoQueryResult = NonNullable<Awaited<ReturnType<typeof listAdminHowto>>>
+export type ListAdminHowtoQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all How-to entries for editors
+ */
+
+export function useListAdminHowto<TData = Awaited<ReturnType<typeof listAdminHowto>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminHowto>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAdminHowtoQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateAdminHowtoUrl = () => {
+
+
+
+
+  return `/api/admin/howto`
+}
+
+/**
+ * @summary Create a How-to entry
+ */
+export const createAdminHowto = async (howtoEntryInput: HowtoEntryInput, options?: Parameters<typeof customFetch>[1]): Promise<HowtoEntry> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<HowtoEntry>(getCreateAdminHowtoUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(howtoEntryInput)
+  }
+);}
+
+
+
+
+
+export const getCreateAdminHowtoMutationKey = () => ['createAdminHowto'] as const;
+
+export const getCreateAdminHowtoMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAdminHowto>>, TError,CreateAdminHowtoMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAdminHowto>>, TError,CreateAdminHowtoMutationVariables, TContext> => {
+
+const mutationKey = getCreateAdminHowtoMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAdminHowto>>, CreateAdminHowtoMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createAdminHowto(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAdminHowtoMutationResult = NonNullable<Awaited<ReturnType<typeof createAdminHowto>>>
+    export type CreateAdminHowtoMutationBody = BodyType<HowtoEntryInput>
+    export type CreateAdminHowtoMutationError = ErrorType<void>
+    export type CreateAdminHowtoMutationVariables = {data: BodyType<HowtoEntryInput>}
+
+    /**
+ * @summary Create a How-to entry
+ */
+export const useCreateAdminHowto = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAdminHowto>>, TError,CreateAdminHowtoMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAdminHowto>>,
+        TError,
+        CreateAdminHowtoMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateAdminHowtoMutationOptions(options));
+    }
+
+export const getGetAdminHowtoUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/howto/${id}`
+}
+
+/**
+ * @summary Get an entry for editing
+ */
+export const getAdminHowto = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<HowtoEntry> => {
+
+  return customFetch<HowtoEntry>(getGetAdminHowtoUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminHowtoQueryKey = (id: string,) => {
+    return [
+    `/api/admin/howto/${id}`
+    ] as const;
+    }
+
+
+export const getGetAdminHowtoQueryOptions = <TData = Awaited<ReturnType<typeof getAdminHowto>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminHowto>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminHowtoQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminHowto>>> = ({ signal }) => getAdminHowto(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminHowto>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminHowtoQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminHowto>>>
+export type GetAdminHowtoQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get an entry for editing
+ */
+
+export function useGetAdminHowto<TData = Awaited<ReturnType<typeof getAdminHowto>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminHowto>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminHowtoQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateAdminHowtoUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/howto/${id}`
+}
+
+/**
+ * @summary Partially update a How-to entry
+ */
+export const updateAdminHowto = async (id: string,
+    howtoEntryPatch: HowtoEntryPatch, options?: Parameters<typeof customFetch>[1]): Promise<HowtoEntry> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<HowtoEntry>(getUpdateAdminHowtoUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(howtoEntryPatch)
+  }
+);}
+
+
+
+
+
+export const getUpdateAdminHowtoMutationKey = () => ['updateAdminHowto'] as const;
+
+export const getUpdateAdminHowtoMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAdminHowto>>, TError,UpdateAdminHowtoMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAdminHowto>>, TError,UpdateAdminHowtoMutationVariables, TContext> => {
+
+const mutationKey = getUpdateAdminHowtoMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAdminHowto>>, UpdateAdminHowtoMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateAdminHowto(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAdminHowtoMutationResult = NonNullable<Awaited<ReturnType<typeof updateAdminHowto>>>
+    export type UpdateAdminHowtoMutationBody = BodyType<HowtoEntryPatch>
+    export type UpdateAdminHowtoMutationError = ErrorType<void>
+    export type UpdateAdminHowtoMutationVariables = {id: string;data: BodyType<HowtoEntryPatch>}
+
+    /**
+ * @summary Partially update a How-to entry
+ */
+export const useUpdateAdminHowto = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAdminHowto>>, TError,UpdateAdminHowtoMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAdminHowto>>,
+        TError,
+        UpdateAdminHowtoMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateAdminHowtoMutationOptions(options));
+    }
+
+export const getDeleteAdminHowtoUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/howto/${id}`
+}
+
+/**
+ * @summary Delete a How-to entry
+ */
+export const deleteAdminHowto = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteAdminHowtoUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteAdminHowtoMutationKey = () => ['deleteAdminHowto'] as const;
+
+export const getDeleteAdminHowtoMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAdminHowto>>, TError,DeleteAdminHowtoMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAdminHowto>>, TError,DeleteAdminHowtoMutationVariables, TContext> => {
+
+const mutationKey = getDeleteAdminHowtoMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAdminHowto>>, DeleteAdminHowtoMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteAdminHowto(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAdminHowtoMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAdminHowto>>>
+
+    export type DeleteAdminHowtoMutationError = ErrorType<void>
+    export type DeleteAdminHowtoMutationVariables = {id: string}
+
+    /**
+ * @summary Delete a How-to entry
+ */
+export const useDeleteAdminHowto = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAdminHowto>>, TError,DeleteAdminHowtoMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAdminHowto>>,
+        TError,
+        DeleteAdminHowtoMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteAdminHowtoMutationOptions(options));
+    }
+
 export const getGetPublishedInsightUrl = (slug: string,) => {
 
 
@@ -1174,6 +1720,80 @@ export function useListAdminInsightMedia<TData = Awaited<ReturnType<typeof listA
 
 
 
+
+export const getDeleteAdminInsightMediaUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/insights/media/${id}`
+}
+
+/**
+ * @summary Delete an unreferenced Insights or How-to media item
+ */
+export const deleteAdminInsightMedia = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteAdminInsightMediaUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteAdminInsightMediaMutationKey = () => ['deleteAdminInsightMedia'] as const;
+
+export const getDeleteAdminInsightMediaMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAdminInsightMedia>>, TError,DeleteAdminInsightMediaMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAdminInsightMedia>>, TError,DeleteAdminInsightMediaMutationVariables, TContext> => {
+
+const mutationKey = getDeleteAdminInsightMediaMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAdminInsightMedia>>, DeleteAdminInsightMediaMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteAdminInsightMedia(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAdminInsightMediaMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAdminInsightMedia>>>
+
+    export type DeleteAdminInsightMediaMutationError = ErrorType<void>
+    export type DeleteAdminInsightMediaMutationVariables = {id: string}
+
+    /**
+ * @summary Delete an unreferenced Insights or How-to media item
+ */
+export const useDeleteAdminInsightMedia = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAdminInsightMedia>>, TError,DeleteAdminInsightMediaMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAdminInsightMedia>>,
+        TError,
+        DeleteAdminInsightMediaMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteAdminInsightMediaMutationOptions(options));
+    }
 
 export const getCreateAdminInsightMediaUrl = () => {
 
@@ -2226,3 +2846,4 @@ export const useRequestInsightUploadUrl = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getRequestInsightUploadUrlMutationOptions(options));
     }
+

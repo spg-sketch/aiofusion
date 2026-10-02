@@ -1050,7 +1050,17 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "PATCH /admin/insights/:id",
   "DELETE /admin/insights/:id",
   "GET /admin/insights/media",
+  "DELETE /admin/insights/media/:id",
   "POST /admin/insights/media/metadata",
+  // How-to reader routes are anonymous; CMS routes enforce verified Insights
+  // editorial access themselves, independent of paid AI/member-role guards.
+  "GET /howto",
+  "GET /howto/:id",
+  "GET /admin/howto",
+  "GET /admin/howto/:id",
+  "POST /admin/howto",
+  "PATCH /admin/howto/:id",
+  "DELETE /admin/howto/:id",
   "POST /storage/uploads/request-url",
   "POST /storage/uploads/direct",
   "GET /storage/objects/*path",

@@ -16,6 +16,8 @@ tags:
     description: Public Insights content and authenticated editorial management.
   - name: Storage
     description: Direct image uploads for the Insights media library.
+  - name: How-to
+    description: Published How-to library and protected editorial management.
 paths:
   /healthz:
     get:
@@ -160,6 +162,105 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/InsightArticle'
+  /howto:
+    get:
+      tags: [How-to]
+      operationId: listPublishedHowto
+      summary: List published How-to entries
+      responses:
+        '200':
+          description: Published entries ordered for display.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/HowtoEntry' }
+  /howto/{id}:
+    get:
+      tags: [How-to]
+      operationId: getPublishedHowto
+      summary: Get a published How-to entry
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Published entry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HowtoEntry' }
+        '404': { description: Entry not found or not published. }
+  /admin/howto:
+    get:
+      tags: [How-to]
+      operationId: listAdminHowto
+      summary: List all How-to entries for editors
+      responses:
+        '200':
+          description: Editorial entries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/HowtoEntry' }
+    post:
+      tags: [How-to]
+      operationId: createAdminHowto
+      summary: Create a How-to entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HowtoEntryInput' }
+      responses:
+        '201':
+          description: Entry created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HowtoEntry' }
+        '400': { description: Invalid entry. }
+        '409': { description: Entry id already exists. }
+  /admin/howto/{id}:
+    get:
+      tags: [How-to]
+      operationId: getAdminHowto
+      summary: Get an entry for editing
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Editorial entry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HowtoEntry' }
+        '404': { description: Entry not found. }
+    patch:
+      tags: [How-to]
+      operationId: updateAdminHowto
+      summary: Partially update a How-to entry
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HowtoEntryPatch' }
+      responses:
+        '200':
+          description: Updated entry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HowtoEntry' }
+        '400': { description: Invalid entry. }
+        '404': { description: Entry not found. }
+    delete:
+      tags: [How-to]
+      operationId: deleteAdminHowto
+      summary: Delete a How-to entry
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Entry deleted. }
+        '404': { description: Entry not found. }
   /insights/{slug}:
     get:
       tags: [Insights]
@@ -284,6 +385,17 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/InsightMedia'
+  /admin/insights/media/{id}:
+    delete:
+      tags: [Insights]
+      operationId: deleteAdminInsightMedia
+      summary: Delete an unreferenced Insights or How-to media item
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Media deleted. }
+        '404': { description: Media not found. }
+        '409': { description: Media is still referenced by content. }
   /admin/insights/media/metadata:
     post:
       tags: [Insights]
@@ -742,6 +854,93 @@ components:
           type: string
         caption:
           type: string
+    HowtoInlineRun:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text: { type: string, maxLength: 12000 }
+        bold: { type: boolean }
+        italic: { type: boolean }
+        href: { type: string, format: uri }
+    HowtoBlock:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [type, runs]
+          properties:
+            type: { type: string, enum: [heading, paragraph, tip] }
+            runs: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/HowtoInlineRun' } }
+        - type: object
+          additionalProperties: false
+          required: [type, number, title, runs]
+          properties:
+            type: { type: string, const: step }
+            number: { type: integer, minimum: 1, maximum: 100 }
+            title: { type: string, maxLength: 300 }
+            runs: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/HowtoInlineRun' } }
+        - type: object
+          additionalProperties: false
+          required: [type, items]
+          properties:
+            type: { type: string, const: list }
+            items: { type: array, maxItems: 100, items: { type: string, maxLength: 4000 } }
+        - type: object
+          additionalProperties: false
+          required: [type, mediaId, altText]
+          properties:
+            type: { type: string, const: image }
+            mediaId: { type: string, minLength: 1, maxLength: 200 }
+            altText: { type: string, maxLength: 1000 }
+            caption: { type: string, maxLength: 2000 }
+            url: { type: [string, 'null'] }
+        - type: object
+          additionalProperties: false
+          required: [type, url]
+          properties:
+            type: { type: string, const: video }
+            url: { type: string, format: uri, maxLength: 2000 }
+            caption: { type: string, maxLength: 2000 }
+    HowtoEntry:
+      type: object
+      required: [id, title, description, type, readTime, displayOrder, status, body, createdAt, updatedAt, publishedAt]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        description: { type: string }
+        type: { type: string, enum: [Article, Guide, Video] }
+        readTime: { type: string }
+        displayOrder: { type: integer }
+        status: { type: string, enum: [draft, published] }
+        body: { type: array, maxItems: 300, items: { $ref: '#/components/schemas/HowtoBlock' } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        publishedAt: { type: [string, 'null'], format: date-time }
+    HowtoEntryInput:
+      type: object
+      additionalProperties: false
+      required: [id, title, description, type, readTime, displayOrder, status, body]
+      properties:
+        id: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 100 }
+        title: { type: string, minLength: 1, maxLength: 300 }
+        description: { type: string, maxLength: 2000 }
+        type: { type: string, enum: [Article, Guide, Video] }
+        readTime: { type: string, maxLength: 100 }
+        displayOrder: { type: integer, minimum: 0, maximum: 1000000 }
+        status: { type: string, enum: [draft, published] }
+        body: { type: array, maxItems: 300, items: { $ref: '#/components/schemas/HowtoBlock' } }
+    HowtoEntryPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title: { type: string, minLength: 1, maxLength: 300 }
+        description: { type: string, maxLength: 2000 }
+        type: { type: string, enum: [Article, Guide, Video] }
+        readTime: { type: string, maxLength: 100 }
+        displayOrder: { type: integer, minimum: 0, maximum: 1000000 }
+        status: { type: string, enum: [draft, published] }
+        body: { type: array, maxItems: 300, items: { $ref: '#/components/schemas/HowtoBlock' } }
     InsightArticle:
       type: object
       required: [id, slug, title, excerpt, tag, body, status, pinned, coverImageUrl, coverImageAlt, seoTitle, seoDescription, focusKeyphrase, canonicalUrl]

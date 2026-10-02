@@ -29,5 +29,6 @@ export * from "./token-usage";
 export * from "./support";
 export * from "./contact-submissions";
 export * from "./insights";
+export * from "./howto";
 // Re-export platform (already included above via "./platform") — the
 // platformEmailVerificationsTable is exported from that file.

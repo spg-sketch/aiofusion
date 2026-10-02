@@ -69,6 +69,7 @@ function PlatformHomePage({
   onManageTeam,
   onManageSubAccounts,
   onInsightsAdmin,
+  onHowtoAdmin,
   onOpenGeorge,
   initialNotice,
   resetToken: resetTokenProp,
@@ -99,6 +100,7 @@ function PlatformHomePage({
   /** Retained for compatibility with older callers; Token Usage now lives inside Manage Accounts. */
   onTokenUsage?: () => void;
   onInsightsAdmin?: () => void;
+  onHowtoAdmin?: () => void;
   onOpenGeorge?: () => void;
   initialNotice?: string;
   resetToken?: string | null;
@@ -987,6 +989,15 @@ function PlatformHomePage({
                       style={{ border: "1.5px solid rgba(255,255,255,0.4)", background: "transparent", color: "white" }}
                     >
                       <FileEdit size={14} /> Edit Insights CMS
+                    </button>
+                  )}
+                  {session.insightsCmsAccess && onHowtoAdmin && (
+                    <button
+                      onClick={onHowtoAdmin}
+                      className="aio-button aio-button--outline min-w-0 px-4 sm:px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white hover:bg-white/10 transition-all"
+                      style={{ border: "1.5px solid rgba(255,255,255,0.4)", background: "transparent", color: "white" }}
+                    >
+                      <BookOpen size={14} /> Manage How-to Library
                     </button>
                   )}
                   {session.role === "admin" && onPrivacyRights && (

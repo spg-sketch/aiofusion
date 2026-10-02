@@ -143,6 +143,669 @@ export const ListPublishedInsightsResponse = zod.array(ListPublishedInsightsResp
 
 
 /**
+ * @summary List published How-to entries
+ */
+export const listPublishedHowtoResponseBodyItemOneRunsItemTextMax = 12000;
+
+export const listPublishedHowtoResponseBodyItemOneRunsMax = 100;
+
+export const listPublishedHowtoResponseBodyItemTwoNumberMax = 100;
+
+export const listPublishedHowtoResponseBodyItemTwoTitleMax = 300;
+
+export const listPublishedHowtoResponseBodyItemTwoRunsItemTextMax = 12000;
+
+export const listPublishedHowtoResponseBodyItemTwoRunsMax = 100;
+
+export const listPublishedHowtoResponseBodyItemThreeItemsItemMax = 4000;
+
+export const listPublishedHowtoResponseBodyItemThreeItemsMax = 100;
+
+export const listPublishedHowtoResponseBodyItemFourMediaIdMax = 200;
+
+export const listPublishedHowtoResponseBodyItemFourAltTextMax = 1000;
+
+export const listPublishedHowtoResponseBodyItemFourCaptionMax = 2000;
+
+export const listPublishedHowtoResponseBodyItemFiveUrlMax = 2000;
+
+export const listPublishedHowtoResponseBodyItemFiveCaptionMax = 2000;
+
+export const listPublishedHowtoResponseBodyMax = 300;
+
+
+
+export const ListPublishedHowtoResponseItem = zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "type": zod.enum(['Article', 'Guide', 'Video']),
+  "readTime": zod.string(),
+  "displayOrder": zod.number().int(),
+  "status": zod.enum(['draft', 'published']),
+  "body": zod.array(zod.union([zod.object({
+  "type": zod.enum(['heading', 'paragraph', 'tip']),
+  "runs": zod.array(zod.object({
+  "text": zod.string().max(listPublishedHowtoResponseBodyItemOneRunsItemTextMax),
+  "bold": zod.boolean().optional(),
+  "italic": zod.boolean().optional(),
+  "href": zod.string().url().optional()
+})).max(listPublishedHowtoResponseBodyItemOneRunsMax)
+}),zod.object({
+  "type": zod.literal("step"),
+  "number": zod.number().int().min(1).max(listPublishedHowtoResponseBodyItemTwoNumberMax),
+  "title": zod.string().max(listPublishedHowtoResponseBodyItemTwoTitleMax),
+  "runs": zod.array(zod.object({
+  "text": zod.string().max(listPublishedHowtoResponseBodyItemTwoRunsItemTextMax),
+  "bold": zod.boolean().optional(),
+  "italic": zod.boolean().optional(),
+  "href": zod.string().url().optional()
+})).max(listPublishedHowtoResponseBodyItemTwoRunsMax)
+}),zod.object({
+  "type": zod.literal("list"),
+  "items": zod.array(zod.string().max(listPublishedHowtoResponseBodyItemThreeItemsItemMax)).max(listPublishedHowtoResponseBodyItemThreeItemsMax)
+}),zod.object({
+  "type": zod.literal("image"),
+  "mediaId": zod.string().min(1).max(listPublishedHowtoResponseBodyItemFourMediaIdMax),
+  "altText": zod.string().max(listPublishedHowtoResponseBodyItemFourAltTextMax),
+  "caption": zod.string().max(listPublishedHowtoResponseBodyItemFourCaptionMax).optional(),
+  "url": zod.string().nullish()
+}),zod.object({
+  "type": zod.literal("video"),
+  "url": zod.string().url().max(listPublishedHowtoResponseBodyItemFiveUrlMax),
+  "caption": zod.string().max(listPublishedHowtoResponseBodyItemFiveCaptionMax).optional()
+})])).max(listPublishedHowtoResponseBodyMax),
+  "createdAt": zod.date(),
+  "updatedAt": zod.date(),
+  "publishedAt": zod.date().nullable()
+})
+export const ListPublishedHowtoResponse = zod.array(ListPublishedHowtoResponseItem)
+
+
+/**
+ * @summary Get a published How-to entry
+ */
+export const GetPublishedHowtoParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const getPublishedHowtoResponseBodyItemOneRunsItemTextMax = 12000;
+
+export const getPublishedHowtoResponseBodyItemOneRunsMax = 100;
+
+export const getPublishedHowtoResponseBodyItemTwoNumberMax = 100;
+
+export const getPublishedHowtoResponseBodyItemTwoTitleMax = 300;
+
+export const getPublishedHowtoResponseBodyItemTwoRunsItemTextMax = 12000;
+
+export const getPublishedHowtoResponseBodyItemTwoRunsMax = 100;
+
+export const getPublishedHowtoResponseBodyItemThreeItemsItemMax = 4000;
+
+export const getPublishedHowtoResponseBodyItemThreeItemsMax = 100;
+
+export const getPublishedHowtoResponseBodyItemFourMediaIdMax = 200;
+
+export const getPublishedHowtoResponseBodyItemFourAltTextMax = 1000;
+
+export const getPublishedHowtoResponseBodyItemFourCaptionMax = 2000;
+
+export const getPublishedHowtoResponseBodyItemFiveUrlMax = 2000;
+
+export const getPublishedHowtoResponseBodyItemFiveCaptionMax = 2000;
+
+export const getPublishedHowtoResponseBodyMax = 300;
+
+
+
+export const GetPublishedHowtoResponse = zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "type": zod.enum(['Article', 'Guide', 'Video']),
+  "readTime": zod.string(),
+  "displayOrder": zod.number().int(),
+  "status": zod.enum(['draft', 'published']),
+  "body": zod.array(zod.union([zod.object({
+  "type": zod.enum(['heading', 'paragraph', 'tip']),
+  "runs": zod.array(zod.object({
+  "text": zod.string().max(getPublishedHowtoResponseBodyItemOneRunsItemTextMax),
+  "bold": zod.boolean().optional(),
+  "italic": zod.boolean().optional(),
+  "href": zod.string().url().optional()
+})).max(getPublishedHowtoResponseBodyItemOneRunsMax)
+}),zod.object({
+  "type": zod.literal("step"),
+  "number": zod.number().int().min(1).max(getPublishedHowtoResponseBodyItemTwoNumberMax),
+  "title": zod.string().max(getPublishedHowtoResponseBodyItemTwoTitleMax),
+  "runs": zod.array(zod.object({
+  "text": zod.string().max(getPublishedHowtoResponseBodyItemTwoRunsItemTextMax),
+  "bold": zod.boolean().optional(),
+  "italic": zod.boolean().optional(),
+  "href": zod.string().url().optional()
+})).max(getPublishedHowtoResponseBodyItemTwoRunsMax)
+}),zod.object({
+  "type": zod.literal("list"),
+  "items": zod.array(zod.string().max(getPublishedHowtoResponseBodyItemThreeItemsItemMax)).max(getPublishedHowtoResponseBodyItemThreeItemsMax)
+}),zod.object({
+  "type": zod.literal("image"),
+  "mediaId": zod.string().min(1).max(getPublishedHowtoResponseBodyItemFourMediaIdMax),
+  "altText": zod.string().max(getPublishedHowtoResponseBodyItemFourAltTextMax),
+  "caption": zod.string().max(getPublishedHowtoResponseBodyItemFourCaptionMax).optional(),
+  "url": zod.string().nullish()
+}),zod.object({
+  "type": zod.literal("video"),
+  "url": zod.string().url().max(getPublishedHowtoResponseBodyItemFiveUrlMax),
+  "caption": zod.string().max(getPublishedHowtoResponseBodyItemFiveCaptionMax).optional()
+})])).max(getPublishedHowtoResponseBodyMax),
+  "createdAt": zod.date(),
+  "updatedAt": zod.date(),
+  "publishedAt": zod.date().nullable()
+})
+
+
+/**
+ * @summary List all How-to entries for editors
+ */
+export const listAdminHowtoResponseBodyItemOneRunsItemTextMax = 12000;
+
+export const listAdminHowtoResponseBodyItemOneRunsMax = 100;
+
+export const listAdminHowtoResponseBodyItemTwoNumberMax = 100;
+
+export const listAdminHowtoResponseBodyItemTwoTitleMax = 300;
+
+export const listAdminHowtoResponseBodyItemTwoRunsItemTextMax = 12000;
+
+export const listAdminHowtoResponseBodyItemTwoRunsMax = 100;
+
+export const listAdminHowtoResponseBodyItemThreeItemsItemMax = 4000;
+
+export const listAdminHowtoResponseBodyItemThreeItemsMax = 100;
+
+export const listAdminHowtoResponseBodyItemFourMediaIdMax = 200;
+
+export const listAdminHowtoResponseBodyItemFourAltTextMax = 1000;
+
+export const listAdminHowtoResponseBodyItemFourCaptionMax = 2000;
+
+export const listAdminHowtoResponseBodyItemFiveUrlMax = 2000;
+
+export const listAdminHowtoResponseBodyItemFiveCaptionMax = 2000;
+
+export const listAdminHowtoResponseBodyMax = 300;
+
+
+
+export const ListAdminHowtoResponseItem = zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "type": zod.enum(['Article', 'Guide', 'Video']),
+  "readTime": zod.string(),
+  "displayOrder": zod.number().int(),
+  "status": zod.enum(['draft', 'published']),
+  "body": zod.array(zod.union([zod.object({
+  "type": zod.enum(['heading', 'paragraph', 'tip']),
+  "runs": zod.array(zod.object({
+  "text": zod.string().max(listAdminHowtoResponseBodyItemOneRunsItemTextMax),
+  "bold": zod.boolean().optional(),
+  "italic": zod.boolean().optional(),
+  "href": zod.string().url().optional()
+})).max(listAdminHowtoResponseBodyItemOneRunsMax)
+}),zod.object({
+  "type": zod.literal("step"),
+  "number": zod.number().int().min(1).max(listAdminHowtoResponseBodyItemTwoNumberMax),
+  "title": zod.string().max(listAdminHowtoResponseBodyItemTwoTitleMax),
+  "runs": zod.array(zod.object({
+  "text": zod.string().max(listAdminHowtoResponseBodyItemTwoRunsItemTextMax),
+  "bold": zod.boolean().optional(),
+  "italic": zod.boolean().optional(),
+  "href": zod.string().url().optional()
+})).max(listAdminHowtoResponseBodyItemTwoRunsMax)
+}),zod.object({
+  "type": zod.literal("list"),
+  "items": zod.array(zod.string().max(listAdminHowtoResponseBodyItemThreeItemsItemMax)).max(listAdminHowtoResponseBodyItemThreeItemsMax)
+}),zod.object({
+  "type": zod.literal("image"),
+  "mediaId": zod.string().min(1).max(listAdminHowtoResponseBodyItemFourMediaIdMax),
+  "altText": zod.string().max(listAdminHowtoResponseBodyItemFourAltTextMax),
+  "caption": zod.string().max(listAdminHowtoResponseBodyItemFourCaptionMax).optional(),
+  "url": zod.string().nullish()
+}),zod.object({
+  "type": zod.literal("video"),
+  "url": zod.string().url().max(listAdminHowtoResponseBodyItemFiveUrlMax),
+  "caption": zod.string().max(listAdminHowtoResponseBodyItemFiveCaptionMax).optional()
+})])).max(listAdminHowtoResponseBodyMax),
+  "createdAt": zod.date(),
+  "updatedAt": zod.date(),
+  "publishedAt": zod.date().nullable()
+})
+export const ListAdminHowtoResponse = zod.array(ListAdminHowtoResponseItem)
+
+
+/**
+ * @summary Create a How-to entry
+ */
+export const createAdminHowtoBodyIdMax = 100;
+
+
+export const createAdminHowtoBodyIdRegExp = new RegExp('^[a-z0-9]+(?:-[a-z0-9]+)*$');
+export const createAdminHowtoBodyTitleMax = 300;
+
+export const createAdminHowtoBodyDescriptionMax = 2000;
+
+export const createAdminHowtoBodyReadTimeMax = 100;
+
+export const createAdminHowtoBodyDisplayOrderMin = 0;
+export const createAdminHowtoBodyDisplayOrderMax = 1000000;
+
+export const createAdminHowtoBodyBodyItemOneRunsItemTextMax = 12000;
+
+export const createAdminHowtoBodyBodyItemOneRunsMax = 100;
+
+export const createAdminHowtoBodyBodyItemTwoNumberMax = 100;
+
+export const createAdminHowtoBodyBodyItemTwoTitleMax = 300;
+
+export const createAdminHowtoBodyBodyItemTwoRunsItemTextMax = 12000;
+
+export const createAdminHowtoBodyBodyItemTwoRunsMax = 100;
+
+export const createAdminHowtoBodyBodyItemThreeItemsItemMax = 4000;
+
+export const createAdminHowtoBodyBodyItemThreeItemsMax = 100;
+
+export const createAdminHowtoBodyBodyItemFourMediaIdMax = 200;
+
+export const createAdminHowtoBodyBodyItemFourAltTextMax = 1000;
+
+export const createAdminHowtoBodyBodyItemFourCaptionMax = 2000;
+
+export const createAdminHowtoBodyBodyItemFiveUrlMax = 2000;
+
+export const createAdminHowtoBodyBodyItemFiveCaptionMax = 2000;
+
+export const createAdminHowtoBodyBodyMax = 300;
+
+
+
+export const CreateAdminHowtoBody = zod.object({
+  "id": zod.string().max(createAdminHowtoBodyIdMax).regex(createAdminHowtoBodyIdRegExp),
+  "title": zod.string().min(1).max(createAdminHowtoBodyTitleMax),
+  "description": zod.string().max(createAdminHowtoBodyDescriptionMax),
+  "type": zod.enum(['Article', 'Guide', 'Video']),
+  "readTime": zod.string().max(createAdminHowtoBodyReadTimeMax),
+  "displayOrder": zod.number().int().min(createAdminHowtoBodyDisplayOrderMin).max(createAdminHowtoBodyDisplayOrderMax),
+  "status": zod.enum(['draft', 'published']),
+  "body": zod.array(zod.union([zod.object({
+  "type": zod.enum(['heading', 'paragraph', 'tip']),
+  "runs": zod.array(zod.object({
+  "text": zod.string().max(createAdminHowtoBodyBodyItemOneRunsItemTextMax),
+  "bold": zod.boolean().optional(),
+  "italic": zod.boolean().optional(),
+  "href": zod.string().url().optional()
+})).max(createAdminHowtoBodyBodyItemOneRunsMax)
+}),zod.object({
+  "type": zod.literal("step"),
+  "number": zod.number().int().min(1).max(createAdminHowtoBodyBodyItemTwoNumberMax),
+  "title": zod.string().max(createAdminHowtoBodyBodyItemTwoTitleMax),
+  "runs": zod.array(zod.object({
+  "text": zod.string().max(createAdminHowtoBodyBodyItemTwoRunsItemTextMax),
+  "bold": zod.boolean().optional(),
+  "italic": zod.boolean().optional(),
+  "href": zod.string().url().optional()
+})).max(createAdminHowtoBodyBodyItemTwoRunsMax)
+}),zod.object({
+  "type": zod.literal("list"),
+  "items": zod.array(zod.string().max(createAdminHowtoBodyBodyItemThreeItemsItemMax)).max(createAdminHowtoBodyBodyItemThreeItemsMax)
+}),zod.object({
+  "type": zod.literal("image"),
+  "mediaId": zod.string().min(1).max(createAdminHowtoBodyBodyItemFourMediaIdMax),
+  "altText": zod.string().max(createAdminHowtoBodyBodyItemFourAltTextMax),
+  "caption": zod.string().max(createAdminHowtoBodyBodyItemFourCaptionMax).optional(),
+  "url": zod.string().nullish()
+}),zod.object({
+  "type": zod.literal("video"),
+  "url": zod.string().url().max(createAdminHowtoBodyBodyItemFiveUrlMax),
+  "caption": zod.string().max(createAdminHowtoBodyBodyItemFiveCaptionMax).optional()
+})])).max(createAdminHowtoBodyBodyMax)
+})
+
+export const createAdminHowtoResponseBodyItemOneRunsItemTextMax = 12000;
+
+export const createAdminHowtoResponseBodyItemOneRunsMax = 100;
+
+export const createAdminHowtoResponseBodyItemTwoNumberMax = 100;
+
+export const createAdminHowtoResponseBodyItemTwoTitleMax = 300;
+
+export const createAdminHowtoResponseBodyItemTwoRunsItemTextMax = 12000;
+
+export const createAdminHowtoResponseBodyItemTwoRunsMax = 100;
+
+export const createAdminHowtoResponseBodyItemThreeItemsItemMax = 4000;
+
+export const createAdminHowtoResponseBodyItemThreeItemsMax = 100;
+
+export const createAdminHowtoResponseBodyItemFourMediaIdMax = 200;
+
+export const createAdminHowtoResponseBodyItemFourAltTextMax = 1000;
+
+export const createAdminHowtoResponseBodyItemFourCaptionMax = 2000;
+
+export const createAdminHowtoResponseBodyItemFiveUrlMax = 2000;
+
+export const createAdminHowtoResponseBodyItemFiveCaptionMax = 2000;
+
+export const createAdminHowtoResponseBodyMax = 300;
+
+
+
+export const CreateAdminHowtoResponse = zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "type": zod.enum(['Article', 'Guide', 'Video']),
+  "readTime": zod.string(),
+  "displayOrder": zod.number().int(),
+  "status": zod.enum(['draft', 'published']),
+  "body": zod.array(zod.union([zod.object({
+  "type": zod.enum(['heading', 'paragraph', 'tip']),
+  "runs": zod.array(zod.object({
+  "text": zod.string().max(createAdminHowtoResponseBodyItemOneRunsItemTextMax),
+  "bold": zod.boolean().optional(),
+  "italic": zod.boolean().optional(),
+  "href": zod.string().url().optional()
+})).max(createAdminHowtoResponseBodyItemOneRunsMax)
+}),zod.object({
+  "type": zod.literal("step"),
+  "number": zod.number().int().min(1).max(createAdminHowtoResponseBodyItemTwoNumberMax),
+  "title": zod.string().max(createAdminHowtoResponseBodyItemTwoTitleMax),
+  "runs": zod.array(zod.object({
+  "text": zod.string().max(createAdminHowtoResponseBodyItemTwoRunsItemTextMax),
+  "bold": zod.boolean().optional(),
+  "italic": zod.boolean().optional(),
+  "href": zod.string().url().optional()
+})).max(createAdminHowtoResponseBodyItemTwoRunsMax)
+}),zod.object({
+  "type": zod.literal("list"),
+  "items": zod.array(zod.string().max(createAdminHowtoResponseBodyItemThreeItemsItemMax)).max(createAdminHowtoResponseBodyItemThreeItemsMax)
+}),zod.object({
+  "type": zod.literal("image"),
+  "mediaId": zod.string().min(1).max(createAdminHowtoResponseBodyItemFourMediaIdMax),
+  "altText": zod.string().max(createAdminHowtoResponseBodyItemFourAltTextMax),
+  "caption": zod.string().max(createAdminHowtoResponseBodyItemFourCaptionMax).optional(),
+  "url": zod.string().nullish()
+}),zod.object({
+  "type": zod.literal("video"),
+  "url": zod.string().url().max(createAdminHowtoResponseBodyItemFiveUrlMax),
+  "caption": zod.string().max(createAdminHowtoResponseBodyItemFiveCaptionMax).optional()
+})])).max(createAdminHowtoResponseBodyMax),
+  "createdAt": zod.date(),
+  "updatedAt": zod.date(),
+  "publishedAt": zod.date().nullable()
+})
+
+
+/**
+ * @summary Get an entry for editing
+ */
+export const GetAdminHowtoParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const getAdminHowtoResponseBodyItemOneRunsItemTextMax = 12000;
+
+export const getAdminHowtoResponseBodyItemOneRunsMax = 100;
+
+export const getAdminHowtoResponseBodyItemTwoNumberMax = 100;
+
+export const getAdminHowtoResponseBodyItemTwoTitleMax = 300;
+
+export const getAdminHowtoResponseBodyItemTwoRunsItemTextMax = 12000;
+
+export const getAdminHowtoResponseBodyItemTwoRunsMax = 100;
+
+export const getAdminHowtoResponseBodyItemThreeItemsItemMax = 4000;
+
+export const getAdminHowtoResponseBodyItemThreeItemsMax = 100;
+
+export const getAdminHowtoResponseBodyItemFourMediaIdMax = 200;
+
+export const getAdminHowtoResponseBodyItemFourAltTextMax = 1000;
+
+export const getAdminHowtoResponseBodyItemFourCaptionMax = 2000;
+
+export const getAdminHowtoResponseBodyItemFiveUrlMax = 2000;
+
+export const getAdminHowtoResponseBodyItemFiveCaptionMax = 2000;
+
+export const getAdminHowtoResponseBodyMax = 300;
+
+
+
+export const GetAdminHowtoResponse = zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "type": zod.enum(['Article', 'Guide', 'Video']),
+  "readTime": zod.string(),
+  "displayOrder": zod.number().int(),
+  "status": zod.enum(['draft', 'published']),
+  "body": zod.array(zod.union([zod.object({
+  "type": zod.enum(['heading', 'paragraph', 'tip']),
+  "runs": zod.array(zod.object({
+  "text": zod.string().max(getAdminHowtoResponseBodyItemOneRunsItemTextMax),
+  "bold": zod.boolean().optional(),
+  "italic": zod.boolean().optional(),
+  "href": zod.string().url().optional()
+})).max(getAdminHowtoResponseBodyItemOneRunsMax)
+}),zod.object({
+  "type": zod.literal("step"),
+  "number": zod.number().int().min(1).max(getAdminHowtoResponseBodyItemTwoNumberMax),
+  "title": zod.string().max(getAdminHowtoResponseBodyItemTwoTitleMax),
+  "runs": zod.array(zod.object({
+  "text": zod.string().max(getAdminHowtoResponseBodyItemTwoRunsItemTextMax),
+  "bold": zod.boolean().optional(),
+  "italic": zod.boolean().optional(),
+  "href": zod.string().url().optional()
+})).max(getAdminHowtoResponseBodyItemTwoRunsMax)
+}),zod.object({
+  "type": zod.literal("list"),
+  "items": zod.array(zod.string().max(getAdminHowtoResponseBodyItemThreeItemsItemMax)).max(getAdminHowtoResponseBodyItemThreeItemsMax)
+}),zod.object({
+  "type": zod.literal("image"),
+  "mediaId": zod.string().min(1).max(getAdminHowtoResponseBodyItemFourMediaIdMax),
+  "altText": zod.string().max(getAdminHowtoResponseBodyItemFourAltTextMax),
+  "caption": zod.string().max(getAdminHowtoResponseBodyItemFourCaptionMax).optional(),
+  "url": zod.string().nullish()
+}),zod.object({
+  "type": zod.literal("video"),
+  "url": zod.string().url().max(getAdminHowtoResponseBodyItemFiveUrlMax),
+  "caption": zod.string().max(getAdminHowtoResponseBodyItemFiveCaptionMax).optional()
+})])).max(getAdminHowtoResponseBodyMax),
+  "createdAt": zod.date(),
+  "updatedAt": zod.date(),
+  "publishedAt": zod.date().nullable()
+})
+
+
+/**
+ * @summary Partially update a How-to entry
+ */
+export const UpdateAdminHowtoParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const updateAdminHowtoBodyTitleMax = 300;
+
+export const updateAdminHowtoBodyDescriptionMax = 2000;
+
+export const updateAdminHowtoBodyReadTimeMax = 100;
+
+export const updateAdminHowtoBodyDisplayOrderMin = 0;
+export const updateAdminHowtoBodyDisplayOrderMax = 1000000;
+
+export const updateAdminHowtoBodyBodyItemOneRunsItemTextMax = 12000;
+
+export const updateAdminHowtoBodyBodyItemOneRunsMax = 100;
+
+export const updateAdminHowtoBodyBodyItemTwoNumberMax = 100;
+
+export const updateAdminHowtoBodyBodyItemTwoTitleMax = 300;
+
+export const updateAdminHowtoBodyBodyItemTwoRunsItemTextMax = 12000;
+
+export const updateAdminHowtoBodyBodyItemTwoRunsMax = 100;
+
+export const updateAdminHowtoBodyBodyItemThreeItemsItemMax = 4000;
+
+export const updateAdminHowtoBodyBodyItemThreeItemsMax = 100;
+
+export const updateAdminHowtoBodyBodyItemFourMediaIdMax = 200;
+
+export const updateAdminHowtoBodyBodyItemFourAltTextMax = 1000;
+
+export const updateAdminHowtoBodyBodyItemFourCaptionMax = 2000;
+
+export const updateAdminHowtoBodyBodyItemFiveUrlMax = 2000;
+
+export const updateAdminHowtoBodyBodyItemFiveCaptionMax = 2000;
+
+export const updateAdminHowtoBodyBodyMax = 300;
+
+
+
+export const UpdateAdminHowtoBody = zod.object({
+  "title": zod.string().min(1).max(updateAdminHowtoBodyTitleMax).optional(),
+  "description": zod.string().max(updateAdminHowtoBodyDescriptionMax).optional(),
+  "type": zod.enum(['Article', 'Guide', 'Video']).optional(),
+  "readTime": zod.string().max(updateAdminHowtoBodyReadTimeMax).optional(),
+  "displayOrder": zod.number().int().min(updateAdminHowtoBodyDisplayOrderMin).max(updateAdminHowtoBodyDisplayOrderMax).optional(),
+  "status": zod.enum(['draft', 'published']).optional(),
+  "body": zod.array(zod.union([zod.object({
+  "type": zod.enum(['heading', 'paragraph', 'tip']),
+  "runs": zod.array(zod.object({
+  "text": zod.string().max(updateAdminHowtoBodyBodyItemOneRunsItemTextMax),
+  "bold": zod.boolean().optional(),
+  "italic": zod.boolean().optional(),
+  "href": zod.string().url().optional()
+})).max(updateAdminHowtoBodyBodyItemOneRunsMax)
+}),zod.object({
+  "type": zod.literal("step"),
+  "number": zod.number().int().min(1).max(updateAdminHowtoBodyBodyItemTwoNumberMax),
+  "title": zod.string().max(updateAdminHowtoBodyBodyItemTwoTitleMax),
+  "runs": zod.array(zod.object({
+  "text": zod.string().max(updateAdminHowtoBodyBodyItemTwoRunsItemTextMax),
+  "bold": zod.boolean().optional(),
+  "italic": zod.boolean().optional(),
+  "href": zod.string().url().optional()
+})).max(updateAdminHowtoBodyBodyItemTwoRunsMax)
+}),zod.object({
+  "type": zod.literal("list"),
+  "items": zod.array(zod.string().max(updateAdminHowtoBodyBodyItemThreeItemsItemMax)).max(updateAdminHowtoBodyBodyItemThreeItemsMax)
+}),zod.object({
+  "type": zod.literal("image"),
+  "mediaId": zod.string().min(1).max(updateAdminHowtoBodyBodyItemFourMediaIdMax),
+  "altText": zod.string().max(updateAdminHowtoBodyBodyItemFourAltTextMax),
+  "caption": zod.string().max(updateAdminHowtoBodyBodyItemFourCaptionMax).optional(),
+  "url": zod.string().nullish()
+}),zod.object({
+  "type": zod.literal("video"),
+  "url": zod.string().url().max(updateAdminHowtoBodyBodyItemFiveUrlMax),
+  "caption": zod.string().max(updateAdminHowtoBodyBodyItemFiveCaptionMax).optional()
+})])).max(updateAdminHowtoBodyBodyMax).optional()
+})
+
+export const updateAdminHowtoResponseBodyItemOneRunsItemTextMax = 12000;
+
+export const updateAdminHowtoResponseBodyItemOneRunsMax = 100;
+
+export const updateAdminHowtoResponseBodyItemTwoNumberMax = 100;
+
+export const updateAdminHowtoResponseBodyItemTwoTitleMax = 300;
+
+export const updateAdminHowtoResponseBodyItemTwoRunsItemTextMax = 12000;
+
+export const updateAdminHowtoResponseBodyItemTwoRunsMax = 100;
+
+export const updateAdminHowtoResponseBodyItemThreeItemsItemMax = 4000;
+
+export const updateAdminHowtoResponseBodyItemThreeItemsMax = 100;
+
+export const updateAdminHowtoResponseBodyItemFourMediaIdMax = 200;
+
+export const updateAdminHowtoResponseBodyItemFourAltTextMax = 1000;
+
+export const updateAdminHowtoResponseBodyItemFourCaptionMax = 2000;
+
+export const updateAdminHowtoResponseBodyItemFiveUrlMax = 2000;
+
+export const updateAdminHowtoResponseBodyItemFiveCaptionMax = 2000;
+
+export const updateAdminHowtoResponseBodyMax = 300;
+
+
+
+export const UpdateAdminHowtoResponse = zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "description": zod.string(),
+  "type": zod.enum(['Article', 'Guide', 'Video']),
+  "readTime": zod.string(),
+  "displayOrder": zod.number().int(),
+  "status": zod.enum(['draft', 'published']),
+  "body": zod.array(zod.union([zod.object({
+  "type": zod.enum(['heading', 'paragraph', 'tip']),
+  "runs": zod.array(zod.object({
+  "text": zod.string().max(updateAdminHowtoResponseBodyItemOneRunsItemTextMax),
+  "bold": zod.boolean().optional(),
+  "italic": zod.boolean().optional(),
+  "href": zod.string().url().optional()
+})).max(updateAdminHowtoResponseBodyItemOneRunsMax)
+}),zod.object({
+  "type": zod.literal("step"),
+  "number": zod.number().int().min(1).max(updateAdminHowtoResponseBodyItemTwoNumberMax),
+  "title": zod.string().max(updateAdminHowtoResponseBodyItemTwoTitleMax),
+  "runs": zod.array(zod.object({
+  "text": zod.string().max(updateAdminHowtoResponseBodyItemTwoRunsItemTextMax),
+  "bold": zod.boolean().optional(),
+  "italic": zod.boolean().optional(),
+  "href": zod.string().url().optional()
+})).max(updateAdminHowtoResponseBodyItemTwoRunsMax)
+}),zod.object({
+  "type": zod.literal("list"),
+  "items": zod.array(zod.string().max(updateAdminHowtoResponseBodyItemThreeItemsItemMax)).max(updateAdminHowtoResponseBodyItemThreeItemsMax)
+}),zod.object({
+  "type": zod.literal("image"),
+  "mediaId": zod.string().min(1).max(updateAdminHowtoResponseBodyItemFourMediaIdMax),
+  "altText": zod.string().max(updateAdminHowtoResponseBodyItemFourAltTextMax),
+  "caption": zod.string().max(updateAdminHowtoResponseBodyItemFourCaptionMax).optional(),
+  "url": zod.string().nullish()
+}),zod.object({
+  "type": zod.literal("video"),
+  "url": zod.string().url().max(updateAdminHowtoResponseBodyItemFiveUrlMax),
+  "caption": zod.string().max(updateAdminHowtoResponseBodyItemFiveCaptionMax).optional()
+})])).max(updateAdminHowtoResponseBodyMax),
+  "createdAt": zod.date(),
+  "updatedAt": zod.date(),
+  "publishedAt": zod.date().nullable()
+})
+
+
+/**
+ * @summary Delete a How-to entry
+ */
+export const DeleteAdminHowtoParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteAdminHowtoResponse = zod.void()
+
+
+/**
  * @summary Get a published Insights story by slug
  */
 export const GetPublishedInsightParams = zod.object({
@@ -373,6 +1036,16 @@ export const ListAdminInsightMediaResponseItem = zod.object({
   "createdAt": zod.date()
 })
 export const ListAdminInsightMediaResponse = zod.array(ListAdminInsightMediaResponseItem)
+
+
+/**
+ * @summary Delete an unreferenced Insights or How-to media item
+ */
+export const DeleteAdminInsightMediaParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteAdminInsightMediaResponse = zod.void()
 
 
 /**
@@ -734,3 +1407,5 @@ export const RequestInsightUploadUrlResponse = zod.object({
   "uploadURL": zod.string().url(),
   "objectPath": zod.string()
 })
+
+

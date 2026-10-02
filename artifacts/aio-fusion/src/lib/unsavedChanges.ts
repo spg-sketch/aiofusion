@@ -1,5 +1,5 @@
 export type UnsavedEditorRegistration = {
-  editor: "creator" | "optimiser";
+  editor: "creator" | "optimiser" | "howto";
   dirty: boolean;
   busy: boolean;
   save: () => Promise<{ ok: boolean; error?: string }>;
