@@ -1,5 +1,133 @@
 import { expect, test } from "@playwright/test";
 
+test("guide images upload, replace, remove and persist through the real CMS", async ({ page, browser, request }) => {
+  test.setTimeout(120_000);
+  expect((await request.get("/api/admin/insights/media")).status()).toBe(401);
+  expect((await request.post("/api/storage/uploads/direct", { data: {} })).status()).toBe(401);
+  await page.goto("/platform");
+  await page.getByPlaceholder("Email or username").fill("howto-editor@aiofusion.ai");
+  await page.getByPlaceholder("Password", { exact: true }).fill("release-harness-password");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByRole("button", { name: "Manage How-to Library", exact: true }).click();
+  await page.getByTestId("button-new-entry").click();
+  await page.getByTestId("input-title").fill("Image upload guide");
+  await page.getByTestId("input-description").fill("Synthetic images in an isolated database only.");
+  const box = page.getByRole("textbox", { name: "Guide content", exact: true });
+  await box.fill("Before screenshot.");
+  await box.press("End");
+  await box.press("Enter");
+  await page.keyboard.insertText("After screenshot.");
+  await box.press("Control+Home");
+  await box.press("End");
+  const originalText = await box.textContent();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const addImage = page.getByRole("button", { name: "Add image", exact: true });
+  await expect(addImage).toHaveText("Add image");
+  await addImage.click();
+  const library = page.getByRole("dialog", { name: "Media Library" });
+  await expect(library).toBeVisible();
+  await page.getByRole("button", { name: "Close media library" }).click();
+  await expect(box).toHaveText(originalText!);
+  await expect(box.locator("img")).toHaveCount(0);
+
+  // Generate valid raster bytes, not fake uploads or mocked API responses.
+  const fixtures = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 32; canvas.height = 32;
+    const context = canvas.getContext("2d")!;
+    context.fillStyle = "#c8497a"; context.fillRect(0, 0, 32, 32);
+    return ["image/png", "image/jpeg", "image/webp"].map((type) => ({
+      type, base64: canvas.toDataURL(type).split(",")[1]!,
+    }));
+  });
+  const upload = async (index: number) => {
+    const fixture = fixtures[index]!;
+    const extension = ["png", "jpg", "webp"][index];
+    await library.getByLabel("Upload image", { exact: true }).setInputFiles({
+      name: `howto-synthetic.${extension}`, mimeType: fixture.type,
+      buffer: Buffer.from(fixture.base64, "base64"),
+    });
+    await expect(library).toHaveCount(0);
+  };
+  await addImage.click();
+  await library.getByLabel("Upload image").setInputFiles({
+    name: "unsupported.gif", mimeType: "image/gif", buffer: Buffer.from("GIF89a"),
+  });
+  await expect(library.getByRole("alert")).toContainText("Choose a PNG, JPEG or WEBP");
+  await expect(box).toHaveText(originalText!);
+  await upload(0);
+  await expect(box.locator("img")).toHaveCount(1);
+  // The saved insertion point is between the two paragraphs, not at the end.
+  const sequence = await box.locator(":scope > *").evaluateAll((nodes) => nodes.map((node) => ({
+    tag: node.tagName, text: node.textContent,
+  })));
+  const imagePosition = sequence.findIndex((node) => node.tag === "FIGURE");
+  expect(sequence.slice(0, imagePosition).some((node) => node.text === "Before screenshot.")).toBe(true);
+  expect(sequence.slice(imagePosition + 1).some((node) => node.text === "After screenshot.")).toBe(true);
+  await box.locator("img").click();
+  await page.getByLabel("Image description", { exact: true }).fill("Synthetic settings screenshot");
+  await page.getByLabel("Caption", { exact: true }).fill("Choose the correct settings");
+  const pngUrl = await box.locator("img").getAttribute("src");
+  await page.getByRole("button", { name: "Change image", exact: true }).click();
+  await upload(1);
+  await expect(box.locator("img")).toHaveCount(1);
+  await expect(box.locator("img")).not.toHaveAttribute("src", pngUrl!);
+  await expect(box.locator("img")).toHaveAttribute("alt", "Synthetic settings screenshot");
+  await expect(box.locator("figcaption")).toHaveText("Choose the correct settings");
+  await page.screenshot({ path: "test-results/howto-images-mobile.png", fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  // Add is distinct from Change: a selected image must not be overwritten.
+  await box.locator("img").click();
+  await addImage.click();
+  await library.getByRole("button", { name: "Select image howto-synthetic.png", exact: true }).click();
+  await expect(box.locator("img")).toHaveCount(2);
+  await box.locator("img").last().click();
+  await page.getByRole("button", { name: "Remove selected media", exact: true }).click();
+  await expect(box.locator("img")).toHaveCount(1);
+  await expect(box).toContainText("Before screenshot.");
+  await expect(box).toContainText("After screenshot.");
+  await box.locator("img").click();
+  await page.getByRole("button", { name: "Change image", exact: true }).click();
+  await upload(2);
+  await expect(box.locator("img")).toHaveAttribute("alt", "Synthetic settings screenshot");
+  const finalUrl = await box.locator("img").getAttribute("src");
+  const imageResponse = await request.get(finalUrl!);
+  expect(imageResponse.status()).toBe(200);
+  expect(imageResponse.headers()["content-type"]).toContain("image/webp");
+
+  await page.getByTestId("button-save").click();
+  await expect(page.getByTestId("save-status")).toContainText(/saved/i);
+  await page.reload();
+  await page.getByTestId("row-entry-image-upload-guide").click();
+  await expect(box.locator("img")).toHaveAttribute("src", finalUrl!);
+  await expect(box.locator("img")).toHaveAttribute("alt", "Synthetic settings screenshot");
+  await expect(box.locator("figcaption")).toHaveText("Choose the correct settings");
+  await page.getByTestId("tab-preview").click();
+  await expect(page.getByTestId("preview").getByRole("img", { name: "Synthetic settings screenshot" })).toBeVisible();
+  await expect(page.getByTestId("preview")).toContainText("Choose the correct settings");
+  await page.getByTestId("tab-edit").click();
+  await page.getByTestId("button-publish").click();
+  await expect(page.getByTestId("entry-status")).toHaveText("published");
+  await page.screenshot({ path: "test-results/howto-images-desktop.png", fullPage: true });
+
+  const reader = await browser.newContext();
+  const readerPage = await reader.newPage();
+  await readerPage.goto("http://127.0.0.1:5000/guidance");
+  await readerPage.getByTestId("card-howto-image-upload-guide").click();
+  await expect(readerPage.locator("article").getByRole("img", { name: "Synthetic settings screenshot" })).toBeVisible();
+  await expect(readerPage.locator("article")).toContainText("Choose the correct settings");
+  await expect(readerPage.locator("article")).toContainText("Before screenshot.");
+  await expect(readerPage.locator("article")).toContainText("After screenshot.");
+  await reader.close();
+  // All tests share the harness database. Do not leave a published fixture
+  // behind for the next test's six-guide baseline assertion.
+  await page.getByTestId("button-delete").click();
+  await page.getByTestId("button-confirm-delete").click();
+  await expect(page.getByTestId("row-entry-image-upload-guide")).toHaveCount(0);
+  expect((await request.get("/api/howto/image-upload-guide")).status()).toBe(404);
+});
+
 test("one-box guide supports clipboard paste, selection, Enter, formatting and reload", async ({ page, context }) => {
   test.setTimeout(120_000);
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
@@ -104,6 +232,10 @@ test("isolated editorial publish/read-back preserves permissions and public Insi
   await ownerPage.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(ownerPage.getByRole("button", { name: "Project Hub", exact: true })).toBeVisible();
   expect(await ownerPage.evaluate(async () => (await fetch("/api/admin/howto", { credentials: "include" })).status)).toBe(403);
+  expect(await ownerPage.evaluate(async () => (await fetch("/api/admin/insights/media", { credentials: "include" })).status)).toBe(403);
+  expect(await ownerPage.evaluate(async () => (await fetch("/api/storage/uploads/direct", {
+    method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: "{}",
+  })).status)).toBe(403);
   await ownerContext.close();
 
   // Actual UI sign-in. The fixture is a verified staff identity with a content

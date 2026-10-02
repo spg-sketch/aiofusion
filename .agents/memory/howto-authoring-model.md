@@ -14,3 +14,9 @@ Do not equate one editing surface with storing arbitrary HTML or discarding the 
 **Why:** Existing guides and shared media references must remain compatible; the editing interface can change without rewriting saved content or loosening its validation.
 
 **How to apply:** Keep compatibility and media-reference preservation explicit in future editor changes.
+
+The How-to CMS should make adding images as discoverable as it is in the Insights CMS, within the same continuous editing box.
+
+**Why:** The user reported that Insights offered image uploads but How-to appeared not to, despite its existing icon-only image tool.
+
+**How to apply:** Keep a plainly labelled image action and preserve the shared upload/library workflow when changing the editor.

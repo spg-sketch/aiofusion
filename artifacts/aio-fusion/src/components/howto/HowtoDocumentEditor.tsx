@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Node, mergeAttributes, isNodeSelection } from "@tiptap/core";
+import { Node, mergeAttributes, isNodeSelection, type Editor } from "@tiptap/core";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Bold, Italic, Link2, Link2Off, List, ListOrdered, Undo2, Redo2, Image, Video, Lightbulb, Trash2 } from "lucide-react";
@@ -99,6 +99,10 @@ export function HowtoDocumentEditor({ body, onChange }: Props) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [linkError, setLinkError] = useState("");
+  const imageTarget = useRef<{
+    bookmark: ReturnType<Editor["state"]["selection"]["getBookmark"]>;
+    replace: boolean;
+  } | null>(null);
 
   const editor = useEditor({
     extensions: howtoEditorExtensions,
@@ -153,6 +157,14 @@ export function HowtoDocumentEditor({ body, onChange }: Props) {
   const insertBlock = (type: string, attrs?: Record<string, unknown>) => {
     editor.chain().focus().insertContent([{ type, ...(attrs ? { attrs } : {}) }, { type: "paragraph" }]).run();
   };
+  const openImages = (replace = false) => {
+    imageTarget.current = { bookmark: editor.state.selection.getBookmark(), replace };
+    setMediaOpen(true);
+  };
+  const closeImages = () => {
+    setMediaOpen(false);
+    imageTarget.current = null;
+  };
   const selectedMedia = state.nodeType === "howtoImage" || state.nodeType === "howtoVideo";
   const selectedStep = state.nodeType === "howtoStep";
 
@@ -179,13 +191,18 @@ export function HowtoDocumentEditor({ body, onChange }: Props) {
         {tool("Bullet list", () => editor.chain().focus().toggleBulletList().run(), <List size={16} />, state.bullet)}
         {tool("Numbered list", () => editor.chain().focus().toggleOrderedList().run(), <ListOrdered size={16} />, state.numbered)}
         {tool("Insert tip", () => insertBlock("howtoTip"), <Lightbulb size={16} />)}
-        {tool("Insert image", () => setMediaOpen(true), <Image size={16} />)}
+        <button type="button" className="howto-editor-tool howto-editor-add-image"
+          onMouseDown={(event) => event.preventDefault()} onClick={() => openImages()}
+          aria-haspopup="dialog">
+          <Image size={16} aria-hidden="true" /> Add image
+        </button>
         {tool("Insert video link", () => insertBlock("howtoVideo"), <Video size={16} />)}
         {tool("Undo", () => editor.chain().focus().undo().run(), <Undo2 size={16} />, false, !editor.can().undo())}
         {tool("Redo", () => editor.chain().focus().redo().run(), <Redo2 size={16} />, false, !editor.can().redo())}
       </div>
       <p className="px-3 py-2 text-[12px]" style={{ color: vars.g500 }}>
         Paste your whole guide here, then use the toolbar to choose headings, body text and formatting.
+        Use Add image to upload from your device or choose from the media library.
       </p>
       {linkOpen && (
         <div className="howto-editor-inspector" role="group" aria-label="Edit link">
@@ -206,7 +223,8 @@ export function HowtoDocumentEditor({ body, onChange }: Props) {
           {selectedStep && <label>Step title<input aria-label="Step title" value={state.attrs.title ?? ""}
             onChange={(event) => editor.commands.updateAttributes("howtoStep", { title: event.target.value })} /></label>}
           {state.nodeType === "howtoImage" && <>
-            <button type="button" className="aio-button aio-button--outline aio-button--compact" onClick={() => setMediaOpen(true)}>Change image</button>
+            <button type="button" className="aio-button aio-button--outline aio-button--compact"
+              onMouseDown={(event) => event.preventDefault()} onClick={() => openImages(true)}>Change image</button>
             <label>Image description<input aria-label="Image description" value={state.attrs.altText ?? ""}
               onChange={(event) => editor.commands.updateAttributes("howtoImage", { altText: event.target.value })} /></label>
           </>}
@@ -218,15 +236,28 @@ export function HowtoDocumentEditor({ body, onChange }: Props) {
             onClick={() => editor.chain().focus().deleteSelection().run()}><Trash2 size={14} /> Remove</button>}
         </div>
       )}
-      {mediaOpen && <MediaLibraryModal onClose={() => setMediaOpen(false)} onSelect={(media) => {
-        const current = editor.isActive("howtoImage") ? editor.getAttributes("howtoImage") : null;
+      {mediaOpen && <MediaLibraryModal onClose={closeImages} onSelect={(media) => {
+        const target = imageTarget.current;
+        if (!target) return;
+        // The picker takes focus. Restore the original insertion/replacement
+        // target instead of relying on whichever selection remains afterwards.
+        const selection = target.bookmark.resolve(editor.state.doc);
+        editor.commands.command(({ tr }) => {
+          tr.setSelection(selection);
+          return true;
+        });
+        const current = target.replace && editor.isActive("howtoImage") ? editor.getAttributes("howtoImage") : null;
         const attrs = {
           mediaId: media.id, url: media.publicUrl,
           altText: current?.altText || media.altText || "", caption: current?.caption ?? "",
         };
         if (current) editor.chain().focus().updateAttributes("howtoImage", attrs).run();
-        else insertBlock("howtoImage", attrs);
-        setMediaOpen(false);
+        else {
+          // Add never replaces selected text or a selected existing image.
+          editor.commands.setTextSelection(selection.to);
+          insertBlock("howtoImage", attrs);
+        }
+        closeImages();
       }} />}
     </div>
   );

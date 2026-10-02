@@ -2,6 +2,7 @@
 .howto-editor-toolbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
 .howto-editor-toolbar select { border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; margin-right: 6px; background: white; font-size: 13px; }
 .howto-editor-tool { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; color: #20334c; }
+.howto-editor-add-image { width: auto; min-height: 36px; height: auto; gap: 6px; padding: 6px 10px; font-size: 13px; font-weight: 600; color: #a3315d; background: #fdf2f8; border-color: #c8497a; white-space: nowrap; }
 .howto-editor-tool[aria-pressed="true"] { background: #fce7f3; border-color: #c8497a; }
 .howto-editor-tool:disabled { opacity: .35; }
 .howto-editor-tool:focus-visible, .howto-editor-toolbar select:focus-visible { outline: 2px solid #c8497a; outline-offset: 2px; }

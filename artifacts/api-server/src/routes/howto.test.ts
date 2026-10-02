@@ -163,6 +163,18 @@ describe("How-to CMS", () => {
     expect((await request("/admin/howto/example", { method: "DELETE" }, "admin")).status).toBe(204);
   });
 
+  it("keeps the shared image library and upload endpoints restricted to editorial identities", async () => {
+    for (const role of ["member", "agency", "client", "content", "viewer", "billing"]) {
+      expect((await request("/admin/insights/media", {}, role)).status).toBe(403);
+      expect((await request("/storage/uploads/direct", {
+        method: "POST", body: JSON.stringify({}),
+      }, role)).status).toBe(403);
+      expect((await request("/storage/uploads/request-url", {
+        method: "POST", body: JSON.stringify({}),
+      }, role)).status).toBe(403);
+    }
+  });
+
   it("returns 409 for a duplicate id even when Drizzle wraps the database error", async () => {
     const input = entry("duplicate-guide", "draft");
     expect((await request("/admin/howto", { method: "POST", body: JSON.stringify(input) }, "admin")).status).toBe(201);
