@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import { useCreateAdminHowto, useUpdateAdminHowto, useDeleteAdminHowto } from "@workspace/api-client-react";
-import { AlertCircle, ArrowDown, ArrowUp, Check, Image as ImageIcon, Loader2, Plus, Trash2 } from "lucide-react";
+import { AlertCircle, Check, Loader2, Trash2 } from "lucide-react";
 import { vars } from "../../marketing/vars";
-import { MediaLibraryModal } from "../MediaLibraryModal";
-import { RichRunsEditor } from "./RichRunsEditor";
+import { HowtoDocumentEditor } from "./HowtoDocumentEditor";
 import { BodyView } from "./HowtoBlocks";
 import { HOWTO_TYPES, buildPayload, draftFromEntry, emptyDraft, errorMessage, slugify, validateDraft } from "../../lib/howto";
-import type { HowtoBlock, HowtoDraft, HowtoEntry, HowtoStatus, HowtoType } from "../../lib/howto";
+import type { HowtoDraft, HowtoEntry, HowtoStatus, HowtoType } from "../../lib/howto";
 
 export type EditorControl = { save: () => Promise<{ ok: boolean; error?: string }> };
 export type EditorState = { dirty: boolean; busy: boolean };
@@ -20,25 +19,12 @@ type Props = {
   controlRef: MutableRefObject<EditorControl | null>;
 };
 
-const NEW_BLOCKS: Array<{ label: string; make: () => HowtoBlock }> = [
-  { label: "Heading", make: () => ({ type: "heading", runs: [{ text: "" }] }) },
-  { label: "Paragraph", make: () => ({ type: "paragraph", runs: [{ text: "" }] }) },
-  { label: "List", make: () => ({ type: "list", items: [""] }) },
-  { label: "Numbered step", make: () => ({ type: "step", number: 1, title: "", runs: [{ text: "" }] }) },
-  { label: "Tip", make: () => ({ type: "tip", runs: [{ text: "" }] }) },
-  { label: "Image", make: () => ({ type: "image", mediaId: "", altText: "" }) },
-  { label: "Video link", make: () => ({ type: "video", url: "https://" }) },
-];
-
 const fieldCls = "w-full rounded-lg border px-3 py-2.5 text-[14px] bg-white";
 const labelCls = "block text-[12px] font-semibold mb-1.5";
-let keySeq = 0;
-const newKey = () => `b${++keySeq}`;
 
 export function HowtoEditor({ entry, onPersisted, onDeleted, onStateChange, controlRef }: Props) {
   const initial = entry ? draftFromEntry(entry) : emptyDraft();
   const [draft, setDraft] = useState<HowtoDraft>(initial);
-  const [keys, setKeys] = useState<string[]>(() => initial.body.map(newKey));
   const [persistedId, setPersistedId] = useState<string | null>(entry?.id ?? null);
   const [baseline, setBaseline] = useState(() => JSON.stringify(initial));
   const [idTouched, setIdTouched] = useState(!!entry);
@@ -47,7 +33,6 @@ export function HowtoEditor({ entry, onPersisted, onDeleted, onStateChange, cont
   const [saveError, setSaveError] = useState<string[]>([]);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [mediaTarget, setMediaTarget] = useState<number | null>(null);
 
   const createM = useCreateAdminHowto();
   const updateM = useUpdateAdminHowto();
@@ -67,8 +52,6 @@ export function HowtoEditor({ entry, onPersisted, onDeleted, onStateChange, cont
   useEffect(() => { onStateChange({ dirty, busy }); }, [dirty, busy, onStateChange]);
 
   const set = (patch: Partial<HowtoDraft>) => { setDraft((d) => ({ ...d, ...patch })); setSavedAt(null); };
-  const setBody = (body: HowtoBlock[]) => set({ body });
-  const updateBlock = (i: number, b: HowtoBlock) => setBody(draft.body.map((x, j) => (j === i ? b : x)));
 
   const persist = useCallback(async (status: HowtoStatus, kind: "save" | "publish" | "unpublish"): Promise<{ ok: boolean; error?: string }> => {
     if (pendingRef.current) return { ok: false, error: "A change is already being saved." };
@@ -126,17 +109,6 @@ export function HowtoEditor({ entry, onPersisted, onDeleted, onStateChange, cont
     }
   };
 
-  const move = (i: number, d: 1 | -1) => {
-    const j = i + d;
-    if (j < 0 || j >= draft.body.length) return;
-    const body = [...draft.body]; [body[i], body[j]] = [body[j], body[i]];
-    const k = [...keys]; [k[i], k[j]] = [k[j], k[i]];
-    setKeys(k); setBody(body);
-  };
-  const remove = (i: number) => { setKeys(keys.filter((_, j) => j !== i)); setBody(draft.body.filter((_, j) => j !== i)); };
-  const add = (make: () => HowtoBlock) => { setKeys([...keys, newKey()]); setBody([...draft.body, make()]); };
-
-  let stepCounter = 0;
   const published = draft.status === "published";
 
   return (
@@ -234,94 +206,12 @@ export function HowtoEditor({ entry, onPersisted, onDeleted, onStateChange, cont
           </section>
 
           <section aria-label="Entry body" className="grid gap-4">
-            <h2 className="aio-type-section-title">Body</h2>
-            {draft.body.length === 0 && (
-              <div className="rounded-2xl border border-dashed px-6 py-10 text-center text-[13px]" style={{ borderColor: vars.g300, color: vars.g500 }}>No content yet. Add a block below to start writing.</div>
-            )}
-            {draft.body.map((b, i) => {
-              if (b.type === "step") stepCounter += 1;
-              const title = b.type === "step" ? `Step ${stepCounter}` : b.type === "list" ? "List" : b.type === "image" ? "Image" : b.type === "video" ? "Video link" : b.type[0].toUpperCase() + b.type.slice(1);
-              return (
-                <div key={keys[i]} className="rounded-2xl border p-4 sm:p-5" style={{ background: "white", borderColor: vars.g200 }} data-testid={`block-editor-${i}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="aio-type-eyebrow" style={{ color: vars.accent }}>{title}</span>
-                    <div className="flex gap-1">
-                      <button className="aio-button aio-button--text aio-button--compact" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move block ${i + 1} up`}><ArrowUp size={14} /></button>
-                      <button className="aio-button aio-button--text aio-button--compact" onClick={() => move(i, 1)} disabled={i === draft.body.length - 1} aria-label={`Move block ${i + 1} down`}><ArrowDown size={14} /></button>
-                      <button className="aio-button aio-button--text aio-button--compact" onClick={() => remove(i)} aria-label={`Remove block ${i + 1}`} style={{ color: "#b91c1c" }}><Trash2 size={14} /></button>
-                    </div>
-                  </div>
-                  {(b.type === "heading" || b.type === "paragraph" || b.type === "tip") && (
-                    <RichRunsEditor runs={b.runs} label={`${title} text`} testId={`rich-${i}`} placeholder={`Write the ${b.type}`} onChange={(runs) => updateBlock(i, { ...b, runs })} />
-                  )}
-                  {b.type === "step" && (
-                    <div className="grid gap-3">
-                      <div>
-                        <label htmlFor={`step-title-${i}`} className={labelCls} style={{ color: vars.g600 }}>Step title</label>
-                        <input id={`step-title-${i}`} data-testid={`step-title-${i}`} className={fieldCls} style={{ borderColor: vars.fieldBorder }} value={b.title} onChange={(e) => updateBlock(i, { ...b, title: e.target.value })} />
-                      </div>
-                      <RichRunsEditor runs={b.runs} label={`Step ${stepCounter} text`} testId={`rich-${i}`} placeholder="Describe the step" onChange={(runs) => updateBlock(i, { ...b, runs })} />
-                    </div>
-                  )}
-                  {b.type === "list" && (
-                    <div className="grid gap-2">
-                      {b.items.map((it, k) => (
-                        <div key={k} className="flex gap-2">
-                          <input aria-label={`List item ${k + 1}`} className={fieldCls} style={{ borderColor: vars.fieldBorder }} value={it} onChange={(e) => updateBlock(i, { ...b, items: b.items.map((x, y) => (y === k ? e.target.value : x)) })} />
-                          <button className="aio-button aio-button--text aio-button--compact" aria-label={`Remove list item ${k + 1}`} onClick={() => updateBlock(i, { ...b, items: b.items.filter((_, y) => y !== k) })}><Trash2 size={14} /></button>
-                        </div>
-                      ))}
-                      <button className="aio-button aio-button--outline aio-button--compact w-fit" onClick={() => updateBlock(i, { ...b, items: [...b.items, ""] })}><Plus size={14} /> Add item</button>
-                    </div>
-                  )}
-                  {b.type === "image" && (
-                    <div className="grid gap-3">
-                      {b.mediaId && b.url ? <img src={b.url} alt={b.altText} className="max-h-56 rounded-lg border object-contain" style={{ borderColor: vars.g200 }} /> : null}
-                      <button className="aio-button aio-button--outline aio-button--compact w-fit" onClick={() => setMediaTarget(i)} data-testid={`choose-image-${i}`}><ImageIcon size={14} /> {b.mediaId ? "Change image" : "Choose image"}</button>
-                      <div>
-                        <label htmlFor={`alt-${i}`} className={labelCls} style={{ color: vars.g600 }}>Alt text (describe the image for screen readers)</label>
-                        <input id={`alt-${i}`} data-testid={`alt-${i}`} className={fieldCls} style={{ borderColor: vars.fieldBorder }} value={b.altText} onChange={(e) => updateBlock(i, { ...b, altText: e.target.value })} />
-                      </div>
-                      <div>
-                        <label htmlFor={`cap-${i}`} className={labelCls} style={{ color: vars.g600 }}>Caption (optional)</label>
-                        <input id={`cap-${i}`} className={fieldCls} style={{ borderColor: vars.fieldBorder }} value={b.caption ?? ""} onChange={(e) => updateBlock(i, { ...b, caption: e.target.value })} />
-                      </div>
-                    </div>
-                  )}
-                  {b.type === "video" && (
-                    <div className="grid gap-3">
-                      <div>
-                        <label htmlFor={`vurl-${i}`} className={labelCls} style={{ color: vars.g600 }}>Video link (https only)</label>
-                        <input id={`vurl-${i}`} data-testid={`video-url-${i}`} className={fieldCls} style={{ borderColor: vars.fieldBorder }} value={b.url} onChange={(e) => updateBlock(i, { ...b, url: e.target.value })} />
-                      </div>
-                      <div>
-                        <label htmlFor={`vcap-${i}`} className={labelCls} style={{ color: vars.g600 }}>Link text (optional)</label>
-                        <input id={`vcap-${i}`} className={fieldCls} style={{ borderColor: vars.fieldBorder }} value={b.caption ?? ""} onChange={(e) => updateBlock(i, { ...b, caption: e.target.value })} />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Add a block">
-              {NEW_BLOCKS.map((nb) => (
-                <button key={nb.label} className="aio-button aio-button--outline aio-button--compact" onClick={() => add(nb.make)} data-testid={`add-${nb.label.toLowerCase().replace(/\s+/g, "-")}`}><Plus size={14} /> {nb.label}</button>
-              ))}
-            </div>
+            <h2 className="aio-type-section-title">Guide content</h2>
+            <HowtoDocumentEditor body={draft.body} onChange={(body) => set({ body })} />
           </section>
         </div>
       )}
 
-      {mediaTarget !== null && (
-        <MediaLibraryModal
-          onClose={() => setMediaTarget(null)}
-          onSelect={(m) => {
-            const b = draft.body[mediaTarget];
-            if (b?.type === "image") updateBlock(mediaTarget, { ...b, mediaId: m.id, url: m.publicUrl, altText: b.altText || m.altText || "" });
-            setMediaTarget(null);
-          }}
-        />
-      )}
     </div>
   );
 }

@@ -166,4 +166,48 @@ describe("Media Research-only result summary", () => {
     render(<RecommendationCard item={item} researchSummary />);
     expect(screen.getByText(/A specialist angle for this story/)).toBeTruthy();
   });
+
+  it("does not let the generic matching template override a recorded contact opportunity", () => {
+    const item = recommendation();
+    item.assessment!.suggestedAngle = null;
+    item.phraseAttributions = [{
+      phraseId: "phrase-1", phraseText: "How can a small business get a professional website built quickly without spending a fortune?",
+      exactPhraseMatch: "Topic overlap", articleFit: "Recorded business coverage", publicationAuthorityContext: "",
+      suggestedPlacementAngle: "Frame the article around How can a small business get a professional website built quickly without spending a fortune? for the contact's business · economy coverage.",
+    }];
+    item.contact.mediaOpportunities = [{ title: "Small business costs", angle: "Compare the upfront price and ongoing running costs of a small business website." }];
+    render(<RecommendationCard item={item} researchSummary />);
+    expect(screen.getByText(/Compare the upfront price/)).toBeTruthy();
+    expect(screen.queryByText(/Frame the article around/)).toBeNull();
+    expect(item.phraseAttributions[0].suggestedPlacementAngle).toContain("Frame the article around");
+  });
+
+  it("restores a discovery opportunity from a saved result instead of its generic template", () => {
+    const item = recommendation();
+    item.assessment!.suggestedAngle = null;
+    item.phraseAttributions = [{
+      phraseId: "phrase-1", phraseText: "Small business website", exactPhraseMatch: "Topic overlap",
+      articleFit: "Recorded business coverage", publicationAuthorityContext: "",
+      suggestedPlacementAngle: "Frame the article around Small business website for the contact's economy coverage.",
+    }];
+    item.contact.provenance = { latestPublicDiscovery: {
+      mediaOpportunities: [{ title: "Discovered opportunity", angle: "A practical checklist for choosing a website supplier and avoiding hidden fees." }],
+    } };
+    render(<RecommendationCard item={item} researchSummary />);
+    expect(screen.getByText(/A practical checklist/)).toBeTruthy();
+    expect(screen.queryByText(/Frame the article around/)).toBeNull();
+  });
+
+  it("states that no tailored angle is recorded when only the generic template is available", () => {
+    const item = recommendation();
+    item.assessment!.suggestedAngle = null;
+    item.phraseAttributions = [{
+      phraseId: "phrase-1", phraseText: "Small business website", exactPhraseMatch: "Topic overlap",
+      articleFit: "Recorded business coverage", publicationAuthorityContext: "",
+      suggestedPlacementAngle: "Frame the article around Small business website for the contact's economy coverage.",
+    }];
+    render(<RecommendationCard item={item} researchSummary />);
+    expect(screen.getByText(/No tailored pitch angle is recorded/)).toBeTruthy();
+    expect(screen.queryByText(/Frame the article around/)).toBeNull();
+  });
 });

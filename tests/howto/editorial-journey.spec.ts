@@ -1,5 +1,88 @@
 import { expect, test } from "@playwright/test";
 
+test("one-box guide supports clipboard paste, selection, Enter, formatting and reload", async ({ page, context }) => {
+  test.setTimeout(120_000);
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/platform");
+  await page.getByPlaceholder("Email or username").fill("howto-editor@aiofusion.ai");
+  await page.getByPlaceholder("Password", { exact: true }).fill("release-harness-password");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByRole("button", { name: "Manage How-to Library", exact: true }).click();
+  await page.getByTestId("button-new-entry").click();
+  await page.getByTestId("input-title").fill("Single box clipboard guide");
+  await page.getByTestId("input-description").fill("An isolated editor regression test.");
+  const box = page.getByRole("textbox", { name: "Guide content", exact: true });
+  await expect(box).toHaveCount(1);
+  const copy = "Create your first article\n\nChoose the correct project.\n\nReview and save your draft.";
+  await page.evaluate(async (text) => navigator.clipboard.writeText(text), copy);
+  await box.click();
+  await box.press("Control+v");
+  await expect(box).toContainText("Choose the correct project.");
+  await box.press("Control+Home");
+  await box.press("Home");
+  await box.press("Shift+End");
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe("Create your first article");
+  await page.getByLabel("Text format", { exact: true }).selectOption("heading");
+  await expect(box.locator("h2")).toHaveText("Create your first article");
+  await box.press("Control+End");
+  await box.press("Enter");
+  await page.keyboard.insertText("Final check.");
+  await expect(box.locator("p").last()).toHaveText("Final check.");
+  await box.press("Home");
+  await box.press("Shift+End");
+  await page.getByRole("button", { name: "Bold", exact: true }).click();
+  await expect(box.locator("strong")).toHaveText("Final check.");
+  await page.getByRole("button", { name: "Italic", exact: true }).click();
+  await expect(box.locator("em")).toHaveText("Final check.");
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(box.locator("em")).toHaveCount(0);
+  await page.getByRole("button", { name: "Redo", exact: true }).click();
+  await expect(box.locator("em")).toHaveText("Final check.");
+  await page.getByRole("button", { name: "Add or edit link", exact: true }).click();
+  await page.getByLabel("Link URL", { exact: true }).fill("https://example.com/guide");
+  await page.getByRole("button", { name: "Apply link", exact: true }).click();
+  await expect(box.locator("a")).toHaveAttribute("href", "https://example.com/guide");
+  await page.getByTestId("tab-preview").click();
+  await expect(page.getByTestId("preview").locator("h2")).toHaveText("Create your first article");
+  await expect(page.getByTestId("preview").locator("strong")).toHaveText("Final check.");
+  await page.getByTestId("tab-edit").click();
+  await page.getByTestId("button-save").click();
+  await expect(page.getByTestId("save-status")).toContainText(/saved/i);
+  await page.reload();
+  await page.getByTestId("row-entry-single-box-clipboard-guide").click();
+  await expect(box.locator("h2")).toHaveText("Create your first article");
+  await expect(box.locator("a strong")).toHaveText("Final check.");
+  await expect(box).toContainText("Review and save your draft.");
+
+  // Rich clipboard content is parsed into the supported schema, not inserted as raw HTML.
+  await box.press("Control+End");
+  await box.press("Enter");
+  await page.evaluate(async () => {
+    await navigator.clipboard.write([new ClipboardItem({
+      "text/html": new Blob(['<p><strong>Pasted bold</strong> and <em>italic</em> <a href="javascript:alert(1)">unsafe link</a></p>'], { type: "text/html" }),
+      "text/plain": new Blob(["Pasted bold and italic unsafe link"], { type: "text/plain" }),
+    })]);
+  });
+  await box.press("Control+v");
+  await expect(box.locator("strong").last()).toHaveText("Pasted bold");
+  await expect(box.locator('a[href^="javascript:"]')).toHaveCount(0);
+  await page.getByTestId("button-save").click();
+  await expect(page.getByTestId("save-status")).toContainText(/saved/i);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await box.press("Control+End");
+  await box.press("Enter");
+  await page.keyboard.insertText("Mobile edit.");
+  await page.getByTestId("button-save").click();
+  await expect(page.getByTestId("save-status")).toContainText(/saved/i);
+  await page.screenshot({ path: "test-results/howto-single-box-mobile.png", fullPage: true });
+  await page.reload();
+  await page.getByTestId("row-entry-single-box-clipboard-guide").click();
+  await expect(box).toContainText("Mobile edit.");
+  await page.getByTestId("button-delete").click();
+  await page.getByTestId("button-confirm-delete").click();
+  await expect(page.getByTestId("row-entry-single-box-clipboard-guide")).toHaveCount(0);
+});
+
 test("isolated editorial publish/read-back preserves permissions and public Insights", async ({ page, browser, request }) => {
   test.setTimeout(120_000);
   const initialInsights = await (await request.get("/api/insights")).json();
@@ -39,10 +122,10 @@ test("isolated editorial publish/read-back preserves permissions and public Insi
   await page.getByTestId("input-title").fill("Isolated browser guide");
   await page.getByTestId("input-description").fill("A disposable guide for the isolated editorial journey.");
   await page.getByTestId("input-order").fill("7");
-  await page.getByTestId("rich-0").fill("Instructions retained across browsers.");
+  await page.getByTestId("howto-document").fill("Instructions retained across browsers.");
   // Exercise formatting without HTML or JSON authoring.
-  await page.getByTestId("rich-0").press("Control+a");
-  await page.getByTestId("rich-0-bold").click();
+  await page.getByTestId("howto-document").press("Control+a");
+  await page.getByRole("button", { name: "Bold", exact: true }).click();
   await page.getByTestId("tab-preview").click();
   await expect(page.getByTestId("preview").locator("strong")).toHaveText("Instructions retained across browsers.");
   await page.getByTestId("tab-edit").click();
@@ -55,7 +138,7 @@ test("isolated editorial publish/read-back preserves permissions and public Insi
   await page.reload();
   await page.getByTestId("row-entry-isolated-browser-guide").click();
   await expect(page.getByTestId("input-title")).toHaveValue("Isolated browser guide");
-  await expect(page.getByTestId("rich-0")).toHaveText("Instructions retained across browsers.");
+  await expect(page.getByTestId("howto-document")).toHaveText("Instructions retained across browsers.");
   await page.getByTestId("button-publish").click();
   await expect(page.getByTestId("entry-status")).toHaveText("published");
   await page.screenshot({ path: "test-results/howto-editor.png", fullPage: true });

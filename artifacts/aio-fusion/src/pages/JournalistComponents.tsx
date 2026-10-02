@@ -3,6 +3,7 @@ import { vars } from "../marketing/vars";
 import { Mail, Phone, MapPin, Globe, ExternalLink, Linkedin, Twitter, Clock, Edit, Check, Bookmark, Database, Target, Award, Shield, FileText, ChevronDown, ChevronRight, AlertCircle, Ban, Loader2 } from "lucide-react";
 import { MiniDonut } from "./shared";
 import { MediaResearchResultSummary } from "./MediaResearchResultSummary";
+import { selectMediaPitchAngle } from "../lib/mediaPitchAngle";
 
 export type Contact = {
   id: number;
@@ -495,7 +496,7 @@ export function RecommendationCard({
   const contactName = [c.firstName, c.lastName].map((part) => part?.trim()).filter(Boolean).join(" ");
   const hasRecordedName = contactName.length > 0;
   const latestDiscovery = c.provenance?.latestPublicDiscovery;
-  const suggestedAngle = item.assessment?.suggestedAngle || item.phraseAttributions?.[0]?.suggestedPlacementAngle || c.mediaOpportunities?.[0]?.angle || latestDiscovery?.mediaOpportunities?.[0]?.angle;
+  const suggestedAngle = selectMediaPitchAngle(item);
   return (
     <div className="p-5 border-b last:border-b-0 bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200 }}>
       {researchSummary && <MediaResearchResultSummary

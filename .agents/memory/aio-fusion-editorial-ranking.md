@@ -27,6 +27,12 @@ Public search suggestions are not checked reporting evidence. A recency claim re
 
 **How to apply:** Test HTML extraction through the real evidence shape. Keep inferred angles labelled as suggestions, not facts or proof of AI visibility gains. Source failures must not erase previous checked evidence or refresh its successful-check timestamp.
 
+Generic phrase/coverage overlap explanations must not be presented as tailored pitch angles or take priority over substantive recorded suggestions.
+
+**Why:** The user reported that the pitch field merely repeated their targeting question and a broad coverage category, obscuring more specific saved opportunities.
+
+**How to apply:** Prefer substantive recorded pitch suggestions. When none exists, state that no tailored angle is recorded rather than disguising a matching template as a personalised recommendation. Preserve matching provenance and historical outreach evidence.
+
 Enrichment must be explicit, bounded, owner/project/article-scoped and concurrency-safe.
 
 **Why:** Slow network work can finish after a newer brief or evidence check. Saving a new targeting brief must not discard prior source history, and a failed provider request must not masquerade as a completed check.
