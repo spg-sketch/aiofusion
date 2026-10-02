@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearAiRuns } from "../lib/aiRunLifecycle";
 import { savedDiagnosticsKey } from "../lib/diagnosticStore";
+import { recordAuditDuration } from "../lib/auditTiming";
 import { DiagnosticPage } from "./DiagnosticPage";
 
 vi.mock("../IntakeForm", () => ({
@@ -33,6 +34,7 @@ describe("DiagnosticPage run lifecycle", () => {
   let now = 1_800_000_000_000;
 
   beforeEach(() => {
+    now = 1_800_000_000_000;
     localStorage.clear();
     clearAiRuns();
     vi.spyOn(Date, "now").mockImplementation(() => now);
@@ -49,6 +51,48 @@ describe("DiagnosticPage run lifecycle", () => {
     clearAiRuns();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it("sets countdown-based expectations before starting the audit", () => {
+    render(<DiagnosticPage activeClient={client} sessionId="person-a" workspaceId="workspace-a" />);
+    fireEvent.click(screen.getByRole("button", { name: "Run Diagnostic" }));
+
+    const explanation = screen.getByText(
+      "This will fetch and analyse your website. This can take several minutes. An estimated countdown will appear when the audit starts.",
+    );
+    expect(explanation).toBeInTheDocument();
+    expect(explanation.textContent).not.toContain("\u2014");
+    expect(screen.queryByText(/15[–-]30 seconds/i)).not.toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes("/api/diagnostic"))).toHaveLength(0);
+  });
+
+  it("pairs the running explanation with the measured estimate and still-working overtime state", async () => {
+    recordAuditDuration("visibility", 150_000);
+    recordAuditDuration("visibility", 168_000);
+    const first = render(<DiagnosticPage activeClient={client} sessionId="person-a" workspaceId="workspace-a" />);
+    fireEvent.change(screen.getByPlaceholderText("https://example.com"), {
+      target: { value: "https://example.test" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run Diagnostic" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    const runningCopy = "Your website is being analysed alongside the figures measured directly from your page, to produce a comprehensive GEO authority score. This can take several minutes. Follow the countdown below for the estimated time remaining. Some audits may take longer.";
+    expect(await screen.findByText(runningCopy)).toBeInTheDocument();
+    expect(screen.getByText(runningCopy).textContent).not.toContain("\u2014");
+    expect(screen.queryByText(/15[–-]30 seconds/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText("2:39")).toHaveLength(2);
+    expect(screen.getByText(/Based on your last 2 audits/)).toBeInTheDocument();
+
+    first.unmount();
+    now += 171_000;
+    render(<DiagnosticPage activeClient={client} sessionId="person-a" workspaceId="workspace-a" />);
+
+    expect(await screen.findByText("Still working - the estimate has passed")).toBeInTheDocument();
+    expect(screen.getByText("+0:12")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("is taking longer than expected and is still in progress");
+    expect(screen.getByText(runningCopy)).toBeInTheDocument();
+    expect(screen.queryByText(/15[–-]30 seconds/i)).not.toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes("/api/diagnostic"))).toHaveLength(1);
   });
 
   it("keeps the wall-clock countdown when the user leaves and returns", async () => {

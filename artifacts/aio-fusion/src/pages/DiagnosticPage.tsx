@@ -418,7 +418,7 @@ Engine used:
                 <p className="text-xs font-light mb-3" style={{ color: "#7A5800" }}>
                   {diagPendingForce
                     ? "This will override the 21-day lock. Continue?"
-                    : "This will fetch and analyse your website. It typically takes 15–30 seconds."}
+                    : "This will fetch and analyse your website. This can take several minutes. An estimated countdown will appear when the audit starts."}
                 </p>
                 <div className="flex items-center gap-2">
                   <button
@@ -475,7 +475,7 @@ Engine used:
                   <span className="text-sm font-medium" style={{ color: vars.navy }}>Running analysis</span>
                 </div>
                 <p className="text-xs font-light" style={{ color: vars.g500 }}>
-                  Your website is being analysed alongside the figures measured directly from your page, to produce a comprehensive GEO authority score. This typically takes 15–30 seconds.
+                  Your website is being analysed alongside the figures measured directly from your page, to produce a comprehensive GEO authority score. This can take several minutes. Follow the countdown below for the estimated time remaining. Some audits may take longer.
                 </p>
                 <div className="mt-4">
                   <CountdownBanner
