@@ -3,6 +3,12 @@ name: AIO Fusion in-tab AI run ownership
 description: Rules for long-running AI operations that must survive route changes without crossing identity boundaries.
 ---
 
+Use the countdown as the single numeric duration estimate for audit work. Confirmation and running explanations should set expectations without promising a separate fixed range.
+
+**Why:** Hardcoded GEO and Earned Media/LLM timing ranges contradicted their starting countdowns and remained misleading when learned estimates changed.
+
+**How to apply:** Check both confirmation and running states against the captured countdown estimate, including learned histories and overtime. Do not describe a source-only correction as published.
+
 Long-running AI work within an open tab belongs to an app-level lifecycle rather than a routed page. Bind every run to the authenticated session, workspace, project, operation and stable subject. Capture immutable inputs, the absolute start time and the starting estimate once. Treat a closed response stream as an uncertain transport outcome, not proof that server work failed.
 
 **Why:** Routed pages unmount during normal navigation. Page-owned promises lose progress and recovery state, while remounted interval counters restart estimates and background throttling distorts elapsed time. Identity changes can also let late results appear or write in the wrong workspace unless the lifecycle invalidates them. Staging requests can be aborted at the 300-second transport limit while the server still completes and persists the operation moments later.

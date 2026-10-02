@@ -2020,7 +2020,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 <p className="text-xs font-light mb-3" style={{ color: "#7A5800" }}>
                   {pendingForce
                     ? "This will override the 21-day lock. Continue?"
-                    : `This will query Claude and ChatGPT across ${targetPhraseCount} question${targetPhraseCount === 1 ? "" : "s"}. It typically takes 1–3 minutes.`}
+                    : `This will query Claude and ChatGPT across ${targetPhraseCount} question${targetPhraseCount === 1 ? "" : "s"}. This can take several minutes. An estimated countdown will appear when the audit starts.`}
                 </p>
                 <div className="flex items-center gap-2">
                   <button
@@ -2164,7 +2164,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                   <span className="text-sm font-medium" style={{ color: vars.navy }}>Running visibility probes</span>
                 </div>
                 <p className="text-xs font-light" style={{ color: vars.g500 }}>
-                  We're running real sector questions as blind probes and counting whether {probeName || activeClient.name} appears in the responses. This typically takes 1–3 minutes.
+                  We're running real sector questions as blind probes and counting whether {probeName || activeClient.name} appears in the responses. Follow the countdown above for the estimated time remaining. Some audits may take longer.
                 </p>
               </div>
             )}
