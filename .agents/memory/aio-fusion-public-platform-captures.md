@@ -14,3 +14,9 @@ When anonymising an approved marketing capture, replace both the borrowed logo a
 **Why:** The neutral dashboard treatment with distinct example scores was approved, but leaving a brand name below a removed logo would undermine the anonymisation.
 
 **How to apply:** Inspect every logo, caption, score and internal account-role label in the final rendered image, not just the source component. Public previews should not show an administrator identity beside a neutral sample client.
+
+The user likes the existing angled Mac screens on the homepage. Preserve their screen orientation when refining the stand or frame.
+
+**Why:** The user said they loved the screen angle and asked for the base to face the same way, rather than changing the screen.
+
+**How to apply:** Keep future stand adjustments consistent with the approved screen perspective unless the user requests a different angle.
