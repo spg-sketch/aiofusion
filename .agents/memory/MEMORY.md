@@ -83,6 +83,7 @@
 - [Incremental journalist discovery runs](aio-fusion-journalist-discovery-runs.md) — live searches persist server-side; expose pending, verified and failed evidence while checks continue.
 - [Journalist privacy outcomes](aio-fusion-journalist-privacy.md) — rights decisions require verified identity, explicit human-selected matches and scope; suppressions must be rechecked at every write boundary.
 - [Editor unsaved-change guards](aio-fusion-unsaved-editor-guards.md) — compare exact saved snapshots and defer navigation centrally; saved handoffs must bypass stale registration state.
+- [Rich editor clipboard safety](rich-editor-clipboard-safety.md) — JSON round trips do not prove clipboard safety; custom ProseMirror blocks need lossless editor HTML parsing.
 - [Database-backed media targeting](aio-fusion-database-media-targeting.md) — content targeting uses populated accessible contact industries; Project Set-Up 1.9 only supplies exact-match defaults.
 - [Article quality scoring](aio-fusion-article-quality-scoring.md) — keep it distinct from campaign Authority and invalidate persisted assessments when content or scoring context changes.
 - [Selective migration approvals](selective-migration-approval-boundaries.md) — exact digest approval governs writes; legacy workspace foreign keys require reviewed SSO bridge or workspace omission.

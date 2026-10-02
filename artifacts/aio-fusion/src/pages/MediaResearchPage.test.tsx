@@ -386,6 +386,9 @@ describe("MediaResearchPage live discovery", () => {
      fireEvent.click(discoverButton);
 
     expect(await screen.findByText("Jane Reporter")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByTestId("status-live-discovery")).toBeNull());
+    expect(screen.queryByText(/Elapsed this session:/)).toBeNull();
+    expect(screen.queryByTestId("empty-live-discovery")).toBeNull();
     expect(screen.queryByText("Phrase fit and recorded topic overlap")).toBeNull();
     expect(screen.getAllByText("Recorded topic/keyword overlap:").length).toBeGreaterThan(0);
     const recommendationRequests = requests.filter((request) => request.url.endsWith("/store/media-db/recommendations"));
@@ -487,10 +490,112 @@ describe("MediaResearchPage live discovery", () => {
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
     fireEvent.click(await screen.findByTestId("button-discover-live"));
     expect(await screen.findByRole("button", { name: "Retry live search" })).toBeTruthy();
+    expect(screen.getByTestId("status-live-discovery")).toBeTruthy();
+    expect(screen.queryByTestId("empty-live-discovery")).toBeNull();
     expect(screen.getByText(/Server-persisted runs are rehydrated when you return to this article.*timeout does not delete them/i)).toBeTruthy();
     featureState.quotaFailure = "";
     fireEvent.click(screen.getByRole("button", { name: "Retry live search" }));
     expect(await screen.findByText("Jane Reporter")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByTestId("status-live-discovery")).toBeNull());
+  });
+
+  it("shows concise empty feedback after success and recovers it on remount without a timer", async () => {
+    delayedRequests.live = true;
+    const first = render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    fireEvent.click(await screen.findByTestId("button-discover-live"));
+    await waitFor(() => expect(delayedRequests.liveCalls).toHaveLength(1));
+    expect(screen.queryByTestId("empty-live-discovery")).toBeNull();
+    await act(async () => delayedRequests.liveCalls[0].resolve(new Response(JSON.stringify({
+      ok: true, items: [], discoveryToken: "",
+    }), { status: 200 })));
+
+    expect(await screen.findByTestId("empty-live-discovery")).toHaveTextContent("No additional journalists found");
+    expect(screen.queryByTestId("status-live-discovery")).toBeNull();
+    expect(screen.queryByText(/Elapsed this session:/)).toBeNull();
+    expect(screen.getByText("Decision Contact")).toBeTruthy();
+    first.unmount();
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByTestId("empty-live-discovery")).toBeTruthy();
+    expect(screen.queryByTestId("status-live-discovery")).toBeNull();
+
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-2" } });
+    expect(screen.queryByTestId("empty-live-discovery")).toBeNull();
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByTestId("empty-live-discovery")).toBeTruthy();
+    fireEvent.click(await screen.findByTestId("button-discover-live"));
+    await waitFor(() => expect(delayedRequests.liveCalls).toHaveLength(2));
+    expect(screen.queryByTestId("empty-live-discovery")).toBeNull();
+    expect(screen.getByTestId("status-live-discovery")).toBeTruthy();
+    await act(async () => delayedRequests.liveCalls[1].resolve(new Response(JSON.stringify({
+      ok: true, items: [], discoveryToken: "",
+    }), { status: 200 })));
+    expect(await screen.findByTestId("empty-live-discovery")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("button-new-research-search"));
+    expect(screen.queryByTestId("empty-live-discovery")).toBeNull();
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    await waitFor(() => expect(screen.getByTestId("button-discover-live")).not.toBeDisabled());
+    expect(screen.queryByTestId("empty-live-discovery")).toBeNull();
+  });
+
+  it("rehydrates article-scoped empty server history and suppresses it after reset", async () => {
+    serverDiscoveryHistory.latest = { runId: "empty-run", status: "succeeded", items: [], discoveryToken: "" };
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByTestId("empty-live-discovery")).toHaveTextContent("No additional journalists found");
+    expect(screen.queryByTestId("status-live-discovery")).toBeNull();
+    expect(screen.queryByText(/Elapsed this session:/)).toBeNull();
+    serverDiscoveryHistory.latest = null;
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-2" } });
+    expect(screen.queryByTestId("empty-live-discovery")).toBeNull();
+    serverDiscoveryHistory.latest = { runId: "empty-run", status: "succeeded", items: [], discoveryToken: "" };
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByTestId("empty-live-discovery")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("button-new-research-search"));
+    expect(screen.queryByTestId("empty-live-discovery")).toBeNull();
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    await waitFor(() => expect(screen.getByTestId("button-discover-live")).not.toBeDisabled());
+    expect(screen.queryByTestId("empty-live-discovery")).toBeNull();
+  });
+
+  it("keeps incremental evidence counts and review controls visible while the search runs", async () => {
+    const originalFetch = globalThis.fetch;
+    let finishPoll: ((response: Response) => void) | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/content/media-discover")) {
+        return new Response(JSON.stringify({ runId: "incremental-run" }), { status: 200 });
+      }
+      if (url.endsWith("/content/journalist-search-runs/incremental-run")) {
+        if (!finishPoll) {
+          finishPoll = () => {};
+          return new Response(JSON.stringify({
+            status: "running", discoveryToken: "verified-token",
+            items: [
+              { ...candidate, evidenceStatus: "verified" },
+              { ...candidate, candidateKey: "pending-2", firstName: "Pending", evidenceStatus: "pending" },
+            ],
+          }), { status: 200 });
+        }
+        return new Promise<Response>((resolve) => { finishPoll = resolve; });
+      }
+      return originalFetch(input, init);
+    }));
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    fireEvent.click(await screen.findByTestId("button-discover-live"));
+    expect(await screen.findByText("Jane Reporter")).toBeTruthy();
+    expect(screen.getByTestId("status-live-discovery")).toHaveTextContent("Checking evidence");
+    expect(screen.getByTestId("status-live-discovery")).toHaveTextContent("1 verified, 1 pending");
+    expect(screen.getByRole("button", { name: /send for review/i })).not.toBeDisabled();
+    expect(screen.queryByTestId("empty-live-discovery")).toBeNull();
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith("/journalist-search-runs/incremental-run"))).toHaveLength(2), { timeout: 3000 });
+    await act(async () => finishPoll?.(new Response(JSON.stringify({
+      status: "succeeded", items: [{ ...candidate, evidenceStatus: "verified" }], discoveryToken: "verified-token",
+    }), { status: 200 })));
+    await waitFor(() => expect(screen.queryByTestId("status-live-discovery")).toBeNull());
+    expect(screen.getByText("Jane Reporter")).toBeTruthy();
   });
 
   it("offers the same explained online search after a persisted no-result match and runs it explicitly", async () => {
@@ -1282,6 +1387,8 @@ describe("MediaResearchPage live discovery", () => {
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
 
     expect(await screen.findByText("Recovered Server History Reporter")).toBeTruthy();
+    expect(screen.queryByTestId("status-live-discovery")).toBeNull();
+    expect(screen.queryByTestId("empty-live-discovery")).toBeNull();
     expect(requests.some((request) => request.url.includes("/content/journalist-search-runs/latest"))).toBe(true);
   });
 

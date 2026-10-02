@@ -329,6 +329,7 @@ function MediaResearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [liveItems, setLiveItems] = useState<LiveDiscovery[]>([]);
+  const [remoteEmptyDiscoveryKey, setRemoteEmptyDiscoveryKey] = useState("");
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveNow, setLiveNow] = useState(() => Date.now());
   const [savedDiscoveries, setSavedDiscoveries] = useState<Record<string, DiscoveryReviewStatus>>({});
@@ -359,6 +360,12 @@ function MediaResearchPage() {
     { projectId: string; storyKey: string },
     DiscoveryRunResult
   >(discoveryRunKey);
+  const showEmptyDiscovery = Boolean(selected)
+    && !liveLoading
+    && liveItems.length === 0
+    && (discoveryRun
+      ? discoveryRun.status === "succeeded" && discoveryRun.result?.items.length === 0
+      : remoteEmptyDiscoveryKey === discoveryRunKey);
   const discoveryStartedAt = discoveryRun?.startedAt;
   const liveElapsedSeconds = discoveryStartedAt ? Math.max(0, Math.floor((liveNow - discoveryStartedAt) / 1000)) : 0;
   const verifiedLiveCount = liveItems.filter((item) => item.evidenceStatus === "verified" || !item.evidenceStatus).length;
@@ -841,6 +848,7 @@ function MediaResearchPage() {
       if (!response.ok || cancelled || researchGeneration.current !== generationAtStart || serverDiscoveryWasReset(discoveryRunKey)) return;
       const remote = await response.json() as RemoteDiscoveryRun | null;
       if (!remote || cancelled || researchGeneration.current !== generationAtStart || serverDiscoveryWasReset(discoveryRunKey) || activeStoryRef.current !== `${projectId}:${storyKey}`) return;
+      setRemoteEmptyDiscoveryKey(remote.status === "succeeded" && Array.isArray(remote.items) && remote.items.length === 0 ? discoveryRunKey : "");
       setLiveItems(Array.isArray(remote.items) ? remote.items : []);
       if (remote.discoveryToken) setDiscoveryToken(remote.discoveryToken);
       if (remote.status === "running" && !discoveryRun) {
@@ -884,6 +892,7 @@ function MediaResearchPage() {
 
   const discoverLive = async () => {
     if (!selected || !projectId) { setError("Choose a saved article and active project before searching the web."); return; }
+    setRemoteEmptyDiscoveryKey("");
     const generation = researchGeneration.current;
     const criteria = generatedCriteria(
       selected,
@@ -1133,6 +1142,7 @@ function MediaResearchPage() {
     editBrief({ regions });
   };
   const resetResearch = () => {
+    setRemoteEmptyDiscoveryKey("");
     // Invalidate UI ownership before scheduling state changes so late
     // responses cannot repopulate a cleared search. Drop this page's
     // app-owned snapshot and suppress server-history rehydration for this
@@ -1178,7 +1188,7 @@ function MediaResearchPage() {
     && (databaseCategories.status !== "ready" || brief.publicationTypes.some((sector) => !databaseCategories.categories.includes(sector)));
   const sectorSelectionUnresolved = brief.publicationTypes.length > 0
     && (databaseCategories.status === "loading" || hasUnavailableSavedSector);
-  const showResetSearch = recommendationHasRun || items.length > 0 || liveItems.length > 0 || loading || liveLoading
+  const showResetSearch = showEmptyDiscovery || recommendationHasRun || items.length > 0 || liveItems.length > 0 || loading || liveLoading
     || ["running", "succeeded", "failed"].includes(discoveryRun?.status || "");
   const contactCard = (item: Recommendation, shortlist = false) => {
     const sharedScoreCount = shortlist ? 1 : items.filter((candidate) => candidate.score === item.score).length;
@@ -1269,7 +1279,8 @@ function MediaResearchPage() {
       </section>
      {error && <p data-testid="status-research-error" className="p-3 rounded bg-white text-[12px] mb-5" style={{ color: vars.red }}>{error}</p>}
       {bookmarkLoadError && <p data-testid="status-bookmark-load-error" className="p-3 rounded bg-white text-[12px] mb-5 text-amber-800">Saved status could not be loaded: {bookmarkLoadError}. Saving remains available. <button type="button" onClick={() => setBookmarkLoadAttempt((attempt) => attempt + 1)} className="underline">Retry saved status</button></p>}
-     {(liveLoading || discoveryRun?.status === "failed" || discoveryRun?.status === "succeeded") && <section className="bg-white rounded-xl border p-4 mb-5" style={{ borderColor: vars.g200 }} data-testid="status-live-discovery">
+     {showEmptyDiscovery && <p role="status" data-testid="empty-live-discovery" className="text-[13px] text-white mb-5">No additional journalists found</p>}
+     {(liveLoading || discoveryRun?.status === "failed") && <section className="bg-white rounded-xl border p-4 mb-5" style={{ borderColor: vars.g200 }} data-testid="status-live-discovery">
        <div className="flex flex-wrap items-center justify-between gap-3">
          <div>
            <p className="text-[13px] font-semibold text-slate-800">{liveStage || "Live search"}</p>

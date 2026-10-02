@@ -10,7 +10,7 @@ function inline(runs: InlineRun[]): JSONContent[] {
     if (run.italic) marks.push({ type: "italic" });
     if (run.href && isHttps(run.href)) marks.push({ type: "link", attrs: { href: run.href } });
     return run.text.split("\n").flatMap((text, i) => [
-      ...(i ? [{ type: "hardBreak" }] : []),
+      ...(i ? [{ type: "hardBreak", ...(marks.length ? { marks } : {}) }] : []),
       ...(text ? [{ type: "text", text, ...(marks.length ? { marks } : {}) }] : []),
     ]);
   });
@@ -56,12 +56,8 @@ export function blocksToDocument(body: HowtoBlock[]): JSONContent {
 function runsFromNodes(nodes: JSONContent[] = []): InlineRun[] {
   const runs: InlineRun[] = [];
   for (const node of nodes) {
-    if (node.type === "hardBreak") {
-      const last = runs.at(-1);
-      if (last && !last.bold && !last.italic && !last.href) last.text += "\n";
-      else runs.push({ text: "\n" });
-    } else if (node.type === "text" && node.text) {
-      const run: InlineRun = { text: node.text };
+    if (node.type === "hardBreak" || (node.type === "text" && node.text)) {
+      const run: InlineRun = { text: node.type === "hardBreak" ? "\n" : node.text! };
       for (const mark of node.marks ?? []) {
         if (mark.type === "bold") run.bold = true;
         if (mark.type === "italic") run.italic = true;

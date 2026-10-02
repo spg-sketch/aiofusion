@@ -26,6 +26,12 @@ describe("single-document How-to editing", () => {
     expect(documentToBlocks(blocksToDocument(body))).toEqual(body);
     expect(blocksToDocument([]).content).toEqual([{ type: "paragraph" }]);
   });
+  it("keeps formatting on multiline runs and preserves blank lines", () => {
+    const body: HowtoBlock[] = [
+      { type: "paragraph", runs: [{ text: "\nBold\n\nlast line\n", bold: true, italic: true, href: "https://example.com/help" }] },
+    ];
+    expect(documentToBlocks(blocksToDocument(body))).toEqual(body);
+  });
   it("preserves formatted bullets instead of losing inline marks on save", () => {
     const doc = { type: "doc", content: [{
       type: "bulletList", content: [{
