@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 import { useListAdminInsightMedia, getListAdminInsightMediaQueryKey } from "@workspace/api-client-react";
 import type { InsightMedia } from "@workspace/api-client-react";
-import { X, UploadCloud, Loader2 } from "lucide-react";
+import { X, UploadCloud, Loader2, Trash2 } from "lucide-react";
 import { apiBase } from "../lib/contentAi";
 
 function readFileAsBase64(file: File): Promise<string> {
@@ -29,12 +29,31 @@ export function MediaLibraryModal({ onClose, onSelect }: { onClose: () => void; 
   const filteredMedia = (mediaItems ?? []).filter((item) =>
     item.fileName.toLocaleLowerCase().includes(filenameQuery),
   );
+  const [pendingRemoval, setPendingRemoval] = useState<InsightMedia | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [removalError, setRemovalError] = useState("");
+  const [removalStatus, setRemovalStatus] = useState("");
   const titleId = useId();
   const searchId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const uploadingRef = useRef(false);
+  const removingRef = useRef(false);
+  const pendingRemovalRef = useRef(pendingRemoval);
+  pendingRemovalRef.current = pendingRemoval;
+  const cancelRemovalRef = useRef<HTMLButtonElement>(null);
+  const removalTriggerRef = useRef<HTMLButtonElement | null>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+
+  const cancelRemoval = () => {
+    if (removingRef.current) return;
+    setPendingRemoval(null);
+    requestAnimationFrame(() => removalTriggerRef.current?.focus());
+  };
+
+  useEffect(() => {
+    if (pendingRemoval) cancelRemovalRef.current?.focus();
+  }, [pendingRemoval]);
 
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
@@ -43,7 +62,9 @@ export function MediaLibraryModal({ onClose, onSelect }: { onClose: () => void; 
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        if (!uploadingRef.current) closeRef.current();
+        if (uploadingRef.current || removingRef.current) return;
+        if (pendingRemovalRef.current) cancelRemoval();
+        else closeRef.current();
       }
       if (event.key !== "Tab" || !dialog) return;
       const controls = Array.from(dialog.querySelectorAll<HTMLElement>(
@@ -71,7 +92,7 @@ export function MediaLibraryModal({ onClose, onSelect }: { onClose: () => void; 
     // Allow choosing the same file again after a validation or network failure.
     e.target.value = "";
 
-    if (uploadingRef.current) return;
+    if (uploadingRef.current || removingRef.current || pendingRemovalRef.current) return;
     uploadingRef.current = true;
     setUploading(true);
     setProgress(0);
@@ -109,20 +130,57 @@ export function MediaLibraryModal({ onClose, onSelect }: { onClose: () => void; 
     }
   };
 
+  const handleRemoval = async () => {
+    const item = pendingRemovalRef.current;
+    if (!item || removingRef.current || uploadingRef.current) return;
+    removingRef.current = true;
+    setRemoving(true);
+    setRemovalError("");
+    setRemovalStatus("");
+    try {
+      const response = await fetch(`${apiBase()}/api/admin/insights/media/${encodeURIComponent(item.id)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        if (response.status === 409) throw new Error("This image is used by a saved Insights story or How-to guide, including drafts. Remove those references and save the content before removing the image.");
+        if (response.status === 401 || response.status === 403) throw new Error("You do not have permission to remove this image. Sign in with an authorised editorial account.");
+        throw new Error(body.error || "The image could not be removed. Please try again.");
+      }
+      setPendingRemoval(null);
+      setRemovalStatus(`Removed "${item.fileName}" from the library.`);
+      // Never hide an image optimistically: the server checks all saved references.
+      const refreshed = await refetch().catch(() => ({ isError: true }));
+      if (refreshed?.isError) {
+        setRemovalStatus(`"${item.fileName}" was removed, but the library could not be refreshed. Retry loading images.`);
+      }
+      dialogRef.current?.focus();
+    } catch (err) {
+      setRemovalError(err instanceof Error ? err.message : "The image could not be removed. Please try again.");
+    } finally {
+      removingRef.current = false;
+      setRemoving(false);
+    }
+  };
+
+  const busy = uploading || removing;
+  const galleryDisabled = busy || !!pendingRemoval;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0a1628]/40 backdrop-blur-sm p-3 sm:p-6 transition-all"
-      onClick={() => { if (!uploadingRef.current) onClose(); }}>
+      onClick={() => { if (!uploadingRef.current && !removingRef.current && !pendingRemovalRef.current) onClose(); }}>
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         
         <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-white shrink-0">
           <h2 id={titleId} className="text-xl font-bold text-[#0a1628]">Media Library</h2>
-          <button type="button" aria-label="Close media library" disabled={uploading} onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-100 hover:text-[#0a1628] rounded-full transition-colors disabled:opacity-40"><X size={20}/></button>
+          <button type="button" aria-label="Close media library" disabled={galleryDisabled} onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-100 hover:text-[#0a1628] rounded-full transition-colors disabled:opacity-40"><X size={20}/></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 bg-gray-50 flex flex-col gap-6">
           <div className="relative border-2 border-dashed border-gray-300 bg-white rounded-xl p-8 flex flex-col items-center justify-center hover:border-[#4f8fff] hover:bg-blue-50/30 transition-colors cursor-pointer shrink-0">
-            <input type="file" aria-label="Upload image" accept="image/png,image/jpeg,image/webp" onChange={handleFileSelect} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" disabled={uploading} />
+            <input type="file" aria-label="Upload image" accept="image/png,image/jpeg,image/webp" onChange={handleFileSelect} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" disabled={galleryDisabled} />
             <UploadCloud size={32} className="text-[#4f8fff] mb-3" />
             <span className="text-base font-semibold text-[#0a1628]">Upload image from your device</span>
             <span className="text-sm text-gray-500 mt-1">PNG, JPEG or WEBP, up to 6 MB</span>
@@ -138,48 +196,71 @@ export function MediaLibraryModal({ onClose, onSelect }: { onClose: () => void; 
             )}
           </div>
           {uploadError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{uploadError} Your guide or story has not been changed.</p>}
+          {pendingRemoval && (
+            <section aria-label="Confirm image removal" className="rounded-xl border border-red-200 bg-white p-4">
+              <h3 className="font-semibold text-[#0a1628]">Remove "{pendingRemoval.fileName}" from the library?</h3>
+              <p className="mt-2 text-sm text-gray-600">Only unused images can be removed. Saved Insights stories and How-to guides, including drafts, are protected. The stored image file will not be physically deleted.</p>
+              <div className="mt-4 flex gap-3">
+                <button ref={cancelRemovalRef} type="button" disabled={removing} onClick={cancelRemoval} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold disabled:opacity-40">Cancel removal</button>
+                <button type="button" disabled={removing} onClick={() => void handleRemoval()} className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{removing ? "Removing..." : "Confirm removal"}</button>
+              </div>
+            </section>
+          )}
+          {removalError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{removalError} The gallery has been kept unchanged.</p>}
+          {removalStatus && <p role="status" className="rounded-lg border border-gray-200 bg-white p-3 text-sm text-[#0a1628]">{removalStatus}</p>}
 
           <div>
             <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Existing Media</h3>
             <div className="mb-4">
               <label htmlFor={searchId} className="block text-sm font-semibold text-[#0a1628] mb-2">Search by filename</label>
               <div className="flex gap-2">
-                <input id={searchId} type="search" value={search} onChange={(event) => setSearch(event.target.value)}
+                <input id={searchId} type="search" value={search} disabled={galleryDisabled} onChange={(event) => setSearch(event.target.value)}
                   placeholder="Find an image by filename"
                   className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-[#4f8fff]" />
-                {search && <button type="button" onClick={() => setSearch("")}
+                {search && <button type="button" disabled={galleryDisabled} onClick={() => setSearch("")}
                   className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold">Clear search</button>}
               </div>
             </div>
             {isError ? (
               <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                 The media library could not be loaded.
-                <button type="button" disabled={uploading} onClick={() => void refetch()} className="ml-2 font-semibold underline">Retry loading images</button>
+                <button type="button" disabled={galleryDisabled} onClick={() => void refetch()} className="ml-2 font-semibold underline">Retry loading images</button>
               </div>
             ) : isLoading ? (
               <div role="status" className="flex justify-center items-center gap-2 p-12"><Loader2 aria-hidden="true" className="animate-spin text-gray-300" size={32} /><span className="text-sm text-gray-500">Loading images...</span></div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                 {filteredMedia.map((item: InsightMedia) => (
-                  <button type="button" disabled={uploading || !onSelect}
+                  <div key={item.id} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                  <button type="button" disabled={galleryDisabled || !onSelect}
                     aria-label={`Select image ${item.fileName}`}
-                    key={item.id} 
                     onClick={() => onSelect && onSelect(item)} 
-                    className={`group bg-white rounded-xl border border-gray-200 overflow-hidden transition-all focus-visible:ring-4 focus-visible:ring-[#4f8fff]/30 disabled:cursor-default ${onSelect ? 'cursor-pointer hover:border-[#4f8fff] hover:shadow-md hover:ring-4 hover:ring-[#4f8fff]/10' : ''}`}
+                    className={`w-full aspect-video relative group bg-white overflow-hidden transition-all focus-visible:ring-4 focus-visible:ring-[#4f8fff]/30 disabled:cursor-default ${onSelect ? 'cursor-pointer hover:shadow-md hover:ring-4 hover:ring-[#4f8fff]/10' : ''}`}
                   >
-                    <div className="aspect-video relative">
-                      <img src={item.publicUrl} alt={item.altText} className="w-full h-full object-cover" />
-                      {onSelect && (
-                        <div className="absolute inset-0 bg-[#0a1628]/60 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 flex items-center justify-center transition-opacity">
-                          <span className="text-white text-sm font-bold tracking-wide">Select Image</span>
-                        </div>
-                      )}
-                    </div>
-                    <span title={item.fileName} className="block p-3 text-left text-sm font-medium text-[#0a1628] break-all">{item.fileName}</span>
+                    <img src={item.publicUrl} alt={item.altText} className="w-full h-full object-cover" />
+                    {onSelect && (
+                      <div className="absolute inset-0 bg-[#0a1628]/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <span className="text-white text-sm font-bold tracking-wide">Select Image</span>
+                      </div>
+                    )}
                   </button>
+                  <div className="flex items-center justify-between gap-2 p-2">
+                    <span className="truncate text-xs text-gray-600" title={item.fileName}>{item.fileName}</span>
+                    <button type="button" disabled={galleryDisabled} aria-label={`Remove image ${item.fileName}`}
+                      onClick={(event) => {
+                        removalTriggerRef.current = event.currentTarget;
+                        setRemovalError("");
+                        setRemovalStatus("");
+                        setPendingRemoval(item);
+                      }}
+                      className="shrink-0 rounded-lg p-2 text-red-700 hover:bg-red-50 focus-visible:ring-4 focus-visible:ring-red-200 disabled:opacity-40">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                  </div>
                 ))}
                 {(!mediaItems || mediaItems.length === 0) && (
-                  <div role="status" className="col-span-full py-12 text-center text-gray-500">No media found. Upload an image to get started.</div>
+                  <div role="status" className="col-span-full py-12 text-center text-gray-400">No media found. Upload an image to get started.</div>
                 )}
                 {!!mediaItems?.length && filteredMedia.length === 0 && (
                   <div role="status" className="col-span-full py-12 text-center text-gray-500">No images match "{search.trim()}". Try another filename or clear your search.</div>

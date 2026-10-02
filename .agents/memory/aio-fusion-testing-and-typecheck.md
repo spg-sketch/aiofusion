@@ -5,6 +5,12 @@ description: Vitest testing gotchas and keeping release validation reliable unde
 
 # Testing and release checks
 
+Concurrency-test barriers must fail promptly when the HTTP request finishes before reaching the expected transaction boundary.
+
+**Why:** An invalid synthetic request can be rejected before the transaction starts, leaving the test waiting indefinitely and obscuring the actual validation error.
+
+**How to apply:** Race the boundary signal against early request completion, and release any held transaction in cleanup on assertion failure.
+
 After a checkpoint restores dependency manifests and the lockfile, synchronize installed dependencies with the restored lockfile before generating release evidence.
 
 **Why:** Restoring source after security updates left newer installed packages in place. Tests against those packages would not validate what the restored lockfile installs during publishing.

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import express from "express";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
@@ -89,6 +89,8 @@ beforeEach(async () => {
   await db.delete(insightMediaTable);
 });
 
+afterEach(() => vi.restoreAllMocks());
+
 const entry = (id: string, status: "draft" | "published" = "published") => ({
   id,
   title: `Title ${id}`,
@@ -166,6 +168,7 @@ describe("How-to CMS", () => {
   it("keeps the shared image library and upload endpoints restricted to editorial identities", async () => {
     for (const role of ["member", "agency", "client", "content", "viewer", "billing"]) {
       expect((await request("/admin/insights/media", {}, role)).status).toBe(403);
+      expect((await request("/admin/insights/media/asset", { method: "DELETE" }, role)).status).toBe(403);
       expect((await request("/storage/uploads/direct", {
         method: "POST", body: JSON.stringify({}),
       }, role)).status).toBe(403);
@@ -228,24 +231,121 @@ describe("How-to CMS", () => {
     });
   });
 
-  it("prevents deleting media used by either How-to or Insights", async () => {
+  it("soft-deletes only unused media, preserving the stored file metadata", async () => {
     await db.insert(insightMediaTable).values({
       id: "asset", fileName: "asset.png", contentType: "image/png", sizeBytes: "12",
       publicUrl: "/asset", objectPath: "/asset", altText: "asset",
     });
-    await db.insert(howtoEntriesTable).values({
-      ...entry("uses-asset"), body: [{ type: "image", mediaId: "asset", altText: "A picture" }],
-    });
-    expect((await request("/admin/insights/media/asset", { method: "DELETE" }, "admin")).status).toBe(409);
-    await db.delete(howtoEntriesTable);
-    await db.insert(insightArticlesTable).values({
-      id: "uses-asset", slug: "uses-asset", title: "Image story", body: [{ type: "image", mediaId: "asset" }],
-      coverMediaId: null, coverImageUrl: null, coverImageAlt: "", excerpt: "", tag: "Article",
-    });
-    expect((await request("/admin/insights/media/asset", { method: "DELETE" }, "admin")).status).toBe(409);
-    await db.delete(insightArticlesTable);
     expect((await request("/admin/insights/media/asset", { method: "DELETE" }, "admin")).status).toBe(204);
+    const [stored] = await db.select().from(insightMediaTable);
+    expect(stored).toMatchObject({ fileName: "asset.png", publicUrl: "/asset", objectPath: "/asset" });
+    expect(stored?.deletedAt).toBeInstanceOf(Date);
+    expect(await (await request("/admin/insights/media", {}, "admin")).json()).toEqual([]);
+    expect((await request("/admin/insights/media/asset", { method: "DELETE" }, "admin")).status).toBe(404);
   });
+
+  for (const status of ["draft", "published"] as const) {
+    for (const reference of ["howto-body", "insights-body", "insights-cover"] as const) {
+      it(`keeps images referenced by ${status} ${reference} available`, async () => {
+        await db.insert(insightMediaTable).values({
+          id: "asset", fileName: "asset.png", contentType: "image/png", sizeBytes: "12",
+          publicUrl: "/asset", objectPath: "/asset", altText: "asset",
+        });
+        if (reference === "howto-body") {
+          await db.insert(howtoEntriesTable).values({
+            ...entry("uses-asset", status), body: [{ type: "image", mediaId: "asset", altText: "A picture" }],
+          });
+        } else {
+          await db.insert(insightArticlesTable).values({
+            id: "uses-asset", slug: "uses-asset", title: "Image story", status,
+            body: reference === "insights-body" ? [{ type: "image", mediaId: "asset", altText: "" }] : [],
+            coverMediaId: reference === "insights-cover" ? "asset" : null,
+          });
+        }
+        const removal = await request("/admin/insights/media/asset", { method: "DELETE" }, "admin");
+        expect(removal.status).toBe(409);
+        expect(await removal.json()).toEqual({ error: "Media is still referenced by Insights or How-to content" });
+        expect((await db.select().from(insightMediaTable))[0]?.deletedAt).toBeNull();
+        expect(await (await request("/admin/insights/media", {}, "admin")).json()).toMatchObject([{ id: "asset" }]);
+      });
+    }
+  }
+
+  for (const cms of ["howto", "insights"] as const) {
+    for (const method of ["POST", "PATCH"] as const) {
+      for (const winner of ["save", "delete"] as const) {
+        it(`protects ${cms} images when ${method} and removal overlap with ${winner} committing first`, async () => {
+          await db.insert(insightMediaTable).values({
+            id: "race-image", fileName: "synthetic.png", contentType: "image/png", sizeBytes: "12",
+            publicUrl: "/synthetic.png", objectPath: "/objects/synthetic.png", altText: "",
+          });
+          const imageBody = [{ type: "image", mediaId: "race-image", altText: "" }];
+          const createInput = cms === "howto"
+            ? entry("race-content", "draft")
+            : { slug: "race-content", title: "Synthetic story", status: "draft", body: [], tag: "Article", excerpt: "", coverImageAlt: "" };
+          let contentId = "race-content";
+          if (method === "PATCH") {
+            const created = await request(`/admin/${cms}`, {
+              method: "POST", body: JSON.stringify(createInput),
+            }, "admin");
+            expect(created.status).toBe(201);
+            contentId = (await created.json() as { id: string }).id;
+          }
+          let reached!: () => void;
+          let release!: () => void;
+          const atBoundary = new Promise<void>(resolve => { reached = resolve; });
+          const barrier = new Promise<void>(resolve => { release = resolve; });
+          const transaction = db.transaction.bind(db);
+          // PGlite serializes transactions on one connection and cannot model
+          // PostgreSQL advisory locks. Hold the save at either boundary to
+          // exercise both commit orders, including Insights' unlocked preflight.
+          vi.spyOn(db, "transaction").mockImplementationOnce(async (callback, config) => {
+            if (winner === "delete") {
+              reached();
+              await barrier;
+              return transaction(callback, config);
+            }
+            return transaction(async tx => {
+              const result = await callback(tx);
+              reached();
+              await barrier;
+              return result;
+            }, config);
+          });
+          const save = request(`/admin/${cms}${method === "PATCH" ? `/${contentId}` : ""}`, {
+            method,
+            body: JSON.stringify(method === "PATCH" && cms === "howto" ? { body: imageBody } : { ...createInput, body: imageBody }),
+          }, "admin");
+          await Promise.race([
+            atBoundary,
+            save.then(async response => {
+              throw new Error(`Save returned before the transaction barrier: ${response.status} ${await response.text()}`);
+            }),
+          ]);
+          const removal = request("/admin/insights/media/race-image", { method: "DELETE" }, "admin");
+          if (winner === "delete") {
+            try {
+              expect((await removal).status).toBe(204);
+            } finally {
+              release();
+            }
+            expect((await save).status).toBe(400);
+          } else {
+            release();
+            expect((await save).status).toBe(method === "POST" ? 201 : 200);
+            expect((await removal).status).toBe(409);
+          }
+          const [media] = await db.select().from(insightMediaTable);
+          expect(media?.deletedAt === null).toBe(winner === "save");
+          const saved = cms === "howto"
+            ? await db.select({ body: howtoEntriesTable.body }).from(howtoEntriesTable)
+            : await db.select({ body: insightArticlesTable.body }).from(insightArticlesTable);
+          expect(saved.some(row => row.body.some(block => block.type === "image" && block.mediaId === "race-image")))
+            .toBe(winner === "save");
+        });
+      }
+    }
+  }
 
   it("runs the initial seed once and never restores edited or deleted seed rows", async () => {
     expect(await applyHowtoSeedMigration(db)).toEqual({ applied: true, seeded: 6 });
@@ -266,13 +366,18 @@ describe("How-to CMS", () => {
     expect(await db.select().from(howtoEntriesTable)).toHaveLength(0);
   });
 
-  it("reports the Drizzle push prerequisite when required How-to tables are missing", async () => {
-    const client = new PGlite();
-    const emptyDatabase = drizzlePGlite(client, { schema });
-    try {
+  describe("missing How-to schema", () => {
+    let client: PGlite;
+    beforeAll(async () => {
+      client = new PGlite();
+      // WASM startup can exceed assertion deadlines under release-suite load.
+      await client.waitReady;
+    }, 120000);
+    afterAll(async () => { await client?.close(); });
+
+    it("reports the Drizzle push prerequisite when required How-to tables are missing", async () => {
+      const emptyDatabase = drizzlePGlite(client, { schema });
       await expect(applyHowtoSeedMigration(emptyDatabase)).rejects.toThrow(/tables are missing.*db run push/i);
-    } finally {
-      await client.close();
-    }
+    });
   });
 });

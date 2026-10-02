@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useListAdminInsightMedia } from "@workspace/api-client-react";
 import { MediaLibraryModal } from "./MediaLibraryModal";
@@ -13,6 +13,7 @@ const image = { id: "test-image", fileName: "settings.png", publicUrl: "/api/sto
 const refetch = vi.fn();
 const fetchMock = vi.fn();
 beforeEach(() => {
+  refetch.mockResolvedValue({ isError: false });
   vi.mocked(useListAdminInsightMedia).mockReturnValue({
     data: [image], isLoading: false, isError: false, refetch,
   } as unknown as ReturnType<typeof useListAdminInsightMedia>);
@@ -28,6 +29,95 @@ function open() {
 }
 
 describe("shared CMS image picker", () => {
+  it("names the image in a confirmation and cancellation never contacts the server", () => {
+    const { onSelect, onClose } = open();
+    fireEvent.click(screen.getByRole("button", { name: "Remove image settings.png" }));
+    expect(screen.getByRole("region", { name: "Confirm image removal" }).textContent).toContain('Remove "settings.png"');
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel removal" }));
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(screen.queryByRole("region", { name: "Confirm image removal" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Remove image settings.png" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel removal" }));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(refetch).not.toHaveBeenCalled();
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("waits for authenticated removal before refreshing, and prevents duplicate requests or selection", async () => {
+    let finish!: (response: unknown) => void;
+    fetchMock.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const { onSelect, onClose, input } = open();
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "settings" } });
+    fireEvent.click(screen.getByRole("button", { name: "Remove image settings.png" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm removal" }));
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/admin/insights/media/test-image"), {
+      method: "DELETE", credentials: "include",
+    });
+    expect(refetch).not.toHaveBeenCalled();
+    expect((input as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole("searchbox") as HTMLInputElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Removing..." }));
+    fireEvent.click(screen.getByRole("button", { name: "Select image settings.png" }));
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onSelect).not.toHaveBeenCalled();
+    await act(async () => finish({ ok: true, status: 204 }));
+    await waitFor(() => expect(refetch).toHaveBeenCalledOnce());
+    expect(screen.queryByRole("region", { name: "Confirm image removal" })).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain('Removed "settings.png"');
+    expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("settings");
+  });
+
+  for (const status of [409, 401, 403, 500]) {
+    it(`preserves the gallery and does not refresh when removal returns ${status}`, async () => {
+      fetchMock.mockResolvedValueOnce({ ok: false, status, json: async () => ({ error: "Server rejected removal" }) });
+      const { onSelect } = open();
+      fireEvent.click(screen.getByRole("button", { name: "Remove image settings.png" }));
+      fireEvent.click(screen.getByRole("button", { name: "Confirm removal" }));
+      await waitFor(() => expect(screen.getByRole("alert").textContent).toContain(
+        status === 409 ? "including drafts" : status === 500 ? "Server rejected removal" : "permission",
+      ));
+      expect(refetch).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Select image settings.png" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Cancel removal" }));
+      fireEvent.click(screen.getByRole("button", { name: "Select image settings.png" }));
+      expect(onSelect).toHaveBeenCalledWith(image);
+    });
+  }
+
+  it("preserves the gallery after a network failure and allows explicit retry", async () => {
+    fetchMock.mockRejectedValueOnce(new Error("Network unavailable"));
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Remove image settings.png" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm removal" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Network unavailable"));
+    expect(refetch).not.toHaveBeenCalled();
+    expect(screen.getByAltText("Settings")).toBeTruthy();
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 204 });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm removal" }));
+    await waitFor(() => expect(refetch).toHaveBeenCalledOnce());
+  });
+
+  it("reports successful removal separately from a subsequent gallery refresh failure", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 204 });
+    refetch.mockRejectedValueOnce(new Error("Offline"));
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Remove image settings.png" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm removal" }));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("was removed, but"));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("allows removal in library-only mode without selecting the image", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 204 });
+    render(<MediaLibraryModal onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Remove image settings.png" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm removal" }));
+    await waitFor(() => expect(refetch).toHaveBeenCalledOnce());
+  });
+
   it("shows filenames and filters only filenames, ignoring case and surrounding spaces", () => {
     const otherImage = { ...image, id: "other-image", fileName: "Dashboard Overview.webp", altText: "settings" };
     vi.mocked(useListAdminInsightMedia).mockReturnValue({
@@ -82,12 +172,12 @@ describe("shared CMS image picker", () => {
     const { unmount } = render(<MediaLibraryModal onClose={vi.fn()} onSelect={vi.fn()} />);
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "settings" } });
     const close = screen.getByRole("button", { name: "Close media library" });
-    const imageButton = screen.getByRole("button", { name: "Select image settings.png" });
-    imageButton.focus();
-    fireEvent.keyDown(imageButton, { key: "Tab" });
+    const lastButton = screen.getByRole("button", { name: "Remove image settings.png" });
+    lastButton.focus();
+    fireEvent.keyDown(lastButton, { key: "Tab" });
     expect(document.activeElement).toBe(close);
     fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
-    expect(document.activeElement).toBe(imageButton);
+    expect(document.activeElement).toBe(lastButton);
     unmount();
     expect(document.activeElement).toBe(trigger);
     trigger.remove();
@@ -112,7 +202,7 @@ describe("shared CMS image picker", () => {
   for (const type of ["image/png", "image/jpeg", "image/webp"]) {
     it(`uses the existing authenticated upload endpoint for ${type}`, async () => {
       fetchMock.mockResolvedValueOnce({ ok: true, json: async () => image });
-      const { onSelect, input } = open();
+    const { onSelect, input } = open();
       fireEvent.change(screen.getByRole("searchbox"), { target: { value: "no-matching-filename" } });
       fireEvent.change(input, { target: { files: [new File(["synthetic image"], "fixture", { type })] } });
       await waitFor(() => expect(onSelect).toHaveBeenCalledWith(image));
@@ -163,3 +253,5 @@ describe("shared CMS image picker", () => {
     expect(refetch).toHaveBeenCalledOnce();
   });
 });
+
+    let finish!: (response: unknown) => void;

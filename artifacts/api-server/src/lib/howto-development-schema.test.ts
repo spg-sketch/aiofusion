@@ -1,5 +1,5 @@
 import { PGlite } from "@electric-sql/pglite";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { assertHowtoDevelopmentTarget, createHowtoDevelopmentTables } from "./howto-development-schema";
 
 describe("safe How-to development setup", () => {
@@ -18,9 +18,16 @@ describe("safe How-to development setup", () => {
     ]) expect(() => assertHowtoDevelopmentTarget({ ...development, ...extra })).toThrow();
   });
 
-  it("creates only the two How-to tables idempotently and preserves existing content and sequences", async () => {
-    const db = new PGlite();
-    try {
+  describe("temporary development database", () => {
+    let db: PGlite;
+    beforeAll(async () => {
+      db = new PGlite();
+      // Keep slow WASM setup separate from the unchanged assertion deadline.
+      await db.waitReady;
+    }, 120000);
+    afterAll(async () => { await db?.close(); });
+
+    it("creates only the two How-to tables idempotently and preserves existing content and sequences", async () => {
       await db.exec("CREATE TABLE unrelated (id serial PRIMARY KEY, content text); INSERT INTO unrelated (content) VALUES ('preserved')");
       await createHowtoDevelopmentTables(db);
       await db.exec(`INSERT INTO howto_entries (id,title,description,type,read_time)
@@ -31,9 +38,7 @@ describe("safe How-to development setup", () => {
       expect((await db.query("SELECT content FROM unrelated")).rows).toEqual([{ content: "preserved" }]);
       expect((await db.query("SELECT last_value FROM unrelated_id_seq")).rows).toEqual([{ last_value: 1 }]);
       expect((await db.query("SELECT count(*)::int AS total FROM howto_migration_ledger")).rows).toEqual([{ total: 0 }]);
-    } finally {
-      await db.close();
-    }
+    });
   });
 
   it("rolls back and reports statement failures rather than proceeding to seed migration", async () => {
