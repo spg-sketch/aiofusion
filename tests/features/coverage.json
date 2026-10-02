@@ -2,7 +2,7 @@
   "suite": "test:features",
   "runtime": {
     "database": "Temporary local PostgreSQL created by tests/release/harness.mjs",
-    "apiAndWeb": "Fresh production builds of the current source, with no real external integrations",
+    "apiAndWeb": "Fresh production builds; default has no external provider credentials. Explicit test:tools:ai opt-in forwards only the configured Anthropic/OpenAI integration credentials.",
     "email": "Real signup-generated verification email intercepted at the Resend HTTP send boundary with synthetic credentials and retrievable only from loopback harness",
     "cleanup": "Harness removes temporary PostgreSQL and captured email files and terminates its API child"
   },
@@ -15,14 +15,15 @@
     "Publication bookmark created through Search Media Database and visible in My Media Database before and after refresh",
     "Anonymous private API denial and authenticated cross-workspace project denial",
     "Representative public and authenticated navigation; browser exceptions and unexpected API 4xx/5xx reporting",
-    "No checkout, Stripe portal, subscription mutation, AI-provider invocation, or real email send"
+    "No checkout, Stripe portal, subscription mutation or real email send",
+    "Core tools suite separately covers audit runs and saved reports, Creator/Optimiser content persistence, calendar use and media database search/bookmarks; consult actual scenario outcomes, not this intended scope"
   ],
   "deferred": [
     "Agency/Partner signup and two-project beta allowance",
-    "Provider-backed AI generation and provider error recovery",
+    "Full provider failure recovery permutations and broader content/research/reporting journeys",
     "Paid subscriptions, checkout, Stripe, invoices, and payment webhooks (excluded until staging exists)"
   ],
   "blocked": [
-    "AI provider execution is intentionally blocked: no AI-provider credentials are supplied to the API child"
+    "Real AI is opt-in only; missing integration credentials fail startup. Skipped, failed or unreached AI scenarios are not verified."
   ]
 }

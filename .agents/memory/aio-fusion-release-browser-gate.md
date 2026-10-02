@@ -14,3 +14,9 @@ Temporary-database browser servers need graceful termination rather than the tes
 **Why:** Hard teardown bypassed the fixture's exit cleanup and left temporary PostgreSQL and email-capture directories behind during repeated runs.
 
 **How to apply:** When a browser server owns disposable services or captured mail, explicitly allow SIGTERM cleanup before forced termination. Do not assume a passing test implies its fixtures were removed.
+
+Run long multi-feature browser commands through the main agent's managed background shell, not a tester's detached shell process.
+
+**Why:** The tester's foreground runner stopped an otherwise progressing batch at five minutes before the JSON reporter finished; its detached shell jobs did not survive, despite the main runner supporting managed background tasks.
+
+**How to apply:** Keep one coherent run, preserve failed-run evidence before a focused retest, and exclude already-passed paid AI actions. A command timeout is incomplete evidence, not eight product failures.

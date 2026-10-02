@@ -5,10 +5,23 @@ import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, extname } from "node:path";
 import { randomBytes, scryptSync } from "node:crypto";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 const root = resolve(import.meta.dirname, "../..");
 const publicDir = resolve(root, "artifacts/aio-fusion/dist/public");
 const featureMode = process.argv.includes("--features");
+const liveAi = featureMode && process.env.AIO_FEATURE_LIVE_AI === "1";
+const liveAiEnv = {};
+if (liveAi) {
+  for (const key of [
+    "AI_INTEGRATIONS_ANTHROPIC_API_KEY", "AI_INTEGRATIONS_ANTHROPIC_BASE_URL",
+    "AI_INTEGRATIONS_OPENAI_API_KEY", "AI_INTEGRATIONS_OPENAI_BASE_URL",
+  ]) {
+    if (!process.env[key]) throw new Error(`Real-AI feature tests require ${key}; no provider values are logged.`);
+    liveAiEnv[key] = process.env[key];
+  }
+}
 const pgDir = mkdtempSync(join(tmpdir(), "aio-release-pg-"));
 const featureDir = featureMode ? mkdtempSync(join(tmpdir(), "aio-feature-mail-")) : null;
 const emailCaptureFile = featureDir ? join(featureDir, "resend-capture.jsonl") : null;
@@ -86,14 +99,14 @@ const salt = randomBytes(16).toString("hex");
 const hash = `scrypt$${salt}$${scryptSync(password, salt, 64).toString("hex")}`;
 const sql = `
 INSERT INTO platform_accounts (username,password_hash,role,email,status)
-VALUES ('release-workspace','${hash}','agency','release@example.invalid','active')
+VALUES ('release-workspace','${hash}','${featureMode ? "client" : "agency"}','release@example.invalid','active')
 ON CONFLICT (username) DO NOTHING;
 INSERT INTO platform_accounts (username,password_hash,role,email,status)
 VALUES ('other-workspace','${hash}','agency','other@example.invalid','active')
 ON CONFLICT (username) DO NOTHING;
 WITH company AS (
   INSERT INTO platform_companies (slug,role,email,display_name,status,setup_complete,free_access)
-  VALUES ('release-workspace','agency','release@example.invalid','Release Workspace','active',true,true)
+   VALUES ('release-workspace','${featureMode ? "client" : "agency"}','release@example.invalid','Release Workspace','active',true,${featureMode ? "false" : "true"})
   ON CONFLICT (slug) DO UPDATE SET display_name=EXCLUDED.display_name
   RETURNING id
 ), app_user AS (
@@ -112,6 +125,17 @@ INSERT INTO projects (id,name,data,owner)
 VALUES ('other-workspace','Other workspace project','{"client":"other-workspace"}','other-workspace')
 ON CONFLICT (id) DO NOTHING;`;
 if (run("psql", ["-h", "127.0.0.1", "-p", String(port), "-U", "release", "-d", "release", "-v", "ON_ERROR_STOP=1", "-c", sql], { env: { DATABASE_URL: dbUrl } }).status !== 0) throw new Error("seed failed");
+if (featureMode) {
+  const betaSql = `
+    ALTER TABLE platform_companies
+      ADD COLUMN IF NOT EXISTS beta_trial_started_at timestamptz,
+      ADD COLUMN IF NOT EXISTS beta_trial_ends_at timestamptz;
+    UPDATE platform_companies SET
+      beta_trial_started_at = NOW(), beta_trial_ends_at = NOW() + INTERVAL '60 days'
+    WHERE slug = 'release-workspace';`;
+  if (run("psql", ["-h", "127.0.0.1", "-p", String(port), "-U", "release", "-d", "release",
+    "-v", "ON_ERROR_STOP=1", "-c", betaSql], { env: { DATABASE_URL: dbUrl } }).status !== 0) throw new Error("isolated beta seed failed");
+}
 start("node", [
   ...(featureMode ? ["--import", emailInterceptor] : []),
   "--enable-source-maps",
@@ -123,6 +147,7 @@ start("node", [
   PLATFORM_ADMIN_PASSWORD: "release-harness-admin-password",
   RESEND_API_KEY: "aio-features-synthetic-resend-key",
   STRIPE_SECRET_KEY: "sk_test_aio_features_synthetic_never_used",
+  ...liveAiEnv,
   ...(featureMode ? {
     AIO_FEATURE_EMAIL_CAPTURE: "1",
     AIO_FEATURE_EMAIL_CAPTURE_FILE: emailCaptureFile,
@@ -184,6 +209,11 @@ const server = createServer(async (req, res) => {
         duplex: ["GET", "HEAD"].includes(req.method) ? undefined : "half",
       });
       const headers = Object.fromEntries(upstream.headers);
+      const cookies = upstream.headers.getSetCookie();
+      if (cookies.length) headers["set-cookie"] = cookies;
+      // fetch decompresses bodies; do not forward stale encoding/length headers.
+      delete headers["content-encoding"];
+      delete headers["content-length"];
       if (featureMode && headers.location) {
         const destination = new URL(headers.location, `http://127.0.0.1:${apiPort}`);
         if (!["127.0.0.1", "localhost"].includes(destination.hostname)) {
@@ -194,11 +224,16 @@ const server = createServer(async (req, res) => {
         headers.location = `http://127.0.0.1:5000${destination.pathname}${destination.search}${destination.hash}`;
       }
       res.writeHead(upstream.status, headers);
-      res.end(Buffer.from(await upstream.arrayBuffer()));
+      if (upstream.body) await pipeline(Readable.fromWeb(upstream.body), res);
+      else res.end();
     } catch (error) {
       console.error("Isolated harness upstream request failed:", error.message);
-      res.writeHead(502, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: "Isolated test API is unavailable." }));
+      if (!res.headersSent) {
+        res.writeHead(502, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "Isolated test API is unavailable." }));
+      } else {
+        res.destroy();
+      }
     }
     return;
   }
