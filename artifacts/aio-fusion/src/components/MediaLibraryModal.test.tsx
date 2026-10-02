@@ -28,6 +28,77 @@ function open() {
 }
 
 describe("shared CMS image picker", () => {
+  it("shows filenames and filters only filenames, ignoring case and surrounding spaces", () => {
+    const otherImage = { ...image, id: "other-image", fileName: "Dashboard Overview.webp", altText: "settings" };
+    vi.mocked(useListAdminInsightMedia).mockReturnValue({
+      data: [image, otherImage], isLoading: false, isError: false, refetch,
+    } as unknown as ReturnType<typeof useListAdminInsightMedia>);
+    const { onSelect } = open();
+    expect(screen.getByText(image.fileName)).toBeTruthy();
+    expect(screen.getByText(otherImage.fileName)).toBeTruthy();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search by filename" }), { target: { value: "  SETTINGS.PNG  " } });
+    expect(screen.queryByRole("button", { name: `Select image ${otherImage.fileName}` })).toBeNull();
+    const result = screen.getByRole("button", { name: `Select image ${image.fileName}` });
+    result.focus();
+    expect(document.activeElement).toBe(result);
+    expect(result.getAttribute("type")).toBe("button");
+    fireEvent.click(result);
+    expect(onSelect).toHaveBeenCalledWith(image);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(refetch).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(screen.getByRole("button", { name: `Select image ${otherImage.fileName}` })).toBeTruthy();
+  });
+
+  it("distinguishes no matching filenames from an empty library and recovers when the query changes", () => {
+    open();
+    const search = screen.getByRole("searchbox", { name: "Search by filename" });
+    fireEvent.change(search, { target: { value: "missing-file" } });
+    expect(screen.getByRole("status").textContent).toContain('No images match "missing-file"');
+    expect(screen.queryByText(/Upload an image to get started/)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.change(search, { target: { value: ".png" } });
+    expect(screen.getByRole("button", { name: "Select image settings.png" })).toBeTruthy();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it.each([
+    { data: [], isLoading: false, message: "No media found" },
+    { data: undefined, isLoading: true, message: "Loading images..." },
+  ])("keeps the $message state distinct from a search miss", ({ data, isLoading, message }) => {
+    vi.mocked(useListAdminInsightMedia).mockReturnValue({
+      data, isLoading, isError: false, refetch,
+    } as unknown as ReturnType<typeof useListAdminInsightMedia>);
+    open();
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "missing" } });
+    expect(screen.getByRole("status").textContent).toContain(message);
+    expect(screen.queryByText(/No images match/)).toBeNull();
+  });
+
+  it("retains the focus trap and restores focus after filtering", () => {
+    const trigger = document.createElement("button");
+    document.body.appendChild(trigger);
+    trigger.focus();
+    const { unmount } = render(<MediaLibraryModal onClose={vi.fn()} onSelect={vi.fn()} />);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "settings" } });
+    const close = screen.getByRole("button", { name: "Close media library" });
+    const imageButton = screen.getByRole("button", { name: "Select image settings.png" });
+    imageButton.focus();
+    fireEvent.keyDown(imageButton, { key: "Tab" });
+    expect(document.activeElement).toBe(close);
+    fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(imageButton);
+    unmount();
+    expect(document.activeElement).toBe(trigger);
+    trigger.remove();
+  });
+
+  it("does not enable selection when opened as a library browser", () => {
+    render(<MediaLibraryModal onClose={vi.fn()} />);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "settings" } });
+    expect((screen.getByRole("button", { name: "Select image settings.png" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("offers an accessible dialog, upload input and keyboard-selectable existing images", () => {
     const { onSelect, onClose, input } = open();
     expect(screen.getByRole("dialog", { name: "Media Library" })).toBeTruthy();
@@ -42,6 +113,7 @@ describe("shared CMS image picker", () => {
     it(`uses the existing authenticated upload endpoint for ${type}`, async () => {
       fetchMock.mockResolvedValueOnce({ ok: true, json: async () => image });
       const { onSelect, input } = open();
+      fireEvent.change(screen.getByRole("searchbox"), { target: { value: "no-matching-filename" } });
       fireEvent.change(input, { target: { files: [new File(["synthetic image"], "fixture", { type })] } });
       await waitFor(() => expect(onSelect).toHaveBeenCalledWith(image));
       const [url, request] = fetchMock.mock.calls[0];
@@ -83,8 +155,10 @@ describe("shared CMS image picker", () => {
       data: undefined, isLoading: false, isError: true, refetch,
     } as unknown as ReturnType<typeof useListAdminInsightMedia>);
     open();
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "missing" } });
     expect(screen.getByRole("alert").textContent).toContain("could not be loaded");
     expect(screen.queryByText(/No media found/)).toBeNull();
+    expect(screen.queryByText(/No images match/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Retry loading images" }));
     expect(refetch).toHaveBeenCalledOnce();
   });

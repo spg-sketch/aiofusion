@@ -24,7 +24,13 @@ export function MediaLibraryModal({ onClose, onSelect }: { onClose: () => void; 
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [uploadError, setUploadError] = useState("");
+  const [search, setSearch] = useState("");
+  const filenameQuery = search.trim().toLocaleLowerCase();
+  const filteredMedia = (mediaItems ?? []).filter((item) =>
+    item.fileName.toLocaleLowerCase().includes(filenameQuery),
+  );
   const titleId = useId();
+  const searchId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const uploadingRef = useRef(false);
   const closeRef = useRef(onClose);
@@ -135,32 +141,48 @@ export function MediaLibraryModal({ onClose, onSelect }: { onClose: () => void; 
 
           <div>
             <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Existing Media</h3>
+            <div className="mb-4">
+              <label htmlFor={searchId} className="block text-sm font-semibold text-[#0a1628] mb-2">Search by filename</label>
+              <div className="flex gap-2">
+                <input id={searchId} type="search" value={search} onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Find an image by filename"
+                  className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-[#4f8fff]" />
+                {search && <button type="button" onClick={() => setSearch("")}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold">Clear search</button>}
+              </div>
+            </div>
             {isError ? (
               <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                 The media library could not be loaded.
                 <button type="button" disabled={uploading} onClick={() => void refetch()} className="ml-2 font-semibold underline">Retry loading images</button>
               </div>
             ) : isLoading ? (
-              <div className="flex justify-center p-12"><Loader2 className="animate-spin text-gray-300" size={32} /></div>
+              <div role="status" className="flex justify-center items-center gap-2 p-12"><Loader2 aria-hidden="true" className="animate-spin text-gray-300" size={32} /><span className="text-sm text-gray-500">Loading images...</span></div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                {mediaItems?.map((item: InsightMedia) => (
+                {filteredMedia.map((item: InsightMedia) => (
                   <button type="button" disabled={uploading || !onSelect}
                     aria-label={`Select image ${item.fileName}`}
                     key={item.id} 
                     onClick={() => onSelect && onSelect(item)} 
-                    className={`aspect-video relative group bg-white rounded-xl border border-gray-200 overflow-hidden transition-all focus-visible:ring-4 focus-visible:ring-[#4f8fff]/30 disabled:cursor-default ${onSelect ? 'cursor-pointer hover:border-[#4f8fff] hover:shadow-md hover:ring-4 hover:ring-[#4f8fff]/10' : ''}`}
+                    className={`group bg-white rounded-xl border border-gray-200 overflow-hidden transition-all focus-visible:ring-4 focus-visible:ring-[#4f8fff]/30 disabled:cursor-default ${onSelect ? 'cursor-pointer hover:border-[#4f8fff] hover:shadow-md hover:ring-4 hover:ring-[#4f8fff]/10' : ''}`}
                   >
-                    <img src={item.publicUrl} alt={item.altText} className="w-full h-full object-cover" />
-                    {onSelect && (
-                      <div className="absolute inset-0 bg-[#0a1628]/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                        <span className="text-white text-sm font-bold tracking-wide">Select Image</span>
-                      </div>
-                    )}
+                    <div className="aspect-video relative">
+                      <img src={item.publicUrl} alt={item.altText} className="w-full h-full object-cover" />
+                      {onSelect && (
+                        <div className="absolute inset-0 bg-[#0a1628]/60 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 flex items-center justify-center transition-opacity">
+                          <span className="text-white text-sm font-bold tracking-wide">Select Image</span>
+                        </div>
+                      )}
+                    </div>
+                    <span title={item.fileName} className="block p-3 text-left text-sm font-medium text-[#0a1628] break-all">{item.fileName}</span>
                   </button>
                 ))}
                 {(!mediaItems || mediaItems.length === 0) && (
-                  <div className="col-span-full py-12 text-center text-gray-400">No media found. Upload an image to get started.</div>
+                  <div role="status" className="col-span-full py-12 text-center text-gray-500">No media found. Upload an image to get started.</div>
+                )}
+                {!!mediaItems?.length && filteredMedia.length === 0 && (
+                  <div role="status" className="col-span-full py-12 text-center text-gray-500">No images match "{search.trim()}". Try another filename or clear your search.</div>
                 )}
               </div>
             )}
