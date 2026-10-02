@@ -16,8 +16,9 @@ import {
 import { stableExactTargetPhraseId } from "../lib/exact-target-phrases";
 import {
   AUTHORITY_DIMENSION_NAMES,
+  AUTHORITY_GRADE_BANDS,
   authorityGradeFor,
-  isCompleteAuthorityAssessmentPayload,
+  getAuthorityAssessmentValidationIssue,
 } from "../lib/authority-assessment-validation";
 
 export { isCompleteAuthorityAssessmentPayload } from "../lib/authority-assessment-validation";
@@ -1262,6 +1263,10 @@ Score the brand across these 8 dimensions, each 0-100, with a one-sentence justi
 - Spokesperson authority: strength and relevance of the named spokespeople the brand supplied.
 
 CRITICAL RULES:
+- The overall index and all dimension scores must be integers from 0 to 100.
+- Calculate the grade strictly from the overall index using these inclusive boundaries: ${AUTHORITY_GRADE_BANDS.map(({ grade, min, max }) => `${grade}: ${min}-${max}`).join("; ")}. Do not choose a grade independently of the index.
+- Include all 8 dimensions exactly once, with names exactly as listed above, a non-empty justification and confidence "high", "medium" or "low". The summary must also be non-empty.
+- Include 1-5 evidence-grounded priorityActions, each with a non-empty action and rationale and priority "high", "medium" or "low". An empty priorityActions array is not valid. If no corrective action is supported, recommend maintaining or verifying an evidenced strength instead of inventing a gap.
 - Use British spelling. No em dashes, use hyphens. No emojis. Plain, non-hyped language.
 - Do NOT invent facts, citations, outlets, quotes, competitors or spokespeople. Use only what is provided.
 - If the evidence does not support a dimension, score it low and write "No evidence in this run." as the justification with confidence "low". This is expected for message fidelity, factual accuracy, source quality and spokesperson authority when the brand rarely appeared or supplied no URLs or spokespeople.
@@ -1270,12 +1275,12 @@ CRITICAL RULES:
 
 Return STRICT JSON only - no prose before or after, no markdown fences. Exactly this shape:
 {
-  "index": <overall AI Authority Index 0-100>,
+  "index": <overall AI Authority Index integer 0-100>,
   "grade": "<A*|A|B|C|D|E>",
   "summary": "<2 to 3 concise sentences, maximum 60 words total, in plain British English>",
-  "dimensions": [{ "name": "Presence", "score": <0-100>, "justification": "<one sentence, maximum 25 words>", "confidence": "high|medium|low" }, ... all 8 dimensions in the order listed],
+  "dimensions": [{ "name": "Presence", "score": <integer 0-100>, "justification": "<one sentence, maximum 25 words>", "confidence": "high|medium|low" }, ... all 8 dimensions in the order listed],
   "topGaps": ["<the most important visibility gap, maximum 15 words>", ... up to 5],
-  "priorityActions": [{ "action": "<what to do, maximum 20 words>", "rationale": "<why, grounded in the evidence, maximum 25 words>", "priority": "high|medium|low", "failedProbes": ["<exact question string where brand was absent and this action would help>", ... up to 3, or omit if not applicable] }, ... up to 5],
+  "priorityActions": [{ "action": "<what to do, maximum 20 words>", "rationale": "<why, grounded in the evidence, maximum 25 words>", "priority": "high|medium|low", "failedProbes": ["<exact question string where brand was absent and this action would help>", ... up to 3, or omit if not applicable] }, ... 1-5 actions, never an empty array],
   "queryTable": [{ "query": "<the probed question>", "appeared": <true|false>, "notes": "<what the engines said, or which rivals they recommended instead, maximum 30 words>" }, ... exactly one row per query in the evidence],
   "competitorInsights": [{ "name": "<competitor name exactly as it appears in the probe evidence>", "description": "<what this organisation does and why engines recommend it, maximum 35 words, based only on the probe evidence>" }, ... one entry per competitor from the probe evidence that does NOT appear in the client's own competitors list above. Omit tracked competitors. Omit generic terms like 'Agency' or 'United Kingdom'. Maximum 8 entries.],
   "categoryFraming": [{ "query": "<the probed question>", "themes": "<how AI engines frame this topic, maximum 40 words, based only on the probe evidence for this query>" }, ... exactly one entry per probe query. Focus on what the engines DO say - frameworks, dominant terminology, competitor context - not on what the brand failed to do.],
@@ -1383,10 +1388,21 @@ ${JSON.stringify(evidence, null, 1)}`;
       );
       return fallbackAuthorityResult("invalid_response");
     }
-    if (
-      !isCompleteAuthorityAssessmentPayload(rawAssessment) ||
-      !isCompleteAuthorityAssessment(assessment)
-    ) {
+    const rawValidationIssue = getAuthorityAssessmentValidationIssue(rawAssessment);
+    if (rawValidationIssue || !isCompleteAuthorityAssessment(assessment)) {
+      logger.warn(
+        {
+          projectId,
+          stopReason: response.stop_reason,
+          outputTokens: _outputTokens,
+          responseChars: text.length,
+          validationStage: rawValidationIssue ? "raw" : "normalised",
+          validationIssue: rawValidationIssue ??
+            getAuthorityAssessmentValidationIssue(assessment) ??
+            { field: "assessment", code: "invalid_value" },
+        },
+        "Authority scoring failed completeness validation",
+      );
       return fallbackAuthorityResult("incomplete_response");
     }
     return {

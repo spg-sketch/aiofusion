@@ -3,6 +3,11 @@ import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import express from "express";
 import { stableExactTargetPhraseId } from "../lib/exact-target-phrases";
+import { logger } from "../lib/logger";
+import {
+  AUTHORITY_GRADE_BANDS,
+  getAuthorityAssessmentValidationIssue,
+} from "../lib/authority-assessment-validation";
 
 // Mock the Anthropic SDK so the stage-two scoring call never hits the network.
 // `messagesCreate` is hoisted so the mock factory can reference it.
@@ -362,11 +367,13 @@ describe("scoreAuthority end-to-end fallback", () => {
 
   beforeEach(() => {
     messagesCreate.mockReset();
+    vi.spyOn(logger, "warn").mockImplementation(() => {});
     process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL = "https://example.test";
     process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY = "test-key";
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     process.env = { ...savedEnv };
   });
 
@@ -421,6 +428,135 @@ describe("scoreAuthority end-to-end fallback", () => {
       status: "fallback",
       reasonCategory: "incomplete_response",
     });
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stopReason: "max_tokens",
+        outputTokens: 8_000,
+        responseChars: expect.any(Number),
+      }),
+      "Authority scoring returned no complete JSON object",
+    );
+  });
+
+  it("instructs the model to follow the validator's grades, integer scores and required actions", async () => {
+    messagesCreate.mockResolvedValue(modelReply(JSON.stringify(VALID_ASSESSMENT)));
+    await scoreAuthorityWithOutcome("Acme", {}, baseEvidence, baseMetrics);
+
+    const prompt = messagesCreate.mock.calls[0][0].messages[0].content as string;
+    for (const { grade, min, max } of AUTHORITY_GRADE_BANDS) {
+      expect(prompt).toContain(`${grade}: ${min}-${max}`);
+    }
+    expect(prompt).toContain("integers from 0 to 100");
+    expect(prompt).toContain("Include 1-5 evidence-grounded priorityActions");
+    expect(prompt).toContain("never an empty array");
+    expect(prompt).toContain("instead of inventing a gap");
+    expect(prompt).toContain("Do NOT invent facts");
+  });
+
+  it.each([
+    [0, "E"], [9, "E"], [10, "D"], [29, "D"],
+    [30, "C"], [49, "C"], [50, "B"], [64, "B"],
+    [65, "A"], [74, "A"], [75, "A*"], [100, "A*"],
+  ])("accepts a complete assessment at grade boundary %i/%s", async (index, grade) => {
+    const payload = { ...VALID_ASSESSMENT, index, grade };
+    messagesCreate.mockResolvedValue(modelReply(JSON.stringify(payload)));
+
+    expect(getAuthorityAssessmentValidationIssue(payload)).toBeNull();
+    const result = await scoreAuthorityWithOutcome("Acme", {}, baseEvidence, baseMetrics);
+    expect(result.assessmentOutcome).toEqual({ status: "complete", reasonCategory: null });
+    expect(result.assessment).toMatchObject({ index, grade });
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      label: "mismatched grade at score 80",
+      changes: { index: 80, grade: "A" },
+      issue: { field: "grade", code: "grade_mismatch" },
+    },
+    {
+      label: "empty priority actions",
+      changes: { priorityActions: [] },
+      issue: { field: "priorityActions", code: "invalid_count" },
+    },
+    {
+      label: "missing dimensions",
+      changes: { dimensions: undefined },
+      issue: { field: "dimensions", code: "invalid_count" },
+    },
+    {
+      label: "fractional index",
+      changes: { index: 64.5 },
+      issue: { field: "index", code: "invalid_score" },
+    },
+    {
+      label: "fractional dimension score",
+      changes: { dimensions: VALID_ASSESSMENT.dimensions.map((d, i) => i === 0 ? { ...d, score: 70.5 } : d) },
+      issue: { field: "dimensions.0.score", code: "invalid_score" },
+    },
+    {
+      label: "missing action rationale",
+      changes: { priorityActions: [{ action: "PRIVATE RESPONSE MARKER", priority: "high" }] },
+      issue: { field: "priorityActions.0.rationale", code: "required" },
+    },
+    {
+      label: "non-boolean query appearance",
+      changes: { queryTable: [{ query: "PRIVATE RESPONSE MARKER", appeared: "yes", notes: "Evidence" }] },
+      issue: { field: "queryTable.0.appeared", code: "invalid_type" },
+    },
+    {
+      label: "missing category themes",
+      changes: { categoryFraming: [{ query: "PRIVATE RESPONSE MARKER" }] },
+      issue: { field: "categoryFraming.0.themes", code: "required" },
+    },
+    {
+      label: "invalid narrative signals",
+      changes: { narrativeSignals: { gpt: ["PRIVATE RESPONSE MARKER"], claude: "PRIVATE RESPONSE MARKER" } },
+      issue: { field: "narrativeSignals.claude", code: "invalid_type" },
+    },
+    {
+      label: "model-authored grade value",
+      changes: { grade: "PRIVATE RESPONSE MARKER" },
+      issue: { field: "grade", code: "grade_mismatch" },
+    },
+    {
+      label: "model-authored dimension name",
+      changes: { dimensions: VALID_ASSESSMENT.dimensions.map((d, i) => i === 0 ? { ...d, name: "PRIVATE RESPONSE MARKER" } : d) },
+      issue: { field: "dimensions", code: "missing_dimension" },
+    },
+  ])("keeps $label incomplete and logs only safe field diagnostics", async ({ changes, issue }) => {
+    const payload = { ...VALID_ASSESSMENT, summary: "PRIVATE RESPONSE MARKER", ...changes };
+    const text = JSON.stringify(payload);
+    messagesCreate.mockResolvedValue({
+      ...modelReply(text),
+      stop_reason: "end_turn",
+      usage: { input_tokens: 41, output_tokens: 17 },
+    });
+
+    expect(getAuthorityAssessmentValidationIssue(payload)).toEqual(issue);
+    expect(isCompleteAuthorityAssessmentPayload(payload)).toBe(false);
+    const result = await scoreAuthorityWithOutcome(
+      "PRIVATE COMPANY MARKER", {}, baseEvidence, baseMetrics,
+      undefined, undefined, undefined, "synthetic-project",
+    );
+    expect(result.assessment).toBeNull();
+    expect(result.assessmentOutcome).toEqual({ status: "fallback", reasonCategory: "incomplete_response" });
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      {
+        projectId: "synthetic-project",
+        stopReason: "end_turn",
+        outputTokens: 17,
+        responseChars: text.length,
+        validationStage: "raw",
+        validationIssue: issue,
+      },
+      "Authority scoring failed completeness validation",
+    );
+    const diagnostic = JSON.stringify(vi.mocked(logger.warn).mock.calls);
+    expect(diagnostic).not.toContain("PRIVATE RESPONSE MARKER");
+    expect(diagnostic).not.toContain("PRIVATE COMPANY MARKER");
+    expect(diagnostic).not.toContain("You are scoring");
   });
 
   it("returns incomplete_response metadata for parseable but incomplete output", async () => {
