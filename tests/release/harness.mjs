@@ -8,7 +8,11 @@ import { randomBytes, scryptSync } from "node:crypto";
 
 const root = resolve(import.meta.dirname, "../..");
 const publicDir = resolve(root, "artifacts/aio-fusion/dist/public");
+const featureMode = process.argv.includes("--features");
 const pgDir = mkdtempSync(join(tmpdir(), "aio-release-pg-"));
+const featureDir = featureMode ? mkdtempSync(join(tmpdir(), "aio-feature-mail-")) : null;
+const emailCaptureFile = featureDir ? join(featureDir, "resend-capture.jsonl") : null;
+const emailInterceptor = resolve(root, "tests/features/resend-interceptor.mjs");
 const freePort = () => new Promise((resolvePort, reject) => {
   const probe = createNetServer();
   probe.once("error", reject);
@@ -56,15 +60,16 @@ const cleanup = () => {
   for (const child of children) child.kill("SIGTERM");
   spawnSync("pg_ctl", ["-D", pgDir, "-m", "immediate", "stop"], { cwd: root, stdio: "ignore" });
   rmSync(pgDir, { recursive: true, force: true });
+  if (featureDir) rmSync(featureDir, { recursive: true, force: true });
 };
 process.on("exit", cleanup);
 process.on("SIGTERM", () => { cleanup(); process.exit(0); });
 process.on("SIGINT", () => { cleanup(); process.exit(0); });
 
-if (!existsSync(join(publicDir, "index.html"))) {
+if (featureMode || !existsSync(join(publicDir, "index.html"))) {
   if (run("pnpm", ["--filter", "@workspace/aio-fusion", "run", "build"]).status !== 0) throw new Error("web build failed");
 }
-if (!existsSync(resolve(root, "artifacts/api-server/dist/index.mjs"))) {
+if (featureMode || !existsSync(resolve(root, "artifacts/api-server/dist/index.mjs"))) {
   if (run("pnpm", ["--filter", "@workspace/api-server", "run", "build"]).status !== 0) throw new Error("API build failed");
 }
 if (run("initdb", ["-D", pgDir, "--username=release", "--auth=trust", "--no-locale"]).status !== 0) throw new Error("initdb failed");
@@ -107,27 +112,94 @@ INSERT INTO projects (id,name,data,owner)
 VALUES ('other-workspace','Other workspace project','{"client":"other-workspace"}','other-workspace')
 ON CONFLICT (id) DO NOTHING;`;
 if (run("psql", ["-h", "127.0.0.1", "-p", String(port), "-U", "release", "-d", "release", "-v", "ON_ERROR_STOP=1", "-c", sql], { env: { DATABASE_URL: dbUrl } }).status !== 0) throw new Error("seed failed");
-start("node", ["--enable-source-maps", "artifacts/api-server/dist/index.mjs"], {
+start("node", [
+  ...(featureMode ? ["--import", emailInterceptor] : []),
+  "--enable-source-maps",
+  "artifacts/api-server/dist/index.mjs",
+], {
   DATABASE_URL: dbUrl, PORT: String(apiPort), NODE_ENV: "test", DEPLOYMENT_ENV: "test",
   ALLOWED_ORIGIN: "http://127.0.0.1:5000", SESSION_COOKIE_SECURE: "false",
   SESSION_SECRET: "release-harness-session-secret",
   PLATFORM_ADMIN_PASSWORD: "release-harness-admin-password",
-  RESEND_API_KEY: "synthetic", STRIPE_SECRET_KEY: "sk_test_synthetic",
+  RESEND_API_KEY: "aio-features-synthetic-resend-key",
+  STRIPE_SECRET_KEY: "sk_test_aio_features_synthetic_never_used",
+  ...(featureMode ? {
+    AIO_FEATURE_EMAIL_CAPTURE: "1",
+    AIO_FEATURE_EMAIL_CAPTURE_FILE: emailCaptureFile,
+  } : {}),
 });
 await waitFor(`http://127.0.0.1:${apiPort}/api/platform/me`).catch((error) => {
   if (error) throw error;
 });
 
 const server = createServer(async (req, res) => {
-  if (req.url.startsWith("/api/")) {
-    const upstream = await fetch(`http://127.0.0.1:${apiPort}${req.url}`, {
-      method: req.method,
-      headers: req.headers,
-      body: ["GET", "HEAD"].includes(req.method) ? undefined : req,
-      duplex: ["GET", "HEAD"].includes(req.method) ? undefined : "half",
+  if (featureMode && req.method === "GET" && req.url?.startsWith("/__test/verification-email")) {
+    const query = new URL(req.url, "http://127.0.0.1:5000").searchParams;
+    const email = (query.get("email") ?? "").trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      res.writeHead(400, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "A valid email address is required." }));
+      return;
+    }
+    const captured = existsSync(emailCaptureFile) ? readFileSync(emailCaptureFile, "utf8").split("\n").filter(Boolean) : [];
+    const message = captured.map((line) => {
+      try { return JSON.parse(line); } catch { return null; }
+    }).filter(Boolean).reverse().find((entry) => {
+      const to = Array.isArray(entry.message?.to) ? entry.message.to : [entry.message?.to];
+      return entry.message?.subject === "Verify your AIO Fusion email address"
+        && to.some((recipient) => String(recipient).trim().toLowerCase() === email);
     });
-    res.writeHead(upstream.status, Object.fromEntries(upstream.headers));
-    res.end(Buffer.from(await upstream.arrayBuffer()));
+    if (!message) {
+      res.writeHead(404, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "No captured verification email exists for this address." }));
+      return;
+    }
+    const body = `${message.message?.text ?? ""}\n${message.message?.html ?? ""}`.replace(/&amp;/g, "&");
+    const verifyUrl = body.match(/https?:\/\/[^\s"'<>]+\/api\/platform\/verify-email\?token=[A-Fa-f0-9]+/)?.[0];
+    if (!verifyUrl) {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "Captured verification email did not contain a usable verification link." }));
+      return;
+    }
+    const token = new URL(verifyUrl).searchParams.get("token");
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    res.end(JSON.stringify({
+      email,
+      subject: message.message.subject,
+      text: message.message.text,
+      html: message.message.html,
+      // Keep the emailed bearer token but direct the browser only to this
+      // loopback harness. Verification still runs through the real API route.
+      localVerifyUrl: `http://127.0.0.1:5000/api/platform/verify-email?token=${encodeURIComponent(token)}`,
+    }));
+    return;
+  }
+  if (req.url.startsWith("/api/")) {
+    try {
+      const upstream = await fetch(`http://127.0.0.1:${apiPort}${req.url}`, {
+        method: req.method,
+        headers: req.headers,
+        redirect: "manual",
+        body: ["GET", "HEAD"].includes(req.method) ? undefined : req,
+        duplex: ["GET", "HEAD"].includes(req.method) ? undefined : "half",
+      });
+      const headers = Object.fromEntries(upstream.headers);
+      if (featureMode && headers.location) {
+        const destination = new URL(headers.location, `http://127.0.0.1:${apiPort}`);
+        if (!["127.0.0.1", "localhost"].includes(destination.hostname)) {
+          throw new Error("Feature harness refused a redirect outside the isolated server");
+        }
+        // Production redirects use HTTPS. Preserve the redirect, session
+        // cookie and query, but let the browser follow it on this local server.
+        headers.location = `http://127.0.0.1:5000${destination.pathname}${destination.search}${destination.hash}`;
+      }
+      res.writeHead(upstream.status, headers);
+      res.end(Buffer.from(await upstream.arrayBuffer()));
+    } catch (error) {
+      console.error("Isolated harness upstream request failed:", error.message);
+      res.writeHead(502, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "Isolated test API is unavailable." }));
+    }
     return;
   }
   let path = decodeURIComponent(new URL(req.url, "http://localhost").pathname);

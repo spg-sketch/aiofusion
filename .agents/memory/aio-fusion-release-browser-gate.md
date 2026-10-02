@@ -8,3 +8,9 @@ Release-critical authentication, authorised workspace, and cross-workspace denia
 **Why:** A mocked browser fixture can pass while real session creation, cookie handling, UI handoff, project loading, or server-enforced workspace isolation is broken.
 
 **How to apply:** Keep these journeys small and deterministic, use synthetic data only, fail when prerequisites are absent, and assert denial through an authenticated same-origin browser request.
+
+Temporary-database browser servers need graceful termination rather than the test runner's default hard kill.
+
+**Why:** Hard teardown bypassed the fixture's exit cleanup and left temporary PostgreSQL and email-capture directories behind during repeated runs.
+
+**How to apply:** When a browser server owns disposable services or captured mail, explicitly allow SIGTERM cleanup before forced termination. Do not assume a passing test implies its fixtures were removed.

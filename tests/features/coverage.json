@@ -1,0 +1,28 @@
+{
+  "suite": "test:features",
+  "runtime": {
+    "database": "Temporary local PostgreSQL created by tests/release/harness.mjs",
+    "apiAndWeb": "Fresh production builds of the current source, with no real external integrations",
+    "email": "Real signup-generated verification email intercepted at the Resend HTTP send boundary with synthetic credentials and retrievable only from loopback harness",
+    "cleanup": "Harness removes temporary PostgreSQL and captured email files and terminates its API child"
+  },
+  "tested": [
+    "Public UI Direct Client signup, refusal of login before verification, and verification using the real generated email token",
+    "Guided account-type selection, company profile setup, and beta activation path",
+    "UI activation of a new 60-day beta and exact server-reported trial interval",
+    "First project creation and intake save with the captured request scoped to that project, followed by refresh persistence and UI rehydration",
+    "Publication and contact create/read/update/delete through the management UI, including a contact linked by a manually typed publication name",
+    "Publication bookmark created through Search Media Database and visible in My Media Database before and after refresh",
+    "Anonymous private API denial and authenticated cross-workspace project denial",
+    "Representative public and authenticated navigation; browser exceptions and unexpected API 4xx/5xx reporting",
+    "No checkout, Stripe portal, subscription mutation, AI-provider invocation, or real email send"
+  ],
+  "deferred": [
+    "Agency/Partner signup and two-project beta allowance",
+    "Provider-backed AI generation and provider error recovery",
+    "Paid subscriptions, checkout, Stripe, invoices, and payment webhooks (excluded until staging exists)"
+  ],
+  "blocked": [
+    "AI provider execution is intentionally blocked: no AI-provider credentials are supplied to the API child"
+  ]
+}

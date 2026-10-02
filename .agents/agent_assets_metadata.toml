@@ -394,3 +394,17 @@ mtime_ms = 1790689130681
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/d40eb24c-e899-4789-8337-ff6a40e03d1e/ff1c79b6-1766-4394-916f-d90a09063d78"
 storage_version_token = "1790689137191407"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "5sSbBlN51GJc-Lb14Eud3"
+uri = "file://.local/feature-test-reports/summary.html"
+type = "html"
+title = "AIO Fusion - Non-payment test report"
+description = "23 live read-only checks passed; isolated 60-day Direct Client beta journey passed. Includes run history, test-environment distinctions and outstanding coverage gaps. Payments excluded."
+logical_id = "05eaf574-53d5-45be-94b8-0a48bfbe6f78"
+content_hash = "sha256:033137fa600c692a37a8c1c3d457cecf1277af55198d65cf115256b9a391e5d6"
+size = 10002
+mtime_ms = 1790927369018
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/05eaf574-53d5-45be-94b8-0a48bfbe6f78/5ab778f3-bcac-4c82-97c6-499c55e6fbb7"
+storage_version_token = "1790927482337433"
+content_type = "text/html"
