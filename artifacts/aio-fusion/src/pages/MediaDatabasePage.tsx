@@ -1253,10 +1253,10 @@ function MediaDatabasePage() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope, type, ...(scope === "selected" ? { ids } : {}) }),
+        body: JSON.stringify({ scope, type, ...(scope === "full" ? {} : { format: "xlsx" }), ...(scope === "selected" ? { ids } : {}) }),
       });
       if (!response.ok) {
-        let message = `CSV export failed with status ${response.status}.`;
+        let message = `Spreadsheet export failed with status ${response.status}.`;
         try {
           const data = await response.json() as { error?: string };
           if (typeof data.error === "string") message = data.error;
@@ -1269,11 +1269,11 @@ function MediaDatabasePage() {
       link.href = url;
       const disposition = response.headers.get("Content-Disposition") || "";
       const serverFilename = disposition.match(/filename="?([^";]+)"?/i)?.[1];
-      link.download = serverFilename || `Media ${type} ${scope}.csv`;
+      link.download = serverFilename || `Media ${type} ${scope}.${scope === "full" ? "csv" : "xlsx"}`;
       link.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      setExportError(error instanceof Error ? error.message : "Could not download the CSV export.");
+      setExportError(error instanceof Error ? error.message : "Could not download the spreadsheet export.");
     } finally {
       setExportBusy(false);
     }
@@ -1426,8 +1426,8 @@ function MediaDatabasePage() {
         <div className="flex items-center justify-between gap-3 mb-3">
           <p className="text-[13px]" style={{ color: "#ffffff" }}>{searchLoading ? "Searching..." : resultMessage || `${searchType === "contacts" ? searchCounts.contacts : searchCounts.outlets} ${searchType} found`}</p>
            <div className="flex flex-wrap items-center justify-end gap-2">
-             <button disabled={exportBusy || !Array.from(savedMedia).some((key) => key.startsWith(`${searchType === "contacts" ? "contact" : "publication"}:`))} onClick={() => void exportMediaCsv("saved", searchType)} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Export saved connections CSV</button>
-             {selectedIdsFor(searchType).length > 0 && <button disabled={exportBusy} onClick={() => void exportMediaCsv("selected", searchType, selectedIdsFor(searchType))} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Export selected CSV ({selectedIdsFor(searchType).length})</button>}
+             <button disabled={exportBusy || !Array.from(savedMedia).some((key) => key.startsWith(`${searchType === "contacts" ? "contact" : "publication"}:`))} onClick={() => void exportMediaCsv("saved", searchType)} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Export saved connections Excel</button>
+             {selectedIdsFor(searchType).length > 0 && <button disabled={exportBusy} onClick={() => void exportMediaCsv("selected", searchType, selectedIdsFor(searchType))} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Export selected Excel ({selectedIdsFor(searchType).length})</button>}
              {isMaster && <button disabled={exportBusy} onClick={() => void exportMediaCsv("full", searchType)} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Export full CSV</button>}
            </div>
          </div>
@@ -1672,8 +1672,8 @@ function MediaDatabasePage() {
               {allCategories.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
             <button onClick={() => { setActiveTab("outlets"); browseResults("outlets"); }} className="rounded-lg border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.accent, color: vars.accent }}>Browse publications</button>
-              <button disabled={exportBusy || !Array.from(savedMedia).some((key) => key.startsWith("publication:"))} onClick={() => void exportMediaCsv("saved", "publications")} className="rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>Export saved connections CSV</button>
-              {selectedIdsFor("publications").length > 0 && <button disabled={exportBusy} onClick={() => void exportMediaCsv("selected", "publications", selectedIdsFor("publications"))} className="rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>Export selected CSV ({selectedIdsFor("publications").length})</button>}
+              <button disabled={exportBusy || !Array.from(savedMedia).some((key) => key.startsWith("publication:"))} onClick={() => void exportMediaCsv("saved", "publications")} className="rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>Export saved connections Excel</button>
+              {selectedIdsFor("publications").length > 0 && <button disabled={exportBusy} onClick={() => void exportMediaCsv("selected", "publications", selectedIdsFor("publications"))} className="rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>Export selected Excel ({selectedIdsFor("publications").length})</button>}
               {isMaster && <button disabled={exportBusy} onClick={() => void exportMediaCsv("full", "publications")} className="rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>Export full CSV</button>}
           </div>
           {outletTotal > 50 && <div className="flex justify-end items-center gap-3 mb-3 text-[12px]" style={{ color: vars.navy }}>
@@ -1775,8 +1775,8 @@ function MediaDatabasePage() {
               </select>
               {(contactSearch || contactCategoryFilter || contactCountryFilter || contactOutletFilter) && <button onClick={() => { setContactSearch(""); setContactCategoryFilter(""); setContactCountryFilter(""); setContactOutletFilter(""); setContactPage(1); }} className="px-3 py-2 rounded-lg text-[12px] font-medium text-slate-500 hover:text-slate-700 transition-colors">Clear filters</button>}
               <div className="flex-1"></div>
-                <button disabled={exportBusy || !Array.from(savedMedia).some((key) => key.startsWith("contact:"))} onClick={() => void exportMediaCsv("saved", "contacts")} className="flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Export saved connections CSV</button>
-                {selectedIdsFor("contacts").length > 0 && <button disabled={exportBusy} onClick={() => void exportMediaCsv("selected", "contacts", selectedIdsFor("contacts"))} className="flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Export selected CSV ({selectedIdsFor("contacts").length})</button>}
+                <button disabled={exportBusy || !Array.from(savedMedia).some((key) => key.startsWith("contact:"))} onClick={() => void exportMediaCsv("saved", "contacts")} className="flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Export saved connections Excel</button>
+                {selectedIdsFor("contacts").length > 0 && <button disabled={exportBusy} onClick={() => void exportMediaCsv("selected", "contacts", selectedIdsFor("contacts"))} className="flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Export selected Excel ({selectedIdsFor("contacts").length})</button>}
                 {isMaster && <button disabled={exportBusy} onClick={() => void exportMediaCsv("full", "contacts")} className="flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Export full CSV</button>}
             </div>
           </div>

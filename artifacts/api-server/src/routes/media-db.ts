@@ -1,5 +1,6 @@
 import { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { buildMediaExcelExport, MediaExcelExportLimitError } from "../lib/media-excel-export";
 import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable, mediaBookmarksTable, mediaDiscoveriesTable, mediaContactFieldOverridesTable, mediaContactSourceChecksTable, mediaContactStatusEventsTable, mediaContactCorrectionReportsTable, mediaSuppressionsTable, mediaImportBatchesTable, mediaImportJobsTable, mediaRecommendationSetsTable, mediaRecommendationItemsTable, mediaRecommendationDecisionsTable, mediaRecommendationFeedbackTable, mediaOutreachTable, mediaOutreachActivitiesTable, mediaPlacementsTable, projectsTable, archiveItemsTable, platformAccountsTable, platformMetaTable, platformUsersTable, tokenUsageTable, type MediaOutreachStatus } from "@workspace/db";
 import { and, asc, count, desc, eq, ilike, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
@@ -620,7 +621,11 @@ function mediaExportCsv(headers: string[], rows: unknown[][]): string {
 
 router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const { scope, type, ids } = req.body ?? {};
+    const { scope, type, ids, format = "csv" } = req.body ?? {};
+    if (format !== "csv" && format !== "xlsx") {
+      res.status(400).json({ error: 'format must be "csv" or "xlsx".' });
+      return;
+    }
     if (!["full", "saved", "selected"].includes(scope) || !["contacts", "publications"].includes(type)) {
       res.status(400).json({ error: 'scope must be "full", "saved", or "selected" and type must be "contacts" or "publications".' });
       return;
@@ -697,6 +702,17 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
         && !matcher({ name: `${contact.firstName} ${contact.lastName}`, email: contact.email, linkedinUrl: contact.linkedinUrl, outlet: outlet?.name ?? "" }));
       if (scope === "selected" && eligible.length !== requestedIds!.length) {
         res.status(403).json({ error: "One or more selected contacts are unavailable for export." });
+        return;
+      }
+      if (format === "xlsx") {
+        const workbook = buildMediaExcelExport("contacts", eligible.map(({ contact, outlet }) => [
+          contact.firstName, contact.lastName, contact.role, outlet?.name ?? "", contact.email,
+          contact.linkedinUrl, safePublicationWebsite(outlet?.website),
+          (contact.sectors ?? []).join("; ") || outlet?.category || "", outlet?.country ?? "",
+          contact.publicationReach || outlet?.reachBand || "",
+        ]));
+        res.status(200).set("Content-Disposition", 'attachment; filename="Media Contacts.xlsx"')
+          .type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(workbook);
         return;
       }
       const headers = scope === "full"
@@ -785,6 +801,17 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
         journalistsByOutlet.set(contact.outletId!, journalists);
       }
     }
+    if (format === "xlsx") {
+      const workbook = buildMediaExcelExport("publications", publications.map((publication) => [
+        publication.name, safePublicationWebsite(publication.website), publication.description,
+        publication.country,
+        (journalistsByOutlet.get(publication.id) ?? []).map((journalist) => journalist.name).filter(Boolean).join("; "),
+        publication.reachBand || "",
+      ]));
+      res.status(200).set("Content-Disposition", 'attachment; filename="Media Publications.xlsx"')
+        .type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(workbook);
+      return;
+    }
     const output = publications.map((publication) => {
       const journalists = journalistsByOutlet.get(publication.id) ?? [];
       return [
@@ -800,6 +827,10 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
       : MEDIA_EXPORT_PUBLICATION_HEADERS.filter((header) => header !== "Linked journalist emails");
     res.status(200).type("text/csv; charset=utf-8").send(mediaExportCsv(headers, output.map((row) => row.slice(0, headers.length))));
   } catch (error) {
+    if (error instanceof MediaExcelExportLimitError) {
+      res.status(413).json({ error: error.message });
+      return;
+    }
     req.log.error({ err: error }, "Failed to export media database");
     res.status(500).json({ error: "Failed to export media database." });
   }

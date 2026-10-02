@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
+import { inflateRawSync } from "node:zlib";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import express, { type Request } from "express";
@@ -270,7 +271,24 @@ async function mediaExportRequest(workspace: string, body: Record<string, unknow
     },
     body: JSON.stringify(body),
   });
-  return { status: response.status, contentType: response.headers.get("content-type"), text: await response.text() };
+  const bytes = Buffer.from(await response.arrayBuffer());
+  return { status: response.status, contentType: response.headers.get("content-type"),
+    disposition: response.headers.get("content-disposition"), bytes,
+    text: bytes.toString("utf8").replace(/^\uFEFF/, "") };
+}
+
+function exportedWorksheet(bytes: Buffer): string {
+  let offset = 0;
+  while (bytes.readUInt32LE(offset) === 0x04034B50) {
+    const size = bytes.readUInt32LE(offset + 18);
+    const nameLength = bytes.readUInt16LE(offset + 26);
+    const extraLength = bytes.readUInt16LE(offset + 28);
+    const name = bytes.subarray(offset + 30, offset + 30 + nameLength).toString("utf8");
+    const start = offset + 30 + nameLength + extraLength;
+    if (name === "xl/worksheets/sheet1.xml") return inflateRawSync(bytes.subarray(start, start + size)).toString("utf8");
+    offset = start + size;
+  }
+  throw new Error("Export does not contain a worksheet.");
 }
 
 const csv = [
@@ -489,11 +507,49 @@ describe("media export route regressions", () => {
     expect(response.text).not.toContain("Confidential hidden outlet details.");
   });
 
-  it("includes only independently saved visible linked journalists in saved and selected publication CSVs", async () => {
+  it("exports exactly the requested contact Excel fields and imported reach, without authority or notes", async () => {
+    const workspace = "contact-excel-fields";
+    const [outlet] = await db.insert(mediaOutletsTable).values({
+      name: "Excel News", accountId: workspace, website: "https://excel.example.test",
+      description: "Not requested for contacts", category: "Energy", country: "UK", reachBand: "300",
+    }).returning();
+    const [contact] = await db.insert(mediaContactsTable).values({
+      firstName: "Zoë", lastName: "Example", role: "=Reporter", email: "zoe@example.test",
+      linkedinUrl: "https://www.linkedin.com/in/excel-example", outletId: outlet!.id, accountId: workspace,
+      sectors: ["Energy & Nature", "Technology"], publicationReach: "00042",
+      publicationAuthority: "88", journalistAuthority: "77", notes: "Private notes not exported",
+    }).returning();
+    await db.insert(mediaBookmarksTable).values({ accountId: workspace, contactId: contact!.id, outletId: null });
+    for (const scope of ["saved", "selected"]) {
+      const response = await mediaExportRequest(workspace, {
+        scope, type: "contacts", format: "xlsx", ...(scope === "selected" ? { ids: [contact!.id] } : {}),
+      });
+      expect(response.status).toBe(200);
+      expect(response.contentType).toContain("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      expect(response.disposition).toContain('filename="Media Contacts.xlsx"');
+      const sheet = exportedWorksheet(response.bytes);
+      const header = sheet.match(/<row r="1"[^>]*>(.*?)<\/row>/s)![1]!;
+      expect([...header.matchAll(/<t[^>]*>(.*?)<\/t>/g)].map((match) => match[1])).toEqual([
+        "First name", "Last name", "Role", "Outlet name", "Email", "LinkedIn", "Outlet website", "Sector", "Country", "Source reach value",
+      ]);
+      for (const value of ["Zoë", "=Reporter", "Excel News", "zoe@example.test", "https://www.linkedin.com/in/excel-example",
+        "https://excel.example.test", "Energy &amp; Nature; Technology", "UK", "00042"]) expect(sheet).toContain(value);
+      for (const absent of ["Private notes not exported", "Not requested for contacts", "Authority", ">88<", ">77<", "<f>"]) expect(sheet).not.toContain(absent);
+    }
+    const denied = await mediaExportRequest("another-excel-workspace", { scope: "selected", type: "contacts", ids: [contact!.id], format: "xlsx" });
+    expect(denied.status).toBe(403);
+    expect((await mediaExportRequest(workspace, { scope: "full", type: "contacts", format: "xlsx" })).status).toBe(403);
+    expect((await mediaExportRequest(workspace, { scope: "selected", type: "contacts", ids: Array.from({ length: 26 }, (_, i) => i + 1), format: "xlsx" })).status).toBe(400);
+    expect((await mediaExportRequest(workspace, { scope: "saved", type: "contacts", format: "html" })).status).toBe(400);
+  });
+
+  it("includes only independently saved visible linked journalists in saved and selected publication exports", async () => {
     const workspace = "publication-csv-journalist-isolation";
     const [publication] = await db.insert(mediaOutletsTable).values({
       name: "Journalist Isolation Publication",
       accountId: workspace,
+      website: "https://publication-excel.example.test", description: "Energy & business reporting",
+      country: "UK", reachBand: "00029",
     }).returning();
     const [savedContact, unsavedContact, privateContact] = await db.insert(mediaContactsTable).values([
       {
@@ -541,6 +597,20 @@ describe("media export route regressions", () => {
       expect(response.text).not.toContain("independently-saved@example.test");
       expect(response.text).not.toContain("publication-only@example.test");
       expect(response.text).not.toContain("private-linked@example.test");
+    }
+    for (const scope of ["saved", "selected"]) {
+      const response = await mediaExportRequest(workspace, { scope, type: "publications", format: "xlsx",
+        ...(scope === "selected" ? { ids: [publication!.id] } : {}) });
+      expect(response.status).toBe(200);
+      expect(response.disposition).toContain('filename="Media Publications.xlsx"');
+      const sheet = exportedWorksheet(response.bytes);
+      const header = sheet.match(/<row r="1"[^>]*>(.*?)<\/row>/s)![1]!;
+      expect([...header.matchAll(/<t[^>]*>(.*?)<\/t>/g)].map((match) => match[1])).toEqual([
+        "Outlet name", "Outlet website", "Outlet description", "Country", "Linked journalists", "Source reach value",
+      ]);
+      for (const value of ["Journalist Isolation Publication", "https://publication-excel.example.test", "Energy &amp; business reporting", "UK", "Independently Saved", "00029"]) expect(sheet).toContain(value);
+      for (const absent of ["Publication Only", "No Visibility", "independently-saved@example.test",
+        "publication-only@example.test", "private-linked@example.test", "Verified authority"]) expect(sheet).not.toContain(absent);
     }
   });
 

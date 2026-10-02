@@ -90,6 +90,14 @@ describe("MediaDatabasePage source health", () => {
         }), { status: 200 });
       }
       if (url.includes("/media-db/export") && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        if (body.format === "xlsx") return new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "Content-Disposition": `attachment; filename="Media ${body.type === "contacts" ? "Contacts" : "Publications"}.xlsx"`,
+          },
+        });
         return new Response('"First Name","Last Name"\r\n"Jane","Reporter"', {
           status: 200,
           headers: { "Content-Type": "text/csv", "Content-Disposition": 'attachment; filename="Media contacts.csv"' },
@@ -599,13 +607,13 @@ describe("MediaDatabasePage source health", () => {
   it("exports only explicitly selected visible contacts through the backend", async () => {
     render(<MediaDatabasePage />);
     await browseContacts();
-    expect(screen.queryByRole("button", { name: /Export selected CSV/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Export selected Excel/i })).toBeNull();
     fireEvent.click(screen.getByLabelText("Select contact 12"));
-    fireEvent.click(screen.getByRole("button", { name: "Export selected CSV (1)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export selected Excel (1)" }));
     await waitFor(() => {
       const [, init] = vi.mocked(fetch).mock.calls.find(([input]) => String(input).includes("/media-db/export"))!;
       expect(init?.method).toBe("POST");
-      expect(JSON.parse(String(init?.body))).toEqual({ scope: "selected", type: "contacts", ids: [12] });
+      expect(JSON.parse(String(init?.body))).toEqual({ scope: "selected", type: "contacts", ids: [12], format: "xlsx" });
     });
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/contacts?") && String(input).includes("pageSize=200"))).toBe(false);
   });
@@ -616,11 +624,11 @@ describe("MediaDatabasePage source health", () => {
     fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
     fireEvent.click(screen.getByTestId("button-search-media"));
     expect(await screen.findByText("Energy Weekly")).toBeTruthy();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Export saved connections CSV" }).hasAttribute("disabled")).toBe(false));
-    fireEvent.click(screen.getByRole("button", { name: "Export saved connections CSV" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Export saved connections Excel" }).hasAttribute("disabled")).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Export saved connections Excel" }));
     await waitFor(() => {
       const [, init] = vi.mocked(fetch).mock.calls.find(([input]) => String(input).includes("/media-db/export"))!;
-      expect(JSON.parse(String(init?.body))).toEqual({ scope: "saved", type: "publications" });
+      expect(JSON.parse(String(init?.body))).toEqual({ scope: "saved", type: "publications", format: "xlsx" });
     });
   });
 
@@ -628,7 +636,7 @@ describe("MediaDatabasePage source health", () => {
     render(<MediaDatabasePage />);
     await browseContacts();
     expect(screen.queryByRole("button", { name: "Export full CSV" })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Export all matches|Word|Excel/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Export all matches|Word/i })).toBeNull();
 
     cleanup();
     localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "admin", role: "admin", membershipRole: "owner" }));
