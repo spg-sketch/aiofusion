@@ -1310,7 +1310,12 @@ function MediaResearchPage() {
         ))}
       </div>)}
     </section>}
-     {!liveLoading && !loading && !briefLoading && !briefLoadError && !error && recommendationHasRun && items.length === 0 && liveItems.length === 0 && selected && <section className="bg-white rounded-2xl border p-5 mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="font-semibold text-lg" style={{ color: vars.navy }}>No suitable saved contacts found</h2><p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Find new journalists with one explicit live search. Results are unverified discoveries, not contacts, and must be sent for review before any human approval.</p></div><button data-testid="button-find-journalists" disabled={liveLoading || briefLoading || briefReadyKey !== `${projectId}:${storyKey}` || Boolean(briefLoadError)} onClick={() => void discoverLive()} className="px-4 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50" style={{ background: vars.navy }}><Search size={15} className="inline mr-1.5" />Find new journalists</button></div></section>}
+     {!liveLoading && !loading && !briefLoading && !briefLoadError && !error && recommendationHasRun && items.length === 0 && liveItems.length === 0 && selected && <section className="bg-white rounded-2xl border p-5 mb-5 shadow-sm" style={{ borderColor: vars.g200 }}>
+       <div className="flex flex-wrap items-center justify-between gap-4">
+         <div><h2 className="font-semibold text-lg" style={{ color: vars.navy }}>No suitable saved contacts found</h2><p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Optional live search finds additional candidates under “Public web discoveries” below. Verified candidates must be sent for review and approved before they become database contacts.</p></div>
+         <button data-testid="button-find-journalists" aria-describedby="research-live-search-help" disabled={liveLoading || briefLoading || briefReadyKey !== `${projectId}:${storyKey}` || Boolean(briefLoadError)} onClick={() => void discoverLive()} className="px-4 py-2.5 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50" style={{ background: vars.navy }}><Search size={15} className="inline mr-1.5" />Find additional journalists online</button>
+       </div>
+     </section>}
      <section className="bg-white rounded-2xl border overflow-hidden shadow-sm" style={{ borderColor: vars.g200 }}>
        <div className="p-5 flex flex-wrap justify-between gap-2 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}>
          <div>

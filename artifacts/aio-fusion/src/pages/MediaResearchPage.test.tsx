@@ -490,13 +490,16 @@ describe("MediaResearchPage live discovery", () => {
     expect(await screen.findByText("Jane Reporter")).toBeTruthy();
   });
 
-  it("offers Find new journalists only after a persisted no-result match and runs live search explicitly", async () => {
+  it("offers the same explained online search after a persisted no-result match and runs it explicitly", async () => {
     recommendationState.includeContact = false;
     render(<MediaResearchPage />);
     expect(screen.queryByTestId("button-find-journalists")).toBeNull();
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
     await waitFor(() => expect(screen.getAllByDisplayValue("Clean energy").length).toBeGreaterThan(0));
-    expect(await screen.findByTestId("button-find-journalists")).toBeTruthy();
+    const findButton = await screen.findByTestId("button-find-journalists");
+    expect(findButton).toHaveAccessibleName("Find additional journalists online");
+    expect(findButton.getAttribute("aria-describedby")).toBe("research-live-search-help");
+    expect(screen.getByText(/Optional live search.*Public web discoveries.*review and approved/i)).toBeTruthy();
     expect(requests.some((request) => request.url.includes("/content/media-discover"))).toBe(false);
     fireEvent.click(screen.getByTestId("button-find-journalists"));
     await waitFor(() => expect(requests.some((request) => request.url.includes("/content/media-discover"))).toBe(true));
