@@ -210,9 +210,11 @@ describe("settings-section deep link survives refresh (account_section param)", 
     // The section content mounts once auth resolves and SubAccountsPage lazy
     // loads. Assert the Security panel's own heading (not the always-visible
     // nav button) so this fails if the deep link lands on the wrong section.
+    // This first cold settings chunk competes with every full-suite worker.
+    // Keep a bounded route-load budget without weakening the destination check.
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: /sign-in & security/i })).toBeInTheDocument();
-    });
+    }, { timeout: 15_000 });
     expect(screen.queryByText("Account type")).toBeNull();
     // History-sync must have rewritten the URL to carry the section, so a
     // second refresh reproduces the same state.

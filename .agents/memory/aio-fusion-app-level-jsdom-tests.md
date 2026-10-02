@@ -23,3 +23,9 @@ Rendering the whole `App` (not just a page) in jsdom works, but needs:
 **Why:** Under full-suite load, a fixed delay can expire before the history listener is attached. The synthetic event is lost and assertions run against the public page even though authentication succeeded.
 
 **How to apply:** Initialize the desired route before import/render; reserve simulated navigation for tests that actually exercise navigation and wait for an observable ready state first.
+
+**Rule:** A cold authenticated lazy route may need a larger bounded assertion wait under full-suite load. Do not infer a missing navigation handler from the previous screen remaining visible during Suspense.
+
+**Why:** A Security deep-link assertion exceeded its ordinary wait during the full release suite but reached the correct panel in under a second when isolated. Static inspection confirmed its navigation effect already existed.
+
+**How to apply:** Reconcile the actual navigation effects and isolate the failing test before editing app behaviour. When timing is the issue, keep the exact destination-content assertion and extend only its bounded wait.
