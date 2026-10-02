@@ -192,6 +192,7 @@ describe("MediaResearchPage live discovery", () => {
           id: 91, firstName: "Decision", lastName: "Contact", role: "Energy editor",
           email: "", phone: "", notes: "", beats: ["energy"], sectors: ["Energy"],
           outletName: "Current Energy Daily", outletCategory: "Energy",
+          publicationReach: "Hidden source reach", outletReachBand: "Hidden outlet band",
         };
         return new Response(JSON.stringify({
           ok: true,
@@ -418,6 +419,8 @@ describe("MediaResearchPage live discovery", () => {
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
     expect(await screen.findByText("Decision Contact")).toBeTruthy();
+    expect(screen.queryByText(/Hidden source reach|Hidden outlet band|Source reach/i)).toBeNull();
+    expect(document.querySelector('[title*="readership"]')).toBeNull();
     expect(screen.queryByRole("button", { name: /decline|more like this|less like this/i })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Save to My Media Database" }));
@@ -898,7 +901,8 @@ describe("MediaResearchPage live discovery", () => {
     expect(screen.getByTestId("editorial-assessment").textContent).toContain("Evidence confidence: low");
     expect(screen.getByTestId("editorial-assessment").textContent).toContain("Contact readiness: Blocked");
     expect(screen.getByText(/Limited checked evidence.*Review recent bylines/i)).toBeTruthy();
-    expect(screen.getByText("Source reach (estimate)").getAttribute("title")).toMatch(/imported publication reach or source estimate.*not verified readership or a score/i);
+    expect(screen.queryByText(/Source reach|50k-100k/)).toBeNull();
+    expect(document.querySelector('[title*="readership"]')).toBeNull();
     expect(screen.getByTestId("contact-provenance-97").textContent).toContain("Imported contacts row 8");
     expect(screen.getByTestId("contact-restricted-97")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Remove restriction" })).toBeTruthy();

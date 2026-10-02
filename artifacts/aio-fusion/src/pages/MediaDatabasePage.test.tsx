@@ -55,6 +55,20 @@ async function browseOutlets() {
   await new Promise((resolve) => window.setTimeout(resolve, 0));
 }
 
+function expectReachHidden() {
+  expect(document.body.innerHTML).not.toMatch(/\breach\b|readership|verified audience|1M-5M/);
+}
+
+function expectTableAligned(columns?: number) {
+  for (const table of document.querySelectorAll("table")) {
+    const headers = table.querySelectorAll("thead th").length;
+    if (columns) expect(headers).toBe(columns);
+    for (const row of table.querySelectorAll("tbody tr")) {
+      expect(row.querySelectorAll("td")).toHaveLength(headers);
+    }
+  }
+}
+
 async function submitPublicationSearch() {
   bookmarkTestRows = [{ type: "publication", targetId: 20 }];
   await waitFor(() => expect(Array.from((screen.getByLabelText("Sector filter") as HTMLSelectElement).options).some((option) => option.value === "Energy")).toBe(true));
@@ -262,6 +276,7 @@ describe("MediaDatabasePage source health", () => {
     expect(profile.queryByText("Notes")).toBeNull();
     expect(screen.getByText("Journalist authority")).toBeTruthy();
     expect(screen.getByText("Confidence")).toBeTruthy();
+    expectReachHidden();
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     fireEvent.click(screen.getAllByRole("button", { name: "Review public source" })[0]);
@@ -481,6 +496,60 @@ describe("MediaDatabasePage source health", () => {
     render(<MediaDatabasePage />);
     await browseContacts();
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/contacts?"))).toBe(true);
+    expectReachHidden();
+    expectTableAligned();
+  });
+
+  it("hides reach in contact and publication search cards and journalist previews", async () => {
+    render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByTestId("button-search-media"));
+    expect(await screen.findByText("Jane Reporter")).toBeTruthy();
+    expectReachHidden();
+    expect(screen.getByText("Recorded authority score 75")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /View profile/i }));
+    expect(screen.getByRole("dialog", { name: "Journalist Profile" })).toBeTruthy();
+    expectReachHidden();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: "publications" } });
+    fireEvent.click(screen.getByTestId("button-search-media"));
+    expect(await screen.findByText("Energy Weekly")).toBeTruthy();
+    expectReachHidden();
+    expect(screen.queryByText("National")).toBeNull();
+    expect(screen.getByText("Currently linked journalists (1)")).toBeTruthy();
+  });
+
+  it("keeps stored publication reach when editing another field with no reach input", async () => {
+    testOutlets = [{ id: 2, name: "Example News", category: "Energy", website: "", description: "", country: "UK", reachBand: "Hidden outlet band", accountId: "account-a" }];
+    render(<MediaDatabasePage />);
+    await browseOutlets();
+    expectReachHidden();
+    expect(screen.queryByText("Hidden outlet band")).toBeNull();
+    expectTableAligned(5);
+    fireEvent.click(screen.getByTitle("Edit"));
+    expectReachHidden();
+    expect(screen.queryByDisplayValue("Hidden outlet band")).toBeNull();
+    fireEvent.change(screen.getByPlaceholderText("e.g. PR Week"), { target: { value: "Updated News" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input, init]) =>
+      String(input).endsWith("/media-db/outlets/2") && init?.method === "PUT")).toBe(true));
+    const [, update] = vi.mocked(fetch).mock.calls.find(([input, init]) =>
+      String(input).endsWith("/media-db/outlets/2") && init?.method === "PUT")!;
+    expect(JSON.parse(String(update?.body))).toMatchObject({ name: "Updated News", reachBand: "Hidden outlet band" });
+  });
+
+  it("keeps stored contact reach when editing another field with no reach input", async () => {
+    render(<MediaDatabasePage />);
+    await browseContacts();
+    fireEvent.click(screen.getAllByTitle("Edit")[0]);
+    expectReachHidden();
+    expect(screen.queryByDisplayValue("1M-5M")).toBeNull();
+    fireEvent.change(screen.getByPlaceholderText("Jane"), { target: { value: "Janet" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input, init]) =>
+      String(input).endsWith("/media-db/contacts/12") && init?.method === "PUT")).toBe(true));
+    const [, update] = vi.mocked(fetch).mock.calls.find(([input, init]) =>
+      String(input).endsWith("/media-db/contacts/12") && init?.method === "PUT")!;
+    expect(JSON.parse(String(update?.body))).toMatchObject({ firstName: "Janet", publicationReach: "1M-5M" });
   });
 
   it("server-pages publication browsing and carries search and category filters", async () => {
@@ -767,16 +836,17 @@ describe("MediaDatabasePage source health", () => {
     await waitFor(() => expect(contactRegion.value).not.toBe("Global"));
     fireEvent.click(screen.getByRole("button", { name: "My Media Database" }));
     expect(await screen.findByRole("columnheader", { name: "First name" })).toBeTruthy();
-    expect(screen.getByRole("columnheader", { name: "Source-provided reach" })).toBeTruthy();
+    expect(screen.queryByRole("columnheader", { name: /reach/i })).toBeNull();
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => {
       const url = new URL(String(input), "http://test.local");
       return url.pathname.endsWith("/media-db/search") && url.searchParams.get("scope") === "saved";
     })).toBe(true));
-    expect(screen.getByText("Source-provided, not verified audience")).toBeTruthy();
+    expectReachHidden();
+    expectTableAligned(10);
     expect(screen.getByRole("button", { name: "Remove from My Media Database" })).toBeTruthy();
   });
 
-  it("shows saved publications in sector tables with honest website and reach labels", async () => {
+  it("shows saved publications in aligned sector tables without reach", async () => {
     bookmarkTestRows = [{ type: "publication", targetId: 20 }];
     render(<MediaDatabasePage />);
     fireEvent.click(screen.getByRole("button", { name: "My Media Database" }));
@@ -784,7 +854,9 @@ describe("MediaDatabasePage source health", () => {
     expect(await screen.findByRole("columnheader", { name: "Publication" })).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "Linked journalists" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Visit" })).toHaveAttribute("href", "https://energy.example/");
-    expect(screen.getByText("Source-provided, not verified audience")).toBeTruthy();
+    expectReachHidden();
+    expect(screen.queryByText("National")).toBeNull();
+    expectTableAligned(6);
     expect(screen.queryByText(/Verified authority/)).toBeNull();
     expect(screen.getByRole("button", { name: "Remove from My Media Database" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
@@ -809,6 +881,7 @@ describe("MediaDatabasePage source health", () => {
     render(<MediaDatabasePage />);
     fireEvent.click(screen.getByRole("button", { name: "Manage my records" }));
     fireEvent.click(screen.getByRole("button", { name: "Add contact" }));
+    expectReachHidden();
 
     const publication = screen.getByRole("textbox", { name: "Publication / outlet" }) as HTMLInputElement;
     expect(publication).toHaveAttribute("id", "contact-publication-name");

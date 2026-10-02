@@ -97,3 +97,4 @@
 - [Contact email delivery ambiguity](contact-delivery-ambiguity.md) — unknown historical acceptance must not be treated as safe to retry; separate each message's state.
 - [Imported ID counter readiness](aio-fusion-imported-id-counters.md) — check next-ID occupancy after explicit-ID imports; backup failures must still block deletion.
 - [Drizzle push safety](drizzle-push-safety.md) — table filters may not scope sequences; inspect migration output and never force unresolved rename/deletion prompts.
+- [Media source reach visibility](media-source-reach-visibility.md) — source reach is temporarily hidden from Database and Research, not removed from stored data or exports.

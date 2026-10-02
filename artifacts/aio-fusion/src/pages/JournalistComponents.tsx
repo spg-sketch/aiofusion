@@ -176,6 +176,13 @@ export type LiveDiscovery = {
 
 export type DiscoveryReviewStatus = "saving" | "submitted" | "approved" | "rejected" | "error";
 
+// Legacy phrase explanations can embed imported reach beside authority.
+// Hide only that source metadata, without changing stored evidence or ranking.
+function visiblePublicationAuthorityContext(context: string): string {
+  if (context === "No publication authority or reach label is stored.") return "No publication authority is stored.";
+  return context.split(";").filter((part) => !/^\s*Stored publication reach:/i.test(part)).join(";").trim();
+}
+
 function PhraseAttributionSections({ attributions, aiSuggested = false }: { attributions?: PhraseAttribution[]; aiSuggested?: boolean }) {
   if (!attributions?.length) return null;
   const hasTopicOverlap = attributions.some((attribution) => attribution.matchKind === "topic");
@@ -191,7 +198,7 @@ function PhraseAttributionSections({ attributions, aiSuggested = false }: { attr
           <dl className="space-y-1">
             <div><dt className="inline font-semibold">{attribution.matchKind === "topic" ? "Recorded topic/keyword overlap: " : "Exact phrase match: "}</dt><dd className="inline">{attribution.exactPhraseMatch}</dd></div>
             <div><dt className="inline font-semibold">Article fit: </dt><dd className="inline">{attribution.articleFit}</dd></div>
-            <div><dt className="inline font-semibold">Publication authority context: </dt><dd className="inline">{attribution.publicationAuthorityContext}</dd></div>
+            {visiblePublicationAuthorityContext(attribution.publicationAuthorityContext) && <div><dt className="inline font-semibold">Publication authority context: </dt><dd className="inline">{visiblePublicationAuthorityContext(attribution.publicationAuthorityContext)}</dd></div>}
             <div><dt className="inline font-semibold">Media opportunities: </dt><dd className="inline">{attribution.suggestedPlacementAngle}</dd></div>
           </dl>
         </div>
@@ -549,16 +556,8 @@ export function RecommendationCard({
                 <span className="text-slate-600">{c.outletCountry}</span>
               </>
             )}
-            {c.outletReachBand && !compact && (
-              <>
-                <span className="mx-2 text-slate-300">|</span>
-                <span className="text-slate-600" title="Imported publication reach band or source estimate; not verified readership or a score">Source reach (imported): {c.outletReachBand}</span>
-              </>
-            )}
           </p>
           {compact && <p className="text-[12px] text-slate-600 mb-2">
-            Source reach (imported publication value): {c.publicationReach || c.outletReachBand || "Not available"} <span className="text-[11px] text-slate-500">(source estimate/band, not verified readership or a score)</span>
-            <span className="mx-2 text-slate-300">·</span>
             Publication authority: {c.publicationAuthority !== undefined && c.publicationAuthority !== null && c.publicationAuthority !== "" ? c.publicationAuthority : "Not available"}
           </p>}
           {(compact || isShortlist) && (c.sourceRef || c.sourceStatus || c.lastVerifiedAt) && (
@@ -691,12 +690,6 @@ export function RecommendationCard({
           </div>}
           
           {!compact && <div className="flex flex-wrap gap-2 justify-end w-full">
-             {c.publicationReach && (
-              <div className="flex flex-col items-center p-2 rounded-lg bg-slate-50 border border-slate-100 flex-1 min-w-[70px]">
-                 <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wide" title="Imported publication reach or source estimate; not verified readership or a score">Source reach (estimate)</span>
-                 <span className="text-[13px] font-bold text-slate-700">{c.publicationReach}</span>
-              </div>
-            )}
              {c.publicationAuthority !== undefined && c.publicationAuthority !== null && c.publicationAuthority !== "" ? (
               <div className="flex flex-col items-center p-2 rounded-lg bg-slate-50 border border-slate-100 flex-1 min-w-[70px]">
                  <Award size={14} className="text-slate-400 mb-1" />

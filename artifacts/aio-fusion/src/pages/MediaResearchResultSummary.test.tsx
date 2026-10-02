@@ -40,17 +40,19 @@ describe("Media Research-only result summary", () => {
     const scoped = within(result);
     expect(scoped.getByRole("heading", { name: "Alex Example" })).toBeTruthy();
     expect(scoped.getByRole("link", { name: "LinkedIn profile for Alex Example" }).getAttribute("href")).toContain("linkedin.com/in/alex-example");
-    for (const label of ["Job role", "Publication", "Publication sector", "Region", "Email address", "Publication website", "Source reach (imported)", "Editorial fit", "Suggested pitch angle:"]) {
+    for (const label of ["Job role", "Publication", "Publication sector", "Region", "Email address", "Publication website", "Editorial fit", "Suggested pitch angle:"]) {
       expect(scoped.getByText(label)).toBeTruthy();
     }
-    for (const value of ["Editor", "Example Publication", "Technology", "Europe", "91", "60%"]) {
+    for (const value of ["Editor", "Example Publication", "Technology", "Europe", "60%"]) {
       expect(scoped.getByText(value)).toBeTruthy();
     }
     expect(scoped.getByRole("link", { name: "alex@example.test" }).getAttribute("href")).toBe("mailto:alex@example.test");
     expect(scoped.getByRole("link", { name: "https://publication.example.test" }).getAttribute("href")).toBe("https://publication.example.test/");
     expect(scoped.getByText(/How practical technology/)).toBeTruthy();
     expect(result.querySelector("svg circle")).toBeTruthy();
-    expect(scoped.getByText("Source reach (imported)").getAttribute("title")).toContain("not a measured AI Authority score");
+    expect(scoped.queryByText("91")).toBeNull();
+    expect(result.innerHTML).not.toMatch(/\breach\b|readership|verified audience/i);
+    expect(result.querySelectorAll("dl > div")).toHaveLength(6);
     for (const hidden of ["Why this matches", "Evidence confidence:", "Contact readiness:", "Evidence and contact checks", "Notes", "Hidden ranking explanation", "Hidden imported notes", "Hidden source title", "Hidden source excerpt", "Hidden imported provenance", "Hidden beat", "Hidden contact sector", "Publication authority:", "Match Score"]) {
       expect(screen.queryByText(hidden, { exact: false })).toBeNull();
     }
@@ -86,20 +88,58 @@ describe("Media Research-only result summary", () => {
     delete item.assessment;
     render(<RecommendationCard item={item} researchSummary />);
     expect(screen.getByText("Not assessed")).toBeTruthy();
-    expect(screen.getByText("91")).toBeTruthy();
+    expect(screen.queryByText("91")).toBeNull();
     expect(screen.queryByText("59%")).toBeNull();
     expect(screen.queryByText("91%")).toBeNull();
     expect(screen.queryByText(/AI authority score:/i)).toBeNull();
   });
 
-  it("preserves a genuine zero editorial fit and zero reach value", () => {
+  it("preserves a genuine zero editorial fit while hiding zero reach", () => {
     const item = recommendation();
     item.assessment!.fitScore = 0;
     item.contact.publicationReach = "0";
     render(<RecommendationCard item={item} researchSummary />);
     expect(screen.getByText("0%")).toBeTruthy();
     expect(screen.queryByText("Not assessed")).toBeNull();
-    expect(screen.getAllByText("0").length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId("research-result-summary-1").querySelector("dl")!).queryByText("0")).toBeNull();
+  });
+
+  it.each(["publicationReach", "outletReachBand", "reach", "reachBand"] as const)("hides the legacy %s fallback without a reach empty state", (field) => {
+    const item = recommendation();
+    delete item.contact.publicationReach;
+    item.contact[field] = "Hidden reach value";
+    const { container } = render(<RecommendationCard item={item} researchSummary />);
+    expect(container.innerHTML).not.toMatch(/\breach\b|readership|verified audience/i);
+  });
+
+  it.each([false, true])("hides reach in shared journalist and publication details (compact: %s)", (compact) => {
+    const item = recommendation();
+    item.contact.outletReachBand = "Hidden publication band";
+    const { container } = render(<RecommendationCard item={item} compact={compact} />);
+    expect(container.innerHTML).not.toMatch(/\breach\b|readership|verified audience|Hidden publication band/i);
+    expect(screen.queryByText("91")).toBeNull();
+    expect(screen.getByText("42", { exact: !compact })).toBeTruthy();
+    expect(screen.getByText(compact ? "Editorial fit: 60%" : "Editorial fit")).toBeTruthy();
+    const details = container.querySelector("details");
+    if (details) {
+      fireEvent.click(details.querySelector("summary")!);
+      expect(container.innerHTML).not.toMatch(/\breach\b|readership|verified audience/i);
+    }
+    expect(item.contact.publicationReach).toBe("91");
+  });
+
+  it.each(["Stored publication authority: 42; Stored publication reach: 91", "Stored publication reach: 91", "No publication authority or reach label is stored."])("hides embedded reach in expanded publication context: %s", (context) => {
+    const item = recommendation();
+    item.phraseAttributions = [{
+      phraseId: "phrase-1", phraseText: "Technology", exactPhraseMatch: "Recorded match",
+      articleFit: "Relevant story", publicationAuthorityContext: context, suggestedPlacementAngle: "Practical technology",
+    }];
+    const { container } = render(<RecommendationCard item={item} compact isShortlist />);
+    fireEvent.click(screen.getByText("Story phrase matches"));
+    expect(container.innerHTML).not.toMatch(/\breach\b|readership/);
+    expect(screen.queryByText("91")).toBeNull();
+    if (context.includes("authority: 42")) expect(screen.getByText("Stored publication authority: 42")).toBeTruthy();
+    expect(item.phraseAttributions[0].publicationAuthorityContext).toBe(context);
   });
 
   it("handles missing data and rejects unsafe links without inventing replacements", () => {

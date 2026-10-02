@@ -21,7 +21,6 @@ export function MediaResearchResultSummary({
   const name = [contact.firstName, contact.lastName].map((part) => part?.trim()).filter(Boolean).join(" ");
   const fit = item.assessment?.fitScore;
   const hasFit = typeof fit === "number" && Number.isFinite(fit) && fit >= 0 && fit <= 100;
-  const reach = contact.publicationReach || contact.outletReachBand || contact.reach || contact.reachBand;
 
   return (
     <div data-testid={`research-result-summary-${contact.id}`} className="flex flex-col sm:flex-row gap-5">
@@ -47,10 +46,6 @@ export function MediaResearchResultSummary({
           <div><dt className="text-slate-500">Publication website</dt><dd className="break-words">
             {publicationUrl ? <a href={publicationUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{contact.outletWebsite}</a> : <span className="text-slate-800">Not recorded</span>}
           </dd></div>
-          <div>
-            <dt className="text-slate-500" title="Imported publication value, not a measured AI Authority score or verified readership.">Source reach (imported)</dt>
-            <dd className="text-slate-800">{reach || "Not available"}</dd>
-          </div>
         </dl>
         <p className="text-[12px] text-slate-700 mt-4">
           <span className="font-semibold">Suggested pitch angle:</span> {suggestedAngle || "Not available"}

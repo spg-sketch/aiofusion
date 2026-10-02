@@ -433,6 +433,7 @@ function MediaDatabasePage() {
 
   const [showOutletModal, setShowOutletModal] = useState(false);
   const [editingOutlet, setEditingOutlet] = useState<Outlet | null>(null);
+  // Reach is temporarily hidden, but retained in form state for unrelated edits.
   const [outletForm, setOutletForm] = useState({ name: "", category: "", website: "", description: "", country: "", reachBand: "", linkedinUrl: "" });
   const [outletSaving, setOutletSaving] = useState(false);
   const [deletingOutletId, setDeletingOutletId] = useState<number | null>(null);
@@ -1446,8 +1447,8 @@ function MediaDatabasePage() {
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-left text-[12px]">
                     <thead style={{ background: vars.g50, color: vars.g600 }}>
-                      {searchType === "contacts" ? <tr>{["First name", "Last name", "Job title", "Outlet", "Email", "LinkedIn", "Outlet website", "Outlet description", "Country", "Source-provided reach", "Actions"].map((label) => <th key={label} className="whitespace-nowrap px-3 py-2 font-semibold">{label}</th>)}</tr>
-                        : <tr>{["Publication", "Website", "Description", "Country", "Source-provided reach", "Linked journalists", "Actions"].map((label) => <th key={label} className="whitespace-nowrap px-3 py-2 font-semibold">{label}</th>)}</tr>}
+                      {searchType === "contacts" ? <tr>{["First name", "Last name", "Job title", "Outlet", "Email", "LinkedIn", "Outlet website", "Outlet description", "Country", "Actions"].map((label) => <th key={label} className="whitespace-nowrap px-3 py-2 font-semibold">{label}</th>)}</tr>
+                        : <tr>{["Publication", "Website", "Description", "Country", "Linked journalists", "Actions"].map((label) => <th key={label} className="whitespace-nowrap px-3 py-2 font-semibold">{label}</th>)}</tr>}
                     </thead>
                     <tbody>
                       {records.map((result) => {
@@ -1462,7 +1463,6 @@ function MediaDatabasePage() {
                           <td className="px-3 py-3">{publicationWebsiteHref(result.contact.outletWebsite) ? <a href={publicationWebsiteHref(result.contact.outletWebsite)!} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>Visit</a> : "Not available"}</td>
                           <td className="max-w-[220px] px-3 py-3">{(result.contact as Contact & { outletDescription?: string }).outletDescription || "Not available"}</td>
                           <td className="px-3 py-3">{result.contact.outletCountry || result.contact.geography || "Not available"}</td>
-                          <td className="px-3 py-3">{result.contact.publicationReach || result.contact.outletReachBand ? <><span>{result.contact.publicationReach || result.contact.outletReachBand}</span><span className="block text-[10px]" style={{ color: vars.g500 }}>Source-provided, not verified audience</span></> : "Not available"}</td>
                           <td className="whitespace-nowrap px-3 py-3">
                             {canWriteMediaDatabase && isCurrentWorkspaceItem(result.contact, session?.username) && <>
                               <button onClick={() => openEditContact(result.contact)} className="mr-3 underline" style={{ color: vars.accent }}>Edit</button>
@@ -1475,7 +1475,6 @@ function MediaDatabasePage() {
                           <td className="px-3 py-3">{publicationWebsiteHref(result.outlet.website) ? <a href={publicationWebsiteHref(result.outlet.website)!} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>Visit</a> : "Not available"}</td>
                           <td className="max-w-[240px] px-3 py-3">{result.outlet.description || "Not available"}</td>
                           <td className="px-3 py-3">{result.outlet.country || "Not available"}</td>
-                          <td className="px-3 py-3">{result.outlet.reachBand ? <><span>{result.outlet.reachBand}</span><span className="block text-[10px]" style={{ color: vars.g500 }}>Source-provided, not verified audience</span></> : "Not available"}</td>
                           <td className="min-w-[200px] px-3 py-3">{(result.outlet.linkedJournalists ?? result.outlet.journalists ?? []).filter((person) => person.lifecycleStatus !== "departed").map(contactDisplayName).join(", ") || "Not available"}</td>
                           <td className="whitespace-nowrap px-3 py-3">
                             {canWriteMediaDatabase && isCurrentWorkspaceItem(result.outlet, session?.username) && <>
@@ -1521,12 +1520,10 @@ function MediaDatabasePage() {
                      {contact.outletName && (outletWebsite
                        ? <a href={outletWebsite} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>Publication website</a>
                        : <span>{contact.outletWebsite ? "Publication website value needs review" : "Publication website not available"}</span>)}
-                      {(contact.publicationReach || contact.outletReachBand) && <span>Source-provided reach: {contact.publicationReach || contact.outletReachBand}, not verified audience</span>}
                    </div>}
                    {contact?.linkedinUrl && <a className="mt-1 inline-block text-[12px] underline" href={contact.linkedinUrl} target="_blank" rel="noreferrer" style={{ color: vars.accent }}>LinkedIn profile</a>}
                    {outlet && <div className="mt-1 flex flex-wrap gap-3 text-[12px]" style={{ color: vars.g500 }}>
                      {outletWebsite ? <a href={outletWebsite} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>Visit publication website</a> : <span>{outlet.website ? "Stored website value needs review" : "Website not available"}</span>}
-                      <span>Source-provided reach: {outlet.reachBand || "Not available"}{outlet.reachBand ? ", not verified audience" : ""}</span>
                       {outlet.verifiedAuthority != null && outlet.verifiedAuthority !== "" && <span>Recorded authority: {outlet.verifiedAuthority}</span>}
                      {outlet.linkedinUrl && <a href={outlet.linkedinUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>LinkedIn</a>}
                    </div>}
@@ -1700,7 +1697,6 @@ function MediaDatabasePage() {
                      <th className="text-left px-4 py-3 font-semibold" style={{ color: vars.navy }}>Publication</th>
                     <th className="text-left px-4 py-3 font-semibold hidden sm:table-cell" style={{ color: vars.navy }}>Sector</th>
                     <th className="text-left px-4 py-3 font-semibold hidden md:table-cell" style={{ color: vars.navy }}>Region</th>
-                    <th className="text-left px-4 py-3 font-semibold hidden lg:table-cell" style={{ color: vars.navy }}>Source reach value</th>
                     <th className="text-left px-4 py-3 font-semibold hidden lg:table-cell" style={{ color: vars.navy }}>Website</th>
                     <th className="px-4 py-3" style={{ color: vars.navy }}></th>
                   </tr>
@@ -1727,7 +1723,6 @@ function MediaDatabasePage() {
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell" style={{ color: vars.g600 }}>{o.category || "Not available"}</td>
                       <td className="px-4 py-3 hidden md:table-cell" style={{ color: vars.g600 }}>{o.country || "Not available"}</td>
-                      <td className="px-4 py-3 hidden lg:table-cell" style={{ color: vars.g600 }}>{o.reachBand ? `Source value: ${o.reachBand}` : "Not available"}</td>
                       <td className="px-4 py-3 hidden lg:table-cell">
                         {publicationWebsiteHref(o.website) ? <a href={publicationWebsiteHref(o.website)!} target="_blank" rel="noopener noreferrer" className="text-[11px] underline" style={{ color: vars.accent }}>{o.website.replace(/^https?:\/\//, "").slice(0, 30)}</a> : o.website ? <span title="Stored value is retained for review but is not a valid website link.">Website value needs review</span> : "Not available"}
                       </td>
@@ -1825,7 +1820,7 @@ function MediaDatabasePage() {
                          {c.outletCategory && <p className="text-[11px] font-light" style={{ color: vars.g500 }}>{c.outletCategory}</p>}
                          {recordVerificationBadge(c)}
                          {(c.beats?.length || c.sectors?.length || c.seniority || c.editorialStatus) && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>{[c.beats?.length ? `Beats: ${c.beats.join(", ")}` : "", c.sectors?.length ? `Sectors: ${c.sectors.join(", ")}` : "", c.seniority, c.editorialStatus].filter(Boolean).join(" · ")}</p>}
-                          {(c.reach || c.reachBand || c.authority !== undefined || c.authorityScore !== undefined || c.confidence || c.confidenceLevel) && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>{[c.reach || c.reachBand ? `Source reach value: ${c.reach || c.reachBand}` : "", c.authority ?? c.authorityScore !== undefined ? `Recorded authority score: ${c.authority ?? c.authorityScore}` : "", c.confidence || c.confidenceLevel ? `Confidence: ${c.confidence || c.confidenceLevel}` : ""].filter(Boolean).join(" · ")}</p>}
+                          {(c.authority !== undefined || c.authorityScore !== undefined || c.confidence || c.confidenceLevel) && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>{[c.authority ?? c.authorityScore !== undefined ? `Recorded authority score: ${c.authority ?? c.authorityScore}` : "", c.confidence || c.confidenceLevel ? `Confidence: ${c.confidence || c.confidenceLevel}` : ""].filter(Boolean).join(" · ")}</p>}
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell" style={{ color: vars.g600 }}>{c.role}</td>
                       <td className="px-4 py-3 hidden md:table-cell" style={{ color: vars.g600 }}>{c.outletName}</td>
@@ -2144,7 +2139,6 @@ function MediaDatabasePage() {
                 { label: "Publication name *", key: "name", placeholder: "e.g. PR Week" },
                 { label: "Website", key: "website", placeholder: "e.g. prweek.com" },
                 { label: "Country", key: "country", placeholder: "e.g. United Kingdom" },
-                { label: "Reach / audience size", key: "reachBand", placeholder: "e.g. 50k–100k, National, Niche" },
                 { label: "LinkedIn URL (optional)", key: "linkedinUrl", placeholder: "Enter a manually verified publication LinkedIn URL" },
                 { label: "Description", key: "description", placeholder: "Brief description of the publication" },
               ].map(({ label, key, placeholder }) => (
@@ -2366,7 +2360,6 @@ function MediaDatabasePage() {
                   {[
                     { label: "Journalist Authority", key: "journalistAuthority", placeholder: "0 - 100", type: "number" },
                     { label: "Publication Authority", key: "publicationAuthority", placeholder: "0 - 100", type: "number" },
-                    { label: "Publication Reach", key: "publicationReach", placeholder: "e.g. 1M - 5M" },
                     { label: "Confidence", key: "confidence", placeholder: "High, Medium, Low" },
                     { label: "Source URL", key: "sourceUrl", placeholder: "https://..." },
                     { label: "Source Reference", key: "sourceRef", placeholder: "e.g. MuckRack, Live Discovery" },
