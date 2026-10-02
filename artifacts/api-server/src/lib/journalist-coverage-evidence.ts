@@ -58,7 +58,9 @@ function createOpenAIClient(): OpenAI | null {
   const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
   const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
   if (!baseURL || !apiKey) return null;
-  return new OpenAI({ baseURL, apiKey });
+  // A transport failure may occur after the provider accepted the paid call.
+  // Retain its reservation and require an explicit user retry instead.
+  return new OpenAI({ baseURL, apiKey, maxRetries: 0 });
 }
 
 function bounded(value: unknown, max: number): string {

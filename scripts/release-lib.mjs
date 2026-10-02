@@ -38,7 +38,7 @@ export const RELEASE_STAGES = [
   ["API production build", "pnpm --filter @workspace/api-server run build", RELEASE_STAGE_TIMEOUTS["API production build"]],
   ["web production build", "pnpm --filter @workspace/aio-fusion run build", RELEASE_STAGE_TIMEOUTS["web production build"]],
   ["production API startup smoke", "node scripts/release-smoke.mjs", RELEASE_STAGE_TIMEOUTS["production API startup smoke"]],
-  ["critical browser journeys", "pnpm exec playwright test --config=playwright.release.config.ts", RELEASE_STAGE_TIMEOUTS["critical browser journeys"]],
+  ["critical browser journeys", "pnpm exec playwright test --config=playwright.release.config.ts && pnpm exec playwright test --config=playwright.media-research.config.ts", RELEASE_STAGE_TIMEOUTS["critical browser journeys"]],
 ];
 
 export function assertReleaseEnvironment(env = process.env) {

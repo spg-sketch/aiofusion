@@ -15,7 +15,16 @@ const projectState = vi.hoisted(() => ({ id: "project-1" }));
 const decisionState = vi.hoisted(() => ({
   payload: { decisions: [] as Record<string, unknown>[], items: [] as Record<string, unknown>[], decisionContacts: [] as Record<string, unknown>[] },
 }));
-const recommendationState = vi.hoisted(() => ({ includeContact: true, brief: null as Record<string, unknown> | null }));
+const recommendationState = vi.hoisted(() => ({
+  includeContact: true,
+  brief: null as Record<string, unknown> | null,
+  pagedItems: null as Record<string, unknown>[] | null,
+  emptyPage: 0,
+  rankingRevision: "rank-v1",
+  stalePageOnce: false,
+  visibilityRevision: "visibility-v1",
+  visibilityStalePageOnce: false,
+}));
 const featureState = vi.hoisted(() => ({
   briefFailure: false,
   recommendationGetFailure: false,
@@ -28,6 +37,10 @@ const delayedRequests = vi.hoisted(() => ({
   live: false,
   recommendationCalls: [] as { storyKey: string; resolve: (response: Response) => void }[],
   liveCalls: [] as { storyKey: string; resolve: (response: Response) => void }[],
+}));
+const delayedCoverage = vi.hoisted(() => ({
+  active: false,
+  calls: [] as { storyKey: string; resolve: (response: Response) => void }[],
 }));
 const serverDiscoveryHistory = vi.hoisted(() => ({
   latest: null as Record<string, unknown> | null,
@@ -70,7 +83,7 @@ vi.mock("../lib/contentAi", () => ({
   escapeHtml: (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"),
 }));
 
-import { MediaResearchPage, orderRecommendations, resolveArticleResearchContext, resolveArticleTargetPhrases } from "./MediaResearchPage";
+import { MediaResearchPage, resolveArticleResearchContext, resolveArticleTargetPhrases } from "./MediaResearchPage";
 import { RecommendationCard } from "./JournalistComponents";
 import { exactTargetPhraseId } from "../lib/exactTargetPhrases";
 import { clearAiRuns } from "../lib/aiRunLifecycle";
@@ -111,6 +124,38 @@ const candidate = {
   confidence: "High",
   verifiedAt: "2026-09-08T12:00:00.000Z",
 };
+
+function coverageSuccessResponse(): Response {
+  return new Response(JSON.stringify({
+    ok: true,
+    recommendationSet: { id: "saved-set-1" },
+    rankingRevision: "rank-v2",
+    visibilityRevision: "visibility-v1",
+    page: 1,
+    pageSize: 5,
+    start: 1,
+    end: 1,
+    hasPrevious: false,
+    hasNext: false,
+    collectionTotal: 1506,
+    totalMatches: 1,
+    items: [{
+      rank: 1,
+      score: 84,
+      reasons: ["Coverage updated"],
+      contact: {
+        id: 91, firstName: "Coverage", lastName: "Updated", role: "Energy editor",
+        email: "", phone: "", notes: "", beats: ["energy"], sectors: ["Energy"],
+        outletName: "Current Energy Daily", outletCategory: "Energy",
+      },
+      assessment: {
+        warnings: [],
+        evidence: [{ attribution: "page_checked", authorMatched: true }],
+      },
+    }],
+    evaluation: { evaluated: 1, shortlisted: 0, contacted: 0, responded: 0, placed: 0 },
+  }), { status: 200 });
+}
 
 describe("MediaResearchPage live discovery", () => {
   it("uses explicit article categories and messages, including an intentional empty selection", () => {
@@ -187,27 +232,69 @@ describe("MediaResearchPage live discovery", () => {
       }
       if (url.includes("/store/media-db/recommendations?")) {
         if (featureState.recommendationGetFailure) return new Response(JSON.stringify({ error: "Saved set unavailable" }), { status: 503 });
-        const queryStoryKey = new URL(url, "http://test.local").searchParams.get("storyKey");
+        const query = new URL(url, "http://test.local").searchParams;
+        const queryStoryKey = query.get("storyKey");
+        const page = Number(query.get("page") || 1);
+        const pageSize = 5;
+        if (page > 1 && recommendationState.stalePageOnce) {
+          recommendationState.stalePageOnce = false;
+          recommendationState.rankingRevision = "rank-v2";
+          recommendationState.pagedItems = recommendationState.pagedItems?.map((item, index) => ({
+            ...item,
+            rank: index + 1,
+            contact: { ...(item.contact as Record<string, unknown>), firstName: `Reranked Reporter ${index + 1}` },
+          })) || null;
+          return new Response(JSON.stringify({ error: "The recommendation ranking has changed." }), { status: 409 });
+        }
+        if (page > 1 && recommendationState.visibilityStalePageOnce) {
+          recommendationState.visibilityStalePageOnce = false;
+          recommendationState.visibilityRevision = "visibility-v2";
+          recommendationState.pagedItems = recommendationState.pagedItems?.slice(1).map((item, index) => ({
+            ...item,
+            rank: index + 1,
+            contact: { ...(item.contact as Record<string, unknown>), firstName: `Visible Reporter ${index + 1}` },
+          })) || null;
+          return new Response(JSON.stringify({ error: "Visible recommendation set changed." }), { status: 409 });
+        }
         const savedContact = {
           id: 91, firstName: "Decision", lastName: "Contact", role: "Energy editor",
           email: "", phone: "", notes: "", beats: ["energy"], sectors: ["Energy"],
           outletName: "Current Energy Daily", outletCategory: "Energy",
           publicationReach: "Hidden source reach", outletReachBand: "Hidden outlet band",
         };
+        const defaultItems = recommendationState.includeContact && queryStoryKey === "story-1"
+          ? [{
+            rank: 1, score: 80, reasons: ["Coverage profile matches energy"], contact: savedContact,
+            restricted: featureState.restricted,
+            assessment: featureState.restricted ? {
+              version: "editorial-v1", fitScore: 80, confidence: "medium", evidenceCoverage: 30,
+              factors: [], readiness: { status: "blocked", reasons: ["Contact or outlet is suppressed / do-not-contact."] },
+              evidence: [], warnings: [], suggestedAngle: null,
+            } : undefined,
+          }]
+          : [];
+        const pageItems = recommendationState.pagedItems && queryStoryKey === "story-1"
+          ? recommendationState.emptyPage === page
+            ? []
+            : recommendationState.pagedItems.slice((page - 1) * pageSize, page * pageSize)
+          : defaultItems;
+        const totalMatches = recommendationState.pagedItems?.length ?? defaultItems.length;
+        const start = pageItems.length ? ((page - 1) * pageSize) + 1 : 0;
+        const end = pageItems.length ? start + pageItems.length - 1 : 0;
         return new Response(JSON.stringify({
           ok: true,
           recommendationSet: { id: "saved-set-1" },
-          items: recommendationState.includeContact && queryStoryKey === "story-1"
-            ? [{
-              rank: 1, score: 80, reasons: ["Coverage profile matches energy"], contact: savedContact,
-              restricted: featureState.restricted,
-              assessment: featureState.restricted ? {
-                version: "editorial-v1", fitScore: 80, confidence: "medium", evidenceCoverage: 30,
-                factors: [], readiness: { status: "blocked", reasons: ["Contact or outlet is suppressed / do-not-contact."] },
-                evidence: [], warnings: [], suggestedAngle: null,
-              } : undefined,
-            }]
-            : [],
+          rankingRevision: recommendationState.rankingRevision,
+          visibilityRevision: recommendationState.visibilityRevision,
+          page,
+          pageSize,
+          start,
+          end,
+          hasPrevious: page > 1,
+          hasNext: page * pageSize < totalMatches,
+          items: pageItems,
+          collectionTotal: recommendationState.pagedItems ? 1234 : 1506,
+          totalMatches,
           brief: recommendationState.brief,
           evaluation: { evaluated: recommendationState.includeContact ? 1 : 0, shortlisted: 0, contacted: 0, responded: 0, placed: 0 },
         }), { status: 200 });
@@ -218,10 +305,25 @@ describe("MediaResearchPage live discovery", () => {
       }
       if (url.includes("/recommendations/enrich") && init?.method === "POST") {
         if (featureState.quotaFailure === "enrich") return new Response(JSON.stringify({ error: "provider quota" }), { status: 429 });
+        if (delayedCoverage.active) {
+          return new Promise<Response>((resolve) => {
+            delayedCoverage.calls.push({ storyKey: String(body?.storyKey || ""), resolve });
+          });
+        }
         featureState.enrich = true;
         return new Response(JSON.stringify({
           ok: true,
           recommendationSet: { id: "saved-set-1" },
+          rankingRevision: "rank-v1",
+          visibilityRevision: "visibility-v1",
+          page: 1,
+          pageSize: 5,
+          start: 1,
+          end: 1,
+          hasPrevious: false,
+          hasNext: false,
+          collectionTotal: 1506,
+          totalMatches: 1,
           items: [{
             rank: 1, score: 84, reasons: ["Coverage profile matches energy"], contact: {
               id: 91, firstName: "Enriched", lastName: "Contact", role: "Energy editor",
@@ -248,6 +350,17 @@ describe("MediaResearchPage live discovery", () => {
           : "Decision";
         const recommendationResponse = new Response(JSON.stringify({
           ok: true,
+          recommendationSet: { id: "saved-set-1" },
+          rankingRevision: "rank-v1",
+          visibilityRevision: "visibility-v1",
+          page: 1,
+          pageSize: 5,
+          start: 1,
+          end: recommendationState.includeContact && body?.storyKey === "story-1" ? 1 : 0,
+          hasPrevious: false,
+          hasNext: false,
+          collectionTotal: 1506,
+          totalMatches: recommendationState.includeContact && body?.storyKey === "story-1" ? 1 : 0,
           items: recommendationState.includeContact && body?.storyKey === "story-1" ? [{
             rank: 1,
             score: 80,
@@ -345,6 +458,12 @@ describe("MediaResearchPage live discovery", () => {
     decisionState.payload = { decisions: [], items: [], decisionContacts: [] };
     recommendationState.includeContact = true;
     recommendationState.brief = null;
+    recommendationState.pagedItems = null;
+    recommendationState.emptyPage = 0;
+    recommendationState.rankingRevision = "rank-v1";
+    recommendationState.stalePageOnce = false;
+    recommendationState.visibilityRevision = "visibility-v1";
+    recommendationState.visibilityStalePageOnce = false;
     featureState.briefFailure = false;
     featureState.recommendationGetFailure = false;
     featureState.restricted = false;
@@ -354,6 +473,8 @@ describe("MediaResearchPage live discovery", () => {
     delayedRequests.live = false;
     delayedRequests.recommendationCalls = [];
     delayedRequests.liveCalls = [];
+    delayedCoverage.active = false;
+    delayedCoverage.calls = [];
     serverDiscoveryHistory.latest = null;
     serverDiscoveryHistory.delayLatest = false;
     serverDiscoveryHistory.latestCalls = [];
@@ -434,6 +555,211 @@ describe("MediaResearchPage live discovery", () => {
     fireEvent.click(screen.getByRole("button", { name: "Saved to My Media Database" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Save to My Media Database" })).toBeTruthy());
     expect(requests.filter((request) => request.url.endsWith("/bookmarks/contact/91")).map((request) => request.method)).toEqual(["PUT", "DELETE"]);
+  });
+
+  it("loads server-ranked recommendations five at a time with separate collection and match totals", async () => {
+    recommendationState.pagedItems = Array.from({ length: 12 }, (_, index) => ({
+      rank: index + 1,
+      score: 100 - index,
+      reasons: ["Server-ranked result"],
+      contact: {
+        id: 200 + index,
+        firstName: `Reporter ${index + 1}`,
+        lastName: "Contact",
+        role: "Energy editor",
+        email: "",
+        phone: "",
+        notes: "",
+        beats: ["energy"],
+        sectors: ["Energy"],
+        outletName: "Energy Daily",
+        outletCategory: "Energy",
+      },
+    }));
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+
+    expect(await screen.findByText(/Reporter 1/)).toBeTruthy();
+    expect(screen.getByTestId("recommendation-pagination-summary")).toHaveTextContent("Showing 5 of 1,234 records");
+    expect(screen.getByTestId("recommendation-pagination-summary")).toHaveTextContent("12 relevant matches");
+    expect(screen.getByText(/Reporter 5/)).toBeTruthy();
+    expect(screen.queryByText(/Reporter 6/)).toBeNull();
+    const firstPageRequest = requests.find((request) => request.url.includes("/store/media-db/recommendations?") && request.url.includes("storyKey=story-1"));
+    expect(firstPageRequest?.url).toContain("page=1");
+    expect(firstPageRequest?.url).not.toContain("pageSize");
+
+    fireEvent.click(screen.getByRole("button", { name: "See next five" }));
+    expect(await screen.findByText(/Reporter 6/)).toBeTruthy();
+    expect(screen.getByTestId("recommendation-pagination-summary")).toHaveTextContent("Showing 6–10 of 1,234 records");
+    expect(screen.getByText(/Reporter 10/)).toBeTruthy();
+    expect(screen.queryByText(/Reporter 5/)).toBeNull();
+    const pageTwoRequest = requests.find((request) => request.url.includes("/store/media-db/recommendations?") && request.url.includes("storyKey=story-1") && request.url.includes("page=2"));
+    expect(new URL(pageTwoRequest?.url || "", "http://test.local").searchParams.get("setId")).toBe("saved-set-1");
+    expect(new URL(pageTwoRequest?.url || "", "http://test.local").searchParams.get("revision")).toBe("rank-v1");
+    expect(new URL(pageTwoRequest?.url || "", "http://test.local").searchParams.get("visibilityRevision")).toBe("visibility-v1");
+
+    fireEvent.click(screen.getByRole("button", { name: "See next five" }));
+    expect(await screen.findByText(/Reporter 11/)).toBeTruthy();
+    expect(screen.getByTestId("recommendation-pagination-summary")).toHaveTextContent("Showing 11–12 of 1,234 records");
+    expect(screen.getByText(/Reporter 12/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "See next five" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Previous five" }));
+    expect(await screen.findByText(/Reporter 6/)).toBeTruthy();
+    expect(screen.getByTestId("recommendation-pagination-summary")).toHaveTextContent("Showing 6–10 of 1,234 records");
+  });
+
+  it("resets to a fresh first page when a page request reports a stale ranking revision", async () => {
+    recommendationState.pagedItems = Array.from({ length: 12 }, (_, index) => ({
+      rank: index + 1,
+      score: 100 - index,
+      reasons: [],
+      contact: {
+        id: 400 + index, firstName: `Reporter ${index + 1}`, lastName: "Contact", role: "Editor",
+        email: "", phone: "", notes: "", beats: [], sectors: ["Energy"], outletName: "Daily",
+        outletCategory: "Energy",
+      },
+    }));
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByText("Reporter 1 Contact")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "See next five" }));
+    expect(await screen.findByText("Reporter 6 Contact")).toBeTruthy();
+
+    recommendationState.stalePageOnce = true;
+    fireEvent.click(screen.getByRole("button", { name: "See next five" }));
+
+    expect(await screen.findByText("Reranked Reporter 1 Contact")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("recommendation-pagination-summary")).toHaveTextContent("Showing 5 of 1,234 records"));
+    expect(screen.queryByText("Reporter 6 Contact")).toBeNull();
+    const pageRequests = requests
+      .filter((request) => request.url.includes("/store/media-db/recommendations?") && request.url.includes("storyKey=story-1"))
+      .map((request) => new URL(request.url, "http://test.local").searchParams);
+    expect(pageRequests.at(-2)?.get("revision")).toBe("rank-v1");
+    expect(pageRequests.at(-1)?.get("page")).toBe("1");
+    expect(pageRequests.at(-1)?.has("setId")).toBe(false);
+    expect(pageRequests.at(-1)?.has("revision")).toBe(false);
+  });
+
+  it("restarts at page one when a suppression changes the visibility revision between pages", async () => {
+    recommendationState.pagedItems = Array.from({ length: 12 }, (_, index) => ({
+      rank: index + 1,
+      score: 100 - index,
+      reasons: [],
+      contact: {
+        id: 500 + index, firstName: `Reporter ${index + 1}`, lastName: "Contact", role: "Editor",
+        email: "", phone: "", notes: "", beats: [], sectors: ["Energy"], outletName: "Daily",
+        outletCategory: "Energy",
+      },
+    }));
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByText("Reporter 1 Contact")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "See next five" }));
+    expect(await screen.findByText("Reporter 6 Contact")).toBeTruthy();
+
+    recommendationState.visibilityStalePageOnce = true;
+    fireEvent.click(screen.getByRole("button", { name: "See next five" }));
+
+    expect(await screen.findByText("Visible Reporter 1 Contact")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("recommendation-pagination-summary")).toHaveTextContent("Showing 5 of 1,234 records"));
+    expect(screen.queryByText("Reporter 6 Contact")).toBeNull();
+    expect(screen.getByTestId("recommendation-pagination-summary")).toHaveTextContent("11 relevant matches");
+    const pageRequests = requests
+      .filter((request) => request.url.includes("/store/media-db/recommendations?") && request.url.includes("storyKey=story-1"))
+      .map((request) => new URL(request.url, "http://test.local").searchParams);
+    expect(pageRequests.at(-2)?.get("visibilityRevision")).toBe("visibility-v1");
+    expect(pageRequests.at(-1)?.get("page")).toBe("1");
+    expect(pageRequests.at(-1)?.has("setId")).toBe(false);
+    expect(pageRequests.at(-1)?.has("revision")).toBe(false);
+    expect(pageRequests.at(-1)?.has("visibilityRevision")).toBe(false);
+  });
+
+  it("renders an empty server page with previous-page navigation and no client-side fallback", async () => {
+    recommendationState.pagedItems = Array.from({ length: 12 }, (_, index) => ({
+      rank: index + 1,
+      score: 100 - index,
+      reasons: [],
+      contact: {
+        id: 300 + index, firstName: `Result ${index + 1}`, lastName: "Contact", role: "Editor",
+        email: "", phone: "", notes: "", beats: [], sectors: ["Energy"], outletName: "Daily",
+        outletCategory: "Energy",
+      },
+    }));
+    recommendationState.emptyPage = 3;
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByText(/Result 1/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "See next five" }));
+    expect(await screen.findByText(/Result 6/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "See next five" }));
+
+    expect(await screen.findByText("There are no eligible contacts on this page. Use Previous five to return to earlier matches.")).toBeTruthy();
+    expect(screen.getByTestId("recommendation-pagination-summary")).toHaveTextContent("No ranked matches on page 3");
+    expect(screen.getByRole("button", { name: "Previous five" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Previous five" }));
+    await waitFor(() => expect(screen.getByTestId("recommendation-pagination-summary")).toHaveTextContent("Showing 6–10 of 1,234 records"));
+    expect(screen.getByText(/Result 6/)).toBeTruthy();
+    expect(screen.queryByText("Result 1 Contact")).toBeNull();
+  });
+
+  it("clears the coverage spinner when page navigation supersedes its result", async () => {
+    delayedCoverage.active = true;
+    recommendationState.pagedItems = Array.from({ length: 12 }, (_, index) => ({
+      rank: index + 1,
+      score: 100 - index,
+      reasons: [],
+      contact: {
+        id: 600 + index, firstName: `Reporter ${index + 1}`, lastName: "Contact", role: "Editor",
+        email: "", phone: "", notes: "", beats: [], sectors: ["Energy"], outletName: "Daily",
+        outletCategory: "Energy",
+      },
+    }));
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByText("Reporter 1 Contact")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Check top 5 recent coverage" }));
+    await waitFor(() => expect(delayedCoverage.calls).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "See next five" }));
+    expect(await screen.findByText("Reporter 6 Contact")).toBeTruthy();
+
+    await act(async () => delayedCoverage.calls[0].resolve(coverageSuccessResponse()));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Check top 5 recent coverage" })).not.toBeDisabled());
+    expect(screen.getByText("Reporter 6 Contact")).toBeTruthy();
+    expect(screen.queryByText("Coverage Updated")).toBeNull();
+  });
+
+  it("keeps a newer coverage spinner owned by its story/workspace after an older run settles", async () => {
+    delayedCoverage.active = true;
+    localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "workspace-a", role: "agency" }));
+    const view = render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByText("Decision Contact")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Check top 5 recent coverage" }));
+    await waitFor(() => expect(delayedCoverage.calls).toHaveLength(1));
+
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-2" } });
+    await waitFor(() => expect((screen.getByTestId("select-research-article") as HTMLSelectElement).value).toBe("story-2"));
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByText("Decision Contact")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Check top 5 recent coverage" }));
+    await waitFor(() => expect(delayedCoverage.calls).toHaveLength(2));
+    await act(async () => delayedCoverage.calls[0].resolve(coverageSuccessResponse()));
+    expect(screen.getByRole("button", { name: "Checking top 5..." })).toBeDisabled();
+
+    const priorScopedLoads = requests.filter((request) => request.url.includes("/store/media-db/recommendations?") && request.url.includes("storyKey=story-1")).length;
+    localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "workspace-b", role: "agency" }));
+    view.rerender(<MediaResearchPage />);
+    await waitFor(() => expect(requests.filter((request) => request.url.includes("/store/media-db/recommendations?") && request.url.includes("storyKey=story-1")).length).toBeGreaterThan(priorScopedLoads));
+    expect(await screen.findByText("Decision Contact")).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Check top 5 recent coverage" })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: "Check top 5 recent coverage" }));
+    await waitFor(() => expect(delayedCoverage.calls).toHaveLength(3));
+
+    await act(async () => delayedCoverage.calls[1].resolve(coverageSuccessResponse()));
+    expect(screen.getByRole("button", { name: "Checking top 5..." })).toBeDisabled();
+    await act(async () => delayedCoverage.calls[2].resolve(coverageSuccessResponse()));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Check top 5 recent coverage" })).not.toBeDisabled());
   });
 
   it("resets transient research and scoped selection without deleting persisted records", async () => {
@@ -1087,21 +1413,6 @@ describe("MediaResearchPage live discovery", () => {
     expect(screen.queryByRole("button", { name: /decline|more like this|less like this/i })).toBeNull();
   });
 
-  it("orders every recommendation response by strongest match with stable ties", () => {
-    const recommendation = (id: number, score: number, rank: number) => ({
-      rank,
-      score,
-      reasons: [],
-      phraseAttributions: [],
-      contact: { id },
-    }) as never;
-    expect(orderRecommendations([
-      recommendation(30, 20, 3),
-      recommendation(20, 90, 2),
-      recommendation(10, 90, 1),
-    ]).map((item) => item.contact.id)).toEqual([10, 20, 30]);
-  });
-
   it.each(["network", "json"] as const)("shows a saved shortlist error when the decision load returns %s failure", async (kind) => {
     decisionLoadFailure.kind = kind;
     render(<MediaResearchPage />);
@@ -1122,7 +1433,7 @@ describe("MediaResearchPage live discovery", () => {
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
     expect(await screen.findByText("Decision Contact")).toBeTruthy();
-    expect(screen.getByText(/up to five contacts per run.*account’s AI spend limit.*not a content-writing AI action/i)).toBeTruthy();
+    expect(screen.getByText(/global top five.*regardless of the page you are viewing.*account’s AI spend limit.*pagination does not run a coverage check/i)).toBeTruthy();
     featureState.quotaFailure = "enrich";
     fireEvent.click(screen.getByRole("button", { name: "Check top 5 recent coverage" }));
     await waitFor(() => expect(requests.some((request) => request.url.includes("/recommendations/enrich") && request.method === "POST")).toBe(true));
@@ -1145,7 +1456,7 @@ describe("MediaResearchPage live discovery", () => {
     expect(await screen.findByText("Decision Contact")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Check top 5 recent coverage" }));
     expect(await screen.findByText("Enriched Contact")).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toMatch(/1 of the top 1 contacts have a page-checked byline/i);
+    expect(screen.getByRole("status").textContent).toMatch(/1 of up to 1 contacts in the global top five have a page-checked byline/i);
     expect(screen.getByRole("status").textContent).toMatch(/does not verify current contact details/i);
     const summary = screen.getByTestId("research-result-summary-91");
     expect(within(summary).getByText("84%")).toBeTruthy();

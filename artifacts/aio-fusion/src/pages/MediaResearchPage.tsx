@@ -239,14 +239,6 @@ function mergeLiveDiscoveryItems(current: LiveDiscovery[], incoming: LiveDiscove
   return [...ordered, ...incoming.filter((item) => !seen.has(item.candidateKey))];
 }
 
-export function orderRecommendations(items: Recommendation[]): Recommendation[] {
-  return [...items].sort((a, b) =>
-    b.score - a.score
-    || a.rank - b.rank
-    || a.contact.id - b.contact.id
-  ).map((item, index) => ({ ...item, rank: index + 1 }));
-}
-
 function researchRequestError(response: Response, data: Record<string, unknown>, fallback: string): Error {
   if (response.status === 429) {
     return new Error("This request reached the account's AI spend limit or request quota. Ask an account admin to review the limit, or try again after it resets.");
@@ -256,6 +248,7 @@ function researchRequestError(response: Response, data: Record<string, unknown>,
 
 const RESEARCH_SELECTION_KEY = "aio.research.selection.v1";
 const DISCOVERY_RESET_KEY = "aio.research.discovery-reset.v1";
+const RECOMMENDATION_PAGE_SIZE = 5;
 
 function researchSelectionStorageKey(projectId: string | null): string | null {
   if (!projectId) return null;
@@ -317,8 +310,18 @@ function MediaResearchPage() {
   const preloadIdRef = useRef(preloadId);
   const [selectedId, setSelectedId] = useState(() => preloadId || readRememberedResearchSelection(selectionStorageKey));
   const [items, setItems] = useState<Recommendation[]>([]);
-  const [visibleRecommendationCount, setVisibleRecommendationCount] = useState(5);
-  const [totalMatches, setTotalMatches] = useState(0);
+  const [recommendationPage, setRecommendationPage] = useState(1);
+  const [recommendationPageLoading, setRecommendationPageLoading] = useState(false);
+  const [recommendationPagination, setRecommendationPagination] = useState<{
+    start: number;
+    end: number;
+    hasPrevious: boolean;
+    hasNext: boolean;
+  } | null>(null);
+  const [rankingRevision, setRankingRevision] = useState<string | number | null>(null);
+  const [visibilityRevision, setVisibilityRevision] = useState<string | number | null>(null);
+  const [collectionTotal, setCollectionTotal] = useState<number | null>(null);
+  const [totalMatches, setTotalMatches] = useState<number | null>(null);
   const [decisions, setDecisions] = useState<Record<number, Decision>>({});
   const [exportSelection, setExportSelection] = useState<number[] | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
@@ -477,9 +480,12 @@ function MediaResearchPage() {
   const discoveryRequests = useRef<Record<string, { id: number; key: string }>>({});
   const decisionLoadSequence = useRef(0);
   const recommendationLoadSequence = useRef(0);
+  const coverageOperationSequence = useRef(0);
   const briefEditRevision = useRef(0);
   const activeStoryRef = useRef(`${projectId || ""}:${storyKey}`);
   activeStoryRef.current = `${projectId || ""}:${storyKey}`;
+  const activeRecommendationScopeRef = useRef(`${workspaceId}:${projectId || ""}:${storyKey}`);
+  activeRecommendationScopeRef.current = `${workspaceId}:${projectId || ""}:${storyKey}`;
 
   useEffect(() => {
     // Do not validate or clear a remembered article while the content store is
@@ -594,13 +600,35 @@ function MediaResearchPage() {
   };
   useEffect(() => { void loadDecisions(); }, [projectId, storyKey]);
 
-  const loadRecommendations = async () => {
+  const loadRecommendations = async (page = recommendationPage, allowStaleReset = true) => {
     if (!projectId || !storyKey) return;
+    if (page > 1 && (recommendationSetId === null || rankingRevision === null || visibilityRevision === null)) {
+      setItems([]);
+      setRecommendationPage(1);
+      setRecommendationPagination(null);
+      setRankingRevision(null);
+      setVisibilityRevision(null);
+      setRecommendationSetId(null);
+      setCollectionTotal(null);
+      setTotalMatches(null);
+      void loadRecommendations(1, false);
+      return;
+    }
     const loadId = ++recommendationLoadSequence.current;
     const loadKey = `${projectId}:${storyKey}`;
-    const isCurrent = () => recommendationLoadSequence.current === loadId && activeStoryRef.current === loadKey;
+    const scopeKey = `${workspaceId}:${loadKey}`;
+    const isCurrent = () => recommendationLoadSequence.current === loadId
+      && activeStoryRef.current === loadKey
+      && activeRecommendationScopeRef.current === scopeKey;
+    setRecommendationPageLoading(true);
     try {
-      const response = await fetch(`${apiBase()}/api/store/media-db/recommendations?projectId=${encodeURIComponent(projectId)}&storyKey=${encodeURIComponent(storyKey)}`, { credentials: "include" });
+      const pageQuery = new URLSearchParams({ projectId, storyKey, page: String(page) });
+      if (page > 1 && recommendationSetId !== null && rankingRevision !== null && visibilityRevision !== null) {
+        pageQuery.set("setId", String(recommendationSetId));
+        pageQuery.set("revision", String(rankingRevision));
+        pageQuery.set("visibilityRevision", String(visibilityRevision));
+      }
+      const response = await fetch(`${apiBase()}/api/store/media-db/recommendations?${pageQuery.toString()}`, { credentials: "include" });
       let data: Record<string, unknown> = {};
       try {
         data = await response.json() as Record<string, unknown>;
@@ -608,32 +636,90 @@ function MediaResearchPage() {
         if (!response.ok) throw new Error(`Could not load saved recommendations (HTTP ${response.status}).`);
         throw new Error("Could not load saved recommendations: the server returned invalid data.");
       }
+      if (response.status === 409) {
+        if (isCurrent() && allowStaleReset) {
+          // A set was reranked while paging. Drop the stale page immediately
+          // and reload a fresh first page; never combine rows from revisions.
+          setItems([]);
+          setRecommendationPage(1);
+          setRecommendationPagination(null);
+          setRankingRevision(null);
+          setVisibilityRevision(null);
+          setRecommendationSetId(null);
+          setCollectionTotal(null);
+          setTotalMatches(null);
+          setError("");
+          void loadRecommendations(1, false);
+        } else if (isCurrent()) {
+          setError(typeof data.error === "string" ? data.error : "Recommendations changed while loading. Return to page one and retry.");
+        }
+        return;
+      }
       if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : `Could not load saved recommendations (HTTP ${response.status}).`);
       if (!isCurrent()) return;
       const set = data.recommendationSet && typeof data.recommendationSet === "object"
         ? data.recommendationSet as Record<string, unknown>
         : null;
+      const pagination = data.pagination && typeof data.pagination === "object"
+        ? data.pagination as Record<string, unknown>
+        : {};
       setRecommendationSetId(typeof set?.id === "number" || typeof set?.id === "string" ? set.id : null);
+      setRankingRevision(typeof data.rankingRevision === "string" || typeof data.rankingRevision === "number" ? data.rankingRevision : null);
+      setVisibilityRevision(typeof data.visibilityRevision === "string" || typeof data.visibilityRevision === "number" ? data.visibilityRevision : null);
       setRecommendationHasRun(Boolean(set?.id));
       setEvaluation(data.evaluation && typeof data.evaluation === "object" ? data.evaluation as RecommendationEvaluation : null);
-      const nextItems = orderRecommendations(Array.isArray(data.items) ? dedupeRecommendations(data.items) : []);
+      const nextItems = dedupeRecommendations(Array.isArray(data.items) ? data.items : []).slice(0, RECOMMENDATION_PAGE_SIZE);
       setItems(nextItems);
-      setTotalMatches(typeof data.totalMatches === "number" ? data.totalMatches : nextItems.length);
+      setTotalMatches(typeof data.totalMatches === "number"
+        ? data.totalMatches
+        : typeof pagination.totalMatches === "number" ? pagination.totalMatches : null);
+      setCollectionTotal(typeof data.collectionTotal === "number"
+        ? data.collectionTotal
+        : typeof pagination.collectionTotal === "number" ? pagination.collectionTotal : null);
+      setRecommendationPage(typeof data.page === "number" ? data.page : page);
+      setRecommendationPagination({
+        start: typeof data.start === "number" ? data.start : 0,
+        end: typeof data.end === "number" ? data.end : 0,
+        hasPrevious: typeof data.hasPrevious === "boolean" ? data.hasPrevious : page > 1,
+        hasNext: typeof data.hasNext === "boolean" ? data.hasNext : (typeof data.totalMatches === "number" && page * RECOMMENDATION_PAGE_SIZE < data.totalMatches),
+      });
     } catch (reason) {
       // A failed refresh must not erase a previously visible, auditable set.
       // Keep the failure visible instead of silently falling back to generated
       // criteria or a blank recommendation list.
       if (isCurrent()) setError(reason instanceof Error ? reason.message : "Could not load saved recommendations.");
+    } finally {
+      if (isCurrent()) setRecommendationPageLoading(false);
     }
   };
-  useEffect(() => { void loadRecommendations(); }, [projectId, storyKey]);
+  useEffect(() => { void loadRecommendations(1); }, [projectId, storyKey, workspaceId]);
 
   const [enriching, setEnriching] = useState<boolean>(false);
+  const coverageScopeRef = useRef(`${workspaceId}:${projectId || ""}:${storyKey}`);
+  useEffect(() => {
+    const scopeKey = `${workspaceId}:${projectId || ""}:${storyKey}`;
+    if (coverageScopeRef.current === scopeKey) return;
+    coverageScopeRef.current = scopeKey;
+    coverageOperationSequence.current += 1;
+    setEnriching(false);
+    setEnrichmentWarning("");
+    setCoverageResult(null);
+    setError("");
+  }, [workspaceId, projectId, storyKey]);
 
   const enrichRecommendations = async (recommendationSetId: number | string) => {
     if (!projectId || !storyKey) return;
     const requestKey = `${projectId}:${storyKey}`;
+    const scopeKey = `${workspaceId}:${requestKey}`;
+    const coverageId = ++coverageOperationSequence.current;
     const loadId = ++recommendationLoadSequence.current;
+    const coverageOwnerIsCurrent = () => coverageOperationSequence.current === coverageId
+      && coverageScopeRef.current === scopeKey
+      && activeRecommendationScopeRef.current === scopeKey;
+    const isCurrent = () => coverageOwnerIsCurrent()
+      && activeStoryRef.current === requestKey
+      && activeRecommendationScopeRef.current === scopeKey
+      && recommendationLoadSequence.current === loadId;
     setEnriching(true);
     setError("");
     setEnrichmentWarning("");
@@ -645,36 +731,52 @@ function MediaResearchPage() {
       });
       const data = await response.json();
       if (!response.ok) throw researchRequestError(response, data, "Could not enrich recommendations.");
-      if (activeStoryRef.current !== requestKey || recommendationLoadSequence.current !== loadId) return;
+      if (!isCurrent()) return;
       const set = data.recommendationSet && typeof data.recommendationSet === "object"
         ? data.recommendationSet as Record<string, unknown>
         : null;
       setRecommendationSetId(typeof set?.id === "number" || typeof set?.id === "string" ? set.id : recommendationSetId);
+      setRankingRevision(typeof data.rankingRevision === "string" || typeof data.rankingRevision === "number" ? data.rankingRevision : null);
+      setVisibilityRevision(typeof data.visibilityRevision === "string" || typeof data.visibilityRevision === "number" ? data.visibilityRevision : null);
       setEvaluation(data.evaluation && typeof data.evaluation === "object" ? data.evaluation as RecommendationEvaluation : null);
-      const nextItems = orderRecommendations(Array.isArray(data.items) ? dedupeRecommendations(data.items) : []);
+      const nextItems = dedupeRecommendations(Array.isArray(data.items) ? data.items : []);
       setItems(nextItems);
+      setRecommendationPage(1);
+      setRecommendationPageLoading(false);
+      const pagination = data.pagination && typeof data.pagination === "object" ? data.pagination as Record<string, unknown> : {};
+      setRecommendationPagination({
+        start: typeof data.start === "number" ? data.start : nextItems.length ? 1 : 0,
+        end: typeof data.end === "number" ? data.end : nextItems.length,
+        hasPrevious: typeof data.hasPrevious === "boolean" ? data.hasPrevious : false,
+        hasNext: typeof data.hasNext === "boolean" ? data.hasNext : (typeof data.totalMatches === "number" ? data.totalMatches : totalMatches ?? nextItems.length) > RECOMMENDATION_PAGE_SIZE,
+      });
+      setTotalMatches(typeof data.totalMatches === "number" ? data.totalMatches : typeof pagination.totalMatches === "number" ? pagination.totalMatches : totalMatches);
+      setCollectionTotal(typeof data.collectionTotal === "number" ? data.collectionTotal : typeof pagination.collectionTotal === "number" ? pagination.collectionTotal : collectionTotal);
       const warnings = nextItems.flatMap((item) => item.assessment?.warnings || []);
       setEnrichmentWarning(Array.from(new Set(warnings)).join(" "));
-      const checkedCount = nextItems.slice(0, 5).filter((item) =>
+      const checkedCount = nextItems.slice(0, RECOMMENDATION_PAGE_SIZE).filter((item) =>
         item.assessment?.evidence.some((source) => source.attribution === "page_checked" && source.authorMatched)
       ).length;
       setCoverageResult({
         key: requestKey,
-        text: `Coverage check finished. ${checkedCount} of the top ${Math.min(5, nextItems.length)} contacts have a page-checked byline. The research assessment has been updated; this does not verify current contact details.`,
+        text: `Coverage check finished. ${checkedCount} of up to ${Math.min(RECOMMENDATION_PAGE_SIZE, totalMatches ?? nextItems.length)} contacts in the global top five have a page-checked byline. This check is independent of the page you were viewing. The research assessment has been updated; this does not verify current contact details.`,
       });
       await loadDecisions();
     } catch (reason) {
-      if (activeStoryRef.current === requestKey && recommendationLoadSequence.current === loadId) {
+      if (isCurrent()) {
         setError(reason instanceof Error ? reason.message : "Could not enrich recommendations.");
       }
     } finally {
-      if (activeStoryRef.current === requestKey && recommendationLoadSequence.current === loadId) setEnriching(false);
+      if (coverageOwnerIsCurrent()) setEnriching(false);
     }
   };
 
   const saveAndRecommend = async () => {
     if (!selected || !projectId) { setError("Choose a saved article and active project before matching contacts."); return; }
     const generation = researchGeneration.current;
+    const workspaceAtStart = workspaceId;
+    const scopeKey = `${workspaceAtStart}:${projectId}:${storyKey}`;
+    const isScopeCurrent = () => activeRecommendationScopeRef.current === scopeKey;
     
     // Save brief first
     setLoading(true);
@@ -687,7 +789,7 @@ function MediaResearchPage() {
       });
       const savedBriefResponse = await briefResponse.json() as Record<string, unknown>;
       if (!briefResponse.ok) throw researchRequestError(briefResponse, savedBriefResponse, "Could not save targeting brief.");
-      if (researchGeneration.current !== generation) return;
+      if (researchGeneration.current !== generation || !isScopeCurrent()) return;
       const savedBrief = normaliseTargetingBrief(savedBriefResponse.brief, brief);
       briefForMatch = {
         ...savedBrief,
@@ -696,7 +798,7 @@ function MediaResearchPage() {
       setBrief(savedBrief);
       setBriefIsDirty(false);
     } catch (e) {
-      if (researchGeneration.current === generation) {
+      if (researchGeneration.current === generation && isScopeCurrent()) {
         setError(e instanceof Error ? e.message : "Could not save targeting brief.");
         setLoading(false);
       }
@@ -724,18 +826,24 @@ function MediaResearchPage() {
     const request: RequestHandle = { id: ++requestSequence.current, key: requestKey, controller: new AbortController() };
     recommendationRequest.current = request;
     setEnrichmentWarning("");
-    setVisibleRecommendationCount(5);
-    setTotalMatches(0);
+    recommendationLoadSequence.current += 1;
+    setRecommendationPageLoading(false);
+    setRecommendationPage(1);
+    setRecommendationPagination(null);
+    setRankingRevision(null);
+    setVisibilityRevision(null);
+    setCollectionTotal(null);
+    setTotalMatches(null);
     setItems([]);
     try {
       const response = await fetch(`${apiBase()}/api/store/media-db/recommendations`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         signal: request.controller.signal,
-         body: JSON.stringify({ projectId, storyKey, brief: briefForMatch, terms, targetPhrases: activeTargetPhrases }),
+         body: JSON.stringify({ projectId, storyKey, brief: briefForMatch, terms, targetPhrases: activeTargetPhrases, page: 1, pageSize: RECOMMENDATION_PAGE_SIZE }),
       });
       const data = await response.json() as Record<string, unknown>;
       if (!response.ok) throw researchRequestError(response, data, "Could not match database contacts.");
-      if (researchGeneration.current !== generation) return;
+      if (researchGeneration.current !== generation || !isScopeCurrent()) return;
       if (!requestIsCurrent(request, recommendationRequest.current)) return;
       const set = data.recommendationSet && typeof data.recommendationSet === "object"
         ? data.recommendationSet as Record<string, unknown>
@@ -743,18 +851,30 @@ function MediaResearchPage() {
       setRecommendationSetId(typeof set?.id === "number" || typeof set?.id === "string" ? set.id : null);
       setRecommendationHasRun(true);
       setEvaluation(data.evaluation && typeof data.evaluation === "object" ? data.evaluation as RecommendationEvaluation : null);
-      const nextItems = orderRecommendations(Array.isArray(data.items) ? dedupeRecommendations(data.items) : []);
+      const receivedItems = dedupeRecommendations(Array.isArray(data.items) ? data.items : []);
+      const nextItems = receivedItems.slice(0, RECOMMENDATION_PAGE_SIZE);
       setItems(nextItems);
-      setTotalMatches(typeof data.totalMatches === "number" ? data.totalMatches : nextItems.length);
+      const pagination = data.pagination && typeof data.pagination === "object" ? data.pagination as Record<string, unknown> : {};
+      setTotalMatches(typeof data.totalMatches === "number" ? data.totalMatches : typeof pagination.totalMatches === "number" ? pagination.totalMatches : receivedItems.length);
+      setCollectionTotal(typeof data.collectionTotal === "number" ? data.collectionTotal : typeof pagination.collectionTotal === "number" ? pagination.collectionTotal : null);
+      setRecommendationPage(1);
+      setRankingRevision(typeof data.rankingRevision === "string" || typeof data.rankingRevision === "number" ? data.rankingRevision : null);
+      setVisibilityRevision(typeof data.visibilityRevision === "string" || typeof data.visibilityRevision === "number" ? data.visibilityRevision : null);
+      setRecommendationPagination({
+        start: typeof data.start === "number" ? data.start : nextItems.length ? 1 : 0,
+        end: typeof data.end === "number" ? data.end : nextItems.length,
+        hasPrevious: typeof data.hasPrevious === "boolean" ? data.hasPrevious : false,
+        hasNext: typeof data.hasNext === "boolean" ? data.hasNext : receivedItems.length > RECOMMENDATION_PAGE_SIZE,
+      });
       // The POST response is the authoritative newest set. Refetch decisions
       // for persistence, but do not let a concurrent/lagging GET replace that
       // freshly returned recommendation list.
     await loadDecisions();
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === "AbortError") return;
-      if (researchGeneration.current === generation && requestIsCurrent(request, recommendationRequest.current)) setError(reason instanceof Error ? reason.message : "Could not match database contacts.");
+      if (researchGeneration.current === generation && isScopeCurrent() && requestIsCurrent(request, recommendationRequest.current)) setError(reason instanceof Error ? reason.message : "Could not match database contacts.");
     } finally {
-      if (researchGeneration.current === generation && requestIsCurrent(request, recommendationRequest.current)) {
+      if (researchGeneration.current === generation && isScopeCurrent() && requestIsCurrent(request, recommendationRequest.current)) {
         recommendationRequest.current = null;
         setLoading(false);
       }
@@ -762,6 +882,21 @@ function MediaResearchPage() {
   };
 
   const briefLoadSequence = useRef(0);
+  const recommendationWorkspaceRef = useRef(workspaceId);
+  useEffect(() => {
+    if (recommendationWorkspaceRef.current === workspaceId) return;
+    recommendationWorkspaceRef.current = workspaceId;
+    setItems([]);
+    setRecommendationPage(1);
+    setRecommendationPagination(null);
+    setRankingRevision(null);
+    setVisibilityRevision(null);
+    setCollectionTotal(null);
+    setTotalMatches(null);
+    setRecommendationSetId(null);
+    setRecommendationHasRun(false);
+    setRecommendationPageLoading(false);
+  }, [workspaceId]);
 
   // Criteria are refreshed only when the article changes. This means an
   // operator can edit either field before the paid stage without a rerender
@@ -771,8 +906,15 @@ function MediaResearchPage() {
     if (!selected || !projectId || !storyKey) {
       invalidateRequests();
       setItems([]);
+      setRecommendationPage(1);
+      setRecommendationPagination(null);
+      setRankingRevision(null);
+      setVisibilityRevision(null);
+      setCollectionTotal(null);
+      setTotalMatches(null);
       setRecommendationSetId(null);
       setRecommendationHasRun(false);
+      setRecommendationPageLoading(false);
       setEvaluation(null);
       setDecisions({});
       setDecisionContacts({});
@@ -818,6 +960,13 @@ function MediaResearchPage() {
     void loadBrief();
 
     setItems([]);
+    setRecommendationPage(1);
+    setRecommendationPagination(null);
+    setRankingRevision(null);
+    setVisibilityRevision(null);
+    setRecommendationPageLoading(false);
+    setCollectionTotal(null);
+    setTotalMatches(null);
     setRecommendationSetId(null);
     setRecommendationHasRun(false);
     setEvaluation(null);
@@ -1133,6 +1282,23 @@ function MediaResearchPage() {
     setBrief((current) => ({ ...current, ...patch }));
     setBriefIsDirty(true);
   };
+  const goToRecommendationPage = (page: number) => {
+    if (page < 1 || page === recommendationPage || recommendationPageLoading) return;
+    if (page > 1 && (recommendationSetId === null || rankingRevision === null || visibilityRevision === null)) {
+      setError("The recommendation ranking changed. Reloading the first page.");
+      setItems([]);
+      setRecommendationPage(1);
+      setRecommendationPagination(null);
+      setRankingRevision(null);
+      setVisibilityRevision(null);
+      setRecommendationSetId(null);
+      setCollectionTotal(null);
+      setTotalMatches(null);
+      void loadRecommendations(1, false);
+      return;
+    }
+    void loadRecommendations(page);
+  };
   const toggleBriefRegion = (region: string) => {
     const regions = brief.regions.includes(region)
       ? region === "Global" ? [] : brief.regions.filter((value) => value !== region)
@@ -1160,8 +1326,12 @@ function MediaResearchPage() {
     setBriefLoading(false);
     setBriefLoadError("");
     setItems([]);
-    setVisibleRecommendationCount(5);
-    setTotalMatches(0);
+    setRecommendationPage(1);
+    setRecommendationPagination(null);
+    setRankingRevision(null);
+    setVisibilityRevision(null);
+    setCollectionTotal(null);
+    setTotalMatches(null);
     setRecommendationSetId(null);
     setRecommendationHasRun(false);
     setEvaluation(null);
@@ -1210,12 +1380,24 @@ function MediaResearchPage() {
       />
     );
   };
+  const displayedStart = recommendationPagination?.start ?? (items.length ? ((recommendationPage - 1) * RECOMMENDATION_PAGE_SIZE) + 1 : 0);
+  const displayedEnd = recommendationPagination?.end ?? (items.length ? displayedStart + items.length - 1 : 0);
+  const collectionCountLabel = collectionTotal === null ? "collection total unavailable" : `${collectionTotal.toLocaleString("en-US")} records`;
+  const relevantMatchesLabel = totalMatches === null ? "relevant match total unavailable" : `${totalMatches.toLocaleString("en-US")} relevant matches`;
+  const recommendationSummary = recommendationPage === 1
+    ? `Showing ${items.length} of ${collectionCountLabel} · ${relevantMatchesLabel}`
+    : items.length
+      ? `Showing ${displayedStart}–${displayedEnd} of ${collectionCountLabel} · ${relevantMatchesLabel}`
+      : `No ranked matches on page ${recommendationPage} · ${relevantMatchesLabel} · ${collectionCountLabel}`;
+  const hasNextRecommendationPage = recommendationPagination?.hasNext
+    ?? (totalMatches !== null && recommendationPage * RECOMMENDATION_PAGE_SIZE < totalMatches);
+  const hasPreviousRecommendationPage = recommendationPagination?.hasPrevious ?? recommendationPage > 1;
   return <div className="p-6 sm:p-8 max-w-6xl mx-auto"><div className="mb-6"><div className="flex gap-3 items-center"><Target color="#fff" size={28} /><h1 className="text-3xl sm:text-4xl" style={{ color: "#fff", fontFamily: "'Alice', Georgia, serif" }}>Media Research</h1></div><p className="text-[14px] mt-2" style={{ color: "rgba(255,255,255,.85)" }}>Match trusted contacts already in your database or discover current journalists from public web sources. Every live result includes evidence and a source. Live search sends the selected article excerpt to OpenAI only after you explicitly run it.</p></div>
      <section className="bg-white rounded-2xl border p-5 mb-5 shadow-sm" style={{ borderColor: vars.g200 }}>
        <div className="flex flex-wrap items-end justify-between gap-3">
          <div className="flex-1 min-w-[240px]">
            <label className="block text-[12px] font-bold mb-2" style={{ color: vars.navy }}>Saved article</label>
-           <select data-testid="select-research-article" value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setItems([]); setVisibleRecommendationCount(5); setTotalMatches(0); setLiveItems([]); setDiscoveryToken(""); setError(""); }} className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400"><option value="">Choose a saved article</option>{archive.map((a) => <option key={a.id} value={a.id}>{a.title} ({a.contentType})</option>)}</select>
+            <select data-testid="select-research-article" value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setItems([]); setRecommendationPage(1); setCollectionTotal(null); setTotalMatches(null); setLiveItems([]); setDiscoveryToken(""); setError(""); }} className="w-full border rounded-lg p-2 text-[13px] outline-none focus:border-slate-400"><option value="">Choose a saved article</option>{archive.map((a) => <option key={a.id} value={a.id}>{a.title} ({a.contentType})</option>)}</select>
          </div>
          {showResetSearch && <button type="button" data-testid="button-new-research-search" onClick={resetResearch} className="px-4 py-2 rounded-lg border text-[12px] font-semibold bg-white hover:bg-slate-50" style={{ borderColor: vars.g200, color: vars.navy }}>New search / reset</button>}
        </div>
@@ -1297,7 +1479,7 @@ function MediaResearchPage() {
          {coverageResult.text}
        </p>
      )}
-       {(loading || items.length > 0) && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b flex flex-wrap justify-between gap-3" style={{ background: vars.g50, borderColor: vars.g200 }}><div><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Recommended from your Media Database</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{loading ? "Finding and ranking the strongest matches..." : `Showing ${Math.min(visibleRecommendationCount, items.length)} of ${items.length} ranked matches${totalMatches > items.length ? ` from ${totalMatches} relevant connections` : ""}. Results are capped at 25 and the next five are already loaded.`}</p>{evaluation && <p className="text-[11px] mt-2 text-slate-500">Evaluation: {evaluation.evaluated} evaluated · {evaluation.shortlisted} shortlisted · {evaluation.contacted} contacted · {evaluation.responded} responded · {evaluation.placed} placed</p>}</div>
+        {(loading || items.length > 0 || (recommendationHasRun && recommendationPage > 1)) && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b flex flex-wrap justify-between gap-3" style={{ background: vars.g50, borderColor: vars.g200 }}><div><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Recommended from your Media Database</h2><p data-testid="recommendation-pagination-summary" className="text-[13px] mt-1" style={{ color: vars.g500 }}>{loading || recommendationPageLoading ? "Loading ranked contacts..." : recommendationSummary}</p>{evaluation && <p className="text-[11px] mt-2 text-slate-500">Evaluation: {evaluation.evaluated} evaluated · {evaluation.shortlisted} shortlisted · {evaluation.contacted} contacted · {evaluation.responded} responded · {evaluation.placed} placed</p>}</div>
        <div className="flex gap-2">
          {items.length > 0 && recommendationSetId !== null && (
            <button disabled={enriching} onClick={() => void enrichRecommendations(recommendationSetId)} className="self-start text-[12px] px-3 py-2 border rounded-lg bg-white disabled:opacity-50 hover:bg-slate-50 transition-colors shadow-sm" style={{ borderColor: vars.g200 }}>
@@ -1305,7 +1487,7 @@ function MediaResearchPage() {
             {enriching ? "Checking top 5..." : "Check top 5 recent coverage"}
           </button>
         )}
-        </div></div><p className="mx-5 mb-3 text-[11px] text-slate-500">This checks recent coverage for up to five contacts per run and counts toward your account’s AI spend limit. It is a coverage research check, not a content-writing AI action.</p>{enrichmentWarning && <p className="mx-5 mb-3 rounded-lg bg-amber-50 border border-amber-100 p-3 text-[12px] text-amber-800">Coverage check warning: {enrichmentWarning}</p>}{items.slice(0, visibleRecommendationCount).map((item) => contactCard(item))}{visibleRecommendationCount < items.length && <div className="p-5 border-t text-center" style={{ borderColor: vars.g200 }}><button type="button" data-testid="button-show-more-recommendations" onClick={() => setVisibleRecommendationCount((count) => Math.min(items.length, count + 5))} className="px-5 py-2.5 rounded-lg border bg-white text-[13px] font-semibold hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}>Show 5 more preloaded matches</button></div>}</section>}
+        </div></div><p className="mx-5 mb-3 text-[11px] text-slate-500">The explicit coverage action checks up to five contacts from the global top five, regardless of the page you are viewing, and counts toward your account’s AI spend limit. Pagination does not run a coverage check.</p>{enrichmentWarning && <p className="mx-5 mb-3 rounded-lg bg-amber-50 border border-amber-100 p-3 text-[12px] text-amber-800">Coverage check warning: {enrichmentWarning}</p>}{items.map((item) => contactCard(item))}{!items.length && recommendationPage > 1 && !recommendationPageLoading && <p className="p-5 text-center text-[13px] text-slate-500">There are no eligible contacts on this page. Use Previous five to return to earlier matches.</p>}{(hasPreviousRecommendationPage || hasNextRecommendationPage) && <div className="p-5 border-t flex justify-center gap-3" style={{ borderColor: vars.g200 }}>{hasPreviousRecommendationPage && <button type="button" data-testid="button-previous-recommendations" disabled={recommendationPageLoading} onClick={() => goToRecommendationPage(recommendationPage - 1)} className="px-5 py-2.5 rounded-lg border bg-white text-[13px] font-semibold hover:bg-slate-50 disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>Previous five</button>}{hasNextRecommendationPage && <button type="button" data-testid="button-next-recommendations" disabled={recommendationPageLoading} onClick={() => goToRecommendationPage(recommendationPage + 1)} className="px-5 py-2.5 rounded-lg border bg-white text-[13px] font-semibold hover:bg-slate-50 disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>See next five</button>}</div>}</section>}
         {liveItems.length > 0 && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Public web discoveries</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{liveItems.length} journalists across {livePublicationCount} publications. {liveLoading ? "Evidence checks are continuing. Verified cards are ready to review now; pending candidates are identified." : "Evidence checks are complete."}</p><p className="text-[12px] mt-2" style={{ color: vars.g500 }}>These are additional online candidates, not saved database contacts. Use “Send for review” on a verified result; a steward must approve it before it becomes a contact.</p></div>
       {liveGroups.filter((group) => group.items.length > 0).map((group) => <div key={group.label}>
         <div className="px-5 py-2.5 border-b text-[12px] font-bold uppercase tracking-wide" style={{ color: vars.navy, background: "rgba(31,116,143,0.07)", borderColor: vars.g200 }}>{group.label} · {group.items.length}</div>

@@ -95,6 +95,7 @@ import {
   mediaRecommendationFeedbackTable,
   mediaRecommendationItemsTable,
   mediaRecommendationSetsTable,
+  mediaSuppressionsTable,
   mediaOutreachTable,
   mediaOutreachActivitiesTable,
   mediaPlacementsTable,
@@ -104,8 +105,10 @@ import {
   tokenUsageTable,
 } from "@workspace/db";
 import { ensureMediaSchema } from "../lib/ensure-media-schema";
+import { ensureTokenUsageSequence } from "../lib/ensure-token-usage-sequence";
 import { stableExactTargetPhraseId } from "../lib/exact-target-phrases";
 import { JOURNALIST_COVERAGE_CALL_RESERVE_GBP } from "../lib/token-usage";
+import { privacyHash } from "../lib/journalist-privacy";
 import mediaDbRouter from "./media-db";
 
 let server: Server;
@@ -391,6 +394,177 @@ describe("media recommendation refinement API", () => {
     expect(savedUnnamed?.reasons).toContain("Marked Less like this");
   });
 
+  it("persists every ranked match and serves stable five-record pages with scoped current totals", async () => {
+    collectJournalistCoverage.mockClear();
+    const storyKey = "uncapped-ranked-pagination";
+    await db.insert(archiveItemsTable).values({
+      id: storyKey, projectId: "project-1", owner: "workspace-a", title: "Pagination story",
+    });
+    const ownContacts = await db.insert(mediaContactsTable).values(Array.from({ length: 31 }, (_, index) => ({
+      firstName: `Pagination${String(index + 1).padStart(2, "0")}`,
+      lastName: "Reporter",
+      role: "Zzqpaginatedunique editor",
+      beats: ["zzqpaginatedunique"],
+      sectors: [],
+      email: `pagination${index + 1}@example.test`,
+      accountId: "workspace-a",
+    }))).returning({ id: mediaContactsTable.id });
+    const [privateContact] = await db.insert(mediaContactsTable).values({
+      firstName: "Private", lastName: "Pagination",
+      role: "Zzqpaginatedunique editor", beats: ["zzqpaginatedunique"], sectors: [],
+      accountId: "workspace-b",
+    }).returning({ id: mediaContactsTable.id });
+    const brief = {
+      topic: "zzqpaginatedunique", angle: "current coverage", audience: "trade press",
+      regions: ["UK"], publicationTypes: [], whyNow: "current coverage",
+    };
+    await request("/store/media-db/recommendations/brief", "workspace-a", {
+      method: "PUT", body: JSON.stringify({ projectId: "project-1", storyKey, brief }),
+    });
+
+    const generated = await request("/store/media-db/recommendations", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: "project-1", storyKey, terms: ["zzqpaginatedunique"],
+      }),
+    });
+    expect(generated.status).toBe(200);
+    const firstPage = await generated.json() as {
+      recommendationSet: {
+        id: number;
+        criteria: {
+          rankingRevision: number;
+          baseScores?: Record<string, number>;
+          assessments?: Record<string, unknown>;
+        };
+      };
+      items: Array<{ rank: number; contact: { id: number } }>;
+      page: number; pageSize: number; start: number; end: number; hasNext: boolean;
+      totalMatches: number; collectionTotal: number; visibilityRevision: string;
+    };
+    expect(firstPage.items).toHaveLength(5);
+    expect(firstPage).toMatchObject({
+      page: 1, pageSize: 5, start: 1, end: 5, hasNext: true,
+      recommendationSet: { criteria: { rankingRevision: 1 } },
+    });
+    expect(firstPage.totalMatches).toBeGreaterThan(25);
+    expect(firstPage.items.map((item) => item.rank)).toEqual([1, 2, 3, 4, 5]);
+    const pageIds = firstPage.items.map((item) => String(item.contact.id));
+    expect(Object.keys(firstPage.recommendationSet.criteria.baseScores ?? {})).toEqual(pageIds);
+    expect(Object.keys(firstPage.recommendationSet.criteria.assessments ?? {})).toEqual(pageIds);
+    const storedSet = await db.select({ criteria: mediaRecommendationSetsTable.criteria })
+      .from(mediaRecommendationSetsTable).where(eq(mediaRecommendationSetsTable.id, firstPage.recommendationSet.id));
+    expect(Object.keys((storedSet[0]?.criteria as { baseScores: Record<string, number> }).baseScores)).toHaveLength(firstPage.totalMatches);
+    const expectedCollectionCount = await db.execute(sql`
+      SELECT count(*)::int AS total
+      FROM media_contacts contacts
+      LEFT JOIN media_outlets outlets ON outlets.id = contacts.outlet_id
+      WHERE contacts.deleted_at IS NULL
+        AND (contacts.account_id IS NULL OR contacts.account_id = 'workspace-a')
+        AND (
+          contacts.outlet_id IS NULL
+          OR (outlets.id IS NOT NULL AND outlets.deleted_at IS NULL
+            AND (outlets.account_id IS NULL OR outlets.account_id = 'workspace-a'))
+        )
+        AND NOT (
+          regexp_replace(trim(concat(contacts.first_name, ' ', contacts.last_name)), '\\s+', '', 'g') ~ '^[0-9]+$'
+        )
+    `);
+    expect(firstPage.collectionTotal).toBe(Number(expectedCollectionCount.rows[0]?.total));
+
+    const allPagedIds: number[] = [];
+    const lastPage = Math.ceil(firstPage.totalMatches / 5);
+    for (let page = 1; page <= lastPage; page += 1) {
+      const response = await request(
+        `/store/media-db/recommendations?projectId=project-1&storyKey=${storyKey}&page=${page}&setId=${firstPage.recommendationSet.id}&revision=1&visibilityRevision=${firstPage.visibilityRevision}`,
+      );
+      expect(response.status).toBe(200);
+      const body = await response.json() as {
+        items: Array<{ rank: number; contact: { id: number } }>;
+        page: number; start: number; end: number; hasNext: boolean; totalMatches: number; visibilityRevision: string;
+      };
+      expect(body.visibilityRevision).toBe(firstPage.visibilityRevision);
+      expect(body.totalMatches).toBe(firstPage.totalMatches);
+      expect(body.page).toBe(page);
+      expect(body.items.map((item) => item.rank)).toEqual(body.items.map((_, index) => (page - 1) * 5 + index + 1));
+      allPagedIds.push(...body.items.map((item) => item.contact.id));
+      if (page === lastPage) expect(body).toMatchObject({
+        start: (lastPage - 1) * 5 + 1, end: firstPage.totalMatches, hasNext: false,
+      });
+    }
+    expect(allPagedIds).toHaveLength(firstPage.totalMatches);
+    expect(new Set(allPagedIds).size).toBe(firstPage.totalMatches);
+    expect(allPagedIds).toEqual(expect.arrayContaining(ownContacts.map(({ id }) => id)));
+    expect(allPagedIds).not.toContain(privateContact!.id);
+    expect(collectJournalistCoverage).not.toHaveBeenCalled();
+
+    const emptyPage = await request(
+      `/store/media-db/recommendations?projectId=project-1&storyKey=${storyKey}&page=${lastPage + 1}&setId=${firstPage.recommendationSet.id}&revision=1&visibilityRevision=${firstPage.visibilityRevision}`,
+    );
+    expect(emptyPage.status).toBe(200);
+    expect(await emptyPage.json()).toMatchObject({
+      items: [], totalMatches: firstPage.totalMatches, page: lastPage + 1, pageSize: 5, start: 0, end: 0, hasNext: false,
+    });
+
+    const initialSecondPage = await request(
+      `/store/media-db/recommendations?projectId=project-1&storyKey=${storyKey}&page=2&setId=${firstPage.recommendationSet.id}&revision=1&visibilityRevision=${firstPage.visibilityRevision}`,
+    );
+    const initialSecondPageBody = await initialSecondPage.json() as {
+      items: Array<{ rank: number; contact: { id: number; email: string } }>;
+    };
+    const suppressedContact = initialSecondPageBody.items[0]!.contact;
+    await db.insert(mediaSuppressionsTable).values({
+      scope: "workspace",
+      accountId: "workspace-a",
+      emailHash: privacyHash(suppressedContact.email),
+      reason: "request",
+      active: 1,
+    });
+    const pageAfterSuppression = await request(
+      `/store/media-db/recommendations?projectId=project-1&storyKey=${storyKey}&page=2&setId=${firstPage.recommendationSet.id}&revision=1&visibilityRevision=${firstPage.visibilityRevision}`,
+    );
+    expect(pageAfterSuppression.status).toBe(409);
+    const sequenceChanged = await pageAfterSuppression.json() as {
+      code: string; page: number; visibilityRevision: string;
+    };
+    expect(sequenceChanged).toMatchObject({ code: "PAGE_SEQUENCE_CHANGED", page: 1 });
+    expect(sequenceChanged.visibilityRevision).not.toBe(firstPage.visibilityRevision);
+    const resetPage = await request(
+      `/store/media-db/recommendations?projectId=project-1&storyKey=${storyKey}&page=1&setId=${firstPage.recommendationSet.id}&revision=1&visibilityRevision=${sequenceChanged.visibilityRevision}`,
+    );
+    expect(resetPage.status).toBe(200);
+    const resetBody = await resetPage.json() as { totalMatches: number; collectionTotal: number; visibilityRevision: string };
+    expect(resetBody.totalMatches).toBe(firstPage.totalMatches - 1);
+    expect(resetBody.collectionTotal).toBe(firstPage.collectionTotal - 1);
+    const pageTwoAfterReset = await request(
+      `/store/media-db/recommendations?projectId=project-1&storyKey=${storyKey}&page=2&setId=${firstPage.recommendationSet.id}&revision=1&visibilityRevision=${resetBody.visibilityRevision}`,
+    );
+    const resetSecondPage = await pageTwoAfterReset.json() as {
+      items: Array<{ rank: number; contact: { id: number } }>;
+    };
+    expect(pageTwoAfterReset.status).toBe(200);
+    expect(resetSecondPage.items.map((item) => item.rank)).toEqual([7, 8, 9, 10, 11]);
+    expect(resetSecondPage.items.some((item) => item.contact.id === suppressedContact.id)).toBe(false);
+
+    const changedRanking = await request("/store/media-db/recommendations/feedback", "workspace-a", {
+      method: "PUT",
+      body: JSON.stringify({
+        projectId: "project-1", storyKey, contactId: ownContacts[0]!.id, signal: "less",
+      }),
+    });
+    expect(changedRanking.status).toBe(200);
+    const stalePage = await request(
+      `/store/media-db/recommendations?projectId=project-1&storyKey=${storyKey}&page=2&setId=${firstPage.recommendationSet.id}&revision=1&visibilityRevision=${resetBody.visibilityRevision}`,
+    );
+    expect(stalePage.status).toBe(409);
+    expect(await stalePage.json()).toMatchObject({ code: "RANKING_CHANGED", rankingRevision: 2 });
+    const refreshedPage = await request(
+      `/store/media-db/recommendations?projectId=project-1&storyKey=${storyKey}&page=2&setId=${firstPage.recommendationSet.id}&revision=2`,
+    );
+    expect(refreshedPage.status).toBe(200);
+    collectJournalistCoverage.mockReset();
+  });
+
   it("migrates the complete recommendation storage contract from a legacy media schema", async () => {
     const tables = await db.execute(sql`
       SELECT table_name
@@ -647,7 +821,10 @@ describe("media recommendation refinement API", () => {
     const generated = await request("/store/media-db/recommendations", "workspace-a", {
       method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "story-1", terms: ["energy"] }),
     });
-    const generatedBody = await generated.json() as { recommendationSet: { id: number }; items: Array<{ contact: { id: number }; assessment: { version: string } }> };
+    const generatedBody = await generated.json() as {
+      recommendationSet: { id: number };
+      items: Array<{ contact: { id: number; firstName: string; lastName: string }; assessment: { version: string } }>;
+    };
     expect(generatedBody.items[0]?.assessment.version).toBe("editorial-v1");
     const contactId = generatedBody.items[0].contact.id;
 
@@ -678,6 +855,9 @@ describe("media recommendation refinement API", () => {
     expect(checkMonthlySpendLimitMock).toHaveBeenCalled();
     expect(maxConcurrentChecks).toBeGreaterThan(1);
     expect(collectJournalistCoverage).toHaveBeenCalledTimes(Math.min(5, generatedBody.items.length));
+    expect(collectJournalistCoverage.mock.calls.map(([input]) => (
+      (input as { contact: { name: string } }).contact.name
+    ))).toEqual(generatedBody.items.slice(0, 5).map(({ contact }) => `${contact.firstName} ${contact.lastName}`.trim()));
     const enrichedBody = await enriched.json() as { items: Array<{ rank: number; score: number; contact: { id: number }; assessment: { evidence: unknown[] } }> };
     expect(enrichedBody.items[0].assessment.evidence).toHaveLength(1);
     expect(enrichedBody.items.map((item) => item.score)).toEqual(
@@ -834,6 +1014,120 @@ describe("media recommendation refinement API", () => {
     checkMonthlySpendLimitMock.mockResolvedValue({ allowed: true, spentGbp: 0, limitGbp: 50 });
   });
 
+  it("sanitizes usage-accounting failures and preserves the saved ranked results", async () => {
+    const storyKey = "coverage-accounting-safe-error";
+    await db.insert(archiveItemsTable).values({
+      id: storyKey, projectId: "project-1", owner: "workspace-a", title: "Accounting failure story",
+    });
+    const [outlet] = await db.select().from(mediaOutletsTable).limit(1);
+    await db.insert(mediaContactsTable).values({
+      outletId: outlet.id,
+      firstName: "Accounting",
+      lastName: "Reporter",
+      role: "Accountingprobe editor",
+      beats: ["accountingprobe"],
+      sectors: [],
+      accountId: "workspace-a",
+    });
+    const brief = {
+      topic: "accountingprobe", angle: "usage", audience: "trade press",
+      regions: ["UK"], publicationTypes: ["Trade press"], whyNow: "current coverage",
+    };
+    await request("/store/media-db/recommendations/brief", "workspace-a", {
+      method: "PUT", body: JSON.stringify({ projectId: "project-1", storyKey, brief }),
+    });
+    const generated = await request("/store/media-db/recommendations", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({ projectId: "project-1", storyKey, terms: ["accountingprobe"] }),
+    });
+    const generatedBody = await generated.json() as { recommendationSet: { id: number } };
+    const before = await db.select({ criteria: mediaRecommendationSetsTable.criteria })
+      .from(mediaRecommendationSetsTable).where(eq(mediaRecommendationSetsTable.id, generatedBody.recommendationSet.id));
+    collectJournalistCoverage.mockClear();
+    await db.execute(sql`
+      ALTER TABLE token_usage ADD CONSTRAINT token_usage_test_reject_reservations
+      CHECK (operation <> 'media-recommendations-enrich' OR input_tokens > 0)
+    `);
+    let response: Response;
+    try {
+      response = await request("/store/media-db/recommendations/enrich", "workspace-a", {
+        method: "POST",
+        body: JSON.stringify({
+          projectId: "project-1", storyKey, recommendationSetId: generatedBody.recommendationSet.id,
+        }),
+      });
+    } finally {
+      await db.execute(sql`ALTER TABLE token_usage DROP CONSTRAINT token_usage_test_reject_reservations`);
+    }
+    expect(response!.status).toBe(503);
+    const body = await response!.json() as { code: string; supportReference: string; error: string };
+    expect(body.code).toBe("COVERAGE_ACCOUNTING_UNAVAILABLE");
+    expect(body.supportReference).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(body.error).toBe(
+      `Coverage checking is temporarily unavailable because usage accounting could not be confirmed. Your saved results are unchanged. Please contact support with reference ${body.supportReference}.`,
+    );
+    expect(body.error).not.toMatch(/token_usage|insert into|workspace-a|postgres|constraint/i);
+    expect(collectJournalistCoverage).not.toHaveBeenCalled();
+    const after = await db.select({ criteria: mediaRecommendationSetsTable.criteria })
+      .from(mediaRecommendationSetsTable).where(eq(mediaRecommendationSetsTable.id, generatedBody.recommendationSet.id));
+    expect(after[0]?.criteria).toEqual(before[0]?.criteria);
+  });
+
+  it("returns a safe support-reference error when a coverage reservation hits an occupied sequence ID", async () => {
+    const storyKey = "coverage-accounting-duplicate-id";
+    await db.insert(archiveItemsTable).values({
+      id: storyKey, projectId: "project-1", owner: "workspace-a", title: "Duplicate reservation ID story",
+    });
+    const [outlet] = await db.select().from(mediaOutletsTable).limit(1);
+    await db.insert(mediaContactsTable).values({
+      outletId: outlet.id,
+      firstName: "Sequence",
+      lastName: "Reporter",
+      role: "Sequenceprobe editor",
+      beats: ["sequenceprobe"],
+      sectors: [],
+      accountId: "workspace-a",
+    });
+    const brief = {
+      topic: "sequenceprobe", angle: "usage", audience: "trade press",
+      regions: ["UK"], publicationTypes: ["Trade press"], whyNow: "current coverage",
+    };
+    await request("/store/media-db/recommendations/brief", "workspace-a", {
+      method: "PUT", body: JSON.stringify({ projectId: "project-1", storyKey, brief }),
+    });
+    const generated = await request("/store/media-db/recommendations", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({ projectId: "project-1", storyKey, terms: ["sequenceprobe"] }),
+    });
+    const generatedBody = await generated.json() as { recommendationSet: { id: number } };
+    const before = await db.select({ criteria: mediaRecommendationSetsTable.criteria })
+      .from(mediaRecommendationSetsTable).where(eq(mediaRecommendationSetsTable.id, generatedBody.recommendationSet.id));
+    const [highest] = await db.select({ id: tokenUsageTable.id }).from(tokenUsageTable)
+      .orderBy(sql`id DESC`).limit(1);
+    expect(highest?.id).toBeGreaterThan(1);
+    await db.execute(sql`
+      SELECT setval(pg_get_serial_sequence('public.token_usage', 'id'), ${highest!.id - 1}, true)
+    `);
+    collectJournalistCoverage.mockClear();
+    const response = await request("/store/media-db/recommendations/enrich", "workspace-a", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: "project-1", storyKey, recommendationSetId: generatedBody.recommendationSet.id,
+      }),
+    });
+    await ensureTokenUsageSequence();
+    expect(response.status).toBe(503);
+    const body = await response.json() as { code: string; supportReference: string; error: string };
+    expect(body.code).toBe("COVERAGE_ACCOUNTING_UNAVAILABLE");
+    expect(body.supportReference).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(body.error).toContain(`support with reference ${body.supportReference}`);
+    expect(body.error).not.toMatch(/23505|token_usage_pkey|INSERT|workspace-a|id\)=/i);
+    expect(collectJournalistCoverage).not.toHaveBeenCalled();
+    const after = await db.select({ criteria: mediaRecommendationSetsTable.criteria })
+      .from(mediaRecommendationSetsTable).where(eq(mediaRecommendationSetsTable.id, generatedBody.recommendationSet.id));
+    expect(after[0]?.criteria).toEqual(before[0]?.criteria);
+  });
+
   it("does not write failed provider results and uses compare-and-swap for concurrent enrichments", async () => {
     const generated = await request("/store/media-db/recommendations", "workspace-a", {
       method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "race-story", terms: ["energy"] }),
@@ -881,7 +1175,9 @@ describe("media recommendation refinement API", () => {
     const failed = await pendingFailure;
     expect(partialFailureCalls).toBe(checksPerRun - 1);
     expect(failed.status).toBe(502);
-    expect(await failed.json()).toMatchObject({ error: "Failed to collect journalist coverage: Journalist coverage search timed out" });
+    expect(await failed.json()).toMatchObject({
+      error: "Failed to verify recent coverage. Your saved results are unchanged. Please try again.",
+    });
     const afterFailure = await db.select({ criteria: mediaRecommendationSetsTable.criteria }).from(mediaRecommendationSetsTable).where(eq(mediaRecommendationSetsTable.id, body.recommendationSet.id));
     expect(afterFailure[0].criteria).toEqual(before[0].criteria);
     const usageAfterFailure = await db.select().from(tokenUsageTable)

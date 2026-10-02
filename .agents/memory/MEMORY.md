@@ -97,6 +97,7 @@
 - [Replit configuration validation](replit-config-validation.md) — avoid credential-bearing diffs; production env changes can modify tracked `.replit`, so commit before a release gate.
 - [Contact email delivery ambiguity](contact-delivery-ambiguity.md) — unknown historical acceptance must not be treated as safe to retry; separate each message's state.
 - [Imported ID counter readiness](aio-fusion-imported-id-counters.md) — check next-ID occupancy after explicit-ID imports; backup failures must still block deletion.
+- [Coverage accounting safety](coverage-accounting-safety.md) — fail closed with safe support references; diagnose nested PG causes and never retry uncertain paid coverage calls automatically.
 - [Drizzle push safety](drizzle-push-safety.md) — table filters may not scope sequences; inspect migration output and never force unresolved rename/deletion prompts.
 - [Media source reach visibility](media-source-reach-visibility.md) — source reach is temporarily hidden from Database and Research, not removed from stored data or exports.
 - [How-to authoring model](howto-authoring-model.md) — user requires one continuous WYSIWYG box, not separate section forms; verify paste, selection, Enter and save/reopen.

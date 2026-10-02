@@ -41,6 +41,7 @@ import { assertCanonicalDomainIsSafeForDeployment } from "./lib/app-url";
 import { ensureInsightsSchema } from "./lib/ensure-insights-schema";
 import { seedInsights } from "./lib/seed-insights";
 import { ensureMediaSchema } from "./lib/ensure-media-schema";
+import { ensureTokenUsageSequence } from "./lib/ensure-token-usage-sequence";
 import { MEDIA_REVERIFICATION_INTERVAL_MS, runMediaSourceReverification } from "./lib/media-source-reverification";
 import {
   markRuntimeReady,
@@ -155,6 +156,7 @@ async function runStartupMigrations(): Promise<void> {
     ["platform_password_resets table", ensurePasswordResetsTable],
     ["Insights editorial schema", ensureInsightsSchema],
     ["media contacts and recommendations schema", ensureMediaSchema],
+    ["usage accounting ID counter readiness", ensureTokenUsageSequence],
   ];
   await runRequiredPrerequisites(steps);
 }

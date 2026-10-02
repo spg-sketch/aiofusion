@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { responsesCreate, fetchMediaSourceEvidence } = vi.hoisted(() => ({
+const { responsesCreate, fetchMediaSourceEvidence, clientOptions } = vi.hoisted(() => ({
   responsesCreate: vi.fn(),
   fetchMediaSourceEvidence: vi.fn(),
+  clientOptions: vi.fn(),
 }));
 
 vi.mock("openai", () => ({
   default: class OpenAI {
+    constructor(options: unknown) { clientOptions(options); }
     responses = { create: responsesCreate };
   },
 }));
@@ -52,6 +54,7 @@ describe("collectJournalistCoverage", () => {
     process.env.AI_INTEGRATIONS_OPENAI_BASE_URL = "https://ai.example.test";
     process.env.AI_INTEGRATIONS_OPENAI_API_KEY = "test-key";
     responsesCreate.mockReset();
+    clientOptions.mockReset();
     fetchMediaSourceEvidence.mockReset();
   });
 
@@ -71,6 +74,7 @@ describe("collectJournalistCoverage", () => {
     fetchMediaSourceEvidence.mockResolvedValue(page);
 
     const result = await collectJournalistCoverage(input());
+    expect(clientOptions).toHaveBeenCalledWith(expect.objectContaining({ maxRetries: 0 }));
 
     expect(fetchMediaSourceEvidence).toHaveBeenCalledTimes(1);
     expect(result.evidence).toEqual([{

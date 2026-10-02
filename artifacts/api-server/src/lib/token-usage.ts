@@ -51,6 +51,29 @@ export class MonthlySpendCapReservationError extends Error {
   }
 }
 
+export class CoverageAccountingError extends Error {
+  constructor(cause: unknown) {
+    super("Coverage usage accounting could not be confirmed.", { cause });
+    this.name = "CoverageAccountingError";
+  }
+}
+
+/** Keep SQL, bound parameters, detail text and customer identifiers out of logs. */
+export function safeCoverageAccountingDiagnostic(error: unknown): {
+  code?: string; table?: string; column?: string; constraint?: string;
+} {
+  let current = error;
+  for (let depth = 0; depth < 8 && current && typeof current === "object"; depth++) {
+    const value = current as Record<string, unknown>;
+    if (typeof value.code === "string" && /^[0-9A-Z]{5}$/.test(value.code)) {
+      const safeIdentifier = (field: unknown) => typeof field === "string" && /^[a-zA-Z0-9_]{1,100}$/.test(field) ? field : undefined;
+      return { code: value.code, table: safeIdentifier(value.table), column: safeIdentifier(value.column), constraint: safeIdentifier(value.constraint) };
+    }
+    current = value.cause;
+  }
+  return {};
+}
+
 const usageReservationQueues = new Map<string, Promise<void>>();
 
 async function withUsageReservationLock<T>(key: string, operation: () => Promise<T>): Promise<T> {
@@ -127,19 +150,26 @@ export async function reserveJournalistCoverageUsageBatch(input: {
       reservationIds.push(reservation.id);
     }
     return reservationIds;
-  }));
+  })).catch((cause: unknown) => {
+    if (cause instanceof MonthlySpendCapReservationError) throw cause;
+    throw new CoverageAccountingError(cause);
+  });
 }
 
 export async function releaseJournalistCoverageUsage(input: {
   reservationId: number;
   accountId: string;
 }): Promise<void> {
+  try {
   const [released] = await db.delete(tokenUsageTable).where(and(
     eq(tokenUsageTable.id, input.reservationId),
     eq(tokenUsageTable.accountId, input.accountId),
     eq(tokenUsageTable.operation, "media-recommendations-enrich"),
   )).returning({ id: tokenUsageTable.id });
   if (!released) throw new Error("Could not release unused journalist coverage usage reservation.");
+  } catch (cause) {
+    throw new CoverageAccountingError(cause);
+  }
 }
 
 export async function settleJournalistCoverageUsage(input: {
@@ -150,6 +180,7 @@ export async function settleJournalistCoverageUsage(input: {
   outputTokens: number;
   webSearchCalls: number;
 }): Promise<void> {
+  try {
   const inputTokens = Math.max(0, Math.floor(input.inputTokens));
   const outputTokens = Math.max(0, Math.floor(input.outputTokens));
   const webSearchCalls = Math.max(0, Math.floor(input.webSearchCalls));
@@ -173,6 +204,9 @@ export async function settleJournalistCoverageUsage(input: {
       costGbp,
       reservedGbp: JOURNALIST_COVERAGE_CALL_RESERVE_GBP,
     }, "Journalist coverage usage exceeded its conservative reservation");
+  }
+  } catch (cause) {
+    throw new CoverageAccountingError(cause);
   }
 }
 

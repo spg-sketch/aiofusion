@@ -12,6 +12,7 @@ const root = resolve(import.meta.dirname, "../..");
 const publicDir = resolve(root, "artifacts/aio-fusion/dist/public");
 const featureMode = process.argv.includes("--features");
 const howtoMode = process.argv.includes("--howto");
+const mediaResearchMode = process.argv.includes("--media-research");
 const liveAi = featureMode && process.env.AIO_FEATURE_LIVE_AI === "1";
 const liveAiEnv = {};
 if (liveAi) {
@@ -80,10 +81,10 @@ process.on("exit", cleanup);
 process.on("SIGTERM", () => { cleanup(); process.exit(0); });
 process.on("SIGINT", () => { cleanup(); process.exit(0); });
 
-if (featureMode || howtoMode || !existsSync(join(publicDir, "index.html"))) {
+if (featureMode || howtoMode || mediaResearchMode || !existsSync(join(publicDir, "index.html"))) {
   if (run("pnpm", ["--filter", "@workspace/aio-fusion", "run", "build"]).status !== 0) throw new Error("web build failed");
 }
-if (featureMode || howtoMode || !existsSync(resolve(root, "artifacts/api-server/dist/index.mjs"))) {
+if (featureMode || howtoMode || mediaResearchMode || !existsSync(resolve(root, "artifacts/api-server/dist/index.mjs"))) {
   if (run("pnpm", ["--filter", "@workspace/api-server", "run", "build"]).status !== 0) throw new Error("API build failed");
 }
 if (run("initdb", ["-D", pgDir, "--username=release", "--auth=trust", "--no-locale"]).status !== 0) throw new Error("initdb failed");
@@ -155,6 +156,51 @@ if (featureMode) {
   if (run("psql", ["-h", "127.0.0.1", "-p", String(port), "-U", "release", "-d", "release",
     "-v", "ON_ERROR_STOP=1", "-c", betaSql], { env: { DATABASE_URL: dbUrl } }).status !== 0) throw new Error("isolated beta seed failed");
 }
+if (mediaResearchMode) {
+  const mediaResearchSql = `
+    INSERT INTO archive_items (
+      id, project_id, owner, title, content_type, status, headline, standfirst,
+      body_copy, selected_messages, media_cats
+    ) VALUES (
+      'media-research-pagination-story', 'release-project', 'release-workspace',
+      'Renewable Energy Coverage Story', 'Article', 'Published',
+      'Renewable energy reporting for industry leaders',
+      'A focused renewable energy story for specialist media.',
+      'Renewable energy innovation is changing how businesses plan for the future.',
+      '["Renewable energy innovation is changing how businesses plan for the future."]'::jsonb,
+      '["Renewable Energy"]'::jsonb
+    );
+    INSERT INTO archive_items (
+      id, project_id, owner, title, content_type, status
+    ) VALUES (
+      'media-research-private-story', 'other-workspace', 'other-workspace',
+      'Private Workspace Article', 'Article', 'Published'
+    );
+    INSERT INTO media_contacts (
+      first_name, last_name, role, email, beats, sectors, geography, account_id
+    )
+    SELECT
+      'Research',
+      'Contact ' || contact_number,
+      'Reporter',
+      'research-' || contact_number || '@release.invalid',
+      ARRAY['renewable energy'],
+      ARRAY['renewable energy'],
+      'Global',
+      NULL
+    FROM generate_series(1, 32) AS contacts(contact_number);
+    INSERT INTO media_contacts (
+      first_name, last_name, role, email, beats, sectors, geography, editorial_status, account_id
+    ) VALUES (
+      'Unrelated', 'Contact', 'Reporter', '',
+      ARRAY['local history'], ARRAY['local history'], 'Global', 'departed', NULL
+    );
+  `;
+  if (run("psql", ["-h", "127.0.0.1", "-p", String(port), "-U", "release", "-d", "release",
+    "-v", "ON_ERROR_STOP=1", "-c", mediaResearchSql], { env: { DATABASE_URL: dbUrl } }).status !== 0) {
+    throw new Error("isolated Media Research regression fixture seed failed");
+  }
+}
 start("node", [
   ...(featureMode ? ["--import", emailInterceptor] : []),
   "--enable-source-maps",
@@ -177,6 +223,19 @@ await waitFor(`http://127.0.0.1:${apiPort}/api/platform/me`).catch((error) => {
 });
 
 const server = createServer(async (req, res) => {
+  if (mediaResearchMode && req.method === "GET" && req.url === "/__test/media-research-state") {
+    const state = run("psql", ["-h", "127.0.0.1", "-p", String(port), "-U", "release", "-d", "release",
+      "-At", "-c", "SELECT json_build_object('tokenUsageCount',(SELECT count(*) FROM token_usage))"],
+    { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", env: { DATABASE_URL: dbUrl } });
+    if (state.status !== 0) {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "Could not read isolated Media Research usage state." }));
+      return;
+    }
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    res.end(state.stdout.trim());
+    return;
+  }
   if (featureMode && req.method === "GET" && req.url?.startsWith("/__test/verification-email")) {
     const query = new URL(req.url, "http://127.0.0.1:5000").searchParams;
     const email = (query.get("email") ?? "").trim().toLowerCase();
