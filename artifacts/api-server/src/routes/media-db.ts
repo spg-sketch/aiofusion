@@ -31,6 +31,7 @@ import {
   issueMediaImportPreviewToken,
   mergeImportedProvenance,
   isNumericOnlyJournalistName,
+  hasNumericJournalistNameIdentifier,
 } from "../lib/media-import-reconciliation";
 import type { ImportReconciliation } from "../lib/media-import-reconciliation";
 import { mediaDiscoveryNotes, verifyMediaDiscoveries, type TrustedMediaDiscovery } from "../lib/media-discovery-token";
@@ -348,6 +349,10 @@ function importOutletOwnerCondition(accountId: string | null) {
 
 function numericOnlyJournalistNameSql() {
   return sql`NOT (regexp_replace(trim(concat(${mediaContactsTable.firstName}, ' ', ${mediaContactsTable.lastName})), '\\s+', '', 'g') ~ '^[0-9]+$')`;
+}
+
+function isNumericOnlyJournalistNameSql() {
+  return sql`regexp_replace(trim(concat(${mediaContactsTable.firstName}, ' ', ${mediaContactsTable.lastName})), '\\s+', '', 'g') ~ '^[0-9]+$'`;
 }
 
 async function editableContact(req: Request, id: number) {
@@ -2881,6 +2886,111 @@ router.post("/store/media-db/corrections/:reportId/resolve", requirePlatformAuth
 });
 
 router.get(
+  "/store/media-db/identity-review",
+  requirePlatformAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    if (!isWritableMaster(req)) {
+      res.status(403).json({ error: "Only a writable Master member may review shared numeric-only contacts." });
+      return;
+    }
+    try {
+      const requestedPage = Number(req.query.page);
+      const requestedPageSize = Number(req.query.pageSize);
+      const page = Number.isFinite(requestedPage) && requestedPage > 0
+        ? Math.max(1, Math.min(10_000, Math.floor(requestedPage))) : 1;
+      const pageSize = Number.isFinite(requestedPageSize) && requestedPageSize > 0
+        ? Math.max(1, Math.min(50, Math.floor(requestedPageSize))) : 50;
+      const query = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 200) : "";
+      const testSuppressionFallback = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
+      const basePredicate = and(
+        isNull(mediaContactsTable.deletedAt),
+        isNull(mediaContactsTable.accountId),
+        isNull(mediaOutletsTable.deletedAt),
+        isNumericOnlyJournalistNameSql(),
+        query ? or(
+          ilike(mediaOutletsTable.name, `%${query}%`),
+          ilike(mediaContactsTable.sourceRef, `%${query}%`),
+        ) : undefined,
+      );
+      let predicate = basePredicate;
+      if (testSuppressionFallback) {
+        const matcher = await createSuppressionMatcher(normUsername(req.account!.username));
+        const identities = await db.select({
+          id: mediaContactsTable.id,
+          firstName: mediaContactsTable.firstName,
+          lastName: mediaContactsTable.lastName,
+          email: mediaContactsTable.email,
+          linkedinUrl: mediaContactsTable.linkedinUrl,
+          outletName: mediaOutletsTable.name,
+        }).from(mediaContactsTable)
+          .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
+          .where(basePredicate);
+        const suppressed = identities.filter((contact) => matcher({
+          name: `${contact.firstName} ${contact.lastName}`,
+          email: contact.email,
+          linkedinUrl: contact.linkedinUrl,
+          outlet: contact.outletName ?? "",
+        })).map((contact) => contact.id);
+        if (suppressed.length) predicate = and(basePredicate, notInArray(mediaContactsTable.id, suppressed));
+      } else {
+        predicate = and(basePredicate, notSuppressedSql(
+          normUsername(req.account!.username),
+          mediaContactsTable.firstName,
+          mediaContactsTable.lastName,
+          mediaContactsTable.email,
+          mediaContactsTable.linkedinUrl,
+          mediaOutletsTable.name,
+        ));
+      }
+      const [{ total }] = await db.select({ total: count() }).from(mediaContactsTable)
+        .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
+        .where(predicate);
+      const rows = await db.select({
+        contact: mediaContactsTable,
+        outletName: mediaOutletsTable.name,
+        outletCategory: mediaOutletsTable.category,
+        outletWebsite: mediaOutletsTable.website,
+        outletCountry: mediaOutletsTable.country,
+        outletReachBand: mediaOutletsTable.reachBand,
+      }).from(mediaContactsTable)
+        .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
+        .where(predicate)
+        .orderBy(asc(mediaContactsTable.id))
+        .limit(pageSize).offset((page - 1) * pageSize);
+      const ids = rows.map(({ contact }) => contact.id);
+      const checks = ids.length ? await db.select().from(mediaContactSourceChecksTable)
+        .where(inArray(mediaContactSourceChecksTable.contactId, ids))
+        .orderBy(desc(mediaContactSourceChecksTable.checkedAt), desc(mediaContactSourceChecksTable.id)) : [];
+      const latest = new Map<string, typeof checks[number]>();
+      for (const check of checks) if (!latest.has(`${check.contactId}\0${check.sourceUrl}`)) latest.set(`${check.contactId}\0${check.sourceUrl}`, check);
+      const now = Date.now();
+      const contacts = rows.map(({ contact, outletName, outletCategory, outletWebsite, outletCountry, outletReachBand }) => {
+        const sourceCheck = latest.get(`${contact.id}\0${contact.sourceUrl}`) ?? null;
+        const due = mediaSourceNextDueAt(sourceCheck, contact.sourceCheckFailureCount);
+        return {
+          ...contact,
+          outletName: outletName ?? null,
+          outletCategory: outletCategory ?? null,
+          outletWebsite: outletWebsite ? safePublicationWebsite(outletWebsite) : null,
+          outletCountry: outletCountry ?? null,
+          outletReachBand: outletReachBand ?? null,
+          sourceCheck,
+          sourceStatus: !contact.sourceUrl ? "unverified" : !sourceCheck || (due && due.getTime() <= now) ? "due" : sourceCheck.outcome,
+          sourceReviewDueAt: due,
+          sourceCheckQueued: Boolean(contact.sourceCheckClaimedAt),
+          lifecycleStatus: "active",
+          hasPendingCorrection: false,
+        };
+      });
+      res.json({ contacts, total: Number(total), page, pageSize });
+    } catch (error) {
+      req.log.error({ err: error }, "Failed to load shared numeric-only identity review");
+      res.status(500).json({ error: "Failed to load identity review." });
+    }
+  },
+);
+
+router.get(
   "/store/media-db/contacts",
   requirePlatformAuth,
   async (req: Request, res: Response) => {
@@ -3199,6 +3309,13 @@ router.post(
         res.status(400).json({ error: "Contact must have at least a first or last name" });
         return;
       }
+      if (hasNumericJournalistNameIdentifier(
+        firstName === undefined || firstName === null ? "" : String(firstName),
+        lastName === undefined || lastName === null ? "" : String(lastName),
+      )) {
+        res.status(400).json({ error: "Contact names cannot contain numeric identifiers. Enter the journalist's real name." });
+        return;
+      }
       // Validate outletId: caller must have visibility over the chosen outlet.
       let resolvedOutletId: number | null = null;
       if (outletId) {
@@ -3298,6 +3415,16 @@ router.put(
       }
       const body = (req.body ?? {}) as Record<string, unknown>;
       const { outletId } = body;
+      const effectiveFirstName = typeof body.firstName === "string" ? body.firstName
+        : body.firstName === undefined ? row.firstName : String(body.firstName);
+      const effectiveLastName = typeof body.lastName === "string" ? body.lastName
+        : body.lastName === undefined ? row.lastName : String(body.lastName);
+      const nameWasChanged = effectiveFirstName.trim() !== row.firstName.trim()
+        || effectiveLastName.trim() !== row.lastName.trim();
+      if (nameWasChanged && hasNumericJournalistNameIdentifier(effectiveFirstName, effectiveLastName)) {
+        res.status(400).json({ error: "Contact names cannot contain numeric identifiers. Enter the journalist's real name." });
+        return;
+      }
       if (body.outletName !== undefined && typeof body.outletName !== "string") {
         res.status(400).json({ error: "Outlet name must be a string" });
         return;
@@ -4249,6 +4376,10 @@ router.post("/store/media-db/discoveries", requirePlatformAuth, async (req: Requ
       res.status(400).json({ error: "This discovery is not present in the verified search results." });
       return;
     }
+    if (hasNumericJournalistNameIdentifier(candidate.firstName, candidate.lastName)) {
+      res.status(400).json({ error: "Discovery names cannot contain numeric identifiers. Only named journalists can be submitted." });
+      return;
+    }
     const candidateData = candidate as unknown as Record<string, unknown>;
     const candidateIdentity = {
       name: typeof candidateData.name === "string" ? candidateData.name : `${candidateData.firstName ?? ""} ${candidateData.lastName ?? ""}`,
@@ -4299,6 +4430,8 @@ router.post("/store/media-db/discoveries/:id/approve", requirePlatformAuth, asyn
       const [project] = row ? await tx.select({ owner: projectsTable.owner, deletedAt: projectsTable.deletedAt }).from(projectsTable).where(eq(projectsTable.id, row.projectId)).limit(1) : [];
       if (!row || !project || project.deletedAt || project.owner !== row.accountId || !inAssignedScope(req, row.projectId)
         || (visible !== null && !visible.includes(row.accountId))) return { notFound: true as const };
+      const candidate = row.candidate as unknown as TrustedMediaDiscovery;
+      if (hasNumericJournalistNameIdentifier(candidate.firstName, candidate.lastName)) return { invalidName: true as const };
       if (row.status === "rejected") return { rejected: true as const };
       if (row.status === "approved" && row.contactId && row.outletId) {
         const [contact] = await tx.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, row.contactId)).limit(1);
@@ -4320,7 +4453,6 @@ router.post("/store/media-db/discoveries/:id/approve", requirePlatformAuth, asyn
            if (await isSuppressedWithDb(tx, { ...contact, outlet: outlet?.name, accountId: row.accountId })) return { suppressed: true as const };
         }
       }
-      const candidate = row.candidate as unknown as TrustedMediaDiscovery;
       const candidateIdentity = candidate as TrustedMediaDiscovery & { linkedinUrl?: string };
       if (await isSuppressedWithDb(tx, {
         name: `${candidate.firstName} ${candidate.lastName}`.trim(),
@@ -4426,6 +4558,10 @@ router.post("/store/media-db/discoveries/:id/approve", requirePlatformAuth, asyn
       }).where(eq(mediaDiscoveriesTable.id, row.id)).returning();
       return { row: updated, contact, outlet, existing: !!existing };
     });
+    if ("invalidName" in result) {
+      res.status(400).json({ error: "Discovery names cannot contain numeric identifiers. Only named journalists can be approved." });
+      return;
+    }
     if ("notFound" in result) {
       res.status(404).json({ error: "Discovery not found" });
       return;

@@ -269,6 +269,21 @@ export function isNumericOnlyJournalistName(firstName: string | null | undefined
   return /^\d+$/.test(name);
 }
 
+/**
+ * Detect numeric identifiers in a person's name fields without interpreting
+ * numeric content elsewhere in a contact or publication record as identity.
+ */
+export function hasNumericJournalistNameIdentifier(
+  firstName: string | null | undefined,
+  lastName: string | null | undefined,
+): boolean {
+  return [firstName, lastName].some((value) => {
+    const field = String(value ?? "");
+    return (/^\d+$/.test(field.replace(/\s+/g, "")) && field.trim().length > 0)
+      || /(?<![A-Za-z0-9])\d{4}(?![A-Za-z0-9])/.test(field);
+  });
+}
+
 function fieldValue(row: MediaImportRow, field: string, aggregate: ImportAggregate): unknown {
   switch (field) {
     case "beats": return aggregate.beats;
@@ -845,7 +860,8 @@ export function reconcileMediaImport(
       });
       return;
     }
-    if (isNumericOnlyJournalistName(row.firstName, row.lastName)) {
+    if (isNumericOnlyJournalistName(row.firstName, row.lastName)
+        || hasNumericJournalistNameIdentifier(row.firstName, row.lastName)) {
       counts.invalid += 1;
       outcomes.push({
         sourceRow: row.sourceRow,
@@ -854,7 +870,7 @@ export function reconcileMediaImport(
         conflicts: [{
           kind: "identity",
           field: "name",
-          message: "Numeric-only names are not accepted as journalist identities.",
+          message: "Names containing numeric identifiers are not accepted as journalist identities.",
           sourceRow: row.sourceRow,
         }],
       });

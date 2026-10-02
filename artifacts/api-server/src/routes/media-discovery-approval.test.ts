@@ -45,6 +45,13 @@ vi.mock("@workspace/db", async () => {
       field_name varchar(80) NOT NULL, value text NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
     );
+    CREATE TABLE media_contact_source_checks (
+      id serial PRIMARY KEY, contact_id integer NOT NULL, account_id varchar NOT NULL,
+      source_url text NOT NULL, outcome varchar(20) NOT NULL, error_code varchar(40),
+      error_message text NOT NULL DEFAULT '', observed_evidence jsonb NOT NULL DEFAULT '{}',
+      differences jsonb NOT NULL DEFAULT '[]', checked_at timestamptz NOT NULL DEFAULT now(),
+      reviewed_at timestamptz, created_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE TABLE media_discoveries (
       id serial PRIMARY KEY, account_id varchar NOT NULL, project_id varchar NOT NULL,
       candidate_key text NOT NULL, status varchar(20) NOT NULL DEFAULT 'pending',
@@ -85,7 +92,8 @@ vi.mock("../lib/platform-auth", () => ({
   getVisibleUsernames: async (account: any) => account.visibleAccounts ?? [account.username],
 }));
 
-import { db, mediaContactsTable, mediaDiscoveriesTable, mediaOutletsTable, projectsTable } from "@workspace/db";
+import { db, mediaContactsTable, mediaDiscoveriesTable, mediaOutletsTable, mediaSuppressionsTable, projectsTable } from "@workspace/db";
+import { privacyHash } from "../lib/journalist-privacy";
 import { signMediaDiscoveries, type TrustedMediaDiscovery } from "../lib/media-discovery-token";
 import router from "./media-db";
 
@@ -104,11 +112,11 @@ const candidate: TrustedMediaDiscovery = {
   verifiedAt: "2026-01-02T00:00:00.000Z",
 };
 
-function appFor(account: { username: string; visibleAccounts?: string[] }) {
+function appFor(account: { username: string; visibleAccounts?: string[]; role?: string }) {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
-    (req as any).account = { ...account, role: "agency", membershipRole: "owner" };
+    (req as any).account = { ...account, role: account.role ?? "agency", membershipRole: "owner" };
     (req as any).log = { error: () => {}, warn: () => {}, info: () => {} };
     next();
   });
@@ -117,7 +125,7 @@ function appFor(account: { username: string; visibleAccounts?: string[] }) {
 }
 
 async function request(
-  account: { username: string; visibleAccounts?: string[] },
+  account: { username: string; visibleAccounts?: string[]; role?: string },
   path: string,
   init?: RequestInit,
 ) {
@@ -132,12 +140,12 @@ async function request(
   }
 }
 
-function token(accountId = "account-a", projectId = "project-a") {
+function token(accountId = "account-a", projectId = "project-a", item = candidate) {
   return signMediaDiscoveries({
     accountId,
     projectId,
     expiresAt: Date.now() + 60_000,
-    items: [candidate],
+    items: [item],
   });
 }
 
@@ -145,6 +153,7 @@ beforeEach(async () => {
   await db.delete(mediaDiscoveriesTable);
   await db.delete(mediaContactsTable);
   await db.delete(mediaOutletsTable);
+  await db.delete(mediaSuppressionsTable);
   await db.delete(projectsTable);
   await db.insert(projectsTable).values({ id: "project-a", owner: "account-a" });
 });
@@ -192,5 +201,102 @@ describe("media discovery approval queue", () => {
     expect(outlets.find((outlet) => outlet.accountId === "account-a")).toBeTruthy();
     expect(contacts[0]?.accountId).toBe("account-a");
     expect(contacts[0]?.outletId).toBe(outlets.find((outlet) => outlet.accountId === "account-a")?.id);
+  });
+
+  it("rejects numeric identifiers at signed discovery submission and approval before creating trusted rows", async () => {
+    const contaminated = { ...candidate, firstName: "Alex", lastName: "Editor 1234", candidateKey: "numeric-name" };
+    const submitted = await request({ username: "account-a" }, "/store/media-db/discoveries", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ discoveryToken: token("account-a", "project-a", contaminated), candidateKey: contaminated.candidateKey }),
+    });
+    expect(submitted.status).toBe(400);
+    expect(await db.select().from(mediaDiscoveriesTable)).toHaveLength(0);
+    expect(await db.select().from(mediaOutletsTable)).toHaveLength(0);
+    expect(await db.select().from(mediaContactsTable)).toHaveLength(0);
+
+    const [discovery] = await db.insert(mediaDiscoveriesTable).values({
+      accountId: "account-a",
+      projectId: "project-a",
+      candidateKey: contaminated.candidateKey,
+      candidate: contaminated,
+    }).returning();
+    const approved = await request({ username: "account-a" }, `/store/media-db/discoveries/${discovery.id}/approve`, { method: "POST" });
+    expect(approved.status).toBe(400);
+    expect((await db.select().from(mediaDiscoveriesTable))[0]?.status).toBe("pending");
+    expect(await db.select().from(mediaOutletsTable)).toHaveLength(0);
+    expect(await db.select().from(mediaContactsTable)).toHaveLength(0);
+  });
+
+  it("limits identity review to writable Master and returns only active shared numeric-only rows", async () => {
+    const [outlet] = await db.insert(mediaOutletsTable).values({ name: "Review Outlet", website: "https://review.test" }).returning();
+    await db.insert(mediaContactsTable).values([
+      { outletId: outlet.id, firstName: "123", lastName: "", sourceRef: "review-source", accountId: null },
+      { outletId: outlet.id, firstName: "987", lastName: "", sourceRef: "review-source", accountId: null },
+      { outletId: outlet.id, firstName: "Real", lastName: "Name", accountId: null },
+      { outletId: outlet.id, firstName: "456", lastName: "", accountId: "account-a" },
+    ]);
+    const [deletedOutlet] = await db.insert(mediaOutletsTable).values({
+      name: "Deleted Review Outlet",
+      deletedAt: new Date(),
+    }).returning();
+    await db.insert(mediaContactsTable).values({
+      outletId: deletedOutlet.id,
+      firstName: "789",
+      lastName: "",
+      sourceRef: "review-source",
+      accountId: null,
+    });
+    await db.insert(mediaSuppressionsTable).values({
+      nameHash: privacyHash("987"),
+      outletHash: privacyHash("Review Outlet"),
+      scope: "shared",
+      accountId: null,
+      reason: "test",
+      active: 1,
+    });
+    const denied = await request({ username: "account-a" }, "/store/media-db/identity-review");
+    expect(denied.status).toBe(403);
+    const reviewed = await request({ username: "admin", role: "admin" }, "/store/media-db/identity-review?page=1&pageSize=999&q=review-source");
+    expect(reviewed.status).toBe(200);
+    const body = await reviewed.json() as { contacts: Array<Record<string, unknown>>; total: number; page: number; pageSize: number };
+    expect(body).toMatchObject({ total: 1, page: 1, pageSize: 50 });
+    expect(body.contacts).toHaveLength(1);
+    expect(body.contacts[0]).toMatchObject({ firstName: "123", outletName: "Review Outlet", outletWebsite: "https://review.test" });
+  });
+
+  it("rejects contaminated manual names while allowing unrelated edits to retained legacy rows", async () => {
+    const rejectedCreate = await request({ username: "account-a" }, "/store/media-db/contacts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ firstName: "Desk", lastName: "2024", outletName: "Manual Outlet" }),
+    });
+    expect(rejectedCreate.status).toBe(400);
+    expect(await db.select().from(mediaOutletsTable)).toHaveLength(0);
+
+    const create = await request({ username: "account-a" }, "/store/media-db/contacts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ firstName: "Alex", lastName: "Editor", outletName: "Manual Outlet" }),
+    });
+    expect(create.status).toBe(200);
+    const { contact } = await create.json() as { contact: { id: number } };
+    const contaminatedUpdate = await request({ username: "account-a" }, `/store/media-db/contacts/${contact.id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ firstName: "Alex", lastName: "Editor 1234" }),
+    });
+    expect(contaminatedUpdate.status).toBe(400);
+    expect((await db.select().from(mediaContactsTable)).find((row) => row.id === contact.id)?.lastName).toBe("Editor");
+
+    const [legacy] = await db.insert(mediaContactsTable).values({ firstName: "123", lastName: "", accountId: "account-a" }).returning();
+    const unrelatedUpdate = await request({ username: "account-a" }, `/store/media-db/contacts/${legacy.id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ role: "Review required" }),
+    });
+    expect(unrelatedUpdate.status).toBe(200);
+    const savedLegacy = (await db.select().from(mediaContactsTable)).find((row) => row.id === legacy.id);
+    expect(savedLegacy).toMatchObject({ firstName: "123", role: "Review required" });
   });
 });

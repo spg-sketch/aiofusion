@@ -683,7 +683,7 @@ describe("media import route regressions", () => {
         sourceRow,
         outcome: "invalid",
         fields: ["name"],
-        reason: expect.stringContaining("Numeric-only"),
+        reason: expect.stringContaining("numeric identifiers"),
       }),
     ]));
     expect(commitResponse.status).toBe(400);
@@ -1887,19 +1887,64 @@ describe("media import route regressions", () => {
     });
     expect(preview).toMatchObject({
       validRows: 19_275,
-      importableRows: 11_884,
-      new: 11_884,
+      importableRows: 11_878,
+      new: 11_878,
       conflicted: 3_639,
-      duplicate: 2_197,
-      newOutletCount: 4_996,
+      duplicate: 2_196,
+      newOutletCount: 4_992,
       expectedMutations: {
-        outletsCreated: 4_996,
+        outletsCreated: 4_992,
         outletsUpdated: 0,
         outletsUnchanged: 0,
-        contactsCreated: 11_884,
+        contactsCreated: 11_878,
         contactsMatched: 0,
         publicationsProcessed: 100,
       },
+    });
+    const outcomeFor = (sheetName: string, sourceRow: number) =>
+      preview.rowOutcomes.find((outcome: { sheetName: string; sourceRow: number }) =>
+        outcome.sheetName === sheetName && outcome.sourceRow === sourceRow);
+    const newlyRejectedRows = [
+      ["Central & Local Government", 53],
+      ["Central & Local Government", 54],
+      ["Central & Local Government", 55],
+      ["Central & Local Government", 65],
+      ["Central & Local Government", 66],
+      ["Public Services", 41],
+      ["Public Services", 69],
+    ] as const;
+    for (const [sheetName, sourceRow] of newlyRejectedRows) {
+      expect(outcomeFor(sheetName, sourceRow)).toMatchObject({
+        sheetName,
+        sourceRow,
+        outcome: "invalid",
+        fields: ["name"],
+        reason: "Names containing numeric identifiers are not accepted as journalist identities.",
+      });
+    }
+    const alreadyConflictedRows = [
+      ["Central & Local Government", 59],
+      ["Central & Local Government", 62],
+      ["Central & Local Government", 64],
+      ["Central & Local Government", 67],
+      ["Central & Local Government", 68],
+      ["Emergency Services", 27],
+      ["Public Services", 85],
+      ["Public Services", 87],
+      ["Specialty Retail", 342],
+      ["Specialty Retail", 431],
+    ] as const;
+    for (const [sheetName, sourceRow] of alreadyConflictedRows) {
+      expect(outcomeFor(sheetName, sourceRow)).toMatchObject({ sheetName, sourceRow, outcome: "conflicted" });
+    }
+    expect(outcomeFor("Central & Local Government", 63)).toMatchObject({
+      sheetName: "Central & Local Government", sourceRow: 63, outcome: "new",
+    });
+    expect(outcomeFor("Specialty Retail", 341)).toMatchObject({
+      sheetName: "Specialty Retail", sourceRow: 341, outcome: "new",
+    });
+    expect(outcomeFor("Public Services", 42)).toMatchObject({
+      sheetName: "Public Services", sourceRow: 42, outcome: "duplicate",
     });
     expect(preview.sheetInventory).toHaveLength(129);
     expect(preview.sheetInventory.every((sheet: { rejectedRows: number; rejectedRowRefs: number[] }) =>

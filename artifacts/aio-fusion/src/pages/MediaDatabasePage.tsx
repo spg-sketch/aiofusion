@@ -380,10 +380,15 @@ function MediaDatabasePage() {
   // Master-owner-only surface.
   const canSeeDiscoveries = Boolean(session);
   const canEditDiscoveryInstructions = isMaster && (!session?.membershipRole || session.membershipRole === "owner");
-  const [activeTab, setActiveTab] = useState<"outlets" | "contacts" | "discoveries" | "corrections" | "instructions">("contacts");
+  const [activeTab, setActiveTab] = useState<"outlets" | "contacts" | "identityReview" | "discoveries" | "corrections" | "instructions">("contacts");
   const [internalToolsOpen, setInternalToolsOpen] = useState(false);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [identityReviewContacts, setIdentityReviewContacts] = useState<Contact[]>([]);
+  const [identityReviewTotal, setIdentityReviewTotal] = useState(0);
+  const [identityReviewPage, setIdentityReviewPage] = useState(1);
+  const [identityReviewLoading, setIdentityReviewLoading] = useState(false);
+  const [identityReviewError, setIdentityReviewError] = useState("");
   const [allCategories, setAllCategories] = useState<string[]>([]);
   const [loadError, setLoadError] = useState("");
   const loadRequestSequence = useRef(0);
@@ -741,9 +746,31 @@ function MediaDatabasePage() {
     }
   };
 
+  const loadIdentityReview = async (page = identityReviewPage) => {
+    if (!isMaster || !canWriteMediaDatabase) return;
+    setIdentityReviewLoading(true);
+    setIdentityReviewError("");
+    try {
+      const params = new URLSearchParams({ page: String(page), pageSize: "50", q: "" });
+      const response = await fetch(`${apiBase()}/api/store/media-db/identity-review?${params}`, { credentials: "include" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load identity review records.");
+      setIdentityReviewContacts(Array.isArray(data.contacts) ? data.contacts : []);
+      setIdentityReviewTotal(Number(data.total) || 0);
+    } catch (error) {
+      setIdentityReviewError(error instanceof Error ? error.message : "Could not load identity review records.");
+    } finally {
+      setIdentityReviewLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === "corrections") void loadCorrectionQueue();
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "identityReview" && isMaster && canWriteMediaDatabase) void loadIdentityReview(identityReviewPage);
+  }, [activeTab, identityReviewPage, isMaster, canWriteMediaDatabase]);
 
   const searchActive = resultMode === "search";
   const runSearch = () => {
@@ -1046,6 +1073,13 @@ function MediaDatabasePage() {
       }
       setShowContactModal(false);
       await loadData();
+      if (isMaster && canWriteMediaDatabase) {
+        if (activeTab === "identityReview") {
+          await Promise.all([loadIdentityReview(identityReviewPage), loadData("browse", "contacts")]);
+        } else if (resultMode === "browse" && activeTab === "contacts") {
+          await loadData("browse", "contacts");
+        }
+      }
     } catch (error) {
       setContactSaveError(error instanceof Error ? error.message : "Could not save this contact.");
     } finally {
@@ -1305,7 +1339,7 @@ function MediaDatabasePage() {
   };
 
   const outletOptions = outlets.map((o) => ({ id: o.id, name: o.name })).sort((a, b) => a.name.localeCompare(b.name));
-  const showCollectionTools = activeTab === "outlets" || activeTab === "contacts";
+  const showCollectionTools = activeTab === "outlets" || activeTab === "contacts" || activeTab === "identityReview";
   const showInternalTools = showManagement && internalToolsOpen;
   const activeNavigation = showManagement ? "manage" : searchActive && searchScope === "saved" ? "saved" : "search";
   const navigationButtonStyle = (section: typeof activeNavigation) => ({
@@ -1594,11 +1628,58 @@ function MediaDatabasePage() {
           {canWriteMediaDatabase && <button onClick={() => { setActiveTab("contacts"); openImport(); }} className="flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}><Upload size={13} /> Import CSV</button>}
           {canSeeDiscoveries && <button onClick={() => setActiveTab("discoveries")} className="rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Discoveries</button>}
           {isMaster && canWriteMediaDatabase && <button onClick={() => setActiveTab("corrections")} className="rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Corrections ({correctionReports.length})</button>}
+          {isMaster && canWriteMediaDatabase && <button data-testid="button-open-identity-review" onClick={() => { setIdentityReviewPage(1); setActiveTab("identityReview"); }} className="rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Identity review</button>}
           {canEditDiscoveryInstructions && <button onClick={() => setActiveTab("instructions")} className="rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Research instructions</button>}
         </div>
       </details>}
 
       {showInternalTools && activeTab === "discoveries" && canSeeDiscoveries && <MediaDiscoveryReview onApproved={() => void loadData()} />}
+      {showInternalTools && activeTab === "identityReview" && isMaster && canWriteMediaDatabase && (
+        <section aria-labelledby="identity-review-heading" className="mb-5 rounded-2xl border bg-white p-4" style={{ borderColor: vars.g200 }}>
+          <div className="mb-4">
+            <h2 id="identity-review-heading" className="text-[20px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Identity review</h2>
+            <p className="mt-1 text-[12px]" style={{ color: vars.g500 }}>Legacy name values that are numeric identifiers are kept out of normal journalist results until a verified name is supplied. Review these records manually. Nothing is automatically deleted, and no names are guessed.</p>
+            <p data-testid="text-identity-review-total" className="mt-2 text-[12px] font-semibold" style={{ color: vars.navy }}>{identityReviewTotal} records need identity review</p>
+          </div>
+          {identityReviewError && <div role="alert" className="mb-3 rounded-lg border bg-red-50 px-3 py-2 text-[12px] text-red-700" style={{ borderColor: "#FECACA" }}>
+            <p>{identityReviewError}</p>
+            <button data-testid="button-retry-identity-review" onClick={() => void loadIdentityReview(identityReviewPage)} className="mt-1 font-semibold underline">Try again</button>
+          </div>}
+          {identityReviewLoading ? (
+            <div role="status" className="flex items-center justify-center gap-2 py-10 text-[12px]" style={{ color: vars.g500 }}><Loader2 size={18} className="animate-spin" />Loading identity review records</div>
+          ) : identityReviewError ? null : identityReviewContacts.length === 0 ? (
+            <div data-testid="empty-identity-review" className="rounded-xl border bg-slate-50 py-8 text-center" style={{ borderColor: vars.g100 }}>
+              <p className="font-semibold" style={{ color: vars.navy }}>No records need identity review</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {identityReviewContacts.map((contact) => {
+                const sourceHref = publicationWebsiteHref(contact.sourceUrl);
+                return <article data-testid={`row-identity-review-${contact.id}`} key={contact.id} className="rounded-xl border p-4" style={{ borderColor: vars.g200 }}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold" style={{ color: vars.navy }}>Name needs review</p>
+                      <p className="mt-1 text-[12px]" style={{ color: vars.g600 }}>Record reference: #{contact.id}</p>
+                      <p className="mt-1 text-[12px]" style={{ color: vars.g600 }}>Publication: {contact.outletName || "Not recorded"}</p>
+                      <p className="mt-1 text-[12px]" style={{ color: vars.g600 }}>Role: {contact.role || "Not recorded"}</p>
+                      <p className="mt-1 text-[12px]" style={{ color: vars.g600 }}>Source reference: {contact.sourceRef || "Not recorded"}</p>
+                      {contact.sourceUrl && <p className="mt-1 text-[12px]" style={{ color: vars.g600 }}>Source: {sourceHref
+                        ? <a href={sourceHref} target="_blank" rel="noreferrer" className="underline" style={{ color: vars.accent }}>View recorded source</a>
+                        : "Recorded source link is not a valid web address"}</p>}
+                    </div>
+                    <button data-testid={`button-review-identity-${contact.id}`} onClick={() => openEditContact(contact)} className="rounded-lg px-3 py-2 text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Review/Edit</button>
+                  </div>
+                </article>;
+              })}
+              {identityReviewTotal > 50 && <div className="flex items-center justify-end gap-3 pt-2 text-[12px]" style={{ color: vars.g600 }}>
+                <button data-testid="button-identity-review-previous" disabled={identityReviewPage <= 1 || identityReviewLoading} onClick={() => setIdentityReviewPage((page) => Math.max(1, page - 1))} className="rounded border px-3 py-1.5 disabled:opacity-40" style={{ borderColor: vars.g200 }}>Previous</button>
+                <span data-testid="text-identity-review-page">Page {identityReviewPage} of {Math.ceil(identityReviewTotal / 50)}</span>
+                <button data-testid="button-identity-review-next" disabled={identityReviewPage * 50 >= identityReviewTotal || identityReviewLoading} onClick={() => setIdentityReviewPage((page) => page + 1)} className="rounded border px-3 py-1.5 disabled:opacity-40" style={{ borderColor: vars.g200 }}>Next</button>
+              </div>}
+            </div>
+          )}
+        </section>
+      )}
       {showInternalTools && activeTab === "corrections" && isMaster && canWriteMediaDatabase && (
         <section>
           <div className="mb-4">

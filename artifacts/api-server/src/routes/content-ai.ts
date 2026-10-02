@@ -22,6 +22,7 @@ import { normaliseMediaResearchRegions } from "../lib/media-research-regions";
 import { isSuppressedWithDb } from "../lib/journalist-privacy";
 import { getMediaDiscoveryInstructions } from "../lib/media-discovery-instructions";
 import { boundedMediaDiscoveryDurationMs, fetchMediaDiscoverySourceWithRetry } from "../lib/media-discovery-reliability";
+import { hasNumericJournalistNameIdentifier } from "../lib/media-import-reconciliation";
 import {
   normaliseExactPhraseText,
   normaliseSubmittedExactTargetPhrases,
@@ -1428,7 +1429,8 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
         const lastName = asString(item.lastName, 120);
         const outletName = asString(item.outletName, 240);
         const sourceUrl = asString(item.sourceUrl, 2000);
-        if ((!firstName && !lastName) || !outletName || !isSupportedByCitation(sourceUrl, citations)) return [];
+        if ((!firstName && !lastName) || hasNumericJournalistNameIdentifier(firstName, lastName)
+            || !outletName || !isSupportedByCitation(sourceUrl, citations)) return [];
         const rawConfidence = asString(item.confidence, 20);
         const confidence: TrustedMediaDiscovery["confidence"] =
           rawConfidence === "High" || rawConfidence === "Medium" ? rawConfidence : "Low";

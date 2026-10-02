@@ -37,6 +37,9 @@ let outletTotalOverride = 0;
 let bookmarkTestRows: Array<Record<string, unknown>> = [];
 let bookmarkTotalOverride: number | null = null;
 let contactSaveFailure = false;
+let identityReviewRows: Array<Record<string, unknown>> = [];
+let identityReviewTotalOverride: number | null = null;
+let identityReviewFailure = false;
 
 async function browseContacts() {
   const manageButton = screen.queryByRole("button", { name: "Manage my records" });
@@ -92,6 +95,19 @@ describe("MediaDatabasePage source health", () => {
     localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "account-a", role: "agency", membershipRole: "owner" }));
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.includes("/media-db/identity-review")) {
+        if (identityReviewFailure) return new Response(JSON.stringify({ error: "Identity review unavailable." }), { status: 503 });
+        const params = new URL(url, "http://test.local").searchParams;
+        const page = Number(params.get("page") || 1);
+        const pageSize = Number(params.get("pageSize") || 50);
+        const start = (page - 1) * pageSize;
+        return new Response(JSON.stringify({
+          contacts: identityReviewRows.slice(start, start + pageSize),
+          total: identityReviewTotalOverride ?? identityReviewRows.length,
+          page,
+          pageSize,
+        }), { status: 200 });
+      }
       if (url.includes("/media-db/import-jobs/")) {
         return new Response(JSON.stringify({
           ok: true,
@@ -200,6 +216,12 @@ describe("MediaDatabasePage source health", () => {
       }
       if (url.includes("/contacts") && (init?.method === "POST" || init?.method === "PUT")) {
         if (contactSaveFailure) return new Response(JSON.stringify({ error: "Contact save rejected." }), { status: 400 });
+        if (init.method === "PUT") {
+          const contactId = Number(url.match(/\/contacts\/(\d+)/)?.[1]);
+          const payload = JSON.parse(String(init.body));
+          identityReviewRows = identityReviewRows.filter((contact) => Number(contact.id) !== contactId);
+          if (contactId === 41) Object.assign(changedContact, { firstName: payload.firstName, lastName: payload.lastName });
+        }
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
       if (url.includes("/contacts")) {
@@ -235,6 +257,9 @@ describe("MediaDatabasePage source health", () => {
     bookmarkTestRows = [];
     bookmarkTotalOverride = null;
     contactSaveFailure = false;
+    identityReviewRows = [];
+    identityReviewTotalOverride = null;
+    identityReviewFailure = false;
     vi.unstubAllGlobals();
   });
 
@@ -1148,5 +1173,84 @@ describe("MediaDatabasePage source health", () => {
     expect(await screen.findByText("Energy Weekly")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Mark as departed" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Flag incorrect details" })).toBeNull();
+  });
+
+  it("shows shared numeric-name records only to Master and refreshes after an explicit identity edit", async () => {
+    localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "admin", role: "admin", membershipRole: "owner" }));
+    identityReviewRows = [{
+      ...changedContact,
+      id: 41,
+      firstName: "9032",
+      lastName: "",
+      outletName: "Example News",
+      role: "Energy Editor",
+      sourceRef: "Contacts row 8",
+      sourceUrl: "https://example.com/source",
+      accountId: null,
+      collectionScope: "shared",
+    }];
+    render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Manage my records" }));
+    const internalTools = Array.from(document.querySelectorAll("details")).find((details) => details.querySelector("summary")?.textContent === "Internal tools");
+    expect(internalTools).toBeTruthy();
+    fireEvent.click(internalTools!.querySelector("summary")!);
+    fireEvent.click(screen.getByTestId("button-open-identity-review"));
+
+    expect(await screen.findByTestId("row-identity-review-41")).toBeTruthy();
+    expect(screen.getByText("Record reference: #41")).toBeTruthy();
+    expect(screen.getByText("Publication: Example News")).toBeTruthy();
+    expect(screen.getByText("Role: Energy Editor")).toBeTruthy();
+    expect(screen.getByText("Source reference: Contacts row 8")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "View recorded source" })).toHaveAttribute("href", "https://example.com/source");
+    expect(screen.queryByText("9032")).toBeNull();
+    const reviewRequest = vi.mocked(fetch).mock.calls.find(([input]) => String(input).includes("/media-db/identity-review"));
+    expect(reviewRequest?.[0]).toContain("page=1&pageSize=50&q=");
+
+    fireEvent.click(screen.getByTestId("button-review-identity-41"));
+    expect(await screen.findByRole("heading", { name: "Edit contact" })).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText("Jane"), { target: { value: "Verified" } });
+    fireEvent.change(screen.getByPlaceholderText("Smith"), { target: { value: "Reporter" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByTestId("empty-identity-review")).toBeTruthy();
+    expect(screen.queryByTestId("row-identity-review-41")).toBeNull();
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/media-db/contacts?"))).toBe(true);
+  });
+
+  it("keeps identity review Master-only and offers retry and empty states", async () => {
+    render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Manage my records" }));
+    const internalTools = Array.from(document.querySelectorAll("details")).find((details) => details.querySelector("summary")?.textContent === "Internal tools");
+    fireEvent.click(internalTools!.querySelector("summary")!);
+    expect(screen.queryByTestId("button-open-identity-review")).toBeNull();
+
+    localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "admin", role: "admin", membershipRole: "owner" }));
+    cleanup();
+    identityReviewFailure = true;
+    render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Manage my records" }));
+    const masterTools = Array.from(document.querySelectorAll("details")).find((details) => details.querySelector("summary")?.textContent === "Internal tools");
+    fireEvent.click(masterTools!.querySelector("summary")!);
+    fireEvent.click(screen.getByTestId("button-open-identity-review"));
+    expect(await screen.findByText("Identity review unavailable.")).toBeTruthy();
+    identityReviewFailure = false;
+    fireEvent.click(screen.getByTestId("button-retry-identity-review"));
+    expect(await screen.findByTestId("empty-identity-review")).toBeTruthy();
+  });
+
+  it("paginates identity review records using the endpoint page contract", async () => {
+    localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "admin", role: "admin", membershipRole: "owner" }));
+    identityReviewRows = Array.from({ length: 51 }, (_, index) => ({
+      ...changedContact, id: 51 + index, firstName: String(17 + index), lastName: "", accountId: null, collectionScope: "shared",
+    }));
+    identityReviewTotalOverride = 51;
+    render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Manage my records" }));
+    const internalTools = Array.from(document.querySelectorAll("details")).find((details) => details.querySelector("summary")?.textContent === "Internal tools");
+    fireEvent.click(internalTools!.querySelector("summary")!);
+    fireEvent.click(screen.getByTestId("button-open-identity-review"));
+    expect(await screen.findByText("Page 1 of 2")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("button-identity-review-next"));
+    await waitFor(() => expect(screen.getByText("Page 2 of 2")).toBeTruthy());
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/identity-review?page=2&pageSize=50&q="))).toBe(true);
   });
 });
