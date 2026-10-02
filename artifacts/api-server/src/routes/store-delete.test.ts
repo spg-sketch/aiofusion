@@ -370,6 +370,54 @@ describe("protected individual project deletion", () => {
     ]);
   });
 
+  it("backs up before deleting when seven occupied snapshot IDs are ahead of the counter", async () => {
+    await seedProjects();
+    await h.client.exec(`
+      INSERT INTO project_snapshots (id, project_id, name, data, reason)
+      SELECT n, 'existing-backup-' || n, 'Existing backup', '{"preserved":true}'::jsonb, 'import'
+      FROM generate_series(1, 7) AS n;
+    `);
+    expect((await deleteProject("p-agency")).status).toBe(200);
+    const snapshots = await h.client.query("SELECT id, project_id, data, reason FROM project_snapshots ORDER BY id");
+    expect(snapshots.rows).toHaveLength(8);
+    expect(snapshots.rows.slice(0, 7)).toEqual(Array.from({ length: 7 }, (_, index) =>
+      expect.objectContaining({ id: index + 1, project_id: `existing-backup-${index + 1}`, data: { preserved: true }, reason: "import" }),
+    ));
+    expect(snapshots.rows[7]).toEqual(expect.objectContaining({
+      id: 8, project_id: "p-agency", reason: "pre-delete", data: expect.objectContaining({ id: "p-agency" }),
+    }));
+    const project = await h.client.query("SELECT deleted_at FROM projects WHERE id = 'p-agency'");
+    expect(project.rows[0].deleted_at).not.toBeNull();
+  });
+
+  it("still refuses deletion if snapshot ID collision recovery is exhausted", async () => {
+    await seedProjects();
+    await h.client.exec(`
+      INSERT INTO project_snapshots (id, project_id, name, data)
+      SELECT n, 'existing-backup-' || n, 'Existing backup', '{"preserved":true}'::jsonb
+      FROM generate_series(1, 8) AS n;
+    `);
+    expect((await deleteProject("p-agency")).status).toBe(503);
+    const project = await h.client.query("SELECT deleted_at FROM projects WHERE id = 'p-agency'");
+    expect(project.rows[0].deleted_at).toBeNull();
+    const snapshots = await h.client.query("SELECT count(*)::int AS total FROM project_snapshots");
+    expect(snapshots.rows[0].total).toBe(8);
+  });
+
+  it("does not retry or delete on a different snapshot uniqueness failure", async () => {
+    await seedProjects();
+    await h.client.exec(`
+      CREATE UNIQUE INDEX snapshot_name_unique ON project_snapshots(name);
+      INSERT INTO project_snapshots (project_id, name)
+      SELECT 'another-project', name FROM projects WHERE id = 'p-agency';
+    `);
+    expect((await deleteProject("p-agency")).status).toBe(503);
+    const counter = await h.client.query("SELECT last_value FROM project_snapshots_id_seq");
+    expect(Number(counter.rows[0].last_value)).toBe(2);
+    const project = await h.client.query("SELECT deleted_at FROM projects WHERE id = 'p-agency'");
+    expect(project.rows[0].deleted_at).toBeNull();
+  });
+
   it("refuses deletion when the pre-delete backup cannot be written", async () => {
     await seedProjects();
     await h.client.exec("DROP TABLE project_snapshots");

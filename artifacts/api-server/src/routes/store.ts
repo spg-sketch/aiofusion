@@ -18,6 +18,7 @@ import {
 } from "../lib/member-guards";
 import { shouldSnapshot, type ProjectContent } from "../lib/snapshot-guards";
 import { logAdminEvent } from "../lib/admin-events";
+import { logger } from "../lib/logger";
 import {
   checkProjectCapacityUnlocked,
   assignAddonToNewProjectUnlocked,
@@ -64,6 +65,19 @@ type ProjectRowSlim = {
 // It never throws: additive saves treat a false as best-effort (the user's work
 // is not blocked by a backup hiccup), while destructive operations (delete,
 // restore) refuse to proceed unless this returns true.
+function snapshotDatabaseFailure(error: unknown): { code: string | null; constraint: string | null } {
+  let current = error;
+  for (let depth = 0; depth < 4 && current && typeof current === "object"; depth++) {
+    const failure = current as { code?: unknown; constraint?: unknown; constraint_name?: unknown; cause?: unknown };
+    if (typeof failure.code === "string") {
+      const constraint = failure.constraint ?? failure.constraint_name;
+      return { code: failure.code, constraint: typeof constraint === "string" ? constraint : null };
+    }
+    current = failure.cause;
+  }
+  return { code: null, constraint: null };
+}
+
 async function snapshotProject(row: ProjectRowSlim, reason: string): Promise<boolean> {
   try {
     const latest = await db
@@ -85,18 +99,31 @@ async function snapshotProject(row: ProjectRowSlim, reason: string): Promise<boo
     };
     // Identical content already backed up: the state is safely captured.
     if (!shouldSnapshot(latest[0] ?? null, current)) return true;
-    await db.insert(projectSnapshotsTable).values({
-      projectId: row.id,
-      name: row.name ?? "",
-      data: (row.data ?? {}) as object,
-      intake: row.intake ?? null,
-      logo: row.logo ?? null,
-      owner: row.owner ?? null,
-      reason,
-    });
-    return true;
+    // A restored explicit ID can be ahead of the serial sequence. A failed
+    // insert consumes that ID without overwriting the existing backup.
+    // Retry only this exact collision, with a bound, and require a real insert.
+    for (let attempt = 0; attempt < 8; attempt++) {
+      try {
+        await db.insert(projectSnapshotsTable).values({
+          projectId: row.id,
+          name: row.name ?? "",
+          data: (row.data ?? {}) as object,
+          intake: row.intake ?? null,
+          logo: row.logo ?? null,
+          owner: row.owner ?? null,
+          reason,
+        });
+        return true;
+      } catch (error) {
+        const failure = snapshotDatabaseFailure(error);
+        if (failure.code !== "23505" || failure.constraint !== "project_snapshots_pkey" || attempt === 7) throw error;
+      }
+    }
+    return false;
   } catch (err) {
-    console.error("[store] snapshotProject failed", { id: row.id, reason, err });
+    // Drizzle error messages contain SQL parameters, including project content.
+    // Log only safe failure metadata, never the full snapshot or intake.
+    logger.error({ projectId: row.id, reason, ...snapshotDatabaseFailure(err) }, "[store] snapshotProject failed");
     return false;
   }
 }

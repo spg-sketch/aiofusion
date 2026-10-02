@@ -95,3 +95,4 @@
 - [Marketing browser verification](marketing-browser-verification.md) — auto-open demo dialog appears after hydration; wait for it before testing hover or links beneath it.
 - [Replit configuration validation](replit-config-validation.md) — avoid credential-bearing diffs; production env changes can modify tracked `.replit`, so commit before a release gate.
 - [Contact email delivery ambiguity](contact-delivery-ambiguity.md) — unknown historical acceptance must not be treated as safe to retry; separate each message's state.
+- [Imported ID counter readiness](aio-fusion-imported-id-counters.md) — check next-ID occupancy after explicit-ID imports; backup failures must still block deletion.
