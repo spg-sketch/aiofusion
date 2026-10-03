@@ -56,6 +56,9 @@ test("keeps every release-blocking stage in the required order", () => {
     "critical browser journeys",
   ]);
   assert.match(RELEASE_STAGES.at(-1)[1], /playwright/);
+  const operationalCommand = RELEASE_STAGES.find(([name]) => name === "operational script suite")[1];
+  assert.match(operationalCommand, /@workspace\/scripts run test/);
+  assert.match(operationalCommand, /&& pnpm --filter @workspace\/mockup-sandbox run test/);
   assert.ok(RELEASE_STAGES.every(([, , timeoutMs]) => timeoutMs > 0));
 });
 

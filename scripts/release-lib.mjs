@@ -34,7 +34,7 @@ export const RELEASE_STAGES = [
   // Keep it mandatory, but run it alone in the same fail-closed stage.
   ["api regression suite", "pnpm --filter @workspace/api-server exec vitest run --maxWorkers=4 --exclude src/lib/ensure-planner-content-columns.test.ts && pnpm --filter @workspace/api-server exec vitest run src/lib/ensure-planner-content-columns.test.ts --maxWorkers=1", RELEASE_STAGE_TIMEOUTS["api regression suite"]],
   ["web regression suite", "pnpm --filter @workspace/aio-fusion run test", RELEASE_STAGE_TIMEOUTS["web regression suite"]],
-  ["operational script suite", "pnpm --filter @workspace/scripts run test", RELEASE_STAGE_TIMEOUTS["operational script suite"]],
+  ["operational script suite", "pnpm --filter @workspace/scripts run test && pnpm --filter @workspace/mockup-sandbox run test", RELEASE_STAGE_TIMEOUTS["operational script suite"]],
   ["API production build", "pnpm --filter @workspace/api-server run build", RELEASE_STAGE_TIMEOUTS["API production build"]],
   ["web production build", "pnpm --filter @workspace/aio-fusion run build", RELEASE_STAGE_TIMEOUTS["web production build"]],
   ["production API startup smoke", "node scripts/release-smoke.mjs", RELEASE_STAGE_TIMEOUTS["production API startup smoke"]],
