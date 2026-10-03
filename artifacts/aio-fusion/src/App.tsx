@@ -38,6 +38,7 @@ import type { AcceptedInvitation } from "./components/InvitationResult";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { BackToAgencyLink } from "./components/BackToAgencyLink";
 import { isHowtoAdminPath, isInsightsAdminPath } from "./lib/adminRoute";
+import { guidanceRouteFromLocation, guidanceUrl, type GuidanceRoute } from "./lib/guidanceRoute";
 import { vars } from "./marketing/vars";
 import { PUBLIC_PAGE_DEFINITIONS } from "./marketing/pageMeta";
 import { GuidedOnboardingPage } from "./pages/GuidedOnboardingPage";
@@ -483,6 +484,7 @@ function viewToUrl(v: string, insightsArticleId?: string | null): string {
 
 
 function App() {
+  const [guidanceRoute, setGuidanceRoute] = useState<GuidanceRoute>(() => guidanceRouteFromLocation());
   const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "insights-admin" | "howto-admin" | "privacy-admin" | "sub-accounts" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security" | "privacy-policy" | "journalist-privacy" | "terms-conditions" | "not-found">(() =>
     isAuthenticationLanding() ? "platform-home" : directViewFromLocation(),
   );
@@ -528,7 +530,10 @@ function App() {
   const transitionToView = useCallback((nextView: typeof view) => {
     requestDeparture(() => {
       warmRoute(VIEW_PRELOADERS[nextView]);
-      startTransition(() => setView(nextView));
+      startTransition(() => {
+        if (nextView === "guidance") setGuidanceRoute((route) => ({ ...route, id: null }));
+        setView(nextView);
+      });
     });
   }, [requestDeparture]);
   const transitionToPage = useCallback((nextPage: string) => {
@@ -1573,6 +1578,8 @@ function App() {
   insightsArticleIdRef.current = insightsArticleId;
   const accountSectionRef = useRef(accountSection);
   accountSectionRef.current = accountSection;
+  const guidanceRouteRef = useRef(guidanceRoute);
+  guidanceRouteRef.current = guidanceRoute;
   const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => { mainRef.current?.scrollTo({ top: 0 }); }, [currentPage]);
@@ -1602,16 +1609,16 @@ function App() {
   }, [currentPage, session]);
 
   useEffect(() => {
-    const currentHistoryState = window.history.state as { __aioIndex?: number } | null;
+    const currentHistoryState = window.history.state as { __aioIndex?: number; view?: string; guidanceRoute?: GuidanceRoute; guidanceFromLibrary?: boolean } | null;
     // Reflect the active settings section in the URL so a refresh restores it
     // (matches the email deep-link format /?account_section=security).
-    const url = (view === "sub-accounts" || view === "users-admin") && accountSection
+    const url = view === "guidance" ? guidanceUrl(guidanceRoute) : (view === "sub-accounts" || view === "users-admin") && accountSection
       ? viewToUrl(view, insightsArticleId) + "?account_section=" + encodeURIComponent(accountSection)
       : viewToUrl(view, insightsArticleId);
     if (!navInitDone.current) {
       navInitDone.current = true;
       committedHistoryIndexRef.current = currentHistoryState?.__aioIndex ?? 0;
-      const navState = { __aioNav: true, __aioIndex: committedHistoryIndexRef.current, view, currentPage, insightsArticleId, accountSection };
+      const navState = { __aioNav: true, __aioIndex: committedHistoryIndexRef.current, view, currentPage, insightsArticleId, accountSection, guidanceRoute, guidanceFromLibrary: currentHistoryState?.guidanceFromLibrary ?? false };
       window.history.replaceState(navState, "", url);
       return;
     }
@@ -1621,14 +1628,21 @@ function App() {
     }
     if (replaceNextNav.current) {
       replaceNextNav.current = false;
-      const navState = { __aioNav: true, __aioIndex: committedHistoryIndexRef.current, view, currentPage, insightsArticleId, accountSection };
+      const navState = { __aioNav: true, __aioIndex: committedHistoryIndexRef.current, view, currentPage, insightsArticleId, accountSection, guidanceRoute };
       window.history.replaceState(navState, "", url);
       return;
     }
+    // Filters update the current library entry; opening a reader adds an entry.
+    if (view === "guidance" && currentHistoryState?.view === "guidance" &&
+        !guidanceRoute.id && !currentHistoryState.guidanceRoute?.id) {
+      window.history.replaceState({ ...currentHistoryState, guidanceRoute }, "", url);
+      return;
+    }
     committedHistoryIndexRef.current += 1;
-    const navState = { __aioNav: true, __aioIndex: committedHistoryIndexRef.current, view, currentPage, insightsArticleId, accountSection };
+    const navState = { __aioNav: true, __aioIndex: committedHistoryIndexRef.current, view, currentPage, insightsArticleId, accountSection, guidanceRoute,
+      guidanceFromLibrary: view === "guidance" && !!guidanceRoute.id && currentHistoryState?.view === "guidance" && !currentHistoryState.guidanceRoute?.id };
     window.history.pushState(navState, "", url);
-  }, [view, currentPage, insightsArticleId, accountSection]);
+  }, [view, currentPage, insightsArticleId, accountSection, guidanceRoute]);
 
   useEffect(() => {
     const onPop = (e: PopStateEvent) => {
@@ -1673,7 +1687,10 @@ function App() {
       const resolvedTargetView = redirect.isAuthRedirect ? "platform-home" as typeof view : targetView;
       // Only apply (and arm the skip guard) when something actually changes,
       // otherwise the guard could stay armed and swallow the next real push.
-      if (resolvedTargetView !== viewRef.current || targetPage !== pageRef.current || targetArticleId !== insightsArticleIdRef.current || targetAccountSection !== accountSectionRef.current) {
+      const targetGuidanceRoute = guidanceRouteFromLocation();
+      const guidanceChanged = resolvedTargetView === "guidance" &&
+        (targetGuidanceRoute.id !== guidanceRouteRef.current.id || targetGuidanceRoute.filter !== guidanceRouteRef.current.filter);
+      if (resolvedTargetView !== viewRef.current || targetPage !== pageRef.current || targetArticleId !== insightsArticleIdRef.current || targetAccountSection !== accountSectionRef.current || guidanceChanged) {
         const applyPopNavigation = () => {
           if (targetIndex !== null) committedHistoryIndexRef.current = targetIndex;
           skipHistoryPush.current = true;
@@ -1681,6 +1698,7 @@ function App() {
           setCurrentPage(targetPage);
           setInsightsArticleId(targetArticleId);
           setAccountSection(targetAccountSection);
+          setGuidanceRoute(targetGuidanceRoute);
         };
         // An auth callback replaces a public page with a security boundary.
         // Do not defer that swap: a transition may keep marketing content
@@ -2167,7 +2185,15 @@ function App() {
     );
   }
   if (view === "guidance") {
-    return <GuidancePage onBack={() => transitionToView("platform-home")} canManage={session?.insightsCmsAccess === true} onManage={() => transitionToView("howto-admin")} />;
+    return <GuidancePage route={guidanceRoute} onRouteChange={setGuidanceRoute}
+      onCloseGuide={() => {
+        if (window.history.state?.guidanceFromLibrary) window.history.back();
+        else {
+          replaceNextNav.current = true;
+          setGuidanceRoute({ ...guidanceRoute, id: null });
+        }
+      }}
+      onBack={() => transitionToView("platform-home")} canManage={session?.insightsCmsAccess === true} onManage={() => transitionToView("howto-admin")} />;
   }
   if (view === "archived-projects") {
     return <ArchivedProjectsPage onBack={() => transitionToView("platform-home")} />;

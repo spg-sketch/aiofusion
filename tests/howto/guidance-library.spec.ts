@@ -42,6 +42,9 @@ test("synthetic library: Project Hub navigation, saved images, fallbacks and rea
   let collection = entries;
   await page.route(/\/api\/howto(?:\/[^/?]+)?(?:\?.*)?$/, (route) => {
     const id = new URL(route.request().url()).pathname.split("/")[3];
+    if (id && !entries.some((entry) => entry.id === id)) {
+      return route.fulfill({ status: 404, json: { error: "Not found" } });
+    }
     return route.fulfill({ json: id ? entries.find((entry) => entry.id === id) : collection });
   });
 
@@ -75,6 +78,10 @@ test("synthetic library: Project Hub navigation, saved images, fallbacks and rea
     }
     await page.screenshot({ path: `test-results/guidance-single-${size}.png`, fullPage: true });
     await page.getByTestId("card-howto-saved-image").click();
+    await expect(page).toHaveURL(/\/guidance\/saved-image\?type=Guide$/);
+    await expect(page.getByTestId("detail-title")).toHaveText(entries[0].title);
+    await page.reload();
+    await expect(page).toHaveURL(/\/guidance\/saved-image\?type=Guide$/);
     await expect(page.getByTestId("detail-title")).toHaveText(entries[0].title);
     await expect(page.locator("article")).toContainText("Complete guide body retained.");
     const unresolved = page.getByTestId("block-image").first();
@@ -85,6 +92,11 @@ test("synthetic library: Project Hub navigation, saved images, fallbacks and rea
     await expect(page.getByRole("img", { name: "Saved project screen", exact: true })).toBeVisible();
     await expect.poll(() => page.getByRole("img", { name: "Saved project screen", exact: true }).evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(1000);
     await expect(page.getByRole("img", { name: "Second saved screen", exact: true })).toHaveAttribute("src", imageUrl);
+    await page.goBack();
+    await expect(page).toHaveURL(/\/guidance\?type=Guide$/);
+    await expect(page.getByTestId("filter-Guide")).toHaveAttribute("aria-pressed", "true");
+    await page.goForward();
+    await expect(page.getByTestId("detail-title")).toHaveText(entries[0].title);
     await page.getByTestId("button-back-guidance").click();
     await expect(page.getByTestId("filter-Guide")).toHaveAttribute("aria-pressed", "true");
     await page.getByTestId("filter-All").click();
@@ -110,6 +122,23 @@ test("synthetic library: Project Hub navigation, saved images, fallbacks and rea
   await page.goto("/guidance");
   await expect(page.getByTestId("guidance-collection")).not.toHaveClass(/sm:grid-cols-2/);
   await expect(page.getByTestId("preview-howto-saved-image")).toBeVisible();
+
+  // Shared links work without an earlier library visit.
+  await page.goto("/guidance/saved-image");
+  await expect(page.getByTestId("detail-title")).toHaveText(entries[0].title);
+  await page.reload();
+  await expect(page.getByTestId("detail-title")).toHaveText(entries[0].title);
+  await page.getByTestId("button-back-guidance").click();
+  await expect(page).toHaveURL(/\/guidance$/);
+  await expect(page.getByTestId("card-howto-saved-image")).toBeVisible();
+  for (const id of ["missing-guide", "unpublished-guide"]) {
+    await page.goto(`/guidance/${id}?type=Guide`);
+    await expect(page.getByTestId("detail-missing")).toBeVisible();
+    await page.reload();
+    await expect(page.getByTestId("detail-missing")).toBeVisible();
+    await page.getByTestId("button-back-guidance").click();
+    await expect(page.getByTestId("filter-Guide")).toHaveAttribute("aria-pressed", "true");
+  }
 });
 
 test("isolated reader and CMS preview retain instructions during missing, slow and failed body image loads", async ({ page }) => {

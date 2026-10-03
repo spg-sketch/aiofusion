@@ -1,14 +1,18 @@
-import { useState } from "react";
 import { useListPublishedHowto, getListPublishedHowtoQueryKey, useGetPublishedHowto, getGetPublishedHowtoQueryKey } from "@workspace/api-client-react";
 import { vars } from "../marketing/vars";
 import { BodyView } from "../components/howto/HowtoBlocks";
 import { GuidanceCard } from "../components/howto/GuidanceCard";
 import { errorMessage, errorStatus } from "../lib/howto";
 import type { HowtoEntry } from "../lib/howto";
+import type { GuidanceFilter, GuidanceRoute } from "../lib/guidanceRoute";
 import { ArrowLeft, BookOpen, FileText, Pencil, Play, RefreshCw } from "lucide-react";
 
-type Filter = "All" | "Article" | "Guide" | "Video";
-type Props = { onBack: () => void; canManage?: boolean; onManage?: () => void };
+type Props = {
+  onBack: () => void; canManage?: boolean; onManage?: () => void;
+  route: GuidanceRoute;
+  onRouteChange: (route: GuidanceRoute) => void;
+  onCloseGuide?: () => void;
+};
 
 function Header({ left, label, onClick }: { left?: boolean; label: string; onClick: () => void }) {
   return (
@@ -73,16 +77,17 @@ function Detail({ id, onClose, canManage, onManage }: { id: string; onClose: () 
   );
 }
 
-function GuidancePage({ onBack, canManage = false, onManage }: Props) {
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Filter>("All");
+function GuidancePage({ onBack, canManage = false, onManage, route, onRouteChange, onCloseGuide }: Props) {
+  const { id: openId, filter } = route;
+  const changeRoute = onRouteChange;
+  const setFilter = (filter: GuidanceFilter) => changeRoute({ id: null, filter });
   const { data, isLoading, isError, error, refetch } = useListPublishedHowto({
     query: { queryKey: getListPublishedHowtoQueryKey(), refetchOnMount: "always" },
   });
   const entries = (data ?? []) as HowtoEntry[];
   const filtered = filter === "All" ? entries : entries.filter((a) => a.type === filter);
 
-  if (openId) return <Detail id={openId} onClose={() => setOpenId(null)} canManage={canManage} onManage={onManage} />;
+  if (openId) return <Detail key={openId} id={openId} onClose={onCloseGuide ?? (() => changeRoute({ id: null, filter }))} canManage={canManage} onManage={onManage} />;
 
   return (
     <div className="min-h-[100dvh] font-['Inter',sans-serif]" style={{ background: vars.g50 }}>
@@ -131,7 +136,7 @@ function GuidancePage({ onBack, canManage = false, onManage }: Props) {
             <p className="text-sm mb-4" style={{ color: vars.g500 }}>{filtered.length} {filtered.length === 1 ? "entry" : "entries"}{filter !== "All" ? ` · ${filter}` : ""}</p>
             <div className={`grid gap-6 ${filtered.length === 1 ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"}`} data-testid="guidance-collection">
               {filtered.map((entry) => (
-                <GuidanceCard key={entry.id} entry={entry} single={filtered.length === 1} onOpen={() => setOpenId(entry.id)} />
+                <GuidanceCard key={entry.id} entry={entry} single={filtered.length === 1} onOpen={() => changeRoute({ id: entry.id, filter })} />
               ))}
             </div>
           </section>

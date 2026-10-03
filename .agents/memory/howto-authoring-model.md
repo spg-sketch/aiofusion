@@ -20,3 +20,9 @@ The How-to CMS should make adding images as discoverable as it is in the Insight
 **Why:** The user reported that Insights offered image uploads but How-to appeared not to, despite its existing icon-only image tool.
 
 **How to apply:** Keep a plainly labelled image action and preserve the shared upload/library workflow when changing the editor.
+
+Individual guide links belong to the dedicated How-to library, not public Insights or new SEO pages.
+
+**Why:** The requested reader-link scope explicitly keeps these libraries separate.
+
+**How to apply:** Preserve that separation when extending reader navigation or sharing; do not add guide routes to public Insights publishing or SEO prerendering.
