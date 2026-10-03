@@ -1,12 +1,14 @@
 import express from "express";
 import cookieParser from "cookie-parser";
 import type { Server } from "node:http";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fake = vi.hoisted(() => ({
   exchange: vi.fn(),
   createSession: vi.fn(),
   returning: vi.fn(),
+  buildAuthorizationUrl: vi.fn(),
+  buildEndSessionUrl: vi.fn(),
 }));
 
 // Exercise the real HTTP routes without contacting an identity provider or DB.
@@ -15,8 +17,8 @@ vi.mock("openid-client", () => ({
   randomNonce: () => "test-nonce",
   randomPKCECodeVerifier: () => "test-verifier",
   calculatePKCECodeChallenge: async () => "test-challenge",
-  buildAuthorizationUrl: () => new URL("https://provider.invalid/authorize"),
-  buildEndSessionUrl: () => new URL("https://provider.invalid/logout"),
+  buildAuthorizationUrl: fake.buildAuthorizationUrl,
+  buildEndSessionUrl: fake.buildEndSessionUrl,
   authorizationCodeGrant: fake.exchange,
 }));
 vi.mock("../lib/auth", () => ({
@@ -47,6 +49,7 @@ let baseUrl: string;
 
 beforeAll(async () => {
   const app = express();
+  app.set("trust proxy", 1);
   app.use(cookieParser());
   app.use("/api", authRouter);
   server = await new Promise<Server>((resolve) => {
@@ -65,6 +68,11 @@ afterAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv("DEPLOYMENT_ENV", "staging");
+  vi.stubEnv("CANONICAL_DOMAIN", "staging.aiofusion.ai");
+  vi.stubEnv("REPLIT_DOMAINS", "preview.example.replit.app");
+  fake.buildAuthorizationUrl.mockReturnValue(new URL("https://provider.invalid/authorize"));
+  fake.buildEndSessionUrl.mockReturnValue(new URL("https://provider.invalid/logout"));
   fake.exchange.mockResolvedValue({
     claims: () => ({ sub: "test-user", exp: 2_000_000_000 }),
     access_token: "synthetic-access-token",
@@ -79,6 +87,8 @@ beforeEach(() => {
   }]);
   fake.createSession.mockResolvedValue("synthetic-session");
 });
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe("sign-in return-path HTTP boundaries", () => {
   it.each([
@@ -130,5 +140,61 @@ describe("sign-in return-path HTTP boundaries", () => {
     const response = await fetch(`${baseUrl}/api/logout`, { redirect: "manual" });
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://provider.invalid/logout");
+  });
+});
+
+describe("configured OIDC callback and logout origins", () => {
+  const hostileHeaders: Record<string, string>[] = [
+    {},
+    { "x-forwarded-host": "attacker.invalid" },
+    { "x-forwarded-host": "aiofusion.ai@attacker.invalid" },
+    { "x-forwarded-proto": "http" },
+    { host: "attacker.invalid", "x-forwarded-host": "attacker.invalid", "x-forwarded-proto": "javascript" },
+  ];
+
+  describe.each([
+    ["production", "aiofusion.ai", "https://aiofusion.ai"],
+    ["staging", "staging.aiofusion.ai", "https://staging.aiofusion.ai"],
+    ["staging", "aiofusion.ai", "https://staging.aiofusion.ai"],
+    ["development", "", "https://preview.example.replit.app"],
+  ])("%s deployment with canonical value %s", (environment, canonical, expectedOrigin) => {
+    it.each(hostileHeaders)("ignores request-origin headers: %j", async (headers) => {
+      vi.stubEnv("DEPLOYMENT_ENV", environment);
+      vi.stubEnv("CANONICAL_DOMAIN", canonical);
+
+      const login = await fetch(`${baseUrl}/api/login`, { redirect: "manual", headers });
+      expect(login.status).toBe(302);
+      expect(login.headers.get("location")).toBe("https://provider.invalid/authorize");
+      expect(fake.buildAuthorizationUrl).toHaveBeenCalledWith({}, expect.objectContaining({
+        redirect_uri: `${expectedOrigin}/api/callback`,
+        code_challenge_method: "S256",
+        state: "test-state",
+        nonce: "test-nonce",
+      }));
+
+      const callback = await fetch(`${baseUrl}/api/callback?code=synthetic-code&state=test-state`, {
+        redirect: "manual",
+        headers: {
+          ...headers,
+          cookie: "code_verifier=test-verifier; nonce=test-nonce; state=test-state; return_to=%2Flibrary",
+        },
+      });
+      expect(callback.status).toBe(302);
+      expect(callback.headers.get("location")).toBe("/library");
+      expect(fake.exchange).toHaveBeenCalledOnce();
+      const exchangeUrl = fake.exchange.mock.calls[0][1] as URL;
+      expect(exchangeUrl.origin).toBe(expectedOrigin);
+      expect(exchangeUrl.pathname).toBe("/api/callback");
+      expect(exchangeUrl.searchParams.get("code")).toBe("synthetic-code");
+      expect(exchangeUrl.searchParams.get("state")).toBe("test-state");
+      expect(fake.createSession).toHaveBeenCalledOnce();
+
+      const logout = await fetch(`${baseUrl}/api/logout`, { redirect: "manual", headers });
+      expect(logout.status).toBe(302);
+      expect(logout.headers.get("location")).toBe("https://provider.invalid/logout");
+      expect(fake.buildEndSessionUrl).toHaveBeenCalledWith({}, expect.objectContaining({
+        post_logout_redirect_uri: expectedOrigin,
+      }));
+    });
   });
 });

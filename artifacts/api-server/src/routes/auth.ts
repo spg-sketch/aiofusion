@@ -8,6 +8,7 @@ import {
 } from "@workspace/api-zod";
 import { db, usersTable } from "@workspace/db";
 import { getSafeReturnTo } from "../lib/safe-return-to";
+import { getAppBaseUrl } from "../lib/app-url";
 import {
   clearSession,
   getOidcConfig,
@@ -23,13 +24,6 @@ import {
 const OIDC_COOKIE_TTL = 10 * 60 * 1000;
 
 const router: IRouter = Router();
-
-function getOrigin(req: Request): string {
-  const proto = req.headers["x-forwarded-proto"] || "https";
-  const host =
-    req.headers["x-forwarded-host"] || req.headers["host"] || "localhost";
-  return `${proto}://${host}`;
-}
 
 function setSessionCookie(res: Response, sid: string) {
   res.cookie(SESSION_COOKIE, sid, {
@@ -86,7 +80,7 @@ router.get("/auth/user", (req: Request, res: Response) => {
 
 router.get("/login", async (req: Request, res: Response) => {
   const config = await getOidcConfig();
-  const callbackUrl = `${getOrigin(req)}/api/callback`;
+  const callbackUrl = `${getAppBaseUrl()}/api/callback`;
 
   const returnTo = getSafeReturnTo(req.query.returnTo);
 
@@ -117,7 +111,7 @@ router.get("/login", async (req: Request, res: Response) => {
 // parameters not expressed in the schema.
 router.get("/callback", async (req: Request, res: Response) => {
   const config = await getOidcConfig();
-  const callbackUrl = `${getOrigin(req)}/api/callback`;
+  const callbackUrl = `${getAppBaseUrl()}/api/callback`;
 
   const codeVerifier = req.cookies?.code_verifier;
   const nonce = req.cookies?.nonce;
@@ -129,7 +123,7 @@ router.get("/callback", async (req: Request, res: Response) => {
   }
 
   const currentUrl = new URL(
-    `${callbackUrl}?${new URL(req.url, `http://${req.headers.host}`).searchParams}`,
+    `${callbackUrl}?${new URL(req.url, callbackUrl).searchParams}`,
   );
 
   let tokens: oidc.TokenEndpointResponse & oidc.TokenEndpointResponseHelpers;
@@ -183,7 +177,7 @@ router.get("/callback", async (req: Request, res: Response) => {
 
 router.get("/logout", async (req: Request, res: Response) => {
   const config = await getOidcConfig();
-  const origin = getOrigin(req);
+  const origin = getAppBaseUrl();
 
   const sid = getSessionId(req);
   await clearSession(res, sid);
