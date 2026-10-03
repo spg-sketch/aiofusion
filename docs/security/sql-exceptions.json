@@ -1,0 +1,42 @@
+[
+  {
+    "path": "artifacts/api-server/src/app.ts",
+    "expression": "express.raw({ type: \"application/json\" })",
+    "digest": "541b1020004285ae0285db23935095989085ea6b31a93f0b8f02972cb4333dc4"
+  },
+  {
+    "path": "artifacts/api-server/src/lib/cleanup-expired-tokens.ts",
+    "expression": "sql.raw(table)",
+    "digest": "41af4e114062c295cd95c77c30840402b24e7d15d9cdb636cc896ee63a4ce849"
+  },
+  {
+    "path": "artifacts/api-server/src/lib/howto-development-schema.ts",
+    "expression": "client.query(\"BEGIN\")",
+    "digest": "0f8f708d2291598e194b6064a83c6d4ba738e9b0924d1482387b49a613dfc315"
+  },
+  {
+    "path": "artifacts/api-server/src/lib/howto-development-schema.ts",
+    "expression": "client.query(`CREATE TABLE IF NOT EXISTS public.howto_entries (\n      id varchar PRIMARY KEY,\n      title text NOT NULL,\n      description text NOT NULL,\n      type varchar NOT NULL,\n      read_time varchar NOT NULL,\n      display_order integer NOT NULL DEFAULT 0,\n      status varchar NOT NULL DEFAULT 'draft',\n      body jsonb NOT NULL DEFAULT '[]'::jsonb,\n      created_at timestamptz NOT NULL DEFAULT now(),\n      updated_at timestamptz NOT NULL DEFAULT now(),\n      published_at timestamptz\n    )`)",
+    "digest": "26917365820189c0d6da741f4a361864c1462377190de88d497782345a3f5b79"
+  },
+  {
+    "path": "artifacts/api-server/src/lib/howto-development-schema.ts",
+    "expression": "client.query(`CREATE TABLE IF NOT EXISTS public.howto_migration_ledger (\n      id varchar PRIMARY KEY,\n      applied_at timestamptz NOT NULL DEFAULT now()\n    )`)",
+    "digest": "895ce06e338b89e24f8be67e4c706311d76f172b5dd9ce022fe5763091721851"
+  },
+  {
+    "path": "artifacts/api-server/src/lib/howto-development-schema.ts",
+    "expression": "client.query(\"COMMIT\")",
+    "digest": "436ef723626d9cd5d1831c6d10a5974fb00f81152ad4138d977b450064526301"
+  },
+  {
+    "path": "artifacts/api-server/src/lib/howto-development-schema.ts",
+    "expression": "client.query(\"ROLLBACK\")",
+    "digest": "5dc4efef92e89779405398241feb937473ec34c09020008b3a8101c04e645c4f"
+  },
+  {
+    "path": "artifacts/api-server/src/routes/journalist-privacy.ts",
+    "expression": "sql.raw(matchedIds.length ? matchedIds.join(\",\") : \"NULL\")",
+    "digest": "8fb1454c075b1494ca6a91890c03474a46dc8cf5ed88bab682ee1a5c4b766c59"
+  }
+]

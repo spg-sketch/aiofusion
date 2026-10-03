@@ -1,0 +1,222 @@
+[
+  [
+    {
+      "ref": "#509",
+      "title": "Audit form SQL injection and application security",
+      "state": "IN_PROGRESS",
+      "description": "# Form and Security Audit\n\n## What & Why\nAudit the existing AIO Fusion web application and API for SQL injection through every form and other untrusted input, together with related high-impact security weaknesses. The initial read-only inspection found PostgreSQL accessed primarily through Drizzle parameterized queries, some raw SQL exceptions, and an existing threat model whose session-isolation statements may be stale; none of these observations establishes an exploitable vulnerability or a..."
+    },
+    {
+      "ref": "#97",
+      "title": "Cross-Member Session Isolation Failure",
+      "state": "MERGED",
+      "description": "Vulnerabilities related to inadequate isolation between team members sharing a workspace.\n\nVulnerabilities to fix:\n\n1. [High] Any team member can list and revoke other members' active sessions\n  Any authenticated member of a workspace - including read-only viewers and billing-only members - can see the active login sessions of every other person on the same team, including their email address, display name, and approximate IP location. They can then forcibly sign out any of those team members..."
+    },
+    {
+      "ref": "#99",
+      "title": "Store Content TOCTOU Authorization Gap",
+      "state": "MERGED",
+      "description": "Vulnerabilities related to non-atomic authorization checks in content store write paths.\n\nVulnerabilities to fix:\n\n1. [Medium] Non-atomic ownership check on archive and planner write operations\n  The archive and planner endpoints that delete or soft-delete content items check ownership before executing the write, but the write query itself is not scoped to the authorised owner set. In a narrow race condition between two concurrent requests, the owning account could change between the check an..."
+    },
+    {
+      "ref": "#231",
+      "title": "Automate media source reverification",
+      "state": "MERGED",
+      "description": "# Automatic Media Reverification\n\n## What & Why\nAutomatically recheck stale, source-backed media records in small safe batches so teams can see current source health without manually opening every contact. This builds on the source-health model and review workflow rather than silently changing contact data.\n\n## Done looks like\n- Eligible stale records are rechecked on a predictable schedule\n- Newer checks update source-health status and preserve an auditable history or latest evidence\n- Faile..."
+    },
+    {
+      "ref": "#302",
+      "title": "Validate recent-coverage checks against real publisher pages",
+      "state": "CANCELLED",
+      "description": "Exercise the new explicit top-five journalist coverage check against a small, approved set of current public author/byline pages from trade, national and specialist publications. Current coverage tests use mocked OpenAI responses plus real HTML extraction; the UI smoke deliberately did not run paid search or public verification. Check provider compatibility/citation source shape, title/date/author extraction, redirected URLs, partial unavailable/paywalled pages, evidence persistence and scori..."
+    },
+    {
+      "ref": "#230",
+      "title": "Add media source health warnings",
+      "state": "MERGED",
+      "description": "# Media Source Health Warnings\n\n## What & Why\nTrack the health of public sources attached to saved media contacts and warn users when evidence is old, unavailable, or no longer supports the stored role or public email. Existing `lastVerifiedAt` values only show when a source was checked and cannot distinguish a healthy source from a failed or changed one.\n\n## Done looks like\n- Source-backed contacts show a clear status such as current, due for review, unavailable, or changed\n- Users can reque..."
+    }
+  ],
+  [
+    {
+      "ref": "#20",
+      "title": "Email users a security alert when their password is changed",
+      "state": "MERGED",
+      "description": "# Email users a security alert when their password is changed\n\n## What & Why\nPassword changes (via the new change-password form or the email reset flow) currently happen silently. If an attacker changes a password, the real owner never finds out. A \"your password was changed — wasn't you? contact us\" email is a standard safeguard.\n\n## Done looks like\n- After a successful POST /api/platform/change-password and /api/platform/reset-password, a notification email is sent to the account email via ..."
+    },
+    {
+      "ref": "#31",
+      "title": "Stop trusting old devices automatically after a password change or two-factor reset",
+      "state": "MERGED",
+      "description": "# Stop trusting old devices automatically after a password change or two-factor reset\n\n## What & Why\nTrusted devices (30-day MFA skip) are cleared today only when MFA is disabled or an admin resets it. If a user changes their password because they suspect compromise, previously trusted browsers still skip the code. Clearing the trusted-device list on password change/reset closes that gap.\n\n## Done looks like\n- Password change and password reset endpoints call clearTrustedDevices(username) so ..."
+    },
+    {
+      "ref": "#41",
+      "title": "Log out all other devices when a password is changed",
+      "state": "PROPOSED",
+      "description": "# Log out all other devices when a password is changed\n\n## What & Why\nIf an attacker knows a password and the real owner changes it (or resets it via email), the attacker's existing logged-in session keeps working. Standard practice is to revoke all other sessions when the password changes, so the alert email (\"wasn't you? contact us\") is paired with actual lock-out.\n\n## Done looks like\n- Successful POST /api/platform/change-password and /api/platform/reset-password bump the user's session_ve..."
+    },
+    {
+      "ref": "#477",
+      "title": "Fix Media Research coverage and pagination",
+      "state": "MERGED",
+      "description": "# Fix Media Research Coverage Pagination\n\n## What & Why\nFix the failure reported when clicking “Check top 5 recent coverage” and replace the recommendation list's 25-result ceiling with real five-record pagination. The user clarified that the denominator must reflect however many Media Database records are actually available, not a hardcoded 6,000.\n\nThe screenshots show a failed token_usage INSERT for the coverage reservation. This identifies the failing accounting boundary, not the underlyin..."
+    },
+    {
+      "ref": "#509",
+      "title": "Audit form SQL injection and application security",
+      "state": "IN_PROGRESS",
+      "description": "# Form and Security Audit\n\n## What & Why\nAudit the existing AIO Fusion web application and API for SQL injection through every form and other untrusted input, together with related high-impact security weaknesses. The initial read-only inspection found PostgreSQL accessed primarily through Drizzle parameterized queries, some raw SQL exceptions, and an existing threat model whose session-isolation statements may be stale; none of these observations establishes an exploitable vulnerability or a..."
+    },
+    {
+      "ref": "#354",
+      "title": "Sales-Safe Master Q&A Revision",
+      "state": "MERGED",
+      "description": "# Sales-Safe Master Q&A Revision\n\n## What & Why\nProduce a sales-safe v1.5 of the uploaded AIO Fusion Master Q&A v1.4, plus an internal annotated comparison against the original. The user accepted the recommendation to retain meaningful sales answers while separating confidential methodology, internal commercial assumptions, and procurement details by audience. This is an editorial document task, not a product implementation or website update.\n\nThe original is labelled internal-only but explic..."
+    },
+    {
+      "ref": "#432",
+      "title": "Fix Article Pitch and launch current site",
+      "state": "MERGED",
+      "description": "# Fix Article Pitch and Launch\n\n## What & Why\nFix Article Media Pitch generation in this AIO Fusion project, then release this site once the fix and release checks pass. The original demo's “The AI response could not be read” message is a diagnostic clue, but the old beta site is not a separate repair target. A run on the current staging site remained at “Polishing the draft...” more than eleven minutes after the estimate; distinguish the countdown estimate from a real request deadline. This ..."
+    },
+    {
+      "ref": "#338",
+      "title": "Keep countdowns running between pages",
+      "state": "MERGED",
+      "description": "# Countdowns That Survive Navigation\n\n## What & Why\nAdd an estimated countdown to Content Optimiser & Editor and make operations with existing countdowns continue across navigation within AIO Fusion. The screenshot shows the Optimiser's elapsed-time generation panel rather than an estimated time remaining. Its optimisation result, original-copy snapshot and changes currently live in page-local state and are lost on remount.\n\nReuse the existing rolling timing history: it retains five samples w..."
+    },
+    {
+      "ref": "#164",
+      "title": "Prepare AIO Fusion live cutover",
+      "state": "MERGED",
+      "description": "# Prepare AIO Fusion Live Cutover\n\n## What & Why\nPrepare the current AIO Fusion staging candidate to replace the older site on the production domains without carrying staging URLs, staging configuration or test integrations into live use. The audit confirms this Repl is currently published as `https://aio-fusion-staging.replit.app`, `staging.aiofusion.ai` serves the newer build, and both `aiofusion.ai` and `www.aiofusion.ai` still serve the older site.\n\nThe production website should use `http..."
+    },
+    {
+      "ref": "#458",
+      "title": "Prepare AIO Fusion GEO improvements",
+      "state": "CANCELLED",
+      "description": "# Prepare AIO Fusion GEO Improvements\n\n## What & Why\nTurn the uploaded SEO/GEO checklist into an evidence-led, approval-ready programme for improving the public AIO Fusion site’s discoverability and citation potential in ChatGPT and Claude. This is planning and preparation only. The owner explicitly requires separate permission before any website text, feature, setting, tracking, public content, or publication changes.\n\nThe uploaded 52/100 score and claim of ten missing image descriptions are..."
+    },
+    {
+      "ref": "#431",
+      "title": "Apply Natalie website design amendments",
+      "state": "MERGED",
+      "description": "# Apply Natalie Website Amendments\n\n## What & Why\nMake the small public website changes in Natalie's attached design document and verify each one before Spencer tells her the work is done. Preserve the current AIO Fusion branding and page structure. This is separate from the proposed Media Database and Media Research work. The user will supply two replacement platform images later: implement and verify every non-image change now, then complete the image swap when the files arrive. Do not hold..."
+    },
+    {
+      "ref": "#279",
+      "title": "Add journalist privacy and removal rights",
+      "state": "MERGED",
+      "description": "# Add Journalist Privacy Rights\n\n## What & Why\nRestore the original standalone scope of Task #279, as explicitly requested by the user, without starting the other client clarity and trust improvements from Task #277. Add a public journalist privacy notice, a safe account-free rights request workflow, authorised case management, and durable enforcement of reviewed correction, objection and removal outcomes.\n\nMedia data includes both shared reference contacts and workspace-private contacts. Exi..."
+    },
+    {
+      "ref": "#80",
+      "title": "Block password/email changes and account deletion while impersonating",
+      "state": "CANCELLED",
+      "description": "# Block password/email changes and account deletion while impersonating\n\n## What & Why\nImpersonation (\"View account\") is logged, but the spec's blocked actions aren't enforced yet: while impersonating, a master/agency user must not be able to change the impersonated account's password or email, or delete the account. Server-side enforcement is required, not just hidden buttons.\n\n## Done looks like\n- While a session is impersonating (stash present), the server rejects password change, email ch..."
+    },
+    {
+      "ref": "#288",
+      "title": "Complete real staging access and visual checks for all three account types",
+      "state": "CANCELLED",
+      "description": "The user redirected this work to brand guidelines and a consistency audit while preserving Project Hub. Complete the original staging-access preparation: provision or confirm authorised staging Direct Client, Agency Partner and Master identities, credentials only in Secrets, then confirm read-only Hub and Settings navigation for each. scripts/src/seed-staging.ts is now guarded, insert-only, uses STAGING_REVIEW_PASSWORD and dedicated top-level staging-review-agency/client accounts, but has NOT..."
+    },
+    {
+      "ref": "#38",
+      "title": "Alert users by email if their account email address is changed",
+      "state": "MERGED",
+      "description": "# Alert users by email if their account email address is changed\n\n## What & Why\nMFA enable/disable, admin MFA resets, and (in progress) password changes now trigger security notice emails. Changing the account's email address is an equally sensitive action — an attacker who swaps the email hijacks all future notifications. Send a security notice to BOTH the old and new addresses when the account email changes, mirroring the existing alerts.\n\n## Done looks like\n- Any endpoint that updates a pl..."
+    },
+    {
+      "ref": "#55",
+      "title": "Tell account owners by email when their account type is changed",
+      "state": "PROPOSED",
+      "description": "# Tell account owners by email when their account type is changed\n\n## What & Why\nAccount type now changes what an account can do (agency accounts manage client sub-accounts). A silent switch by a team owner could surprise other stakeholders. Sending a confirmation email to the account owner mirrors the existing security-alert emails (password change, 2FA changes) and creates an audit trail.\n\n## Done looks like\n- When POST /platform/settings/account-type succeeds, the account owner receives an..."
+    },
+    {
+      "ref": "#417",
+      "title": "Prevent false 0-of-0 fair-usage limit results",
+      "state": "PROPOSED",
+      "description": "# Prevent false 0-of-0 fair-usage limit results\n\n## What & Why\nSome accounts can produce a 0-of-0 fair-usage result. Email delivery is now disabled for content action-count breaches, but the underlying quota calculation remains incorrect and may still block content AI actions with a misleading limit.\n\n## Done looks like\n- The source of 0 call-count / 0 limit results is identified\n- Valid project and account entitlements resolve to the correct non-zero action limit\n- Invalid or missing entitle..."
+    },
+    {
+      "ref": "#334",
+      "title": "Protect unsaved Creator and Optimiser content",
+      "state": "MERGED",
+      "description": "# Protect Unsaved Content Changes\n\n## What & Why\nPrevent accidental loss of work when leaving Content Creator or Content Optimiser & Editor. Both pages currently keep editing state in memory and unmount without warning; the user lost a Creator draft by moving to the Optimiser and returning with browser Back. Add a shared unsaved-changes confirmation that can save to Content Library before completing the requested navigation.\n\nExisting archive saves are asynchronous and server-confirmed. The c..."
+    },
+    {
+      "ref": "#487",
+      "title": "Improve Media Spreadsheet Exports",
+      "state": "MERGED",
+      "description": "# Improve Media Spreadsheet Exports\n\n## What & Why\nKeep Excel as the primary download for saved connections and selected contacts or publications in AIO Fusion's Media Database. Improve the workbook into a clean, compact working spreadsheet, and expose CSV as a secondary option for imports into other tools rather than treating CSV as a formatting fix.\n\nThe existing workbook has fixed widths, wrapping everywhere and estimated row heights. These can make URL columns unnecessarily wide and long-..."
+    },
+    {
+      "ref": "#239",
+      "title": "Refine account settings controls",
+      "state": "MERGED",
+      "description": "# Refine Account Settings Controls\n\n## What & Why\nBring every Account Settings variant into line with the rest of the AIO Fusion platform. Apply the same heading, layout cleanup, control sizing, and roomier sidebar navigation for direct clients, Agency Partners, and Master users so the shared page remains visually consistent regardless of account type.\n\n## Done looks like\n- The main page heading reads \"Account Settings\" for direct-client, Agency Partner, and Master versions\n- The small pink i..."
+    },
+    {
+      "ref": "#81",
+      "title": "Lock accounts progressively after 5 failed sign-in attempts",
+      "state": "CANCELLED",
+      "description": "# Lock accounts progressively after 5 failed sign-in attempts\n\n## What & Why\nCurrent protection is a blanket rate limit (20 tries per 15 min per address). The spec asks for progressive lockout after 5 failed attempts on an account - increasing delays/lockout windows per account, not just per IP, so credential-stuffing from many addresses is also blocked.\n\n## Done looks like\n- After 5 failed attempts on an account, sign-in is locked with progressively longer windows (e.g. 1 min, 5 min, 15 min,..."
+    },
+    {
+      "ref": "#337",
+      "title": "Database-backed media target selection",
+      "state": "MERGED",
+      "description": "# Database-Backed Media Target Selection\n\n## What & Why\nRestrict Select Media Targets in Content Creator and Content Optimiser to industries/categories represented by accessible contacts in the imported Media Database. Businesses can retain bespoke niche sectors in Project Set-Up for search and content context, but media targeting must use the broader categories actually available for promotion.\n\nBoth pages currently offer the static trade-media list, custom-category creation and a separate P..."
+    },
+    {
+      "ref": "#286",
+      "title": "Media Database",
+      "state": "MERGED",
+      "description": "# Complete V33 Media Import\n\n## What & Why\nComplete the previously requested V33 master workbook import and make the existing Media Database and Media Research section work with its actual records and metadata. Task #188 was merged but its explicit workbook import and realistic-scale verification outcomes are not evidenced in the target database. Do not report code completion as data-import completion.\n\nThe user explicitly states that this staging site uses the production database, not the be..."
+    },
+    {
+      "ref": "#485",
+      "title": "Review the remaining redirect warnings without disrupting sign-in",
+      "state": "CANCELLED",
+      "description": "The return-path backslash/control-character weakness in artifacts/api-server/src/routes/auth.ts is fixed using src/lib/safe-return-to.ts, with direct validator and actual HTTP route tests in src/lib/safe-return-to.test.ts and src/routes/auth-return-to.test.ts. The static scanner still reports four medium redirect alerts: fixed canonical-host redirect in artifacts/api-server/src/app.ts, provider-generated authorization/logout redirects and the validated callback return path in src/routes/auth...."
+    },
+    {
+      "ref": "#216",
+      "title": "Remind owners who leave a workspace name unreviewed",
+      "state": "CANCELLED",
+      "description": "# Remind owners who leave a workspace name unreviewed\n\n## What & Why\nSome owners may not open account settings after signing in, or may dismiss the correction prompt without acting. A restrained reminder can help complete the legacy cleanup while preserving the rule that no workspace name changes without owner confirmation.\n\n## Done looks like\n- Only owners of conservatively identified, still-unreviewed workspaces receive a reminder\n- Reminders are rate-limited and stop permanently after conf..."
+    },
+    {
+      "ref": "#321",
+      "title": "Recover paid tier upgrades after an interrupted billing confirmation",
+      "state": "CANCELLED",
+      "description": "# Recover paid tier upgrades after an interrupted billing confirmation\n\n## What & Why\nTier upgrades now fail visibly and avoid inviting another charge when Stripe may have applied a change but its invoice or local entitlement update cannot be confirmed. Add a safe recovery path so a customer who has paid does not remain on the old local allowance.\n\n## Done looks like\n- Persist enough operation/invoice evidence to recover an uncertain or locally incomplete upgrade without initiating a new paym..."
+    },
+    {
+      "ref": "#158",
+      "title": "Strengthen organic search growth",
+      "state": "MERGED",
+      "description": "# Strengthen Organic Search Growth\n\n## What & Why\nBuild on the completed technical SEO foundation with a measured organic-search programme for AIO Fusion. Improve how commercial pages target buyer intent, strengthen structured data and internal linking, establish an authoritative GEO content cluster, and give the team a repeatable way to use Search Console and analytics data to prioritise future work.\n\n## Done looks like\n- A documented baseline records index coverage, organic landing-page per..."
+    },
+    {
+      "ref": "#136",
+      "title": "Sign-in security and session hygiene (trusted devices, sign-out elsewhere, workspace isolation)",
+      "state": "MERGED",
+      "description": "# Sign-in security and session hygiene\n\n## What & Why\nRound out the recent login/SSO overhaul with the remaining security niceties users expect: sessions elsewhere should end when a password changes; users should be able to see and remove devices that are trusted to skip two-factor codes; SSO users should see which sign-in methods are active on their account (and the 'Set a password' panel should be verified with a real SSO account); the sign-in interstitial should still work without JavaScri..."
+    },
+    {
+      "ref": "#339",
+      "title": "Add real persistent article scoring",
+      "state": "MERGED",
+      "description": "# Real Persistent Article Score\n\n## What & Why\nReplace the Content Optimiser's hard-coded Authority Signal numbers with a transparent, deterministic before-and-after article score. Explain the result in customer-friendly language and save the optimisation assessment with the article so it remains visible when the article is reopened.\n\n## Done looks like\n- Before and after scores are calculated from the actual original and optimised article using the same published scoring rules\n- The score me..."
+    },
+    {
+      "ref": "#423",
+      "title": "Restore staging’s main database connection",
+      "state": "MERGED",
+      "description": "# Restore Staging Main Data\n\n## What & Why\nOn 23 September 2026, staging startup was changed to force the beta-named database. The user wants staging returned to this project's previously used main published database, and requires safe confirmation that the published staging service uses the main target. Attended Google sign-in and deployment-log verification are tracked in a separate task. The main database still contains the earlier personal MFA factor and more user/project data; do **not**..."
+    }
+  ]
+]

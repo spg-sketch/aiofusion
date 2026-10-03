@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import express from "express";
 import cookieParser from "cookie-parser";
+import { SQL_DATA_PROBES } from "../lib/security-audit-probes";
 
 // ---------------------------------------------------------------------------
 // PGlite-backed in-memory database mock
@@ -316,6 +317,19 @@ describe("POST /api/platform/login - new user-table auth path", () => {
   const EMAIL = "login-test@example.com";
   const PASSWORD = "hunter2secure!";
   const USERNAME = "login-test-agency";
+
+  it("SQL audit: quoted identifiers and passwords cannot broaden authentication lookups", async () => {
+    const before = await db.select().from(platformSessionsTable);
+    for (const value of SQL_DATA_PROBES.slice(1)) {
+      const response = await fetch(`${baseUrl}/api/platform/login`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: value, password: value }),
+      });
+      expect(response.status).toBe(401);
+      expect((await response.json() as { account?: unknown }).account).toBeUndefined();
+    }
+    expect(await db.select().from(platformSessionsTable)).toEqual(before);
+  });
 
   beforeEach(async () => {
     // Named identities must already have their stable user and membership.

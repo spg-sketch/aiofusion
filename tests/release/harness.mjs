@@ -14,6 +14,7 @@ const featureMode = process.argv.includes("--features");
 const howtoMode = process.argv.includes("--howto");
 const mediaResearchMode = process.argv.includes("--media-research");
 const manualContactsMode = process.argv.includes("--manual-contacts");
+const securityMode = process.argv.includes("--security");
 const liveAi = featureMode && process.env.AIO_FEATURE_LIVE_AI === "1";
 const liveAiEnv = {};
 if (liveAi) {
@@ -27,6 +28,7 @@ if (liveAi) {
 }
 const pgDir = mkdtempSync(join(tmpdir(), "aio-release-pg-"));
 const featureDir = featureMode ? mkdtempSync(join(tmpdir(), "aio-feature-mail-")) : null;
+const securityDir = securityMode ? mkdtempSync(join(tmpdir(), "aio-security-mail-")) : null;
 const emailCaptureFile = featureDir ? join(featureDir, "resend-capture.jsonl") : null;
 const emailInterceptor = resolve(root, "tests/features/resend-interceptor.mjs");
 const freePort = () => new Promise((resolvePort, reject) => {
@@ -77,15 +79,23 @@ const cleanup = () => {
   spawnSync("pg_ctl", ["-D", pgDir, "-m", "immediate", "stop"], { cwd: root, stdio: "ignore" });
   rmSync(pgDir, { recursive: true, force: true });
   if (featureDir) rmSync(featureDir, { recursive: true, force: true });
+  if (securityDir) rmSync(securityDir, { recursive: true, force: true });
 };
 process.on("exit", cleanup);
 process.on("SIGTERM", () => { cleanup(); process.exit(0); });
 process.on("SIGINT", () => { cleanup(); process.exit(0); });
 
-if (featureMode || howtoMode || mediaResearchMode || manualContactsMode || !existsSync(join(publicDir, "index.html"))) {
-  if (run("pnpm", ["--filter", "@workspace/aio-fusion", "run", "build"]).status !== 0) throw new Error("web build failed");
+if (securityMode || featureMode || howtoMode || mediaResearchMode || manualContactsMode || !existsSync(join(publicDir, "index.html"))) {
+  if (securityMode) {
+    // Build the real web bundles, but never query a published Insights API.
+    if (run("pnpm", ["--filter", "@workspace/aio-fusion", "exec", "vite", "build", "--config", "vite.config.ts"]).status !== 0 ||
+        run("pnpm", ["--filter", "@workspace/aio-fusion", "exec", "vite", "build", "--config", "vite.ssr.config.ts"]).status !== 0 ||
+        run("pnpm", ["--filter", "@workspace/aio-fusion", "exec", "node", "--input-type=module", "-e", "const {runPrerender}=await import('./dist/ssr/prerender-entry.js'); await runPrerender({canonicalDomain:null});"]).status !== 0) {
+      throw new Error("isolated web build failed");
+    }
+  } else if (run("pnpm", ["--filter", "@workspace/aio-fusion", "run", "build"]).status !== 0) throw new Error("web build failed");
 }
-if (featureMode || howtoMode || mediaResearchMode || manualContactsMode || !existsSync(resolve(root, "artifacts/api-server/dist/index.mjs"))) {
+if (securityMode || featureMode || howtoMode || mediaResearchMode || manualContactsMode || !existsSync(resolve(root, "artifacts/api-server/dist/index.mjs"))) {
   if (run("pnpm", ["--filter", "@workspace/api-server", "run", "build"]).status !== 0) throw new Error("API build failed");
 }
 if (run("initdb", ["-D", pgDir, "--username=release", "--auth=trust", "--no-locale"]).status !== 0) throw new Error("initdb failed");
@@ -236,17 +246,25 @@ if (mediaResearchMode) {
   }
 }
 start("node", [
+  ...(securityMode ? ["--import", resolve(root, "tests/security/outbound-interceptor.mjs")] : []),
   ...(featureMode ? ["--import", emailInterceptor] : []),
   "--enable-source-maps",
   "artifacts/api-server/dist/index.mjs",
 ], {
-  DATABASE_URL: dbUrl, PORT: String(apiPort), NODE_ENV: "test", DEPLOYMENT_ENV: howtoMode ? "development" : "test",
+  DATABASE_URL: dbUrl, PORT: String(apiPort), NODE_ENV: securityMode ? "production" : "test", DEPLOYMENT_ENV: securityMode ? "staging" : howtoMode ? "development" : "test",
   ALLOWED_ORIGIN: "http://127.0.0.1:5000", SESSION_COOKIE_SECURE: "false",
   SESSION_SECRET: "release-harness-session-secret",
   PLATFORM_ADMIN_PASSWORD: "release-harness-admin-password",
   RESEND_API_KEY: "aio-features-synthetic-resend-key",
   STRIPE_SECRET_KEY: "sk_test_aio_features_synthetic_never_used",
   ...liveAiEnv,
+  ...(securityMode ? {
+    AIO_SECURITY_CAPTURE_FILE: join(securityDir, "mail.jsonl"),
+    CANONICAL_DOMAIN: "staging.aiofusion.ai",
+    // Deployed bootstrap requires this variable name. Its VALUE is always
+    // the new loopback fixture, never any inherited published credential.
+    PRODUCTION_DATABASE_URL: dbUrl,
+  } : {}),
   ...(featureMode ? {
     AIO_FEATURE_EMAIL_CAPTURE: "1",
     AIO_FEATURE_EMAIL_CAPTURE_FILE: emailCaptureFile,
@@ -257,6 +275,20 @@ await waitFor(`http://127.0.0.1:${apiPort}/api/platform/me`).catch((error) => {
 });
 
 const server = createServer(async (req, res) => {
+  if (securityMode && req.method === "GET" && req.url === "/__test/security-state") {
+    const state = run("psql", ["-h", "127.0.0.1", "-p", String(port), "-U", "release", "-d", "release",
+      "-At", "-c", `SELECT json_build_object(
+        'foreignProject',(SELECT row_to_json(p) FROM projects p WHERE id='other-workspace'),
+        'projects',(SELECT count(*) FROM projects),
+        'contacts',(SELECT count(*) FROM media_contacts),
+        'tokenUsage',(SELECT count(*) FROM token_usage),
+        'archive',(SELECT count(*) FROM archive_items),
+        'planner',(SELECT count(*) FROM planner_items))`],
+      { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", env: { DATABASE_URL: dbUrl } });
+    res.writeHead(state.status === 0 ? 200 : 500, { "content-type": "application/json" });
+    res.end(state.status === 0 ? state.stdout.trim() : '{"error":"Fixture integrity query failed"}');
+    return;
+  }
   if (mediaResearchMode && req.method === "GET" && req.url === "/__test/media-research-state") {
     const state = run("psql", ["-h", "127.0.0.1", "-p", String(port), "-U", "release", "-d", "release",
       "-At", "-c", "SELECT json_build_object('tokenUsageCount',(SELECT count(*) FROM token_usage))"],

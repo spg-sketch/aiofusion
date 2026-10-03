@@ -104,3 +104,4 @@
 - [How-to authoring model](howto-authoring-model.md) — user requires one continuous WYSIWYG box, not separate section forms; verify paste, selection, Enter and save/reopen.
 - [GEO George guide inclusion](george-guide-inclusion.md) — published CMS guides enter support automatically, with editorial opt-out; use original content, not duplicate FAQ copies.
 - [Media name identifiers](aio-fusion-media-name-identifiers.md) — validate name fields separately; preserve desk contacts and retain unidentified records for human review.
+- [Security fix compatibility](security-fix-compatibility.md) — security fixes must not break existing site behaviour; preserve normal-use regression evidence.

@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { SQL_DATA_PROBES } from "../lib/security-audit-probes";
 import express from "express";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
@@ -123,6 +124,23 @@ async function request(path: string, options: RequestInit = {}, role = "reader")
 }
 
 describe("How-to CMS", () => {
+  it("SQL audit: CMS titles and rich text round-trip and cannot broaden public identifier reads", async () => {
+    for (const [index, value] of SQL_DATA_PROBES.entries()) {
+      const id = `sql-guide-${index}`;
+      const input = { ...entry(id), title: value, description: value,
+        body: [{ type: "paragraph", runs: [{ text: value }] }] };
+      const response = await request("/admin/howto", { method: "POST", body: JSON.stringify(input) }, "admin");
+      expect(response.status).toBe(201);
+      expect((await (await request(`/howto/${id}`)).json() as { title: string }).title).toBe(value);
+      expect((await request(`/howto/${encodeURIComponent(value)}`)).status).toBe(404);
+      const edit = await request(`/admin/howto/${id}`, {
+        method: "PATCH", body: JSON.stringify({ title: `${value} edited` }),
+      }, "admin");
+      expect(edit.status).toBe(200);
+      expect((await (await request(`/howto/${id}`)).json() as { title: string }).title).toBe(`${value} edited`);
+      expect((await request(`/admin/howto/${id}`, { method: "DELETE" }, "admin")).status).toBe(204);
+    }
+  });
   it("creates draft batches atomically, preserves edited and deleted entries, and never exposes drafts to readers or George", async () => {
     vi.stubEnv("DEPLOYMENT_ENV", "development");
     vi.stubEnv("DATABASE_URL", "postgres://fixture@127.0.0.1:5432/disposable");

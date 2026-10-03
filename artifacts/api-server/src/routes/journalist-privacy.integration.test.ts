@@ -3,6 +3,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { eq } from "drizzle-orm";
+import { SQL_DATA_PROBES } from "../lib/security-audit-probes";
 process.env.NODE_ENV = "test";
 
 const { db, tables, client } = await (async () => {
@@ -88,6 +89,7 @@ vi.mock("../lib/notify-email", () => ({
 const { default: router } = await import("./journalist-privacy");
 const { isSuppressedWithDb, privacyHash } = await import("../lib/journalist-privacy");
 const app = express();
+app.set("trust proxy", 1);
 app.use(express.json());
 app.use(router);
 const server: Server = app.listen(0);
@@ -97,6 +99,29 @@ async function call(path: string, init?: RequestInit) { return fetch(`${baseUrl}
 afterAll(() => new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())));
 
 describe("journalist privacy route integration", () => {
+  it("SQL audit: public rights-request text and admin filters are data, not matching instructions", async () => {
+    for (const [index, value] of SQL_DATA_PROBES.entries()) {
+      const email = `security-privacy-${index}@example.invalid`;
+      const response = await call("/journalist-privacy/requests", {
+        method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": `192.0.2.${index + 10}` },
+        body: JSON.stringify({ requestType: "access", name: value, email, outlet: value, details: value }),
+      });
+      expect(response.status).toBe(202);
+      const [stored] = await db.select().from(tables.journalistPrivacyRequestsTable)
+        .where(eq(tables.journalistPrivacyRequestsTable.email, email));
+      expect(stored.name).toBe(value);
+      expect(stored.details).toBe(value);
+      const filtered = await call(`/admin/journalist-privacy/requests?assignedTo=${encodeURIComponent(value)}`, {
+        headers: { "x-account": "admin" },
+      });
+      expect(filtered.status).toBe(200);
+      expect((await filtered.json() as { requests: unknown[] }).requests).toEqual([]);
+      await db.delete(tables.journalistPrivacyRequestEventsTable)
+        .where(eq(tables.journalistPrivacyRequestEventsTable.requestId, stored.id));
+      await db.delete(tables.journalistPrivacyRequestsTable)
+        .where(eq(tables.journalistPrivacyRequestsTable.id, stored.id));
+    }
+  });
   it("returns the same neutral intake response and persists before notification failure", async () => {
     const app = express();
     app.use(express.json());

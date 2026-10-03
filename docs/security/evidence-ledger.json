@@ -1,0 +1,285 @@
+{
+  "sourceRevision": "7fad1e268d10bbaf872772c607f7cfe3b6b7d197",
+  "generatedAt": "2026-10-03T12:13:21.817Z",
+  "scope": "Local source and isolated runtime only. No published deployment, existing database, real account, payment or paid AI verified.",
+  "environment": {
+    "node": "v24.13.0",
+    "pnpm": "10.26.1",
+    "postgres": "psql (PostgreSQL) 16.10",
+    "platform": "linux"
+  },
+  "commands": {
+    "inventory": "node scripts/security-inventory.mjs",
+    "sqlGuard": "node scripts/security-sql-guard.mjs",
+    "sqlFixtures": "pnpm --filter @workspace/api-server exec vitest run src/routes/store-content-isolation.test.ts src/routes/store-intake.test.ts src/routes/howto.test.ts src/routes/media-import.test.ts src/routes/contact-security.test.ts src/routes/platform-login-signup.test.ts src/routes/journalist-privacy.integration.test.ts src/lib/security-fetch-audit.test.ts --reporter=json --outputFile=../../docs/security/sql-test-results.json",
+    "boundaryFixtures": "pnpm --filter @workspace/api-server exec vitest run src/routes/ai-assist-security.test.ts src/routes/auth-return-to.test.ts src/lib/safe-return-to.test.ts src/app.stripe-webhook.test.ts src/routes/insights-homepage-pins.test.ts --reporter=json --outputFile=../../docs/security/boundary-test-results.json",
+    "additionalFixtures": "pnpm --filter @workspace/api-server exec vitest run src/routes/journalist-privacy.integration.test.ts src/routes/team-personal-mfa.test.ts src/routes/platform-mfa.test.ts src/routes/billing.test.ts src/lib/media-csv-import.test.ts src/lib/cleanup-expired-tokens.test.ts src/lib/media-parser-security.test.ts --maxWorkers=2 --reporter=json --outputFile=../../docs/security/additional-test-results.json",
+    "editorFixtures": "pnpm --filter @workspace/aio-fusion exec vitest run src/lib/howto.test.ts src/lib/howtoDocument.test.ts src/components/howto/HowtoDocumentEditor.clipboard.test.ts --maxWorkers=2 --reporter=json --outputFile=../../docs/security/editor-test-results.json",
+    "privacyRetest": "pnpm --filter @workspace/api-server exec vitest run src/routes/journalist-privacy.integration.test.ts --reporter=json --outputFile=../../docs/security/privacy-retest-results.json",
+    "dnsFormat": "pnpm --filter @workspace/api-server exec vitest run src/lib/security-dns-format.test.ts --reporter=json --outputFile=../../docs/security/dns-format-test-results.json",
+    "remainingFormFamilies": "pnpm --filter @workspace/api-server exec vitest run src/routes/form-family-sql.test.ts --reporter=json --outputFile=../../docs/security/form-family-test-results.json",
+    "builtBrowser": "pnpm exec playwright test --config=playwright.security.config.ts",
+    "typecheck": "pnpm run typecheck"
+  },
+  "batches": [
+    {
+      "file": "sql-test-results.json",
+      "success": true,
+      "total": 151,
+      "passed": 151,
+      "failed": 0,
+      "startedAt": "2026-10-03T11:47:46.228Z",
+      "suites": [
+        {
+          "file": "artifacts/api-server/src/lib/security-fetch-audit.test.ts",
+          "status": "passed",
+          "tests": 4,
+          "durationMs": 23.411376953125
+        },
+        {
+          "file": "artifacts/api-server/src/routes/contact-security.test.ts",
+          "status": "passed",
+          "tests": 2,
+          "durationMs": 127.37646484375
+        },
+        {
+          "file": "artifacts/api-server/src/routes/howto.test.ts",
+          "status": "passed",
+          "tests": 31,
+          "durationMs": 3956.32763671875
+        },
+        {
+          "file": "artifacts/api-server/src/routes/journalist-privacy.integration.test.ts",
+          "status": "passed",
+          "tests": 9,
+          "durationMs": 330.042724609375
+        },
+        {
+          "file": "artifacts/api-server/src/routes/media-import.test.ts",
+          "status": "passed",
+          "tests": 43,
+          "durationMs": 108242.3515625
+        },
+        {
+          "file": "artifacts/api-server/src/routes/platform-login-signup.test.ts",
+          "status": "passed",
+          "tests": 48,
+          "durationMs": 7744.666015625
+        },
+        {
+          "file": "artifacts/api-server/src/routes/store-content-isolation.test.ts",
+          "status": "passed",
+          "tests": 6,
+          "durationMs": 387.030517578125
+        },
+        {
+          "file": "artifacts/api-server/src/routes/store-intake.test.ts",
+          "status": "passed",
+          "tests": 8,
+          "durationMs": 302.91845703125
+        }
+      ]
+    },
+    {
+      "file": "boundary-test-results.json",
+      "success": true,
+      "total": 79,
+      "passed": 79,
+      "failed": 0,
+      "startedAt": "2026-10-03T11:49:32.764Z",
+      "suites": [
+        {
+          "file": "artifacts/api-server/src/app.stripe-webhook.test.ts",
+          "status": "passed",
+          "tests": 11,
+          "durationMs": 71.694580078125
+        },
+        {
+          "file": "artifacts/api-server/src/routes/ai-assist-security.test.ts",
+          "status": "passed",
+          "tests": 1,
+          "durationMs": 56.008056640625
+        },
+        {
+          "file": "artifacts/api-server/src/routes/auth-return-to.test.ts",
+          "status": "passed",
+          "tests": 30,
+          "durationMs": 137.602783203125
+        },
+        {
+          "file": "artifacts/api-server/src/routes/insights-homepage-pins.test.ts",
+          "status": "passed",
+          "tests": 11,
+          "durationMs": 152.32568359375
+        },
+        {
+          "file": "artifacts/api-server/src/lib/safe-return-to.test.ts",
+          "status": "passed",
+          "tests": 26,
+          "durationMs": 4.097900390625
+        }
+      ]
+    },
+    {
+      "file": "additional-test-results.json",
+      "success": false,
+      "total": 224,
+      "passed": 223,
+      "failed": 1,
+      "startedAt": "2026-10-03T11:55:13.134Z",
+      "suites": [
+        {
+          "file": "artifacts/api-server/src/lib/cleanup-expired-tokens.test.ts",
+          "status": "passed",
+          "tests": 2,
+          "durationMs": 47.864501953125
+        },
+        {
+          "file": "artifacts/api-server/src/lib/media-csv-import.test.ts",
+          "status": "passed",
+          "tests": 26,
+          "durationMs": 2067.300048828125
+        },
+        {
+          "file": "artifacts/api-server/src/lib/media-parser-security.test.ts",
+          "status": "passed",
+          "tests": 1,
+          "durationMs": 5.99169921875
+        },
+        {
+          "file": "artifacts/api-server/src/routes/billing.test.ts",
+          "status": "passed",
+          "tests": 106,
+          "durationMs": 18736.2685546875
+        },
+        {
+          "file": "artifacts/api-server/src/routes/journalist-privacy.integration.test.ts",
+          "status": "failed",
+          "tests": 10,
+          "durationMs": 341.91162109375
+        },
+        {
+          "file": "artifacts/api-server/src/routes/platform-mfa.test.ts",
+          "status": "passed",
+          "tests": 66,
+          "durationMs": 20869.7880859375
+        },
+        {
+          "file": "artifacts/api-server/src/routes/team-personal-mfa.test.ts",
+          "status": "passed",
+          "tests": 13,
+          "durationMs": 811.23974609375
+        }
+      ]
+    },
+    {
+      "file": "privacy-retest-results.json",
+      "success": true,
+      "total": 10,
+      "passed": 10,
+      "failed": 0,
+      "startedAt": "2026-10-03T11:58:51.442Z",
+      "suites": [
+        {
+          "file": "artifacts/api-server/src/routes/journalist-privacy.integration.test.ts",
+          "status": "passed",
+          "tests": 10,
+          "durationMs": 407.1298828125
+        }
+      ]
+    },
+    {
+      "file": "editor-test-results.json",
+      "success": true,
+      "total": 20,
+      "passed": 20,
+      "failed": 0,
+      "startedAt": "2026-10-03T11:55:13.617Z",
+      "suites": [
+        {
+          "file": "artifacts/aio-fusion/src/lib/howto.test.ts",
+          "status": "passed",
+          "tests": 6,
+          "durationMs": 17.64599609375
+        },
+        {
+          "file": "artifacts/aio-fusion/src/lib/howtoDocument.test.ts",
+          "status": "passed",
+          "tests": 5,
+          "durationMs": 14.266845703125
+        },
+        {
+          "file": "artifacts/aio-fusion/src/components/howto/HowtoDocumentEditor.clipboard.test.ts",
+          "status": "passed",
+          "tests": 9,
+          "durationMs": 276.162109375
+        }
+      ]
+    },
+    {
+      "file": "dns-format-test-results.json",
+      "success": true,
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "startedAt": "2026-10-03T12:04:01.536Z",
+      "suites": [
+        {
+          "file": "artifacts/api-server/src/lib/security-dns-format.test.ts",
+          "status": "passed",
+          "tests": 1,
+          "durationMs": 8.638671875
+        }
+      ]
+    },
+    {
+      "file": "form-family-test-results.json",
+      "success": true,
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "startedAt": "2026-10-03T12:06:10.351Z",
+      "suites": [
+        {
+          "file": "artifacts/api-server/src/routes/form-family-sql.test.ts",
+          "status": "passed",
+          "tests": 2,
+          "durationMs": 235.332763671875
+        }
+      ]
+    }
+  ],
+  "browser": {
+    "file": "browser-results.json",
+    "stats": {
+      "startTime": "2026-10-03T11:58:51.022Z",
+      "duration": 33090.205,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "errors": []
+  },
+  "typecheck": {
+    "status": "passed",
+    "command": "pnpm run typecheck"
+  },
+  "sqlGuard": {
+    "status": "passed",
+    "reviewedExceptions": 8
+  },
+  "scanners": {
+    "file": "audit-scanners.json",
+    "dependency": "fulfilled, zero",
+    "static": "fulfilled, one medium false positive",
+    "privacy": "fulfilled, zero"
+  },
+  "releaseReadiness": {
+    "command": "RELEASE_ENVIRONMENT=staging pnpm run release:ready",
+    "status": "not approved",
+    "attemptedOutcome": "failed before release stages because an interrupted readiness lock exists",
+    "rerun": "intentionally skipped: full web prerender fetches published Insights, conflicting with audit-only scope; no lock removal or fabricated approval"
+  },
+  "limitation": "Batch totals overlap suites. Additional batch has one fixture limiter interaction failure, corrected and separately passed in privacy-retest-results.json. Retain the original failure rather than relabelling it passed. Totals are assertions executed, not unique routes tested."
+}

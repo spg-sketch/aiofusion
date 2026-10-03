@@ -1,0 +1,49 @@
+[
+  {
+    "status": "fulfilled",
+    "value": {
+      "metadata": {
+        "vulnerabilities": {
+          "critical": 0,
+          "high": 0,
+          "info": 0,
+          "low": 0,
+          "moderate": 0
+        }
+      },
+      "vulnerabilities": []
+    }
+  },
+  {
+    "status": "fulfilled",
+    "value": {
+      "incomplete": false,
+      "results": [
+        {
+          "checkId": "javascript.express.web.tainted-redirect-express.tainted-redirect-express",
+          "fingerprint": "0c0f65c4c3519cf2327b27157a9057a2c1372704d9a5669cc14078af2e6dc4a9",
+          "location": {
+            "end": {
+              "col": 24,
+              "line": 175
+            },
+            "lines": "",
+            "path": "/home/runner/workspace/artifacts/api-server/src/routes/auth.ts",
+            "start": {
+              "col": 16,
+              "line": 175
+            }
+          },
+          "message": "The application builds a URL using user-controlled input which can lead to an open redirect vulnerability. An attacker can manipulate the URL and redirect users to an arbitrary domain. Open redirect vulnerabilities can lead to issues such as Cross-site scripting (XSS) or redirecting to a malicious domain for activities such as phishing to capture users' credentials. To prevent this vulnerability perform strict input validation of the domain against an allowlist of approved domains. Notify a user in your application that they are leaving the website. Display a domain where they are redirected to the user. A user can then either accept or deny the redirect to an untrusted site.",
+          "severity": "MEDIUM"
+        }
+      ]
+    }
+  },
+  {
+    "status": "fulfilled",
+    "value": {
+      "vulnerabilities": []
+    }
+  }
+]

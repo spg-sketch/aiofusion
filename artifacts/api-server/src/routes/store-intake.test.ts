@@ -95,6 +95,7 @@ vi.mock("@workspace/db", async () => {
 import { db, platformAccountsTable, projectsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import storeRouter from "./store";
+import { SQL_DATA_PROBES } from "../lib/security-audit-probes";
 
 const POPULATED_INTAKE = {
   formData: {
@@ -141,6 +142,19 @@ describe("POST /api/store/projects/intake (blank never overwrites populated, DB-
       .limit(1);
     return row?.intake ?? null;
   }
+
+  it("SQL audit: intake JSON and quote-bearing project identifiers survive conflict updates as data", async () => {
+    for (const [index, value] of SQL_DATA_PROBES.entries()) {
+      const id = `sql-intake-${index}-${value}`;
+      const intake = { formData: { "1.1": value, "4.1": value }, businessCategories: [value] };
+      expect((await postIntake({ id, intake })).status).toBe(200);
+      expect(await storedIntake(id)).toEqual(intake);
+      const changed = { ...intake, formData: { "1.1": value, "4.1": `${value} revised` } };
+      expect((await postIntake({ id, intake: changed })).status).toBe(200);
+      expect(await storedIntake(id)).toEqual(changed);
+      expect(await storedIntake(`nonexistent-${value}`)).toBeNull();
+    }
+  });
 
   beforeAll(async () => {
     const app = express();

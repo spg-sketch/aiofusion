@@ -478,3 +478,17 @@ mtime_ms = 1791024751021
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/1b37587d-3051-44d9-853b-b478a511c937/91a55be6-5deb-4693-b2db-a8bcd38fae69"
 storage_version_token = "1791024817674089"
 content_type = "image/png"
+
+[[outputs]]
+id = "JrDUJCNZJPyPO4HigRGpb"
+uri = "file://docs/security/aio-fusion-security-audit.html"
+type = "html"
+title = "AIO Fusion audit - updated validation status"
+description = "Audit evidence and coverage, with the blocked release check and audit-only limits explicitly recorded. No security fixes or deployment applied."
+logical_id = "cd58a89a-01a6-4bf3-9ee2-5343ae0540d8"
+content_hash = "sha256:8c3348287bf751060754069df43202dc6ecef3aff35bd5900569ddf55b2fc24d"
+size = 554453
+mtime_ms = 1791029602214
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/cd58a89a-01a6-4bf3-9ee2-5343ae0540d8/d7d5e628-26a0-4995-b40f-5b51a4031d93"
+storage_version_token = "1791029610403121"
+content_type = "text/html"

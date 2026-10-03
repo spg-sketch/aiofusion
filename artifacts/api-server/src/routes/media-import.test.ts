@@ -4,6 +4,7 @@ import { inflateRawSync } from "node:zlib";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import express, { type Request } from "express";
+import { SQL_DATA_PROBES } from "../lib/security-audit-probes";
 
 vi.mock("@workspace/db", async () => {
   const { PGlite } = await import("@electric-sql/pglite");
@@ -340,6 +341,31 @@ async function previewThenCommit(
   }, role, platformRole);
   return { previewResponse, preview, commitResponse };
 }
+
+it("SQL audit: imported notes survive reuse, search probes do not expose another workspace", async () => {
+  for (const [index, value] of SQL_DATA_PROBES.entries()) {
+    const workspace = `sql-import-${index}`;
+    const rows = [{ ...workbookRows[0], notes: value, firstName: "Anne", lastName: "O'Brien",
+      email: `sql-import-${index}@example.invalid`, outletName: "O'Brien & Sons" }];
+    const { commitResponse } = await previewThenCommit(workspace, { rows, filename: `${value}.csv` });
+    expect(commitResponse.status).toBe(200);
+    const list = await mediaRequest("GET", "/api/store/media-db/contacts", workspace);
+    expect(list.status).toBe(200);
+    const contact = list.json.contacts.find((row: { email: string }) => row.email === rows[0].email);
+    expect(contact).toBeTruthy();
+    expect(contact.notes).toContain(value);
+    expect(contact.lastName).toBe("O'Brien");
+    const scoped = await mediaRequest("GET", `/api/store/media-db/contacts?q=${encodeURIComponent(value)}`, "sql-import-outsider");
+    expect(scoped.status).toBe(200);
+    expect(scoped.json.contacts.some((row: { email: string }) => row.email === rows[0].email)).toBe(false);
+    const modified = await mediaRequest("PUT", `/api/store/media-db/contacts/${contact.id}`, workspace, {
+      firstName: "Anne", lastName: "O'Brien", notes: `${value} edited`,
+    });
+    expect(modified.status).toBe(200);
+    const reread = await mediaRequest("GET", "/api/store/media-db/contacts", workspace);
+    expect(reread.json.contacts.find((row: { id: number }) => row.id === contact.id).notes).toBe(`${value} edited`);
+  }
+});
 
 beforeAll(async () => {
   process.env.SESSION_SECRET = "test-session-secret";

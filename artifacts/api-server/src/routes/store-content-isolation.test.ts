@@ -61,6 +61,7 @@ vi.mock("../lib/platform-auth", () => ({
 import { db } from "@workspace/db";
 import storeContentRouter from "./store-content";
 import { sql } from "drizzle-orm";
+import { SQL_DATA_PROBES } from "../lib/security-audit-probes";
 
 describe("content store project isolation", () => {
   let server: Server;
@@ -97,6 +98,47 @@ describe("content store project isolation", () => {
   const request = (path: string, init: RequestInit) => fetch(`${baseUrl}${path}`, {
     ...init,
     headers: { "content-type": "application/json", ...(init.headers || {}) },
+  });
+
+  it("SQL audit: archive, planner and scoring inputs remain data on subsequent reads and mutations", async () => {
+    for (const [index, value] of SQL_DATA_PROBES.entries()) {
+      const id = `sql-${index}-${value}`;
+      const archive = await request("/store/archive", {
+        method: "POST", body: JSON.stringify({
+          id, projectId: "workspace-b-project", title: value, headline: value,
+          bodyCopy: value, contentType: "Article", tags: [value],
+        }),
+      });
+      expect(archive.status).toBe(200);
+      expect((await archive.json() as { item: { title: string } }).item.title).toBe(value);
+      const planner = await request("/store/planner", {
+        method: "POST", body: JSON.stringify({
+          id: `planner-${id}`, projectId: "workspace-b-project", sourceArchiveId: id,
+          title: value, notes: value, contentType: "Article",
+        }),
+      });
+      expect(planner.status).toBe(200);
+      const queried = await request(`/store/archive?projectId=${encodeURIComponent(value)}`, { method: "GET" });
+      expect(queried.status).toBe(200);
+      expect((await queried.json() as { items: unknown[] }).items).toEqual([]);
+      const foreign = await request(`/store/archive/${encodeURIComponent("private-archive" + value)}`, {
+        method: "PUT", body: JSON.stringify({ title: value }),
+      });
+      expect(foreign.status).toBe(404);
+      expect((await request(`/store/planner/${encodeURIComponent(`planner-${id}`)}`, {
+        method: "DELETE",
+      })).status).toBe(200);
+      expect((await request(`/store/archive/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      })).status).toBe(200);
+    }
+    const config = { label: SQL_DATA_PROBES[0], values: SQL_DATA_PROBES };
+    expect((await request("/store/scoring-config", {
+      method: "PUT", body: JSON.stringify({ config }),
+    })).status).toBe(200);
+    expect(await (await request("/store/scoring-config", { method: "GET" })).json()).toMatchObject({ config });
+    const guard = await db.execute(sql`SELECT title, deleted_at FROM archive_items WHERE id = ${"private-archive"}`);
+    expect(guard.rows).toEqual([{ title: "Private", deleted_at: null }]);
   });
 
   it("rejects guessed foreign and deleted project writes, including mutations", async () => {
