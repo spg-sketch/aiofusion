@@ -33,6 +33,26 @@ Inline links and video URLs must use HTTPS. Image blocks reference an existing,
 active image in the shared Insights media library by `mediaId`; returned image
 blocks additionally include the resolved `url`.
 
+## Guidance library presentation
+
+Platform home and Project Hub both open `/guidance`. Public `/insights` remains
+a separate collection. Library previews use the first saved image block with
+a non-empty resolved URL, retaining its saved alt text. No cover field or
+editorial data rewrite is required. Cards reserve their image area while loading
+and show the same branded fallback when no image is resolved or loading fails.
+The reader still renders the complete saved body, including images and captions.
+
+Presentation regression checks:
+
+- `pnpm --filter @workspace/aio-fusion exec vitest run src/pages/GuidancePage.test.tsx src/App.mediaManagementNavigation.test.tsx src/pages/ClientSelectorPage.test.tsx`
+- `pnpm exec playwright test --config=playwright.howto.config.ts tests/howto/guidance-library.spec.ts`
+
+The browser check uses the built app and real sign-in in the disposable loopback
+harness, with synthetic published-content responses and a generated PNG served
+by test routes. It verifies desktop/mobile rendering, image failure, filters,
+full-body opening, return navigation, refresh and browser Back. Its screenshots
+are fixture evidence, not proof of production content or App Storage delivery.
+
 ## Operations
 
 - `GET /howto` — published entries.

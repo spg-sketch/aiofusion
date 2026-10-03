@@ -28,12 +28,14 @@ vi.mock("./pages/PlatformHomePage", () => ({
   PlatformHomePage: ({
     session,
     onContinueToProjects,
+    onGuidance,
   }: {
     session: { username: string } | null;
     onContinueToProjects: () => void;
+    onGuidance: () => void;
   }) => (
     session
-      ? <button onClick={onContinueToProjects}>Continue to projects</button>
+       ? <><button onClick={onContinueToProjects}>Continue to projects</button><button onClick={onGuidance}>Home Guidance</button></>
       : <div>Sign in</div>
   ),
 }));
@@ -41,10 +43,12 @@ vi.mock("./pages/PlatformHomePage", () => ({
 vi.mock("./pages/ClientSelectorPage", () => ({
   default: ({
     onSelectClient,
+    onGuidance,
   }: {
     onSelectClient: (client: Client) => void;
+    onGuidance: () => void;
   }) => (
-    <button
+    <><button onClick={onGuidance}>Hub Guidance</button><button
       onClick={() => onSelectClient({
         id: "project-1",
         name: "Test project",
@@ -61,7 +65,7 @@ vi.mock("./pages/ClientSelectorPage", () => ({
       })}
     >
       Open test project
-    </button>
+    </button></>
   ),
 }));
 
@@ -97,6 +101,17 @@ vi.mock("./pages/ContentCreatorPage", async () => {
 vi.mock("./lib/contentAi", async (importOriginal) => {
   const mod = await importOriginal<typeof import("./lib/contentAi")>();
   return { ...mod, apiBase: () => "" };
+});
+
+vi.mock("@workspace/api-client-react", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@workspace/api-client-react")>();
+  return {
+    ...original,
+    useListPublishedHowto: () => ({
+      data: [{ id: "fixture-guide", title: "Published fixture guide", type: "Guide", readTime: "3 min", description: "CMS guidance", body: [] }],
+      isLoading: false, isError: false,
+    }),
+  };
 });
 
 function makeResponse(body: unknown, status = 200) {
@@ -182,6 +197,36 @@ afterEach(() => {
 });
 
 describe("Media Management sidebar navigation", () => {
+  it("opens the real Guidance library from both platform entry points, direct URLs and Back", async () => {
+    window.history.replaceState({}, "", "/platform");
+    const { default: App } = await import("./App");
+    const mounted = render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue to projects" }));
+    await waitFor(() => expect(window.location.pathname).toBe("/project-hub"));
+    const hubState = window.history.state;
+    fireEvent.click(screen.getByRole("button", { name: "Hub Guidance" }));
+    expect(await screen.findByRole("heading", { name: "Guidance" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Published fixture guide.*Read guide/ })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/guidance");
+    act(() => {
+      window.history.replaceState(hubState, "", "/project-hub");
+      window.dispatchEvent(new PopStateEvent("popstate", { state: hubState }));
+    });
+    expect(await screen.findByRole("button", { name: "Hub Guidance" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Hub Guidance" }));
+    await screen.findByRole("heading", { name: "Guidance" });
+    fireEvent.click(screen.getByTestId("button-back"));
+    fireEvent.click(await screen.findByRole("button", { name: "Home Guidance" }));
+    await screen.findByRole("heading", { name: "Guidance" });
+    expect(window.location.pathname).toBe("/guidance");
+    mounted.unmount();
+    // Remount at the canonical URL models a refresh without cached route state.
+    window.history.replaceState({}, "", "/guidance");
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Guidance" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/guidance");
+  });
+
   it("routes both cards and clears the old page while cold chunks load", async () => {
     window.history.replaceState({}, "", "/?oauth_status=ok");
     const { default: App } = await import("./App");

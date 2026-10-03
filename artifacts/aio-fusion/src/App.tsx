@@ -2217,10 +2217,7 @@ function App() {
         onBackToPlatformHome={() => transitionToView("platform-home")}
         onCreateProject={beginCreateProject}
         onArchivedProjects={() => requireSessionThen(() => transitionToView("archived-projects"))}
-        onGuidance={() => {
-          setInsightsFilter("Guidance");
-          transitionToView("insights");
-        }}
+        onGuidance={() => transitionToView("guidance")}
         onDeleteProject={handleDeleteProject}
         session={session}
         onGenerateFromUrl={session?.role === "admin" ? () => setShowGenerateFromUrl(true) : undefined}

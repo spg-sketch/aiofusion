@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useListPublishedHowto, getListPublishedHowtoQueryKey, useGetPublishedHowto, getGetPublishedHowtoQueryKey } from "@workspace/api-client-react";
 import { vars } from "../marketing/vars";
 import { BodyView } from "../components/howto/HowtoBlocks";
+import { GuidanceCard } from "../components/howto/GuidanceCard";
 import { errorMessage, errorStatus } from "../lib/howto";
 import type { HowtoEntry } from "../lib/howto";
-import { ArrowLeft, BookOpen, ChevronDown, FileText, Pencil, Play, RefreshCw } from "lucide-react";
+import { ArrowLeft, BookOpen, FileText, Pencil, Play, RefreshCw } from "lucide-react";
 
 type Filter = "All" | "Article" | "Guide" | "Video";
 type Props = { onBack: () => void; canManage?: boolean; onManage?: () => void };
@@ -86,7 +87,7 @@ function GuidancePage({ onBack, canManage = false, onManage }: Props) {
   return (
     <div className="min-h-[100dvh] font-['Inter',sans-serif]" style={{ background: vars.g50 }}>
       <Header label="Back to platform home" onClick={onBack} />
-      <div className="px-4 sm:px-10 py-8 sm:py-12 max-w-5xl mx-auto">
+      <div className="px-4 sm:px-10 py-8 sm:py-12 max-w-6xl mx-auto">
         <div className="mb-8 flex items-end justify-between gap-4 flex-wrap">
           <div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-3" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
@@ -112,7 +113,7 @@ function GuidancePage({ onBack, canManage = false, onManage }: Props) {
 
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5" data-testid="library-loading" aria-busy="true">
-            {[0, 1, 2, 3].map((i) => <div key={i} className="h-32 rounded-2xl animate-pulse" style={{ background: vars.g200 }} />)}
+            {[0, 1, 2, 3].map((i) => <div key={i} className="h-80 rounded-2xl animate-pulse" style={{ background: vars.g200 }} />)}
           </div>
         ) : isError ? (
           <div role="alert" className="rounded-2xl border p-8 text-center bg-white" style={{ borderColor: "#fca5a5" }} data-testid="library-error">
@@ -126,21 +127,14 @@ function GuidancePage({ onBack, canManage = false, onManage }: Props) {
             <p className="text-[13px]" style={{ color: vars.g500 }}>{entries.length === 0 ? "New guides will appear here as soon as they are published." : "Try another type."}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
-            {filtered.map((a) => (
-              <button key={a.id} onClick={() => setOpenId(a.id)} data-testid={`card-howto-${a.id}`} className="rounded-2xl border p-5 text-left transition-all hover:shadow-md group" style={{ background: "white", borderColor: vars.g200 }}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.16em] px-2 py-0.5 rounded" style={{ background: vars.lightBg, color: vars.accent }}>{a.type}</span>
-                    <span className="text-[11px]" style={{ color: vars.g500 }}>{a.readTime}</span>
-                  </div>
-                  <ChevronDown size={14} className="transition-transform group-hover:rotate-180" style={{ color: vars.g400 }} />
-                </div>
-                <h3 className="text-[15px] font-bold mb-1 group-hover:underline" style={{ color: vars.navy }}>{a.title}</h3>
-                <p className="text-[13px] font-light leading-relaxed" style={{ color: vars.g500 }}>{a.description}</p>
-              </button>
-            ))}
-          </div>
+          <section aria-label="Published how-to content">
+            <p className="text-sm mb-4" style={{ color: vars.g500 }}>{filtered.length} {filtered.length === 1 ? "entry" : "entries"}{filter !== "All" ? ` · ${filter}` : ""}</p>
+            <div className={`grid gap-6 ${filtered.length === 1 ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"}`} data-testid="guidance-collection">
+              {filtered.map((entry) => (
+                <GuidanceCard key={entry.id} entry={entry} single={filtered.length === 1} onOpen={() => setOpenId(entry.id)} />
+              ))}
+            </div>
+          </section>
         )}
       </div>
     </div>

@@ -67,4 +67,67 @@ describe("GuidancePage", () => {
     fireEvent.click(screen.getByTestId("card-howto-a-guide"));
     expect(screen.getByTestId("detail-missing")).toBeTruthy();
   });
+
+  it("uses the first resolved saved image, preserves its description, and keeps failure layout stable", () => {
+    const imageGuide = { ...entries[0], body: [
+      { type: "image", mediaId: "unresolved", altText: "Not resolved" },
+      { type: "image", mediaId: "first", url: "https://example.com/first.jpg", altText: "Project set-up screen", caption: "Original caption" },
+      { type: "image", mediaId: "second", url: "https://example.com/second.jpg", altText: "Second screen" },
+    ] };
+    list.mockReturnValue(ok([imageGuide]));
+    detail.mockReturnValue(ok(imageGuide));
+    render(<GuidancePage onBack={() => {}} />);
+    const preview = screen.getByRole("img", { name: "Project set-up screen" });
+    expect(preview).toHaveAttribute("src", "https://example.com/first.jpg");
+    expect(screen.queryByRole("img", { name: "Second screen" })).toBeNull();
+    expect(preview).toHaveClass("opacity-0");
+    const frame = preview.parentElement;
+    expect(frame).toHaveClass("aspect-[16/10]");
+    fireEvent.load(preview);
+    expect(preview).toHaveClass("opacity-100");
+    fireEvent.error(preview);
+    expect(screen.queryByRole("img", { name: "Project set-up screen" })).toBeNull();
+    expect(frame).toHaveClass("aspect-[16/10]");
+    fireEvent.click(screen.getByRole("button", { name: /Alpha guide.*Read guide/ }));
+    expect(screen.getByRole("img", { name: "Project set-up screen" })).toHaveAttribute("src", "https://example.com/first.jpg");
+    expect(screen.getByRole("img", { name: "Second screen" })).toBeTruthy();
+    expect(screen.getByText("Original caption")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("button-back-guidance"));
+    expect(screen.getByTestId("card-howto-a-guide")).toBeTruthy();
+  });
+
+  it("provides no-image fallbacks, all three opening actions, and intentional single and collection layouts", () => {
+    const article = { ...entries[0], id: "article", type: "Article", title: "An article" };
+    list.mockReturnValue(ok([...entries, article]));
+    detail.mockReturnValue(ok(entries[1]));
+    const { rerender } = render(<GuidancePage onBack={() => {}} />);
+    expect(screen.getByTestId("guidance-collection")).toHaveClass("lg:grid-cols-3");
+    expect(screen.queryByRole("img", { name: /screen/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /An article.*Read article/ })).toBeTruthy();
+    fireEvent.click(screen.getByTestId("filter-Article"));
+    expect(screen.getByTestId("guidance-collection")).not.toHaveClass("sm:grid-cols-2");
+    expect(screen.getByTestId("card-howto-article")).toHaveClass("md:grid-cols-2");
+    fireEvent.click(screen.getByTestId("filter-Video"));
+    fireEvent.click(screen.getByRole("button", { name: /Beta video.*Watch video/ }));
+    fireEvent.click(screen.getByTestId("button-back-guidance"));
+    expect(screen.getByTestId("filter-Video")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByTestId("card-howto-a-guide")).toBeNull();
+    list.mockReturnValue(ok([entries[0]]));
+    rerender(<GuidancePage onBack={() => {}} />);
+    expect(screen.getByTestId("library-empty")).toHaveTextContent("No video entries");
+  });
+
+  it("returns to platform home and retries a detail failure", () => {
+    list.mockReturnValue(ok(entries));
+    const retry = vi.fn();
+    detail.mockReturnValue({ ...ok(undefined), isError: true, error: new Error("Offline"), refetch: retry });
+    const onBack = vi.fn();
+    render(<GuidancePage onBack={onBack} />);
+    fireEvent.click(screen.getByTestId("button-back"));
+    expect(onBack).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByTestId("card-howto-a-guide"));
+    expect(screen.getByTestId("detail-error")).toHaveTextContent("Offline");
+    fireEvent.click(screen.getByTestId("button-retry-detail"));
+    expect(retry).toHaveBeenCalledOnce();
+  });
 });

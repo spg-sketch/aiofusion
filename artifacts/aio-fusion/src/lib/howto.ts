@@ -23,6 +23,12 @@ export type HowtoEntry = {
 };
 export type HowtoInput = Omit<HowtoEntry, "createdAt" | "updatedAt" | "publishedAt">;
 
+/** Library previews reuse saved media, skipping images whose URL is unresolved. */
+export function firstHowtoImage(body: HowtoBlock[]): Extract<HowtoBlock, { type: "image" }> | undefined {
+  return body.find((block): block is Extract<HowtoBlock, { type: "image" }> =>
+    block.type === "image" && !!block.url?.trim());
+}
+
 export const HOWTO_TYPES: HowtoType[] = ["Article", "Guide", "Video"];
 export const KEBAB = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
