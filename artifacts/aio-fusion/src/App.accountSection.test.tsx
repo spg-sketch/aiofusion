@@ -53,13 +53,15 @@ function clientMeResponse({
   username = "client-289",
   agencyManagedClient = false,
   impersonating = null,
+  membershipRole,
 }: {
   username?: string;
   agencyManagedClient?: boolean;
   impersonating?: { by: string; byRole?: string } | null;
+  membershipRole?: "viewer" | "content" | "billing";
 } = {}) {
   return makeResponse({
-    account: { username, role: "client" },
+    account: { username, role: "client", membershipRole },
     impersonating,
     setupComplete: true,
     hasPassword: true,
@@ -79,6 +81,8 @@ function stubClientAppFetch({
   pushLimitReached = false,
   pushFailures = 0,
   onUpsert,
+  trial,
+  membershipRole,
 }: {
   username?: string;
   agencyManagedClient?: boolean;
@@ -88,11 +92,13 @@ function stubClientAppFetch({
   pushLimitReached?: boolean;
   pushFailures?: number;
   onUpsert?: (body: unknown) => void;
+  trial?: { status: "active" | "expired"; daysRemaining: number };
+  membershipRole?: "viewer" | "content" | "billing";
 } = {}) {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.includes("/api/platform/me")) {
-      return clientMeResponse({ username, agencyManagedClient, impersonating });
+      return clientMeResponse({ username, agencyManagedClient, impersonating, membershipRole });
     }
     if (url.includes("/api/store/projects/upsert")) {
       if (init?.body) {
@@ -110,6 +116,19 @@ function stubClientAppFetch({
       return makeResponse({ projects, deletedIds: [] });
     }
     if (url.includes("/api/platform/billing/subscription")) {
+      if (trial) return makeResponse({
+        status: "none", plan: null, frequency: null, currentPeriodEnd: null,
+        entitled: trial.status === "active", applicablePlan: "inhouse",
+        includedProjects: 3, projectAllowance: 3, projectsUsed: 0,
+        portalAvailable: false, checkoutAvailable: false, companyRecordComplete: false,
+        trial, projects: [], unassignedAddons: [],
+        tierPrices: {
+          standard: { yearlyTotal: 12000, actionsPerMonth: 50 },
+          premium: { yearlyTotal: 24000, actionsPerMonth: 100 },
+          max: { yearlyTotal: 36000, actionsPerMonth: 150 },
+        },
+        prices: { annual: { yearlyTotal: 12000 }, quarterly: { perQuarter: 3000, yearlyTotal: 12000 } },
+      });
       return makeResponse(atLimit
         ? { projectsUsed: 3, projectAllowance: 3 }
         : { projectsUsed: 0, projectAllowance: 3 });
@@ -331,6 +350,55 @@ describe("settings-section deep link survives refresh (account_section param)", 
       expect(screen.queryByRole("heading", { name: /please check your company name/i })).toBeNull();
       expect(screen.getByText("Morgan Communications")).toBeInTheDocument();
     });
+  });
+});
+
+describe("View plans opens Billing details from Platform Home", () => {
+  it.each(["active", "expired"] as const)("%s trial opens the billing panel and keeps it after refresh", async (status) => {
+    stubClientAppFetch({ trial: { status, daysRemaining: status === "active" ? 12 : 0 } });
+    const app = await renderAppAt("/platform");
+
+    expect(await screen.findByText(status === "active"
+      ? "12 days left in your beta trial"
+      : "Your 60-day beta trial has ended")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /view plans/i }));
+
+    await screen.findByRole("heading", { name: /company and billing information/i });
+    expect(await screen.findByRole("heading", { name: /^subscription$/i })).toBeInTheDocument();
+    expect(screen.queryByText("Your profile")).toBeNull();
+    await waitFor(() => expect(window.location.search).toBe("?account_section=billing"));
+
+    const billingUrl = window.location.pathname + window.location.search;
+    app.unmount();
+    await renderAppAt(billingUrl);
+    await screen.findByRole("heading", { name: /company and billing information/i });
+    expect(await screen.findByRole("heading", { name: /^subscription$/i })).toBeInTheDocument();
+    expect(window.location.search).toBe("?account_section=billing");
+
+    fireEvent.click(screen.getByRole("button", { name: /back to platform/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /account & team settings/i }));
+    await screen.findByText("Your profile");
+    expect(screen.queryByRole("heading", { name: /company and billing information/i })).toBeNull();
+    await waitFor(() => expect(window.location.search).toBe("?account_section=profile"));
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => /\/checkout|\/portal/.test(String(url)))).toBe(false);
+  });
+
+  it.each([
+    { membershipRole: "viewer" as const },
+    { membershipRole: "content" as const },
+    { agencyManagedClient: true },
+  ])("does not bypass billing restrictions for %j", async (restrictedSession) => {
+    stubClientAppFetch({
+      ...restrictedSession,
+      trial: { status: "active", daysRemaining: 12 },
+    });
+    await renderAppAt("/platform");
+    fireEvent.click(await screen.findByRole("button", { name: /view plans/i }));
+
+    await screen.findByText("Your profile");
+    expect(screen.queryByRole("button", { name: /^billing details$/i })).toBeNull();
+    expect(screen.queryByRole("heading", { name: /company and billing information/i })).toBeNull();
+    expect(screen.queryByRole("heading", { name: /^subscription$/i })).toBeNull();
   });
 });
 

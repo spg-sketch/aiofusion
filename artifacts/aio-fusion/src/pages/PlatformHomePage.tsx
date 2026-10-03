@@ -68,6 +68,7 @@ function PlatformHomePage({
   onPrivacyRights,
   onManageTeam,
   onManageSubAccounts,
+  onOpenBilling,
   onInsightsAdmin,
   onHowtoAdmin,
   onOpenGeorge,
@@ -97,6 +98,7 @@ function PlatformHomePage({
   onPrivacyRights?: () => void;
   onManageTeam?: () => void;
   onManageSubAccounts: () => void;
+  onOpenBilling?: () => void;
   /** Retained for compatibility with older callers; Token Usage now lives inside Manage Accounts. */
   onTokenUsage?: () => void;
   onInsightsAdmin?: () => void;
@@ -396,7 +398,7 @@ function PlatformHomePage({
           </p>
         </div>
 
-        {session && session.role !== "admin" && <BetaTrialBanner onViewPlans={onManageSubAccounts} />}
+        {session && session.role !== "admin" && onOpenBilling && <BetaTrialBanner onViewPlans={onOpenBilling} />}
 
         {/* LOGIN / SIGN-UP / SESSION - full-width across the page */}
         {/* resetToken is checked first so a logged-in SSO user who clicked the

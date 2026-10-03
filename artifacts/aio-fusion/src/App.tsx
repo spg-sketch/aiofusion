@@ -1836,9 +1836,9 @@ function App() {
     // retaining a marketing page during the transition.
     setView("platform-home");
   };
-  const openAccountSettings = () => {
+  const openAccountSettings = (section: "profile" | "billing" = "profile") => {
     requestDeparture(() => {
-      setAccountSection("profile");
+      setAccountSection(section);
       warmRoute(VIEW_PRELOADERS["sub-accounts"]);
       startTransition(() => setView("sub-accounts"));
     });
@@ -2029,7 +2029,8 @@ function App() {
               setAccountSection("team");
               transitionToView("sub-accounts");
             })}
-            onManageSubAccounts={() => requireSessionThen(openAccountSettings)}
+            onManageSubAccounts={() => requireSessionThen(() => openAccountSettings())}
+            onOpenBilling={() => requireSessionThen(() => openAccountSettings("billing"))}
             onInsightsAdmin={() => { if (session?.insightsCmsAccess) transitionToView("insights-admin"); }}
             onHowtoAdmin={() => { if (session?.insightsCmsAccess) transitionToView("howto-admin"); }}
             onCreateProject={beginCreateProject}
