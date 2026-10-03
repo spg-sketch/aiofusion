@@ -94,6 +94,12 @@ function openImportModal() {
 
 describe("MediaDatabasePage source health", () => {
   beforeEach(() => {
+    const NativeURL = URL;
+    vi.stubGlobal("URL", class extends NativeURL {
+      static createObjectURL = vi.fn(() => "blob:media-export-test");
+      static revokeObjectURL = vi.fn();
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "account-a", role: "agency", membershipRole: "owner" }));
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -132,7 +138,7 @@ describe("MediaDatabasePage source health", () => {
         });
         return new Response('"First Name","Last Name"\r\n"Jane","Reporter"', {
           status: 200,
-          headers: { "Content-Type": "text/csv", "Content-Disposition": 'attachment; filename="Media contacts.csv"' },
+          headers: { "Content-Type": "text/csv", "Content-Disposition": `attachment; filename="Media ${body.type === "contacts" ? "Contacts" : "Publications"}.csv"` },
         });
       }
       if (url.includes("/media-db/bookmarks")) {
@@ -280,6 +286,7 @@ describe("MediaDatabasePage source health", () => {
     identityReviewTotalOverride = null;
     identityReviewFailure = false;
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("treats uploaded rows as verified records and marks 80 percent as complete", () => {
@@ -743,6 +750,81 @@ describe("MediaDatabasePage source health", () => {
       const [, init] = vi.mocked(fetch).mock.calls.find(([input]) => String(input).includes("/media-db/export"))!;
       expect(JSON.parse(String(init?.body))).toEqual({ scope: "saved", type: "publications", format: "xlsx" });
     });
+  });
+
+  it.each([
+    ["contacts", "search"], ["publications", "search"],
+    ["contacts", "management"], ["publications", "management"],
+  ] as const)("offers working Excel and secondary CSV actions for saved and selected %s in %s", async (type, view) => {
+    const recordType = type === "contacts" ? "contact" : "publication";
+    const id = type === "contacts" ? 12 : 20;
+    bookmarkTestRows = [{ type: recordType, targetId: id }];
+    testOutlets = [{ id: 20, name: "Energy Weekly", category: "Energy", country: "UK",
+      website: "https://energy.example", description: "", reachBand: "National", accountId: "account-a" }];
+    render(<MediaDatabasePage />);
+    if (view === "search") {
+      fireEvent.change(screen.getByLabelText("Search record type"), { target: { value: type } });
+      fireEvent.click(screen.getByTestId("button-search-media"));
+    } else if (type === "contacts") await browseContacts();
+    else await browseOutlets();
+    const selection = await screen.findByLabelText(`Select ${recordType} ${id}`);
+    fireEvent.click(selection);
+    const downloads: string[] = [];
+    vi.mocked(HTMLAnchorElement.prototype.click).mockImplementation(function (this: HTMLAnchorElement) {
+      downloads.push(this.download);
+    });
+    for (const scope of ["saved", "selected"] as const) {
+      const label = scope === "saved" ? "Export saved connections" : "Export selected";
+      for (const format of ["xlsx", "csv"] as const) {
+        const name = `${label} ${format === "xlsx" ? "Excel" : "CSV"}${scope === "selected" ? " (1)" : ""}`;
+        await waitFor(() => expect(screen.getByRole("button", { name })).not.toBeDisabled());
+        fireEvent.click(screen.getByRole("button", { name }));
+        await waitFor(() => expect(downloads).toHaveLength(
+          (scope === "selected" ? 2 : 0) + (format === "csv" ? 2 : 1),
+        ));
+        const request = vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes("/media-db/export")).at(-1)!;
+        expect(JSON.parse(String(request[1]?.body))).toEqual({
+          scope, type, format, ...(scope === "selected" ? { ids: [id] } : {}),
+        });
+        expect(downloads.at(-1)).toBe(`Media ${type === "contacts" ? "Contacts" : "Publications"}.${format}`);
+        const blob = vi.mocked(URL.createObjectURL).mock.calls.at(-1)![0] as Blob;
+        expect(blob.type).toBe(format === "csv" ? "text/csv" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      }
+    }
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(4);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it.each(["xlsx", "csv"] as const)("uses the chosen %s format for loading, errors, and fallback filenames", async (format) => {
+    bookmarkTestRows = [{ type: "contact", targetId: 12 }];
+    render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByTestId("button-search-media"));
+    const buttonName = `Export saved connections ${format === "xlsx" ? "Excel" : "CSV"}`;
+    await waitFor(() => expect(screen.getByRole("button", { name: buttonName })).not.toBeDisabled());
+    const originalFetch = vi.mocked(fetch).getMockImplementation()!;
+    let finish!: (response: Response) => void;
+    vi.mocked(fetch).mockImplementation((input, init) => String(input).includes("/media-db/export")
+      ? new Promise<Response>((resolve) => { finish = resolve; })
+      : originalFetch(input, init));
+    fireEvent.click(screen.getByRole("button", { name: buttonName }));
+    expect(screen.getByRole("status").textContent).toBe(`Preparing ${format === "xlsx" ? "Excel" : "CSV"} download…`);
+    expect(screen.getByRole("button", { name: "Export saved connections Excel" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Export saved connections CSV" })).toBeDisabled();
+    finish(new Response("Unavailable", { status: 503 }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(`${format === "xlsx" ? "Excel" : "CSV"} export failed with status 503.`);
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByRole("button", { name: buttonName })).not.toBeDisabled());
+    const downloads: string[] = [];
+    vi.mocked(HTMLAnchorElement.prototype.click).mockImplementation(function (this: HTMLAnchorElement) {
+      downloads.push(this.download);
+    });
+    fireEvent.click(screen.getByRole("button", { name: buttonName }));
+    finish(new Response(format === "csv" ? "complete,url" : "PK", {
+      headers: { "Content-Type": format === "csv" ? "text/csv" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+    }));
+    await waitFor(() => expect(downloads).toEqual([`Media contacts saved.${format}`]));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("shows full CSV controls only to the canonical platform admin and supports both types", async () => {

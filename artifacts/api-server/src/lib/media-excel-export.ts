@@ -1,4 +1,5 @@
 import { deflateRawSync } from "node:zlib";
+import { safeMediaExportLink } from "./media-export-links";
 
 const CONTACT_HEADERS = [
   "First name",
@@ -72,28 +73,46 @@ function cellText(value: unknown): string {
   return String(value);
 }
 
-function worksheetXml(type: ExportType, rows: readonly (readonly unknown[])[]): string {
+function worksheetXml(type: ExportType, rows: readonly (readonly unknown[])[]): { xml: string; relationships: string; range: string } {
   const headers = type === "contacts" ? CONTACT_HEADERS : PUBLICATION_HEADERS;
   const rowCount = rows.length + 1;
   const endColumn = columnName(headers.length - 1);
   const filterRange = `A1:${endColumn}${rowCount}`;
   const widths = type === "contacts"
-    ? [16, 16, 24, 28, 32, 34, 34, 22, 20, 22]
-    : [30, 34, 60, 20, 56, 22];
+    ? [15, 17, 32, 28, 32, 20, 26, 28, 20, 18]
+    : [28, 26, 56, 20, 44, 18];
+  const wrappedColumns = new Set(type === "contacts" ? [2, 3, 7] : [0, 2, 4]);
+  const websiteColumn = type === "contacts" ? 6 : 1;
+  const hyperlinks: string[] = [];
+  const relationships: string[] = [];
   const tableRows = [headers, ...rows];
   const xmlRows = tableRows.map((row, rowIndex) => {
     const rowNumber = rowIndex + 1;
     const cells = headers.map((_, columnIndex) => {
-      const value = rowIndex === 0 ? headers[columnIndex]! : cellText(row[columnIndex]);
-      const style = rowIndex === 0 ? 1 : rowIndex % 2 === 1 ? 2 : 3;
+      let value = rowIndex === 0 ? headers[columnIndex]! : cellText(row[columnIndex]);
+      let style = rowIndex === 0 ? 1 : (rowIndex % 2 === 1 ? 2 : 3) + (wrappedColumns.has(columnIndex) ? 2 : 0);
       const reference = `${columnName(columnIndex)}${rowNumber}`;
+      if (rowIndex > 0 && (columnIndex === websiteColumn || (type === "contacts" && columnIndex === 5))) {
+        const link = safeMediaExportLink(value);
+        if (link && (columnIndex === websiteColumn || /(^|\.)linkedin\.com$/i.test(link.hostname))) {
+          const tooltip = link.target !== value ? ` tooltip="${xmlEscape(value)}"` : "";
+          value = columnIndex === websiteColumn ? link.hostname : "LinkedIn profile";
+          style = rowIndex % 2 === 1 ? 6 : 7;
+          const id = `rId${relationships.length + 1}`;
+          hyperlinks.push(`<hyperlink ref="${reference}" r:id="${id}"${tooltip}/>`);
+          relationships.push(`<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${xmlEscape(link.target)}" TargetMode="External"/>`);
+        }
+      }
       return `<c r="${reference}" s="${style}" t="inlineStr"><is><t xml:space="preserve">${xmlEscape(value)}</t></is></c>`;
     }).join("");
-    const lineCount = Math.max(1, ...headers.map((_, index) =>
+    // Only useful prose wraps. URLs, email addresses and short fields never
+    // inflate a row. Very long prose remains intact for the formula bar or
+    // manual row expansion, rather than making every working row enormous.
+    const lineCount = Math.max(1, ...[...wrappedColumns].map((index) =>
       cellText(row[index]).split(/\r\n|\r|\n/).reduce((lines, line) =>
         lines + Math.max(1, Math.ceil(line.length / Math.max(1, widths[index]! - 2))), 0),
     ));
-    const height = rowIndex === 0 ? 30 : Math.min(409, Math.max(24, lineCount * 15 + 8));
+    const height = rowIndex === 0 ? 30 : Math.min(72, Math.max(24, lineCount * 14 + 8));
     return `<row r="${rowNumber}" ht="${height}" customHeight="1">${cells}</row>`;
   }).join("");
 
@@ -101,35 +120,43 @@ function worksheetXml(type: ExportType, rows: readonly (readonly unknown[])[]): 
     `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`,
   ).join("");
 
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  return { xml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <dimension ref="${filterRange}"/>
   <sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>
+  <sheetFormatPr defaultRowHeight="24"/>
   <cols>${columns}</cols>
   <sheetData>${xmlRows}</sheetData>
   <autoFilter ref="${filterRange}"/>
-</worksheet>`;
+  ${hyperlinks.length ? `<hyperlinks>${hyperlinks.join("")}</hyperlinks>` : ""}
+</worksheet>`,
+    relationships: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relationships.join("")}</Relationships>`,
+    range: filterRange,
+  };
 }
 
 function stylesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="2">
+  <fonts count="3">
     <font><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/></font>
     <font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>
+    <font><u/><sz val="11"/><color rgb="FF256393"/><name val="Calibri"/><family val="2"/></font>
   </fonts>
   <fills count="4">
     <fill><patternFill patternType="none"/></fill>
     <fill><patternFill patternType="gray125"/></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FF17365D"/><bgColor indexed="64"/></patternFill></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FFF2F6FA"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF3F5264"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF4F6F8"/><bgColor indexed="64"/></patternFill></fill>
   </fills>
   <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="4">
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment vertical="top" wrapText="1"/></xf>
+  <cellXfs count="8">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment vertical="center"/></xf>
     <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>
-    <xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>
+    ${[false, true].flatMap((wrap) => [0, 3].map((fill) => `<xf numFmtId="0" fontId="0" fillId="${fill}" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment vertical="${wrap ? "top" : "center"}" wrapText="${wrap ? 1 : 0}"/></xf>`)).join("")}
+    ${[0, 3].map((fill) => `<xf numFmtId="0" fontId="2" fillId="${fill}" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center" wrapText="0"/></xf>`).join("")}
   </cellXfs>
   <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
@@ -146,10 +173,10 @@ const PARTS: Omit<ZipPart, "content">[] = [
   { name: "xl/worksheets/sheet1.xml" },
 ];
 
-function partsFor(type: ExportType, worksheet: string): ZipPart[] {
+function partsFor(type: ExportType, worksheet: { xml: string; relationships: string; range: string }): ZipPart[] {
   const sheetName = type === "contacts" ? "Media contacts" : "Publications";
   const escapedSheetName = xmlEscape(sheetName);
-  return PARTS.map(({ name }) => {
+  return PARTS.map<ZipPart>(({ name }) => {
     switch (name) {
       case "[Content_Types].xml":
         return {
@@ -199,8 +226,9 @@ function partsFor(type: ExportType, worksheet: string): ZipPart[] {
           name,
           content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <bookViews><workbookView/></bookViews>
+  <bookViews><workbookView activeTab="0"/></bookViews>
   <sheets><sheet name="${escapedSheetName}" sheetId="1" r:id="rId1"/></sheets>
+  <definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'${escapedSheetName}'!${worksheet.range.replace(/([A-Z]+)(\d+)/g, (_, col, row) => `$${col}$${row}`)}</definedName></definedNames>
   <calcPr calcId="191029"/>
 </workbook>`,
         };
@@ -216,11 +244,11 @@ function partsFor(type: ExportType, worksheet: string): ZipPart[] {
       case "xl/styles.xml":
         return { name, content: stylesXml() };
       case "xl/worksheets/sheet1.xml":
-        return { name, content: worksheet };
+        return { name, content: worksheet.xml };
       default:
         throw new Error("Unknown workbook part.");
     }
-  });
+  }).concat({ name: "xl/worksheets/_rels/sheet1.xml.rels", content: worksheet.relationships });
 }
 
 const CRC_TABLE = (() => {

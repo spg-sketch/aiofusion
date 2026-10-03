@@ -121,7 +121,7 @@ describe("buildMediaExcelExport", () => {
       "0007 News",
       '=HYPERLINK("https://bad.example","click")',
       "+SUM(1,2)",
-      "https://example.test/a?x=1&y=2",
+      "example.test",
       "A&B",
       "Côte d’Ivoire",
       "0",
@@ -129,12 +129,15 @@ describe("buildMediaExcelExport", () => {
     expect(sheet).toContain('t="inlineStr"');
     expect(sheet).not.toMatch(/<f(?:\s|>)/);
     expect(sheet).toContain("Editor, Research\n&amp; Analysis");
-    expect(sheet).toContain("x=1&amp;y=2");
+    expect(files.get("xl/worksheets/_rels/sheet1.xml.rels")).toContain("x=1&amp;y=2");
     expect(sheet).toContain('<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>');
     expect(sheet).toContain('<autoFilter ref="A1:J2"/>');
+    expect(files.get("xl/workbook.xml")).toContain(
+      `<definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'Media contacts'!$A$1:$J$2</definedName>`,
+    );
 
     const styles = files.get("xl/styles.xml")!;
-    expect(styles).toContain('rgb="FF17365D"');
+    expect(styles).toContain('rgb="FF3F5264"');
     expect(styles).toContain('rgb="FFFFFFFF"');
     expect(styles).toContain('wrapText="1"');
     expect(sheet).toContain('<col min="4" max="4" width="28"');
@@ -168,8 +171,8 @@ describe("buildMediaExcelExport", () => {
     ]]));
     const sheet = files.get("xl/worksheets/sheet1.xml")!;
     expect(inlineCellValues(sheet).slice(0, PUBLICATION_HEADERS.length)).toEqual(PUBLICATION_HEADERS);
-    expect(sheet).toContain('<col min="3" max="3" width="60"');
-    expect(sheet).toContain('<col min="5" max="5" width="56"');
+    expect(sheet).toContain('<col min="3" max="3" width="56"');
+    expect(sheet).toContain('<col min="5" max="5" width="44"');
     expect(sheet).toContain('<autoFilter ref="A1:F2"/>');
     expect(sheet).toContain("Montréal");
     expect(sheet).not.toMatch(/<f(?:\s|>)/);
@@ -182,6 +185,72 @@ describe("buildMediaExcelExport", () => {
     expect(contacts.get("xl/worksheets/sheet1.xml")).toContain('<autoFilter ref="A1:J1"/>');
     expect(inlineCellValues(publications.get("xl/worksheets/sheet1.xml")!)).toEqual(PUBLICATION_HEADERS);
     expect(publications.get("xl/worksheets/sheet1.xml")).toContain('<autoFilter ref="A1:F1"/>');
+  });
+
+  it("keeps URL-heavy ordinary rows at 24 points and caps only wrapped prose, without losing text", () => {
+    const longUrl = `https://example.test/${"long-path/".repeat(100)}?x=1&y=2`;
+    const longLinkedin = `https://www.linkedin.com/in/editor?tracking=${"long-path".repeat(100)}`;
+    const prose = "Long editorial description with Unicode: São Paulo. ".repeat(80);
+    const contactFiles = unzipAndValidate(buildMediaExcelExport("contacts", [
+      ["Ada", "Example", "Editor", "Daily", "ada@example.test", longLinkedin, longUrl, "Energy", "GB", ""],
+      ["Ben", "Example", "Editor\nReporter", "Daily", "", "", "", "", "", "0"],
+    ]));
+    const contacts = contactFiles.get("xl/worksheets/sheet1.xml")!;
+    expect(contacts).toContain('<row r="2" ht="24"');
+    expect(contacts).toContain('<row r="3" ht="36"');
+    expect(contacts).toContain("LinkedIn profile");
+    expect(contacts).toContain('ref="F2" r:id="rId1"');
+    expect(contacts).not.toContain(longUrl);
+    expect(unescapeXml(contactFiles.get("xl/worksheets/_rels/sheet1.xml.rels")!)).toContain(longUrl);
+    const publications = unzipAndValidate(buildMediaExcelExport("publications", [
+      ["Daily", longUrl, "Brief description", "GB", "Ada Example", ""],
+      ["Weekly", "", prose, "BR", "Ada Example; Ben Example", "0"],
+    ])).get("xl/worksheets/sheet1.xml")!;
+    expect(publications).toContain('<row r="2" ht="24"');
+    expect(publications).toContain('<row r="3" ht="72"');
+    expect(publications).toContain(prose);
+    expect(publications).not.toContain("<mergeCells");
+  });
+
+  it("round trips complete web destinations and never activates unsafe or formula-like values", async () => {
+    const destinations = [
+      "https://www.linkedin.com/in/zoe?utm_source=test&x=é",
+      "https://news.example.test/articles/a?one=1&two=2#section",
+    ];
+    const unsafe = ["javascript:alert(1)", "file:///tmp/example", "=HYPERLINK(\"https://bad.test\")",
+      "https://user:password@example.test", "https://example.test/\nspoof", "+SUM(1,2)", "", "@command"];
+    const rows = [
+      ["Zoë", "Example", "Editor", "News", "", ...destinations, "Science", "France", ""],
+      ...unsafe.map((value) => ["Test", "Example", "", "News", "", value, value, "", "", ""]),
+    ];
+    const workbook = buildMediaExcelExport("contacts", rows);
+    const files = unzipAndValidate(workbook);
+    const sheet = files.get("xl/worksheets/sheet1.xml")!;
+    expect(sheet).not.toMatch(/<f(?:\s|>)/);
+    expect(sheet.match(/<hyperlink ref=/g)).toHaveLength(2);
+    for (const value of unsafe) expect(inlineCellValues(sheet)).toContain(value);
+    const imported = await parseMediaImportXlsx(workbook.toString("base64"));
+    expect(imported.rows[0]).toMatchObject({ linkedinUrl: destinations[0], website: destinations[1] });
+    for (let i = 0; i < unsafe.length; i += 1) {
+      expect(imported.rows[i + 1]).toMatchObject({ linkedinUrl: unsafe[i]?.trim(), website: unsafe[i]?.trim() });
+    }
+  });
+
+  it("preserves bare-domain originals on re-import and does not mislabel non-LinkedIn addresses", async () => {
+    const website = "news.example.test/articles/one?x=1&y=2";
+    const linkedin = "www.linkedin.com/in/synthetic-editor?x=1&y=2";
+    const workbook = buildMediaExcelExport("contacts", [
+      ["Ada", "Example", "", "News", "", linkedin, website, "", "", ""],
+      ["Ben", "Example", "", "News", "", "https://not-linkedin.example", "not a URL", "", "", ""],
+    ]);
+    const files = unzipAndValidate(workbook);
+    const sheet = files.get("xl/worksheets/sheet1.xml")!;
+    expect(sheet).toContain(`tooltip="news.example.test/articles/one?x=1&amp;y=2"`);
+    expect(sheet).toContain("https://not-linkedin.example");
+    expect(sheet.match(/<hyperlink ref=/g)).toHaveLength(2);
+    const imported = await parseMediaImportXlsx(workbook.toString("base64"));
+    expect(imported.rows[0]).toMatchObject({ website, linkedinUrl: linkedin });
+    expect(imported.rows[1]).toMatchObject({ website: "not a URL", linkedinUrl: "https://not-linkedin.example" });
   });
 
   it("rejects oversized row, cell, and total text counts explicitly", () => {

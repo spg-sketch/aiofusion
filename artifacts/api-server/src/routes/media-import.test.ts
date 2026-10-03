@@ -532,9 +532,21 @@ describe("media export route regressions", () => {
       expect([...header.matchAll(/<t[^>]*>(.*?)<\/t>/g)].map((match) => match[1])).toEqual([
         "First name", "Last name", "Role", "Outlet name", "Email", "LinkedIn", "Outlet website", "Sector", "Country", "Source reach value",
       ]);
-      for (const value of ["Zoë", "=Reporter", "Excel News", "zoe@example.test", "https://www.linkedin.com/in/excel-example",
-        "https://excel.example.test", "Energy &amp; Nature; Technology", "UK", "00042"]) expect(sheet).toContain(value);
+      for (const value of ["Zoë", "=Reporter", "Excel News", "zoe@example.test", "LinkedIn profile",
+        "excel.example.test", "Energy &amp; Nature; Technology", "UK", "00042"]) expect(sheet).toContain(value);
       for (const absent of ["Private notes not exported", "Not requested for contacts", "Authority", ">88<", ">77<", "<f>"]) expect(sheet).not.toContain(absent);
+      const csv = await mediaExportRequest(workspace, {
+        scope, type: "contacts", format: "csv", ...(scope === "selected" ? { ids: [contact!.id] } : {}),
+      });
+      expect(csv.status).toBe(200);
+      expect(csv.contentType).toContain("text/csv");
+      expect(csv.disposition).toContain('filename="Media Contacts.csv"');
+      expect(csv.text).toContain("https://www.linkedin.com/in/excel-example");
+      expect(csv.text).toContain("https://excel.example.test");
+      expect(csv.text).toContain('"Outlet Description"');
+      expect(csv.text).toContain("Not requested for contacts");
+      expect(csv.text).toContain("Private notes not exported");
+      expect(csv.text).not.toContain('"Review Notes"');
     }
     const denied = await mediaExportRequest("another-excel-workspace", { scope: "selected", type: "contacts", ids: [contact!.id], format: "xlsx" });
     expect(denied.status).toBe(403);
@@ -608,7 +620,7 @@ describe("media export route regressions", () => {
       expect([...header.matchAll(/<t[^>]*>(.*?)<\/t>/g)].map((match) => match[1])).toEqual([
         "Outlet name", "Outlet website", "Outlet description", "Country", "Linked journalists", "Source reach value",
       ]);
-      for (const value of ["Journalist Isolation Publication", "https://publication-excel.example.test", "Energy &amp; business reporting", "UK", "Independently Saved", "00029"]) expect(sheet).toContain(value);
+      for (const value of ["Journalist Isolation Publication", "publication-excel.example.test", "Energy &amp; business reporting", "UK", "Independently Saved", "00029"]) expect(sheet).toContain(value);
       for (const absent of ["Publication Only", "No Visibility", "independently-saved@example.test",
         "publication-only@example.test", "private-linked@example.test", "Verified authority"]) expect(sheet).not.toContain(absent);
     }
@@ -646,6 +658,50 @@ describe("media export route regressions", () => {
       '"Publication","Sector","Region","Description","Website","LinkedIn URL","Source reach value","Verified authority","Linked journalist names"',
     );
     expect(publicationExport.text).not.toContain("not-selected@example.test");
+    expect(publicationExport.disposition).toContain('filename="Media Publications.csv"');
+    for (const format of ["csv", "xlsx"]) {
+      expect((await mediaExportRequest("selected-export-workspace", {
+        scope: "selected", type: "contacts", ids: [contact!.id], format,
+      })).status).toBe(403);
+      expect((await mediaExportRequest("selected-export-workspace", {
+        scope: "selected", type: "publications", ids: [publication!.id, publication!.id], format,
+      })).status).toBe(400);
+      expect((await mediaExportRequest("selected-export-workspace", {
+        scope: "selected", type: "publications", ids: [], format,
+      })).status).toBe(400);
+    }
+  });
+
+  it("omits departed and suppressed bookmarks in both formats without changing workspace scope", async () => {
+    const workspace = "compact-export-eligibility";
+    const [active, departed, suppressed, foreign] = await db.insert(mediaContactsTable).values([
+      { firstName: "Active", lastName: "Synthetic", accountId: workspace },
+      { firstName: "Departed", lastName: "Synthetic", accountId: workspace },
+      { firstName: "Suppressed", lastName: "Synthetic", accountId: workspace, email: "hidden@synthetic.test" },
+      { firstName: "Foreign", lastName: "Synthetic", accountId: "compact-export-other" },
+    ]).returning();
+    await db.insert(mediaContactStatusEventsTable).values({
+      contactId: departed!.id, accountId: workspace, status: "departed", createdBy: "synthetic",
+    });
+    await db.insert(mediaSuppressionsTable).values({
+      scope: "workspace", accountId: workspace, emailHash: privacyHash("hidden@synthetic.test"), reason: "synthetic test",
+    });
+    await db.insert(mediaBookmarksTable).values([active!, departed!, suppressed!, foreign!].map((contact) => ({
+      accountId: workspace, contactId: contact.id, outletId: null,
+    })));
+    for (const format of ["csv", "xlsx"]) {
+      const saved = await mediaExportRequest(workspace, { scope: "saved", type: "contacts", format });
+      expect(saved.status).toBe(200);
+      const text = format === "csv" ? saved.text : exportedWorksheet(saved.bytes);
+      expect(text).toContain("Active");
+      for (const value of ["Departed", "Suppressed", "Foreign"]) expect(text).not.toContain(value);
+      expect((await mediaExportRequest(workspace, {
+        scope: "selected", type: "contacts", ids: [departed!.id], format,
+      })).status).toBe(403);
+      expect((await mediaExportRequest(workspace, {
+        scope: "selected", type: "contacts", ids: [foreign!.id], format,
+      })).status).toBe(403);
+    }
   });
 });
 

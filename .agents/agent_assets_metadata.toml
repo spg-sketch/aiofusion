@@ -408,3 +408,45 @@ mtime_ms = 1790930600562
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/05eaf574-53d5-45be-94b8-0a48bfbe6f78/712dedb4-46d8-4cd9-8c32-5cb66dd1a7c6"
 storage_version_token = "1790930608387823"
 content_type = "text/html"
+
+[[outputs]]
+id = "Iqpsg3CeGtpcCPa1apWJm"
+uri = "file://exports/media-spreadsheet-review/Synthetic%20Media%20Contacts.xlsx"
+type = "table"
+title = "Synthetic contact export"
+description = "Compact Excel example with ordinary rows, long links, multiline prose, Unicode, blanks and safe literal values. For Natalie's desktop Excel review."
+logical_id = "d0e84aeb-cd3d-47b5-84f8-4a99dc953733"
+content_hash = "sha256:de006daca87c15e9ed651e284c05ab7306242a89e640b6c684001856b9f92a01"
+size = 5020
+mtime_ms = 1791022042834
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/d0e84aeb-cd3d-47b5-84f8-4a99dc953733/1c42cbb2-1c79-4b5a-8092-e7728008e58d"
+storage_version_token = "1791022270828848"
+content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+[[outputs]]
+id = "HGdrjaVT4BjAbpfAFNPcV"
+uri = "file://exports/media-spreadsheet-review/Synthetic%20Media%20Publications.xlsx"
+type = "table"
+title = "Synthetic publication export"
+description = "Excel example with descriptions, linked journalists, source reach and long website destinations. Synthetic data only."
+logical_id = "f84dcd1f-08f1-4625-8a55-ebce0cdaf875"
+content_hash = "sha256:b4bbf306110a583928e23fa63e5f32aa885e3dea3271ab4436f140b5fabb0bf4"
+size = 4724
+mtime_ms = 1791022042834
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/f84dcd1f-08f1-4625-8a55-ebce0cdaf875/b6e49493-fd72-4a7c-a3d0-6deb58fe6c31"
+storage_version_token = "1791022271439996"
+content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+[[outputs]]
+id = "z7FdgBlluRtR1jLLmCUae"
+uri = "file://exports/media-spreadsheet-review/Review%20findings.html"
+type = "html"
+title = "Spreadsheet visual review"
+description = "Self-contained findings and actual LibreOffice Calc screenshots, including filters, frozen headers and hyperlink destinations. Lists remaining desktop Excel checks."
+logical_id = "4a8c0e74-c16e-4ca4-a867-e1aca9f9705d"
+content_hash = "sha256:76030798a12fdc9780afe8d1a67b1fd4ff128d95ecb4b066c1d486fc7d9d571d"
+size = 910806
+mtime_ms = 1791022148650
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/4a8c0e74-c16e-4ca4-a867-e1aca9f9705d/d8935684-9c0c-4050-8dcd-5df41360c6c1"
+storage_version_token = "1791022272084682"
+content_type = "text/html"

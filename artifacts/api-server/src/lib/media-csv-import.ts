@@ -1,3 +1,5 @@
+import { safeMediaExportLink } from "./media-export-links";
+
 export const MEDIA_CSV_MAX_BYTES = 2 * 1024 * 1024;
 export const MEDIA_CSV_MAX_ROWS = 50_000;
 /** Overrides are owned by the contact workspace, never by an impersonating admin. */
@@ -563,6 +565,32 @@ export async function parseMediaImportXlsx(base64: string): Promise<MediaImportP
       warnings.push(issue(0, "Worksheet relationship target was not found.", name, "missing_worksheet"));
       continue;
     }
+    // Recover concise export labels from genuine hyperlink metadata only.
+    // Never evaluate formulas, fetch targets, expand ranges, or substitute
+    // arbitrary linked cells. Existing ZIP expansion bounds apply here too.
+    const sheetRelsPath = target!.replace(/\/([^/]+)$/, "/_rels/$1.rels");
+    const linkTargets = new Map<string, string>();
+    const sheetRels = files.get(sheetRelsPath)?.toString() ?? "";
+    for (const match of sheetRels.matchAll(/<Relationship\b[^>]*\/?>/g)) {
+      const link = xmlAttributes(match[0]);
+      if (link.Type === "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
+        && link.TargetMode === "External" && link.Id && safeMediaExportLink(link.Target ?? "")) {
+        linkTargets.set(link.Id, link.Target);
+      }
+    }
+    const linksByCell = new Map<string, { target: string; original: string }>();
+    for (const match of xml.matchAll(/<hyperlink\b[^>]*\/?>/g)) {
+      const link = xmlAttributes(match[0]);
+      const destination = linkTargets.get(link["r:id"]);
+      if (destination && /^[A-Z]{1,3}[1-9]\d{0,5}$/.test(link.ref ?? "") && !link.location) {
+        // Scheme-free source addresses are exported with an HTTPS target and
+        // their original text in a tooltip. Only recover it if it resolves to
+        // exactly the same safe target; never trust arbitrary tooltip content.
+        const tooltip = safeMediaExportLink(link.tooltip ?? "");
+        linksByCell.set(link.ref, { target: destination,
+          original: tooltip?.target === destination ? link.tooltip : destination });
+      }
+    }
     const records: string[][] = [];
     const rowNumbers: number[] = [];
     let worksheetRows = 0;
@@ -611,6 +639,27 @@ export async function parseMediaImportXlsx(base64: string): Promise<MediaImportP
       sheetInventory.push(emptySheetInventory(name, kind, worksheetRows, records.length, emptyRows));
       if (kind === "exception") warnings.push(issue(rowNumbers[0] ?? 1, "A contact-like worksheet has no usable header row.", name, "missing_header"));
       continue;
+    }
+    const urlColumns = records[headerIndex].map((header) => {
+      const normalised = normaliseHeader(header);
+      return [...HEADER_ALIASES.website, ...HEADER_ALIASES.linkedinUrl]
+        .some((alias) => normaliseHeader(alias) === normalised);
+    });
+    for (let row = headerIndex + 1; row < records.length; row += 1) {
+      records[row].forEach((value, column) => {
+        if (!urlColumns[column]) return;
+        let col = column + 1;
+        let letters = "";
+        while (col > 0) {
+          letters = String.fromCharCode(65 + (col - 1) % 26) + letters;
+          col = Math.floor((col - 1) / 26);
+        }
+        const destination = linksByCell.get(`${letters}${rowNumbers[row]}`);
+        const safe = destination ? safeMediaExportLink(destination.target) : null;
+        if (safe && (value === safe.hostname || value === "LinkedIn profile")) {
+          records[row][column] = destination!.original;
+        }
+      });
     }
     contactDataRows += Math.max(0, records.length - headerIndex - 1);
     if (contactDataRows > MEDIA_XLSX_MAX_ROWS) {

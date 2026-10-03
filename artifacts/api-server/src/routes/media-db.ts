@@ -783,7 +783,7 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
       if (format === "xlsx") {
         const workbook = buildMediaExcelExport("contacts", eligible.map(({ contact, outlet }) => [
           contact.firstName, contact.lastName, contact.role, outlet?.name ?? "", contact.email,
-          contact.linkedinUrl, safePublicationWebsite(outlet?.website),
+          contact.linkedinUrl, outlet?.website ?? "",
           (contact.sectors ?? []).join("; ") || outlet?.category || "", outlet?.country ?? "",
           contact.publicationReach || outlet?.reachBand || "",
         ]));
@@ -813,6 +813,7 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
         };
         return headers.map((header) => data[header] ?? "");
       });
+      if (scope !== "full") res.set("Content-Disposition", 'attachment; filename="Media Contacts.csv"');
       res.status(200).type("text/csv; charset=utf-8").send(mediaExportCsv(headers, output));
       return;
     }
@@ -879,7 +880,7 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
     }
     if (format === "xlsx") {
       const workbook = buildMediaExcelExport("publications", publications.map((publication) => [
-        publication.name, safePublicationWebsite(publication.website), publication.description,
+        publication.name, publication.website, publication.description,
         publication.country,
         (journalistsByOutlet.get(publication.id) ?? []).map((journalist) => journalist.name).filter(Boolean).join("; "),
         publication.reachBand || "",
@@ -901,6 +902,7 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
     const headers = scope === "full"
       ? MEDIA_EXPORT_PUBLICATION_HEADERS
       : MEDIA_EXPORT_PUBLICATION_HEADERS.filter((header) => header !== "Linked journalist emails");
+    if (scope !== "full") res.set("Content-Disposition", 'attachment; filename="Media Publications.csv"');
     res.status(200).type("text/csv; charset=utf-8").send(mediaExportCsv(headers, output.map((row) => row.slice(0, headers.length))));
   } catch (error) {
     if (error instanceof MediaExcelExportLimitError) {
