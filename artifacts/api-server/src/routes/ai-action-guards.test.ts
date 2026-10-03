@@ -1028,6 +1028,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
 
   // ── support (support.ts) ─────────────────────────────────────────────────
   "GET /support/faq",
+  "GET /support/search", // Published guidance + active FAQs only; no paid AI calls.
   "POST /support/faq",
   "PATCH /support/faq/:id",
   "POST /support/faq/reorder",
