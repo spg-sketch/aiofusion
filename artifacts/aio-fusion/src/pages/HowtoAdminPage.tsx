@@ -89,7 +89,7 @@ function HowtoAdminPage({ onBack, onRegisterUnsavedEditor }: Props) {
     <div className="min-h-[100dvh] font-['Inter',sans-serif]" style={{ background: vars.g50 }}>
       <header className="border-b px-4 sm:px-10 py-4 flex items-center justify-between" style={{ background: "white", borderColor: vars.g200 }}>
         <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-12 sm:h-14" />
-        <button onClick={onBack} className="aio-button aio-button--text aio-button--compact" data-testid="button-back"><ArrowLeft size={14} /> Back</button>
+        <button onClick={onBack} className="aio-button aio-button--return" data-testid="button-back"><ArrowLeft size={16} /> Back</button>
       </header>
       <div className="px-4 sm:px-10 py-8 max-w-[1280px] mx-auto">
         <div className="mb-6 flex items-end justify-between gap-4 flex-wrap">

@@ -26,3 +26,9 @@ Individual guide links belong to the dedicated How-to library, not public Insigh
 **Why:** The requested reader-link scope explicitly keeps these libraries separate.
 
 **How to apply:** Preserve that separation when extending reader navigation or sharing; do not add guide routes to public Insights publishing or SEO prerendering.
+
+The top-right Back buttons in the How-to reader and admin pages should match the larger rounded pink return button used in Project Hub.
+
+**Why:** The user requested matching the rest of the site's navigation, rather than the small text-only Back links.
+
+**How to apply:** Preserve the existing destinations and use the site's standard return-button appearance when changing these headers.

@@ -18,8 +18,8 @@ function Header({ left, label, onClick }: { left?: boolean; label: string; onCli
   return (
     <header className="border-b px-4 sm:px-10 py-4 sm:py-5 flex items-center justify-between" style={{ background: "white", borderColor: vars.g200 }}>
       <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-12 sm:h-16" />
-      <button onClick={onClick} className="aio-button aio-button--text aio-button--compact" style={{ color: vars.g500 }} data-testid={left ? "button-back-guidance" : "button-back"}>
-        <ArrowLeft size={14} /> {label}
+      <button onClick={onClick} className="aio-button aio-button--return" data-testid={left ? "button-back-guidance" : "button-back"}>
+        <ArrowLeft size={16} /> {label}
       </button>
     </header>
   );
