@@ -10,3 +10,9 @@ Rule: when a rebase conflict file fails tests even after removing markers, check
 **How to apply:** find the last coherent version (`git log main-repl/main -- <file>`, `git show <sha>:<file>`), rebuild the file from it, re-add each later task's tests from their evident intent, run the file's suite before `continueMergeResolution`, and note the repair in `divergenceSummary`.
 
 **Update (Aug 2026):** The semantic merge can scramble *source* files too (route handlers spliced into neighboring endpoints), not just tests, and each markTaskComplete rebase round can re-scramble files you already repaired. Keep a verified-good copy of every rebuilt file outside the repo (e.g. /tmp) during the completion cycle so it can be re-applied after each rebase round, and re-run the full suite after *every* round — a "rebase completed cleanly" message does not mean the merged content is coherent.
+
+Do not assume a task branch is the coherent original when repairing merged tests.
+
+**Why:** A task branch and its final merged version both contained the same missing test imports/mocks and joined test bodies.
+
+**How to apply:** Compare earlier known-good snapshots as well as the task branch. Restore missing setup and assertion boundaries while retaining coverage from every later change.

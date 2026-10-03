@@ -1,9 +1,18 @@
 // @vitest-environment jsdom
+import { useState, type ComponentProps } from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { GuidancePage as Reader } from "./GuidancePage";
+import type { GuidanceRoute } from "../lib/guidanceRoute";
 
 const list = vi.fn();
 const detail = vi.fn();
+vi.mock("@workspace/api-client-react", () => ({
+  useListPublishedHowto: (...args: unknown[]) => list(...args),
+  getListPublishedHowtoQueryKey: () => ["/api/howto"],
+  useGetPublishedHowto: (...args: unknown[]) => detail(...args),
+  getGetPublishedHowtoQueryKey: (id: string) => [`/api/howto/${id}`],
+}));
 
 function GuidancePage(props: Omit<ComponentProps<typeof Reader>, "route" | "onRouteChange"> & { initialRoute?: GuidanceRoute }) {
   const [route, onRouteChange] = useState<GuidanceRoute>(props.initialRoute ?? { id: null, filter: "All" });
@@ -53,6 +62,19 @@ describe("GuidancePage", () => {
     list.mockReturnValue(ok(entries));
     detail.mockReturnValue(ok(entries[0]));
     const { unmount } = render(<GuidancePage onBack={() => {}} />);
+    fireEvent.click(screen.getByTestId("card-howto-a-guide"));
+    expect(screen.getByTestId("detail-title").textContent).toBe("Alpha guide");
+    expect(screen.getByText("docs").closest("a")?.getAttribute("href")).toBe("https://example.com");
+    expect(screen.getByText("bad").closest("a")).toBeNull();
+    expect(screen.getByText("Watch").closest("a")?.getAttribute("rel")).toContain("noopener");
+    unmount();
+    detail.mockReturnValue({ ...ok(undefined), isError: true, error: { status: 404 } });
+    render(<GuidancePage onBack={() => {}} />);
+    fireEvent.click(screen.getByTestId("card-howto-a-guide"));
+    expect(screen.getByTestId("detail-missing")).toBeTruthy();
+  });
+
+  it("uses the first resolved saved image, preserves its description, and keeps failure layout stable", () => {
     const imageGuide = { ...entries[0], body: [
       { type: "image", mediaId: "unresolved", altText: "Not resolved" },
       { type: "image", mediaId: "first", url: "https://example.com/first.jpg", altText: "Project set-up screen", caption: "Original caption" },
