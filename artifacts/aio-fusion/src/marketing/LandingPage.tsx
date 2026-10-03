@@ -50,6 +50,22 @@ const NAV_LINKS = [
   { l: "About", v: "about" },
 ];
 
+const FOOTER_PRIMARY_LINKS = [
+  ["Features", "#features"],
+  ["For In-house", "for-inhouse"],
+  ["For PR Agencies", "for-agencies"],
+  ["For Agents", "for-agents"],
+  ["Insights", "insights"],
+  ["Contact", "contact"],
+  ["About", "about"],
+] as const;
+
+const FOOTER_SECONDARY_LINKS = [
+  ["Trust & Security", "trust-security"],
+  ["Privacy Policy", "privacy-policy"],
+  ["Terms & Conditions", "terms-conditions"],
+] as const;
+
 function navHref(v: string): string {
   const base = import.meta.env.BASE_URL;
   if (v === "landing") return base;
@@ -401,21 +417,32 @@ export default function LandingPageC({
 
       <footer style={{ background: paper, borderTop: `1px solid ${vars.g200}` }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-8 py-10">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-5">
-            <img src={`${base}images/logo-color.png`} alt="AIO Fusion" className="h-14" />
-            <nav aria-label="Footer navigation" className="flex items-center gap-6 text-[12px] font-semibold uppercase tracking-[0.12em] flex-wrap justify-center" style={{ color: vars.g500 }}>
-              <a href="#features" className="hover:opacity-60">Features</a>
-              <a href={`${base}for-inhouse`} onClick={(e) => { e.preventDefault(); onNavigate("for-inhouse"); }} className="hover:opacity-60">For In-house</a>
-              <a href={`${base}for-agencies`} onClick={(e) => { e.preventDefault(); onNavigate("for-agencies"); }} className="hover:opacity-60">For PR Agencies</a>
-              <a href={`${base}for-agents`} onClick={(e) => { e.preventDefault(); onNavigate("for-agents"); }} className="hover:opacity-60">For Agents</a>
-              <a href={`${base}insights`} onClick={(e) => { e.preventDefault(); onNavigate("insights"); }} className="hover:opacity-60">Insights</a>
-              <a href={`${base}contact`} onClick={(e) => { e.preventDefault(); onNavigate("contact"); }} className="hover:opacity-60">Contact</a>
-              <a href={`${base}about`} onClick={(e) => { e.preventDefault(); onNavigate("about"); }} className="hover:opacity-60">About</a>
-              <a href={`${base}trust-security`} onClick={(e) => { e.preventDefault(); onNavigate("trust-security"); }} className="hover:opacity-60">Trust &amp; Security</a>
-              <a href={`${base}privacy-policy`} onClick={(e) => { e.preventDefault(); onNavigate("privacy-policy"); }} className="hover:opacity-60">Privacy Policy</a>
-              <a href={`${base}terms-conditions`} onClick={(e) => { e.preventDefault(); onNavigate("terms-conditions"); }} className="hover:opacity-60">Terms &amp; Conditions</a>
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
+            <img src={`${base}images/logo-color.png`} alt="AIO Fusion" className="h-14 w-auto max-w-full shrink-0" />
+            <nav aria-label="Footer navigation" style={{ color: vars.g500 }}>
+              <ul className="flex flex-wrap items-center justify-center lg:justify-end gap-x-4 gap-y-3 text-[11px] font-semibold uppercase tracking-[0.08em]">
+                {FOOTER_PRIMARY_LINKS.map(([label, destination]) => (
+                  <li key={destination}>
+                    <a href={destination === "#features" ? destination : `${base}${destination}`}
+                      onClick={destination === "#features" ? undefined : (e) => { e.preventDefault(); onNavigate(destination); }}
+                      className="inline-block whitespace-nowrap hover:opacity-60">{label}</a>
+                  </li>
+                ))}
+              </ul>
             </nav>
-            <p className="text-[11px] font-normal" style={{ color: vars.g600 }}>&copy; AIO Fusion 2026</p>
+          </div>
+          <div className="mt-7 pt-6 border-t flex flex-col md:flex-row items-center justify-between gap-5" style={{ borderColor: vars.g200 }}>
+            <p className="text-[11px] font-normal whitespace-nowrap shrink-0" style={{ color: vars.g600 }}>&copy; AIO Fusion 2026</p>
+            <nav aria-label="Footer legal navigation" style={{ color: vars.g500 }}>
+              <ul className="flex flex-wrap items-center justify-center md:justify-end gap-x-6 gap-y-3 text-[11px] font-semibold uppercase tracking-[0.08em]">
+                {FOOTER_SECONDARY_LINKS.map(([label, destination]) => (
+                  <li key={destination}>
+                    <a href={`${base}${destination}`} onClick={(e) => { e.preventDefault(); onNavigate(destination); }}
+                      className="inline-block whitespace-nowrap hover:opacity-60">{label}</a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
           </div>
         </div>
       </footer>

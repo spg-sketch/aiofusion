@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import LandingPage from "./LandingPage";
 
 describe("homepage demo enquiry", () => {
@@ -67,5 +67,51 @@ describe("homepage demo enquiry", () => {
       expect.stringMatching(/api\/contact\/book-demo$/),
       expect.objectContaining({ method: "POST", body: JSON.stringify({ name: "Test Visitor", email: "visitor@example.test", company: "Example Co", goal: "See an audit" }) }),
     );
+  });
+
+  it("separates primary and legal footer links, preserving URLs and navigation", () => {
+    const onNavigate = vi.fn();
+    render(<LandingPage onLogin={vi.fn()} onNavigate={onNavigate} />);
+    fireEvent.keyDown(document, { key: "Escape" });
+    const footer = within(screen.getByRole("contentinfo"));
+    const primary = within(footer.getByRole("navigation", { name: "Footer navigation" }));
+    const legal = within(footer.getByRole("navigation", { name: "Footer legal navigation" }));
+    const primaryLinks = [
+      ["Features", "#features"],
+      ["For In-house", "for-inhouse"],
+      ["For PR Agencies", "for-agencies"],
+      ["For Agents", "for-agents"],
+      ["Insights", "insights"],
+      ["Contact", "contact"],
+      ["About", "about"],
+    ];
+    const legalLinks = [
+      ["Trust & Security", "trust-security"],
+      ["Privacy Policy", "privacy-policy"],
+      ["Terms & Conditions", "terms-conditions"],
+    ];
+    expect(primary.getAllByRole("link").map((link) => link.textContent)).toEqual(primaryLinks.map(([label]) => label));
+    expect(legal.getAllByRole("link").map((link) => link.textContent)).toEqual(legalLinks.map(([label]) => label));
+    expect(primary.getByRole("list")).toBeTruthy();
+    expect(legal.getByRole("list")).toBeTruthy();
+    for (const [group, links] of [[primary, primaryLinks], [legal, legalLinks]] as const) {
+      for (const [label, destination] of links) {
+        const link = group.getByRole("link", { name: label });
+        expect(link.getAttribute("href")).toBe(destination === "#features" ? destination : `${import.meta.env.BASE_URL}${destination}`);
+        link.focus();
+        expect(document.activeElement).toBe(link);
+        onNavigate.mockClear();
+        const prevented = !fireEvent.click(link);
+        if (destination === "#features") {
+          expect(onNavigate).not.toHaveBeenCalled();
+          expect(prevented).toBe(false);
+        } else {
+          expect(onNavigate).toHaveBeenCalledExactlyOnceWith(destination);
+          expect(prevented).toBe(true);
+        }
+      }
+    }
+    expect(footer.getByText("© AIO Fusion 2026").classList.contains("whitespace-nowrap")).toBe(true);
+    expect(footer.getByRole("img", { name: "AIO Fusion" }).getAttribute("src")).toBe(`${import.meta.env.BASE_URL}images/logo-color.png`);
   });
 });
