@@ -35,7 +35,8 @@ export function guideParagraphs(body: HowtoBlock[]): string[] {
 const STOP = new Set("a an and are as at be been but by can did do does for from get got had has have he her him his how i if in is it its just me my no not of on or our out so some that the their them then there they this to up us was we were what when where which who why will with you your".split(" "));
 
 function searchTerms(query: string): string[] {
-  const raw = (query.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((t) => t.length > 1);
+  const tokens: string[] = query.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  const raw = tokens.filter((t) => t.length > 1);
   const filtered = raw.filter((t) => !STOP.has(t));
   return filtered.length ? filtered : raw;
 }
