@@ -354,6 +354,53 @@ describe("settings-section deep link survives refresh (account_section param)", 
 });
 
 describe("View plans opens Billing details from Platform Home", () => {
+  it("browser Back restores Platform Home and Forward restores Billing details from the button's history", async () => {
+    stubClientAppFetch({ trial: { status: "active", daysRemaining: 12 } });
+    await renderAppAt("/platform");
+
+    await screen.findByText("12 days left in your beta trial");
+    const homeUrl = window.location.pathname + window.location.search;
+    fireEvent.click(screen.getByRole("button", { name: /view plans/i }));
+
+    await screen.findByRole("heading", { name: /company and billing information/i });
+    expect(await screen.findByRole("heading", { name: /^subscription$/i })).toBeInTheDocument();
+    await waitFor(() => expect(window.location.search).toBe("?account_section=billing"));
+    const billingUrl = window.location.pathname + window.location.search;
+    const billingState = window.history.state;
+
+    // Traverse the actual entries created by App, not fabricated nav states.
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        window.addEventListener("popstate", () => resolve(), { once: true });
+        window.history.back();
+      });
+    });
+
+    expect(await screen.findByText("12 days left in your beta trial")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /view plans/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /account & team settings/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /company and billing information/i })).toBeNull();
+    expect(screen.queryByRole("heading", { name: /^subscription$/i })).toBeNull();
+    expect(window.location.pathname + window.location.search).toBe(homeUrl);
+    expect(window.history.state).toMatchObject({ __aioNav: true, view: "platform-home" });
+
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        window.addEventListener("popstate", () => resolve(), { once: true });
+        window.history.forward();
+      });
+    });
+
+    await screen.findByRole("heading", { name: /company and billing information/i });
+    expect(await screen.findByRole("heading", { name: /^subscription$/i })).toBeInTheDocument();
+    expect(screen.queryByText("Your profile")).toBeNull();
+    expect(screen.queryByRole("button", { name: /view plans/i })).toBeNull();
+    expect(window.location.pathname + window.location.search).toBe(billingUrl);
+    expect(window.location.search).toBe("?account_section=billing");
+    expect(window.history.state).toEqual(billingState);
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => /\/checkout|\/portal/.test(String(url)))).toBe(false);
+  });
+
   it.each(["active", "expired"] as const)("%s trial opens the billing panel and keeps it after refresh", async (status) => {
     stubClientAppFetch({ trial: { status, daysRemaining: status === "active" ? 12 : 0 } });
     const app = await renderAppAt("/platform");
