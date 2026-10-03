@@ -87,6 +87,7 @@ import { MediaResearchPage, resolveArticleResearchContext, resolveArticleTargetP
 import { RecommendationCard } from "./JournalistComponents";
 import { exactTargetPhraseId } from "../lib/exactTargetPhrases";
 import { clearAiRuns } from "../lib/aiRunLifecycle";
+import { getAuditDurationSeconds, getAuditSampleCount, recordAuditDuration } from "../lib/auditTiming";
 
 const storyOnePhrase = {
   id: exactTargetPhraseId("discovery", "clean energy platform"),
@@ -187,6 +188,7 @@ describe("MediaResearchPage live discovery", () => {
   let requests: { url: string; method?: string; body?: Record<string, unknown> }[] = [];
   beforeEach(() => {
     requests = [];
+    localStorage.removeItem("aio.auditTiming.media-discover");
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
@@ -1743,6 +1745,64 @@ describe("MediaResearchPage live discovery", () => {
     expect(requests.some((request) => request.url.includes("/content/journalist-search-runs/latest"))).toBe(true);
   });
 
+  it("resumes the countdown from the server start time without learning a partial duration", async () => {
+    serverDiscoveryHistory.latest = {
+      runId: "resumed-timer", status: "running", items: [], discoveryToken: "",
+      startedAt: new Date(Date.now() - 90_000).toISOString(),
+    };
+    const originalFetch = fetch;
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/journalist-search-runs/resumed-timer")) return new Promise<Response>(() => {});
+      return originalFetch(input, init);
+    }));
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    const status = await screen.findByTestId("status-live-discovery");
+    expect(status.textContent).toContain("Estimated time remaining: 0m 00s");
+    expect(status.textContent).toContain("Taking longer than estimated");
+    expect(getAuditSampleCount("media-discover")).toBe(0);
+  });
+
+  it("counts down from one minute, stays active at zero, and learns successful completion time", async () => {
+    const started = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(started);
+    try {
+      delayedRequests.live = true;
+      render(<MediaResearchPage />);
+      fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+      fireEvent.click(await screen.findByTestId("button-discover-live"));
+      await waitFor(() => expect(delayedRequests.liveCalls).toHaveLength(1));
+      expect(screen.getByTestId("status-live-discovery").textContent).toContain("Estimated time remaining: 1m 00s");
+      expect(getAuditSampleCount("media-discover")).toBe(0);
+      clock.mockReturnValue(started + 20_000);
+      await waitFor(() => expect(screen.getByTestId("status-live-discovery").textContent).toContain("0m 40s"), { timeout: 2000 });
+      clock.mockReturnValue(started + 90_000);
+      await waitFor(() => expect(screen.getByTestId("status-live-discovery").textContent).toContain("0m 00s"), { timeout: 2000 });
+      expect(screen.getByTestId("status-live-discovery").textContent).toContain("Taking longer than estimated");
+      expect(screen.getByTestId("button-discover-live")).toBeDisabled();
+      expect(getAuditSampleCount("media-discover")).toBe(0);
+      await act(async () => {
+        delayedRequests.liveCalls[0].resolve(new Response(JSON.stringify({ ok: true, items: [], discoveryToken: "" }), { status: 200 }));
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(screen.queryByTestId("status-live-discovery")).toBeNull());
+      expect(getAuditDurationSeconds("media-discover")).toBe(90);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("starts a new countdown from measured recent search durations", async () => {
+    recordAuditDuration("media-discover", 40_000);
+    recordAuditDuration("media-discover", 60_000);
+    delayedRequests.live = true;
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    fireEvent.click(await screen.findByTestId("button-discover-live"));
+    await waitFor(() => expect(delayedRequests.liveCalls).toHaveLength(1));
+    expect(screen.getByTestId("status-live-discovery").textContent).toContain("Estimated time remaining: 0m 50s");
+  });
+
   it("keeps a delayed live run alive across navigation and ignores other-project results", async () => {
     delayedRequests.live = true;
     render(<MediaResearchPage />);
@@ -1752,7 +1812,7 @@ describe("MediaResearchPage live discovery", () => {
     fireEvent.click(await screen.findByTestId("button-discover-live"));
     await waitFor(() => expect(delayedRequests.liveCalls).toHaveLength(1));
     expect(screen.getByTestId("status-live-discovery").textContent).toContain("Finding sources");
-    expect(screen.getByTestId("status-live-discovery").textContent).toContain("Elapsed this session:");
+    expect(screen.getByTestId("status-live-discovery").textContent).toContain("Estimated time remaining:");
     await act(async () => { await new Promise(r => setTimeout(r, 0)); });
     fireEvent.change(selector, { target: { value: "story-2" } });
     await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).toBeTruthy());

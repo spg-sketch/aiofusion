@@ -5,6 +5,22 @@ import {
   recordAuditDuration,
 } from "./auditTiming";
 
+describe("Media discovery timing", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("starts with a one-minute estimate without successful measurements", () => {
+    expect(getAuditDurationSeconds("media-discover")).toBe(60);
+    expect(getAuditSampleCount("media-discover")).toBe(0);
+  });
+
+  it("learns the rolling average of completed search durations", () => {
+    recordAuditDuration("media-discover", 40_000);
+    recordAuditDuration("media-discover", 60_000);
+    expect(getAuditDurationSeconds("media-discover")).toBe(50);
+    expect(getAuditSampleCount("media-discover")).toBe(2);
+  });
+});
+
 describe("Content Optimiser timing", () => {
   beforeEach(() => {
     localStorage.clear();

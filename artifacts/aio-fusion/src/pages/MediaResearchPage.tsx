@@ -11,6 +11,7 @@ import { MediaOutreachPanel } from "./MediaOutreachPanel";
 import { aiRunKey, discardAiRun, startAiRun, useAiRun } from "../lib/aiRunLifecycle";
 import { getSession } from "../lib/auth";
 import { useDatabaseCategories } from "../lib/databaseCategories";
+import { getAuditDurationSeconds, recordAuditDuration } from "../lib/auditTiming";
 
 export type TargetingBrief = {
   topic: string;
@@ -358,9 +359,9 @@ function MediaResearchPage() {
   }, [projectId, storyKey]);
   const discoveryRunKey = aiRunKey(discoveryScope, "media-discover", storyKey || "new-article");
   type DiscoveryRunResult = { items: LiveDiscovery[]; discoveryToken: string };
-  type RemoteDiscoveryRun = DiscoveryRunResult & { runId: string; status: "running" | "succeeded" | "failed"; error?: string };
+  type RemoteDiscoveryRun = DiscoveryRunResult & { runId: string; status: "running" | "succeeded" | "failed"; error?: string; startedAt?: string };
   const discoveryRun = useAiRun<
-    { projectId: string; storyKey: string },
+    { projectId: string; storyKey: string; serverStartedAt?: number },
     DiscoveryRunResult
   >(discoveryRunKey);
   const showEmptyDiscovery = Boolean(selected)
@@ -369,8 +370,10 @@ function MediaResearchPage() {
     && (discoveryRun
       ? discoveryRun.status === "succeeded" && discoveryRun.result?.items.length === 0
       : remoteEmptyDiscoveryKey === discoveryRunKey);
-  const discoveryStartedAt = discoveryRun?.startedAt;
+  const discoveryStartedAt = discoveryRun?.input.serverStartedAt ?? discoveryRun?.startedAt;
   const liveElapsedSeconds = discoveryStartedAt ? Math.max(0, Math.floor((liveNow - discoveryStartedAt) / 1000)) : 0;
+  const liveEstimatedSeconds = discoveryRun?.estimateSeconds ?? getAuditDurationSeconds("media-discover");
+  const liveRemainingSeconds = Math.max(0, liveEstimatedSeconds - liveElapsedSeconds);
   const verifiedLiveCount = liveItems.filter((item) => item.evidenceStatus === "verified" || !item.evidenceStatus).length;
   const pendingLiveCount = liveItems.filter((item) => item.evidenceStatus === "pending").length;
   const liveStage = pendingLiveCount > 0
@@ -1001,13 +1004,17 @@ function MediaResearchPage() {
       setLiveItems(Array.isArray(remote.items) ? remote.items : []);
       if (remote.discoveryToken) setDiscoveryToken(remote.discoveryToken);
       if ((remote.status === "running" || remote.status === "failed") && !discoveryRun) {
-        startAiRun<{ resumedRunId: string }, DiscoveryRunResult>({
+        const serverStartedAt = typeof remote.startedAt === "string" ? Date.parse(remote.startedAt) : NaN;
+        startAiRun<{ resumedRunId: string; serverStartedAt?: number }, DiscoveryRunResult>({
           key: discoveryRunKey,
           scope: discoveryScope,
           operation: "media-discover",
           subjectId: storyKey,
-          input: { resumedRunId: remote.runId },
-          estimateSeconds: 90,
+          input: {
+            resumedRunId: remote.runId,
+            serverStartedAt: Number.isFinite(serverStartedAt) && serverStartedAt > 0 && serverStartedAt <= Date.now() ? serverStartedAt : undefined,
+          },
+          estimateSeconds: getAuditDurationSeconds("media-discover"),
           // Restore a stored failure without starting another provider search.
           execute: (progress) => remote.status === "failed"
             ? Promise.reject(new Error(remote.error || "Could not complete live media research."))
@@ -1060,7 +1067,7 @@ function MediaResearchPage() {
       operation: "media-discover",
       subjectId: storyKey || "new-article",
       input: { projectId, storyKey },
-      estimateSeconds: 90,
+      estimateSeconds: getAuditDurationSeconds("media-discover"),
       execute: async (progress) => {
         const response = await fetch(`${apiBase()}/api/content/media-discover`, {
           method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
@@ -1095,7 +1102,10 @@ function MediaResearchPage() {
         if (!runId) throw new Error("The live discovery run could not be started.");
         return pollDiscoveryRun(runId, progress, generation);
       },
-      onSuccess: async (result) => {
+      onSuccess: async (result, completedRun) => {
+        // Learn once from successful, fully observed app-owned searches, even
+        // after navigation. Resumed and failed runs do not skew the average.
+        recordAuditDuration("media-discover", Date.now() - completedRun.startedAt, completedRun.estimateSeconds * 1000);
         // The app-owned lifecycle retains the verified result across in-app
         // navigation. Do not submit candidates for human review automatically;
         // each result still requires the explicit "Send for review" action.
@@ -1469,8 +1479,8 @@ function MediaResearchPage() {
        <div className="flex flex-wrap items-center justify-between gap-3">
          <div>
            <p className="text-[13px] font-semibold text-slate-800">{liveStage || "Live search"}</p>
-            <p className="text-[12px] text-slate-600">Elapsed this session: {Math.floor(liveElapsedSeconds / 60)}m {liveElapsedSeconds % 60}s{liveItems.length ? ` · ${verifiedLiveCount} verified, ${pendingLiveCount} pending` : ""}</p>
-           {liveLoading && liveElapsedSeconds >= 15 && <p className="text-[12px] text-slate-600 mt-1">Checks are continuing. Verified results appear here as they are ready; the search has no promised completion time.</p>}
+            {liveLoading && <p className="text-[12px] text-slate-600">Estimated time remaining: {Math.floor(liveRemainingSeconds / 60)}m {String(liveRemainingSeconds % 60).padStart(2, "0")}s{liveItems.length ? ` · ${verifiedLiveCount} verified, ${pendingLiveCount} pending` : ""}</p>}
+           {liveLoading && <p className="text-[12px] text-slate-600 mt-1">{liveRemainingSeconds === 0 ? "Taking longer than estimated. Checks are continuing; verified results appear as they are ready." : "This countdown is an estimate. Verified results appear as checks complete."}</p>}
            {liveLoading && liveElapsedSeconds >= 40 && <p className="text-[12px] text-slate-600 mt-1">You can leave and return to this article later to resume the account-bound search.</p>}
             {discoveryRun?.status === "failed" && <p className="text-[12px] text-rose-700 mt-1">The run stopped or timed out. Retry live search; any verified results remain available for review. Server-persisted runs are rehydrated when you return to this article, and a timeout does not delete them.</p>}
          </div>
