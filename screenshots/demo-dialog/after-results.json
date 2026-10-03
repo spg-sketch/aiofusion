@@ -1,0 +1,164 @@
+{
+  "environment": "Replit development preview",
+  "origin": "https://980839d0-3e5e-48b6-81c5-2904335bf934-00-14zieywvlt3d7-5m59ex9x.kirk.replit.dev",
+  "emulation": "Chromium desktop with responsive viewport sizing, not physical devices",
+  "developmentBanner": "Hidden by test-only CSS for interaction checks; original before screenshots include it",
+  "results": [
+    {
+      "name": "small-phone",
+      "width": 320,
+      "height": 568,
+      "initial": {
+        "x": 12,
+        "y": 16,
+        "width": 296,
+        "height": 536,
+        "close": {
+          "x": 256,
+          "y": 22,
+          "width": 44,
+          "height": 44
+        },
+        "firstFieldTop": 259,
+        "horizontalOverflow": false,
+        "inputFont": "16px"
+      },
+      "closeAfterScroll": {
+        "x": 256,
+        "y": 22,
+        "width": 44,
+        "height": 44
+      }
+    },
+    {
+      "name": "phone",
+      "width": 375,
+      "height": 667,
+      "initial": {
+        "x": 12,
+        "y": 16,
+        "width": 351,
+        "height": 635,
+        "close": {
+          "x": 311,
+          "y": 22,
+          "width": 44,
+          "height": 44
+        },
+        "firstFieldTop": 259,
+        "horizontalOverflow": false,
+        "inputFont": "16px"
+      },
+      "closeAfterScroll": {
+        "x": 311,
+        "y": 22,
+        "width": 44,
+        "height": 44
+      }
+    },
+    {
+      "name": "large-phone",
+      "width": 430,
+      "height": 932,
+      "initial": {
+        "x": 12,
+        "y": 109.75,
+        "width": 406,
+        "height": 712.5,
+        "close": {
+          "x": 366,
+          "y": 115.75,
+          "width": 44,
+          "height": 44
+        },
+        "firstFieldTop": 322.75,
+        "horizontalOverflow": false,
+        "inputFont": "16px"
+      },
+      "closeAfterScroll": {
+        "x": 366,
+        "y": 115.75,
+        "width": 44,
+        "height": 44
+      }
+    },
+    {
+      "name": "landscape-small",
+      "width": 568,
+      "height": 320,
+      "initial": {
+        "x": 12,
+        "y": 16,
+        "width": 544,
+        "height": 288,
+        "close": {
+          "x": 504,
+          "y": 22,
+          "width": 44,
+          "height": 44
+        },
+        "firstFieldTop": 206.25,
+        "horizontalOverflow": false,
+        "inputFont": "16px"
+      },
+      "closeAfterScroll": {
+        "x": 504,
+        "y": 22,
+        "width": 44,
+        "height": 44
+      }
+    },
+    {
+      "name": "landscape-large",
+      "width": 932,
+      "height": 430,
+      "initial": {
+        "x": 12,
+        "y": 16,
+        "width": 908,
+        "height": 398,
+        "close": {
+          "x": 868,
+          "y": 22,
+          "width": 44,
+          "height": 44
+        },
+        "firstFieldTop": 206.25,
+        "horizontalOverflow": false,
+        "inputFont": "16px"
+      },
+      "closeAfterScroll": {
+        "x": 868,
+        "y": 22,
+        "width": 44,
+        "height": 44
+      }
+    },
+    {
+      "name": "desktop",
+      "width": 1440,
+      "height": 1000,
+      "initial": {
+        "x": 208,
+        "y": 179.25,
+        "width": 1024,
+        "height": 641.5,
+        "close": {
+          "x": 1172,
+          "y": 195.25,
+          "width": 44,
+          "height": 44
+        },
+        "firstFieldTop": 328.75,
+        "horizontalOverflow": false,
+        "inputFont": "14px"
+      },
+      "closeAfterScroll": {
+        "x": 1172,
+        "y": 195.25,
+        "width": 44,
+        "height": 44
+      }
+    }
+  ]
+}

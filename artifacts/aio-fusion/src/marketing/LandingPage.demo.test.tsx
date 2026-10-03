@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import LandingPage from "./LandingPage";
+import DemoDialog from "./DemoDialog";
 
 describe("homepage demo enquiry", () => {
   beforeEach(() => {
@@ -67,6 +68,94 @@ describe("homepage demo enquiry", () => {
       expect.stringMatching(/api\/contact\/book-demo$/),
       expect.objectContaining({ method: "POST", body: JSON.stringify({ name: "Test Visitor", email: "visitor@example.test", company: "Example Co", goal: "See an audit" }) }),
     );
+  });
+
+  it("traps focus both ways, restores the opener and restores background scrolling", () => {
+    const original = document.body.style.overflow;
+    document.body.style.overflow = "auto";
+    render(<LandingPage onLogin={vi.fn()} onNavigate={vi.fn()} />);
+    const close = screen.getByRole("button", { name: /close demo enquiry/i });
+    const preference = screen.getByRole("checkbox");
+    expect(document.body.style.overflow).toBe("hidden");
+    expect(document.body.style.position).toBe("fixed");
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(preference);
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(close);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(document.body.style.overflow).toBe("auto");
+    expect(document.body.style.position).toBe("");
+    const opener = screen.getAllByRole("button", { name: /book a demo/i })[0]!;
+    opener.focus();
+    fireEvent.click(opener);
+    fireEvent.click(screen.getByRole("button", { name: /close demo enquiry/i }));
+    expect(document.activeElement).toBe(opener);
+    document.body.style.overflow = original;
+  });
+
+  it("does not refocus close or overwrite the return target when the parent rerenders", () => {
+    const opener = document.createElement("button");
+    document.body.append(opener);
+    opener.focus();
+    const page = render(<DemoDialog onClose={vi.fn()} />);
+    const field = screen.getByLabelText(/your name/i);
+    field.focus();
+    page.rerender(<DemoDialog onClose={vi.fn()} />);
+    expect(document.activeElement).toBe(field);
+    page.unmount();
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+
+  it("keeps hidden controls outside focus traversal and recovers focus from outside", () => {
+    render(<DemoDialog onClose={vi.fn()} />);
+    const dialog = screen.getByRole("dialog");
+    const hidden = document.createElement("div");
+    hidden.style.display = "none";
+    hidden.innerHTML = "<button>Hidden action</button>";
+    dialog.append(hidden);
+    screen.getByRole("checkbox").focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /close demo enquiry/i }));
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    outside.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    outside.remove();
+  });
+
+  it("tracks the visual viewport and reveals the focused field after keyboard-like resizing", () => {
+    const viewport = Object.assign(new EventTarget(), { height: 600, width: 375, offsetTop: 0, offsetLeft: 0 });
+    vi.stubGlobal("visualViewport", viewport);
+    const page = render(<DemoDialog onClose={vi.fn()} />);
+    const overlay = screen.getByRole("dialog").parentElement!;
+    expect(overlay.style.getPropertyValue("--demo-viewport-height")).toBe("600px");
+    viewport.height = 260;
+    viewport.offsetTop = 40;
+    viewport.dispatchEvent(new Event("resize"));
+    expect(overlay.style.getPropertyValue("--demo-viewport-height")).toBe("260px");
+    expect(overlay.style.getPropertyValue("--demo-viewport-top")).toBe("40px");
+    const field = screen.getByLabelText(/what are you hoping to achieve/i);
+    const reveal = vi.fn();
+    field.scrollIntoView = reveal;
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
+    field.focus();
+    expect(reveal).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
+    page.unmount();
+    viewport.height = 300;
+    viewport.dispatchEvent(new Event("resize"));
+    expect(overlay.style.getPropertyValue("--demo-viewport-height")).toBe("260px");
+  });
+
+  it("shows failed delivery without losing fields or the preference", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({ error: "Please try later" }) }));
+    render(<DemoDialog onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/your name/i), { target: { value: "Test Visitor" } });
+    fireEvent.submit(screen.getByRole("button", { name: /request a demo/i }).closest("form")!);
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Please try later"));
+    expect((screen.getByLabelText(/your name/i) as HTMLInputElement).value).toBe("Test Visitor");
+    expect(screen.getByRole("checkbox")).toBeTruthy();
   });
 
   it("separates primary and legal footer links, preserving URLs and navigation", () => {

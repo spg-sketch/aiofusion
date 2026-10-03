@@ -1,0 +1,88 @@
+.demo-dialog-overlay {
+  position: fixed;
+  top: var(--demo-viewport-top, 0px);
+  left: var(--demo-viewport-left, 0px);
+  width: var(--demo-viewport-width, 100%);
+  height: var(--demo-viewport-height, 100dvh);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  overscroll-behavior: contain;
+}
+
+.demo-dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.demo-dialog-close {
+  top: 6px;
+  right: 8px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.demo-dialog-mobile-bar {
+  min-height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 60px 12px 16px;
+  color: #1a647b;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.demo-dialog-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scroll-padding: 12px;
+}
+
+.demo-dialog-intro, .demo-dialog-form { padding: 16px; min-width: 0; }
+.demo-dialog-title { font-size: 24px; margin: 0 0 8px; }
+.demo-dialog-preference { min-height: 44px; }
+.demo-dialog-columns { display: grid; }
+.demo-dialog-desktop { display: none; }
+
+/* Only the dialog's shared form is compacted. Contact keeps its existing layout. */
+@media (max-width: 767px), (max-width: 1023px) and (max-height: 500px) {
+  .demo-dialog-form form, .demo-dialog-form form > .grid { gap: 12px; }
+  .demo-dialog-form input:not([type="checkbox"]), .demo-dialog-form textarea {
+    font-size: 16px;
+    min-width: 0;
+    min-height: 44px;
+    padding: 10px 12px;
+    scroll-margin: 12px;
+  }
+  .demo-dialog-form textarea { height: 96px; }
+  .demo-dialog-form form > button { min-height: 44px; padding: 12px; }
+  .demo-dialog-form [role="status"] { padding-block: 20px; gap: 12px; }
+}
+
+@media (pointer: coarse) {
+  .demo-dialog-form input:not([type="checkbox"]), .demo-dialog-form textarea { font-size: 16px; }
+}
+
+@media (min-width: 768px) and (min-height: 501px), (min-width: 1024px) {
+  .demo-dialog-overlay { padding: 24px; }
+  .demo-dialog { max-height: min(90dvh, 850px, 100%); }
+  .demo-dialog-mobile-bar { display: none; }
+  .demo-dialog-mobile { display: none; }
+  .demo-dialog-desktop { display: block; }
+  .demo-dialog-eyebrow { display: inline-flex; }
+  .demo-dialog-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .demo-dialog-close { top: 16px; right: 16px; }
+  .demo-dialog-intro, .demo-dialog-form { padding: 40px; }
+  .demo-dialog-title { font-size: 36px; margin: 20px 0; }
+}

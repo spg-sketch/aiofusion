@@ -450,3 +450,31 @@ mtime_ms = 1791022148650
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/4a8c0e74-c16e-4ca4-a867-e1aca9f9705d/d8935684-9c0c-4050-8dcd-5df41360c6c1"
 storage_version_token = "1791022272084682"
 content_type = "text/html"
+
+[[outputs]]
+id = "cYBUeJeD3YKyB4ozV_qOR"
+uri = "file://screenshots/demo-dialog/before-small-phone.png"
+type = "image"
+title = "Small phone: before"
+description = "320 × 568 development-preview capture. The first enquiry field was below the opening view; Replit's development banner is visible."
+logical_id = "4aca71f6-b880-4d04-8a23-772c59ba6286"
+content_hash = "sha256:410e5093da66f2e487fef81c009e0ed7530846d827fc38f40bb24e2b563dfc44"
+size = 57181
+mtime_ms = 1791024360579
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/4aca71f6-b880-4d04-8a23-772c59ba6286/f9260d52-6123-4980-b120-e03a23745062"
+storage_version_token = "1791024816821079"
+content_type = "image/png"
+
+[[outputs]]
+id = "-O14TYSHcipyxb_HF465i"
+uri = "file://screenshots/demo-dialog/after-small-phone.png"
+type = "image"
+title = "Small phone: after"
+description = "320 × 568 responsive Chromium capture with the development-only banner hidden by the test harness. Compact introduction and persistent 44 × 44 close control."
+logical_id = "1b37587d-3051-44d9-853b-b478a511c937"
+content_hash = "sha256:eb0b2669683c27fd1f4e929aad2216bbef20e9d8f2799c5e5cf62ecf119b921d"
+size = 46854
+mtime_ms = 1791024751021
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/1b37587d-3051-44d9-853b-b478a511c937/91a55be6-5deb-4693-b2db-a8bcd38fae69"
+storage_version_token = "1791024817674089"
+content_type = "image/png"

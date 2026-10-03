@@ -32,6 +32,12 @@ function setup() {
 const lastReg = (r: ReturnType<typeof vi.fn>) => r.mock.calls.filter((c) => c[0]).at(-1)?.[0];
 
 describe("HowtoAdminPage", () => {
+  beforeEach(() => {
+    [list, create, update, del].forEach((mock) => mock.mockReset());
+    list.mockReturnValue({ data: [entry("one", "Guide", "draft"), entry("two", "Video", "published")], isLoading: false, isError: false, error: null, refetch: vi.fn() });
+  });
+  afterEach(cleanup);
+
   it("defaults George availability on and saves an opt-out through the normal editor workflow", async () => {
     const { register } = setup();
     fireEvent.click(screen.getByTestId("row-entry-one"));
@@ -43,7 +49,7 @@ describe("HowtoAdminPage", () => {
     fireEvent.click(screen.getByTestId("button-save"));
     await waitFor(() => expect(update).toHaveBeenCalledWith({ id: "one", data: expect.objectContaining({ includeInGeorge: false }) }));
     await waitFor(() => expect(lastReg(register).dirty).toBe(false));
-    // Simulate the refreshed server list; this suite mocks the query hook.
+    // Simulate a refreshed server list; this suite mocks the query hook.
     list.mockReturnValue({ data: [
       { ...entry("one", "Guide", "draft"), includeInGeorge: false },
       entry("two", "Video", "published"),
@@ -54,11 +60,6 @@ describe("HowtoAdminPage", () => {
     fireEvent.click(screen.getByTestId("button-new-entry"));
     expect(screen.getByTestId("input-include-george")).toBeChecked();
   });
-  beforeEach(() => {
-    [list, create, update, del].forEach((m) => m.mockReset());
-    list.mockReturnValue({ data: [entry("one", "Guide", "draft"), entry("two", "Video", "published")], isLoading: false, isError: false, error: null, refetch: vi.fn() });
-  });
-  afterEach(cleanup);
 
   it("searches and filters by type and status", () => {
     setup();
@@ -71,7 +72,6 @@ describe("HowtoAdminPage", () => {
     fireEvent.click(screen.getByTestId("filter-type-Guide"));
     expect(screen.queryByTestId("row-entry-two")).toBeNull();
   });
-
   it("keeps inputs and unsaved state when a save fails, clears only on confirmed success", async () => {
     const { register } = setup();
     fireEvent.click(screen.getByTestId("button-new-entry"));
