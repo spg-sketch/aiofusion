@@ -19,6 +19,27 @@ tags:
   - name: How-to
     description: Published How-to library and protected editorial management.
 paths:
+  /support/search:
+    get:
+      operationId: searchGeorgeSupport
+      tags: [How-to]
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '200':
+          description: Relevant active FAQs and eligible published guides.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items: { $ref: '#/components/schemas/GeorgeSearchResult' }
   /healthz:
     get:
       operationId: healthCheck
@@ -901,6 +922,16 @@ components:
             type: { type: string, const: video }
             url: { type: string, format: uri, maxLength: 2000 }
             caption: { type: string, maxLength: 2000 }
+    GeorgeSearchResult:
+      type: object
+      required: [id, source, category, question, answer]
+      properties:
+        id: { type: string }
+        source: { type: string, enum: [faq, guide] }
+        category: { type: string }
+        question: { type: string }
+        answer: { type: string }
+        guideId: { type: string }
     HowtoEntry:
       type: object
       required: [id, title, description, type, readTime, displayOrder, status, body, createdAt, updatedAt, publishedAt]
@@ -912,6 +943,7 @@ components:
         readTime: { type: string }
         displayOrder: { type: integer }
         status: { type: string, enum: [draft, published] }
+        includeInGeorge: { type: boolean }
         body: { type: array, maxItems: 300, items: { $ref: '#/components/schemas/HowtoBlock' } }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -928,6 +960,7 @@ components:
         readTime: { type: string, maxLength: 100 }
         displayOrder: { type: integer, minimum: 0, maximum: 1000000 }
         status: { type: string, enum: [draft, published] }
+        includeInGeorge: { type: boolean, default: true }
         body: { type: array, maxItems: 300, items: { $ref: '#/components/schemas/HowtoBlock' } }
     HowtoEntryPatch:
       type: object
@@ -940,6 +973,7 @@ components:
         readTime: { type: string, maxLength: 100 }
         displayOrder: { type: integer, minimum: 0, maximum: 1000000 }
         status: { type: string, enum: [draft, published] }
+        includeInGeorge: { type: boolean }
         body: { type: array, maxItems: 300, items: { $ref: '#/components/schemas/HowtoBlock' } }
     InsightArticle:
       type: object

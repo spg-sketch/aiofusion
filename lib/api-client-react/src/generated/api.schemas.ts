@@ -273,6 +273,23 @@ export type HowtoBlock = {
   caption?: string;
 };
 
+export type GeorgeSearchResultSource = typeof GeorgeSearchResultSource[keyof typeof GeorgeSearchResultSource];
+
+
+export const GeorgeSearchResultSource = {
+  faq: 'faq',
+  guide: 'guide',
+} as const;
+
+export interface GeorgeSearchResult {
+  id: string;
+  source: GeorgeSearchResultSource;
+  category: string;
+  question: string;
+  answer: string;
+  guideId?: string;
+}
+
 export type HowtoEntryType = typeof HowtoEntryType[keyof typeof HowtoEntryType];
 
 
@@ -298,6 +315,7 @@ export interface HowtoEntry {
   readTime: string;
   displayOrder: number;
   status: HowtoEntryStatus;
+  includeInGeorge?: boolean;
   /** @maxItems 300 */
   body: HowtoBlock[];
   createdAt: string;
@@ -345,6 +363,7 @@ export interface HowtoEntryInput {
      */
   displayOrder: number;
   status: HowtoEntryInputStatus;
+  includeInGeorge?: boolean;
   /** @maxItems 300 */
   body: HowtoBlock[];
 }
@@ -383,6 +402,7 @@ export interface HowtoEntryPatch {
      */
   displayOrder?: number;
   status?: HowtoEntryPatchStatus;
+  includeInGeorge?: boolean;
   /** @maxItems 300 */
   body?: HowtoBlock[];
 }
@@ -513,6 +533,18 @@ export type ProjectIdParameter = string;
 export type ProjectIdOptionalParameter = string;
 
 export type StoryKeyParameter = string;
+
+export type SearchGeorgeSupportParams = {
+/**
+ * @minLength 1
+ * @maxLength 500
+ */
+q: string;
+};
+
+export type SearchGeorgeSupport200 = {
+  results: GeorgeSearchResult[];
+};
 
 export type BeginBrowserLoginParams = {
 /**

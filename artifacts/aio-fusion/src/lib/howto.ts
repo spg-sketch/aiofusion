@@ -16,6 +16,7 @@ export type HowtoEntry = {
   readTime: string;
   displayOrder: number;
   status: HowtoStatus;
+  includeInGeorge?: boolean;
   body: HowtoBlock[];
   createdAt: string;
   updatedAt: string;
@@ -53,11 +54,12 @@ export type HowtoDraft = {
   readTime: string;
   displayOrder: string;
   status: HowtoStatus;
+  includeInGeorge: boolean;
   body: HowtoBlock[];
 };
 
 export function emptyDraft(): HowtoDraft {
-  return { id: "", title: "", description: "", type: "Guide", readTime: "3 min read", displayOrder: "0", status: "draft", body: [{ type: "paragraph", runs: [{ text: "" }] }] };
+  return { id: "", title: "", description: "", type: "Guide", readTime: "3 min read", displayOrder: "0", status: "draft", includeInGeorge: true, body: [{ type: "paragraph", runs: [{ text: "" }] }] };
 }
 
 export function draftFromEntry(e: HowtoEntry): HowtoDraft {
@@ -69,6 +71,7 @@ export function draftFromEntry(e: HowtoEntry): HowtoDraft {
     readTime: e.readTime,
     displayOrder: String(e.displayOrder),
     status: e.status,
+    includeInGeorge: e.includeInGeorge !== false,
     body: JSON.parse(JSON.stringify(e.body)) as HowtoBlock[],
   };
 }
@@ -119,6 +122,7 @@ export function buildPayload(draft: HowtoDraft, status: HowtoStatus): HowtoInput
     readTime: draft.readTime.trim(),
     displayOrder: Number(draft.displayOrder),
     status,
+    includeInGeorge: draft.includeInGeorge,
     body,
   };
 }

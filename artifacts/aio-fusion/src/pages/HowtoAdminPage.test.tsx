@@ -32,6 +32,28 @@ function setup() {
 const lastReg = (r: ReturnType<typeof vi.fn>) => r.mock.calls.filter((c) => c[0]).at(-1)?.[0];
 
 describe("HowtoAdminPage", () => {
+  it("defaults George availability on and saves an opt-out through the normal editor workflow", async () => {
+    const { register } = setup();
+    fireEvent.click(screen.getByTestId("row-entry-one"));
+    expect(screen.getByTestId("input-include-george")).toBeChecked();
+    fireEvent.click(screen.getByTestId("input-include-george"));
+    expect(screen.getByTestId("input-include-george")).not.toBeChecked();
+    await waitFor(() => expect(lastReg(register).dirty).toBe(true));
+    update.mockResolvedValueOnce({ ...entry("one", "Guide", "draft"), includeInGeorge: false });
+    fireEvent.click(screen.getByTestId("button-save"));
+    await waitFor(() => expect(update).toHaveBeenCalledWith({ id: "one", data: expect.objectContaining({ includeInGeorge: false }) }));
+    await waitFor(() => expect(lastReg(register).dirty).toBe(false));
+    // Simulate the refreshed server list; this suite mocks the query hook.
+    list.mockReturnValue({ data: [
+      { ...entry("one", "Guide", "draft"), includeInGeorge: false },
+      entry("two", "Video", "published"),
+    ], isLoading: false, isError: false, error: null, refetch: vi.fn() });
+    fireEvent.click(screen.getByTestId("row-entry-two"));
+    fireEvent.click(screen.getByTestId("row-entry-one"));
+    expect(screen.getByTestId("input-include-george")).not.toBeChecked();
+    fireEvent.click(screen.getByTestId("button-new-entry"));
+    expect(screen.getByTestId("input-include-george")).toBeChecked();
+  });
   beforeEach(() => {
     [list, create, update, del].forEach((m) => m.mockReset());
     list.mockReturnValue({ data: [entry("one", "Guide", "draft"), entry("two", "Video", "published")], isLoading: false, isError: false, error: null, refetch: vi.fn() });

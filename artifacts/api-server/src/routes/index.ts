@@ -21,6 +21,7 @@ import supportRouter from "./support";
 import publicAssetsRouter from "./public-assets";
 import insightsRouter from "./insights";
 import howtoRouter from "./howto";
+import georgeSearchRouter from "./george-search";
 import journalistPrivacyRouter from "./journalist-privacy";
 
 const router: IRouter = Router();
@@ -30,6 +31,7 @@ router.use(publicAssetsRouter);
 router.use(journalistPrivacyRouter);
 router.use(insightsRouter);
 router.use(howtoRouter);
+router.use(georgeSearchRouter);
 router.use(authRouter);
 router.use(platformRouter);
 router.use(billingRouter);

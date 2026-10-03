@@ -8,6 +8,26 @@
 import * as zod from 'zod';
 
 
+export const searchGeorgeSupportQueryQMax = 500;
+
+
+
+export const SearchGeorgeSupportQueryParams = zod.object({
+  "q": zod.coerce.string().min(1).max(searchGeorgeSupportQueryQMax)
+})
+
+export const SearchGeorgeSupportResponse = zod.object({
+  "results": zod.array(zod.object({
+  "id": zod.string(),
+  "source": zod.enum(['faq', 'guide']),
+  "category": zod.string(),
+  "question": zod.string(),
+  "answer": zod.string(),
+  "guideId": zod.string().optional()
+}))
+})
+
+
 /**
  * Returns server health status
  * @summary Health check
@@ -183,6 +203,7 @@ export const ListPublishedHowtoResponseItem = zod.object({
   "readTime": zod.string(),
   "displayOrder": zod.number().int(),
   "status": zod.enum(['draft', 'published']),
+  "includeInGeorge": zod.boolean().optional(),
   "body": zod.array(zod.union([zod.object({
   "type": zod.enum(['heading', 'paragraph', 'tip']),
   "runs": zod.array(zod.object({
@@ -267,6 +288,7 @@ export const GetPublishedHowtoResponse = zod.object({
   "readTime": zod.string(),
   "displayOrder": zod.number().int(),
   "status": zod.enum(['draft', 'published']),
+  "includeInGeorge": zod.boolean().optional(),
   "body": zod.array(zod.union([zod.object({
   "type": zod.enum(['heading', 'paragraph', 'tip']),
   "runs": zod.array(zod.object({
@@ -346,6 +368,7 @@ export const ListAdminHowtoResponseItem = zod.object({
   "readTime": zod.string(),
   "displayOrder": zod.number().int(),
   "status": zod.enum(['draft', 'published']),
+  "includeInGeorge": zod.boolean().optional(),
   "body": zod.array(zod.union([zod.object({
   "type": zod.enum(['heading', 'paragraph', 'tip']),
   "runs": zod.array(zod.object({
@@ -401,6 +424,7 @@ export const createAdminHowtoBodyReadTimeMax = 100;
 export const createAdminHowtoBodyDisplayOrderMin = 0;
 export const createAdminHowtoBodyDisplayOrderMax = 1000000;
 
+export const createAdminHowtoBodyIncludeInGeorgeDefault = true;
 export const createAdminHowtoBodyBodyItemOneRunsItemTextMax = 12000;
 
 export const createAdminHowtoBodyBodyItemOneRunsMax = 100;
@@ -439,6 +463,7 @@ export const CreateAdminHowtoBody = zod.object({
   "readTime": zod.string().max(createAdminHowtoBodyReadTimeMax),
   "displayOrder": zod.number().int().min(createAdminHowtoBodyDisplayOrderMin).max(createAdminHowtoBodyDisplayOrderMax),
   "status": zod.enum(['draft', 'published']),
+  "includeInGeorge": zod.boolean().default(createAdminHowtoBodyIncludeInGeorgeDefault),
   "body": zod.array(zod.union([zod.object({
   "type": zod.enum(['heading', 'paragraph', 'tip']),
   "runs": zod.array(zod.object({
@@ -511,6 +536,7 @@ export const CreateAdminHowtoResponse = zod.object({
   "readTime": zod.string(),
   "displayOrder": zod.number().int(),
   "status": zod.enum(['draft', 'published']),
+  "includeInGeorge": zod.boolean().optional(),
   "body": zod.array(zod.union([zod.object({
   "type": zod.enum(['heading', 'paragraph', 'tip']),
   "runs": zod.array(zod.object({
@@ -594,6 +620,7 @@ export const GetAdminHowtoResponse = zod.object({
   "readTime": zod.string(),
   "displayOrder": zod.number().int(),
   "status": zod.enum(['draft', 'published']),
+  "includeInGeorge": zod.boolean().optional(),
   "body": zod.array(zod.union([zod.object({
   "type": zod.enum(['heading', 'paragraph', 'tip']),
   "runs": zod.array(zod.object({
@@ -685,6 +712,7 @@ export const UpdateAdminHowtoBody = zod.object({
   "readTime": zod.string().max(updateAdminHowtoBodyReadTimeMax).optional(),
   "displayOrder": zod.number().int().min(updateAdminHowtoBodyDisplayOrderMin).max(updateAdminHowtoBodyDisplayOrderMax).optional(),
   "status": zod.enum(['draft', 'published']).optional(),
+  "includeInGeorge": zod.boolean().optional(),
   "body": zod.array(zod.union([zod.object({
   "type": zod.enum(['heading', 'paragraph', 'tip']),
   "runs": zod.array(zod.object({
@@ -757,6 +785,7 @@ export const UpdateAdminHowtoResponse = zod.object({
   "readTime": zod.string(),
   "displayOrder": zod.number().int(),
   "status": zod.enum(['draft', 'published']),
+  "includeInGeorge": zod.boolean().optional(),
   "body": zod.array(zod.union([zod.object({
   "type": zod.enum(['heading', 'paragraph', 'tip']),
   "runs": zod.array(zod.object({

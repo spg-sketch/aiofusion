@@ -7,6 +7,7 @@ import {
 import {
   db,
   howtoEntriesTable,
+  platformMetaTable,
   insightArticlesTable,
   insightMediaTable,
   type HowtoBlock,
@@ -14,10 +15,11 @@ import {
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { canAccessInsightsCms } from "../lib/insights-cms-access";
 import { lockSharedMediaReferences } from "../lib/shared-media-reference-lock";
+import { excludedGeorgeGuideIds, GEORGE_GUIDE_PREFIX, setGeorgeGuidePreference } from "../lib/george-guides";
 
 const router = Router();
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
-const BODY_FIELDS = new Set(["title", "description", "type", "readTime", "displayOrder", "status", "body"]);
+const BODY_FIELDS = new Set(["title", "description", "type", "readTime", "displayOrder", "status", "body", "includeInGeorge"]);
 
 function hasDatabaseCode(error: unknown, code: string): boolean {
   const visited = new Set<unknown>();
@@ -80,7 +82,7 @@ function entryId(req: Request): string {
   return Array.isArray(id) ? id[0] ?? "" : id ?? "";
 }
 
-async function serializeEntry(entry: typeof howtoEntriesTable.$inferSelect) {
+async function serializeEntry(entry: typeof howtoEntriesTable.$inferSelect, excluded = new Set<string>()) {
   const imageIds = [...new Set(entry.body.flatMap((block) => block.type === "image" ? [block.mediaId] : []))];
   const media = imageIds.length
     ? await db.select({ id: insightMediaTable.id, publicUrl: insightMediaTable.publicUrl, altText: insightMediaTable.altText })
@@ -90,6 +92,7 @@ async function serializeEntry(entry: typeof howtoEntriesTable.$inferSelect) {
   const byId = new Map(media.map((row) => [row.id, row]));
   return {
     ...entry,
+    includeInGeorge: !excluded.has(entry.id),
     body: entry.body.map((block) => {
       if (block.type !== "image") return block;
       const asset = byId.get(block.mediaId);
@@ -133,7 +136,8 @@ router.get("/howto", async (_req, res) => {
   const rows = await db.select().from(howtoEntriesTable)
     .where(eq(howtoEntriesTable.status, "published"))
     .orderBy(asc(howtoEntriesTable.displayOrder), asc(howtoEntriesTable.id));
-  res.json(await Promise.all(rows.map(serializeEntry)));
+  const excluded = await excludedGeorgeGuideIds();
+  res.json(await Promise.all(rows.map((row) => serializeEntry(row, excluded))));
 });
 
 router.get("/howto/:id", async (req, res) => {
@@ -144,14 +148,15 @@ router.get("/howto/:id", async (req, res) => {
     res.status(404).json({ error: "How-to entry not found" });
     return;
   }
-  res.json(await serializeEntry(entry));
+  res.json(await serializeEntry(entry, await excludedGeorgeGuideIds()));
 });
 
 router.get("/admin/howto", requirePlatformAuth, async (req, res) => {
   if (!authorized(req, res)) return;
   const rows = await db.select().from(howtoEntriesTable)
     .orderBy(asc(howtoEntriesTable.displayOrder), asc(howtoEntriesTable.id));
-  res.json(await Promise.all(rows.map(serializeEntry)));
+  const excluded = await excludedGeorgeGuideIds();
+  res.json(await Promise.all(rows.map((row) => serializeEntry(row, excluded))));
 });
 
 router.get("/admin/howto/:id", requirePlatformAuth, async (req, res) => {
@@ -162,7 +167,7 @@ router.get("/admin/howto/:id", requirePlatformAuth, async (req, res) => {
     res.status(404).json({ error: "How-to entry not found" });
     return;
   }
-  res.json(await serializeEntry(entry));
+  res.json(await serializeEntry(entry, await excludedGeorgeGuideIds()));
 });
 
 router.post("/admin/howto", requirePlatformAuth, async (req, res) => {
@@ -174,6 +179,7 @@ router.post("/admin/howto", requirePlatformAuth, async (req, res) => {
     return;
   }
   const input = parsed.data;
+  const { includeInGeorge = true, ...entryInput } = input;
   const body = stripResolvedImageUrls(input.body as HowtoBlock[]);
   if (!validBody(body)) {
     res.status(400).json({ error: "How-to links must use HTTPS" });
@@ -185,15 +191,16 @@ router.post("/admin/howto", requirePlatformAuth, async (req, res) => {
       if (!(await hasValidImageReferences(tx, body))) throw new Error("invalid-media");
       const now = new Date();
       const [entry] = await tx.insert(howtoEntriesTable).values({
-        ...input,
+        ...entryInput,
         body,
         createdAt: now,
         updatedAt: now,
         publishedAt: input.status === "published" ? now : null,
       }).returning();
+      await setGeorgeGuidePreference(tx, entry!.id, includeInGeorge);
       return entry!;
     });
-    res.status(201).json(await serializeEntry(created));
+    res.status(201).json(await serializeEntry(created, await excludedGeorgeGuideIds()));
   } catch (error) {
     if (error instanceof Error && error.message === "invalid-media") {
       res.status(400).json({ error: "How-to entry references an invalid or deleted image" });
@@ -216,6 +223,7 @@ router.patch("/admin/howto/:id", requirePlatformAuth, async (req, res) => {
     return;
   }
   const input = parsed.data;
+  const { includeInGeorge, ...entryInput } = input;
   const body = input.body ? stripResolvedImageUrls(input.body as HowtoBlock[]) : undefined;
   if (body && !validBody(body)) {
     res.status(400).json({ error: "How-to links must use HTTPS" });
@@ -232,18 +240,19 @@ router.patch("/admin/howto/:id", requirePlatformAuth, async (req, res) => {
       const now = new Date();
       const nextStatus = input.status ?? existing.status;
       const [updated] = await tx.update(howtoEntriesTable).set({
-        ...input,
+        ...entryInput,
         body: nextBody,
         updatedAt: now,
         publishedAt: nextStatus === "published" ? existing.publishedAt ?? now : existing.publishedAt,
       }).where(eq(howtoEntriesTable.id, existing.id)).returning();
+      if (includeInGeorge !== undefined) await setGeorgeGuidePreference(tx, existing.id, includeInGeorge);
       return updated ?? null;
     });
     if (!entry) {
       res.status(404).json({ error: "How-to entry not found" });
       return;
     }
-    res.json(await serializeEntry(entry));
+    res.json(await serializeEntry(entry, await excludedGeorgeGuideIds()));
   } catch (error) {
     if (error instanceof Error && error.message === "invalid-media") {
       res.status(400).json({ error: "How-to entry references an invalid or deleted image" });
@@ -255,8 +264,12 @@ router.patch("/admin/howto/:id", requirePlatformAuth, async (req, res) => {
 
 router.delete("/admin/howto/:id", requirePlatformAuth, async (req, res) => {
   if (!authorized(req, res)) return;
-  const [deleted] = await db.delete(howtoEntriesTable)
-    .where(eq(howtoEntriesTable.id, entryId(req))).returning({ id: howtoEntriesTable.id });
+  const deleted = await db.transaction(async (tx) => {
+    const [row] = await tx.delete(howtoEntriesTable)
+      .where(eq(howtoEntriesTable.id, entryId(req))).returning({ id: howtoEntriesTable.id });
+    if (row) await tx.delete(platformMetaTable).where(eq(platformMetaTable.key, `${GEORGE_GUIDE_PREFIX}${row.id}`));
+    return row;
+  });
   if (!deleted) {
     res.status(404).json({ error: "How-to entry not found" });
     return;

@@ -37,6 +37,12 @@ vi.mock("@workspace/db", async () => {
       updated_at timestamptz NOT NULL DEFAULT now(), published_at timestamptz
     );
     CREATE TABLE platform_meta (key varchar PRIMARY KEY, value text NOT NULL);
+    CREATE TABLE support_faq (
+      id serial PRIMARY KEY, category varchar NOT NULL, question text NOT NULL, answer text NOT NULL,
+      keywords text NOT NULL DEFAULT '', display_order integer NOT NULL DEFAULT 0,
+      is_active boolean NOT NULL DEFAULT true, created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
   `);
   return { ...(await vi.importActual<object>("@workspace/db/schema")), db, pool: { end: () => client.close() } };
 });
@@ -51,8 +57,12 @@ import {
   howtoMigrationLedgerTable,
   insightArticlesTable,
   insightMediaTable,
+  platformMetaTable,
+  supportFaqTable,
 } from "@workspace/db";
 import howtoRouter from "./howto";
+import georgeSearchRouter from "./george-search";
+import { guideExcerpt, guideParagraphs, supportScore } from "../lib/george-guides";
 import insightsRouter from "./insights";
 import { applyHowtoSeedMigration, HOWTO_SEED_MIGRATION_ID } from "../lib/howto-seed-migration";
 import { HOWTO_INITIAL_SEEDS } from "../lib/howto-seeds";
@@ -72,6 +82,7 @@ beforeAll(async () => {
     next();
   });
   app.use("/api", howtoRouter);
+  app.use("/api", georgeSearchRouter);
   app.use("/api", insightsRouter);
   server = app.listen(0);
   await new Promise<void>((resolve) => server.once("listening", resolve));
@@ -83,6 +94,8 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
+  await db.delete(platformMetaTable);
+  await db.delete(supportFaqTable);
   await db.delete(howtoEntriesTable);
   await db.delete(howtoMigrationLedgerTable);
   await db.delete(insightArticlesTable);
@@ -110,6 +123,79 @@ async function request(path: string, options: RequestInit = {}, role = "reader")
 }
 
 describe("How-to CMS", () => {
+  it("searches written guide material, not media URLs, and keeps long excerpts around the matching instructions", () => {
+    const paragraphs = guideParagraphs([
+      { type: "image", mediaId: "asset", altText: "Measurement screenshot", caption: "Select the saved audit" },
+      { type: "video", url: "https://not-indexed.example/video", caption: "A walkthrough of reports" },
+      { type: "paragraph", runs: [{ text: "Open " }, { text: "the editor", href: "https://not-indexed.example/link" }] },
+    ]);
+    expect(paragraphs).toEqual(["Measurement screenshot", "Select the saved audit", "A walkthrough of reports", "Open the editor"]);
+    expect(supportScore("How do I use measurement?", "", "", paragraphs.join("\n"))).toBeGreaterThan(0);
+    const excerpt = guideExcerpt("zebrametric?", [`${"Introduction ".repeat(100)}zebrametric instructions ${"More detail ".repeat(100)}`], "Description");
+    expect(excerpt.length).toBeLessThanOrEqual(600);
+    expect(excerpt).toContain("zebrametric instructions");
+  });
+  it("defaults existing and new published guides into George and applies opt-out, edits, unpublishing and deletion immediately", async () => {
+    // Legacy rows have no preference and must be included without backfilling.
+    await db.insert(howtoEntriesTable).values(entry("existing"));
+    const found = async (q: string) => ((await (await request(`/support/search?q=${encodeURIComponent(q)}`)).json()) as {
+      results: Array<{ guideId?: string; source: string; question: string; answer: string }>;
+    }).results;
+    expect((await found("existing")).map((r: any) => r.guideId)).toEqual(["existing"]);
+    const created = await request("/admin/howto", { method: "POST", body: JSON.stringify({
+      ...entry("new-guide"), body: [
+        { type: "heading", runs: [{ text: "Project configuration" }] },
+        { type: "step", number: 1, title: "Enable measurement", runs: [{ text: "Use the zebrametric selector." }] },
+        { type: "list", items: ["Verify the calibration dial"] },
+        { type: "image", mediaId: "unused", altText: "A screenshot" },
+      ].filter((b) => b.type !== "image"),
+    }) }, "admin");
+    expect(created.status).toBe(201);
+    expect(((await created.json()) as { includeInGeorge: boolean }).includeInGeorge).toBe(true);
+    const matches = await found("zebrametric");
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toMatchObject({ source: "guide", guideId: "new-guide", answer: expect.stringContaining("zebrametric") });
+    expect((await found("calibration"))[0].guideId).toBe("new-guide");
+    const patch = (data: object) => request("/admin/howto/new-guide", { method: "PATCH", body: JSON.stringify(data) }, "admin");
+    expect((await patch({ includeInGeorge: false })).status).toBe(200);
+    expect(await found("zebrametric")).toEqual([]);
+    const library = (await (await request("/howto/new-guide")).json()) as { includeInGeorge: boolean };
+    expect(library.includeInGeorge).toBe(false); // Opt-out does not remove the library entry.
+    expect((await patch({ title: "Updated guide" })).status).toBe(200);
+    expect(await found("zebrametric")).toEqual([]); // Unrelated edits preserve opt-out.
+    expect((await patch({ includeInGeorge: true, body: [{ type: "paragraph", runs: [{ text: "New foxmetric instructions" }] }] })).status).toBe(200);
+    expect(await found("zebrametric")).toEqual([]);
+    expect((await found("foxmetric"))[0].question).toBe("Updated guide");
+    await patch({ status: "draft" });
+    expect(await found("foxmetric")).toEqual([]);
+    await patch({ status: "published" });
+    expect((await found("foxmetric"))[0].guideId).toBe("new-guide");
+    await request("/admin/howto/new-guide", { method: "DELETE" }, "admin");
+    expect(await found("foxmetric")).toEqual([]);
+    expect(await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, "howto:george:new-guide"))).toEqual([]);
+  });
+
+  it("never exposes drafts, excluded guides or inactive FAQs through anonymous support search", async () => {
+    await db.insert(howtoEntriesTable).values([entry("published"), entry("draft-guide", "draft"), entry("excluded")]);
+    await request("/admin/howto/excluded", { method: "PATCH", body: JSON.stringify({ includeInGeorge: false }) }, "admin");
+    await db.insert(supportFaqTable).values([
+      { question: "Title FAQ", answer: "Current answer", category: "General" },
+      { question: "Title secret FAQ", answer: "Do not expose", category: "General", isActive: false },
+    ]);
+    const response = await request("/support/search?q=Title", { headers: { "x-role": "reader" } });
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    const { results } = (await response.json()) as { results: Array<{ source: string; guideId?: string }> };
+    expect(results.map((r: any) => r.source).sort()).toEqual(["faq", "guide"]);
+    expect(results.find((r) => r.source === "guide")?.guideId).toBe("published");
+    expect((await request("/support/search")).status).toBe(400);
+    expect((await request(`/support/search?q=${"x".repeat(501)}`)).status).toBe(400);
+    expect((await request("/admin/howto/published", {
+      method: "PATCH", body: JSON.stringify({ includeInGeorge: false }),
+    }, "reader")).status).toBe(403);
+    expect((await request("/admin/howto/published", {
+      method: "PATCH", body: JSON.stringify({ includeInGeorge: "false" }),
+    }, "admin")).status).toBe(400);
+  });
   it("matches the frozen source-GuidancePage metadata and complete converted body snapshot", () => {
     const snapshot = HOWTO_INITIAL_SEEDS.map((seed) => ({
       id: seed.id,

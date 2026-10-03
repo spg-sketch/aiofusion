@@ -144,6 +144,18 @@ export function HowtoEditor({ entry, onPersisted, onDeleted, onStateChange, cont
         )}
       </div>
 
+      <div className="mt-4 rounded-xl border p-4" style={{ borderColor: vars.g200, background: vars.g50 }}>
+        <label className="flex items-center gap-2 text-[13px] font-semibold">
+          <input type="checkbox" checked={draft.includeInGeorge} disabled={busy}
+            onChange={(event) => setDraft((current) => ({ ...current, includeInGeorge: event.target.checked }))}
+            data-testid="input-include-george" />
+          Available in GEO George
+        </label>
+        <p className="mt-1 text-[12px]" style={{ color: vars.g500 }}>
+          Published guides appear in George's support search automatically. Untick to exclude this guide. Drafts never appear.
+        </p>
+      </div>
+
       {saveError.length > 0 && (
         <div role="alert" data-testid="save-error" className="mt-4 rounded-xl border px-4 py-3 text-[13px]" style={{ background: "#fef2f2", borderColor: "#fca5a5", color: "#7f1d1d" }}>
           <p className="font-bold mb-1 flex items-center gap-1.5"><AlertCircle size={14} /> This entry was not saved</p>

@@ -2,13 +2,11 @@ import { useState, useEffect, useRef } from "react";
 import { X, MessageCircle, Send, CheckCircle2, AlertCircle, Loader2, ChevronDown, Paperclip, ArrowLeft, Clock, InboxIcon } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { apiBase } from "../lib/contentAi";
+import { searchGeorgeSupport } from "@workspace/api-client-react";
+import type { GeorgeSearchResult } from "@workspace/api-client-react";
+import { GeorgeGuide } from "./GeorgeGuide";
 
-type FaqEntry = {
-  id: number;
-  category: string;
-  question: string;
-  answer: string;
-};
+type FaqEntry = GeorgeSearchResult;
 
 type Ticket = {
   id: number;
@@ -41,6 +39,8 @@ type ChatStep =
   | { type: "searching" }
   | { type: "faq_options"; entries: FaqEntry[] }
   | { type: "faq_result"; entry: FaqEntry }
+  | { type: "guide"; entry: FaqEntry }
+  | { type: "search_error" }
   | { type: "not_helpful" }
   | { type: "no_match" }
   | { type: "ticket_form" }
@@ -157,12 +157,8 @@ export function GeorgeSupport({
     if (!q) return;
     setStep({ type: "searching" });
     try {
-      const r = await fetch(
-        `${apiBase()}/api/support/faq?q=${encodeURIComponent(q)}`,
-        { credentials: "include" },
-      );
-      const data = (await r.json()) as { faq: FaqEntry[] };
-      const results = data.faq ?? [];
+      const data = await searchGeorgeSupport({ q });
+      const results = data.results;
       if (results.length === 0) {
         setStep({ type: "no_match" });
       } else if (results.length === 1) {
@@ -173,7 +169,7 @@ export function GeorgeSupport({
         setStep({ type: "faq_options", entries: results });
       }
     } catch {
-      setStep({ type: "no_match" });
+      setStep({ type: "search_error" });
     }
   }
 
@@ -521,7 +517,7 @@ export function GeorgeSupport({
 
           {/* ── Standard chat flow ── */}
           {(step.type === "greeting" || step.type === "waiting_question" || step.type === "searching" ||
-            step.type === "faq_options" || step.type === "faq_result" || step.type === "not_helpful" ||
+            step.type === "faq_options" || step.type === "faq_result" || step.type === "guide" || step.type === "search_error" || step.type === "not_helpful" ||
             step.type === "no_match" || step.type === "ticket_form" || step.type === "ticket_success" ||
             step.type === "ask_another") && (
             <>
@@ -590,7 +586,7 @@ export function GeorgeSupport({
                 <GeorgeBubble>
                   <div className="flex items-center gap-2">
                     <Loader2 size={14} className="animate-spin" style={{ color: teal }} />
-                    <span className="text-[13px]" style={{ color: vars.g500 }}>Searching the FAQ…</span>
+                    <span className="text-[13px]" style={{ color: vars.g500 }}>Searching FAQs and published guides...</span>
                   </div>
                 </GeorgeBubble>
               )}
@@ -639,6 +635,12 @@ export function GeorgeSupport({
                     <p className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{ color: vars.g600 ?? navy }}>
                       {step.entry.answer}
                     </p>
+                    {step.entry.source === "guide" && step.entry.guideId && (
+                      <button className="mt-3 underline text-[13px] font-semibold"
+                        onClick={() => setStep({ type: "guide", entry: step.entry })}>
+                        Open full guide
+                      </button>
+                    )}
                   </GeorgeBubble>
 
                   {helpfulVote === null && (
@@ -663,6 +665,17 @@ export function GeorgeSupport({
                     </GeorgeBubble>
                   )}
                 </>
+              )}
+
+              {step.type === "guide" && step.entry.guideId && (
+                <GeorgeGuide id={step.entry.guideId} onBack={() => setStep({ type: "faq_result", entry: step.entry })} />
+              )}
+
+              {step.type === "search_error" && (
+                <GeorgeBubble>
+                  <p className="text-[13px]" role="alert">Support search could not be loaded. Please try again.</p>
+                  <button className="mt-3 underline text-[13px]" onClick={() => void handleAskQuestion()}>Retry search</button>
+                </GeorgeBubble>
               )}
 
               {step.type === "ask_another" && (
@@ -814,6 +827,7 @@ export function GeorgeSupport({
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleAskQuestion(); }
               }}
               placeholder="Type your question…"
+              maxLength={500}
               className="flex-1 text-[13px] px-3 py-2 rounded-lg border outline-none focus:ring-2"
               style={{
                 borderColor: vars.g200,

@@ -50,6 +50,8 @@ import type {
   RecommendationBriefRequest,
   RecommendationEnrichRequest,
   RecommendationRequest,
+  SearchGeorgeSupport200,
+  SearchGeorgeSupportParams,
   UploadUrlRequest,
   UploadUrlResponse
 } from './api.schemas';
@@ -80,6 +82,84 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getSearchGeorgeSupportUrl = (params: SearchGeorgeSupportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/support/search?${stringifiedParams}` : `/api/support/search`
+}
+
+export const searchGeorgeSupport = async (params: SearchGeorgeSupportParams, options?: Parameters<typeof customFetch>[1]): Promise<SearchGeorgeSupport200> => {
+
+  return customFetch<SearchGeorgeSupport200>(getSearchGeorgeSupportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getSearchGeorgeSupportQueryKey = (params?: SearchGeorgeSupportParams,) => {
+    return [
+    `/api/support/search`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getSearchGeorgeSupportQueryOptions = <TData = Awaited<ReturnType<typeof searchGeorgeSupport>>, TError = ErrorType<unknown>>(params: SearchGeorgeSupportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof searchGeorgeSupport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getSearchGeorgeSupportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof searchGeorgeSupport>>> = ({ signal }) => searchGeorgeSupport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof searchGeorgeSupport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type SearchGeorgeSupportQueryResult = NonNullable<Awaited<ReturnType<typeof searchGeorgeSupport>>>
+export type SearchGeorgeSupportQueryError = ErrorType<unknown>
+
+
+
+export function useSearchGeorgeSupport<TData = Awaited<ReturnType<typeof searchGeorgeSupport>>, TError = ErrorType<unknown>>(
+ params: SearchGeorgeSupportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof searchGeorgeSupport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getSearchGeorgeSupportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getHealthCheckUrl = () => {
 

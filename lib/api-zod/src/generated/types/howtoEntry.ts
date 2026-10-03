@@ -17,6 +17,7 @@ export interface HowtoEntry {
   readTime: string;
   displayOrder: number;
   status: HowtoEntryStatus;
+  includeInGeorge?: boolean;
   /** @maxItems 300 */
   body: HowtoBlock[];
   createdAt: Date;

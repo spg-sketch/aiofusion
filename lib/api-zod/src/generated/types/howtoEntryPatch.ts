@@ -26,6 +26,7 @@ export interface HowtoEntryPatch {
      */
   displayOrder?: number;
   status?: HowtoEntryPatchStatus;
+  includeInGeorge?: boolean;
   /** @maxItems 300 */
   body?: HowtoBlock[];
 }

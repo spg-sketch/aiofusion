@@ -31,6 +31,7 @@ export interface HowtoEntryInput {
      */
   displayOrder: number;
   status: HowtoEntryInputStatus;
+  includeInGeorge?: boolean;
   /** @maxItems 300 */
   body: HowtoBlock[];
 }
