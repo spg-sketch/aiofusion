@@ -12,7 +12,11 @@ description: Lessons about staging domains, production aliases, and live OAuth c
 
 **How to apply:** Compare public NS and the Replit-required TXT record against the actual zone in the screenshot. Treat a DNS table with no visible zone name as ambiguous; do not infer its domain from the user's current goal.
 - Deployment visibility can change; check current deployment metadata rather than assuming the historical password shield still applies.
-- Environments (user asked to remember, CORRECTED): **THIS repl = `aio-fusion-staging`**, the feature-development/staging server. The beta site is on another Replit instance and was intended to have its own DB; beta/alpha promotion should not share databases or data. Do not assume this intended isolation matches the current runtime: a later startup change explicitly forced the staging deployment to use a beta-named connection. Verify the actual target before claiming staging has its own independent DB.
+- The user clarified: "this isnt stagin anymore - its live." Treat this app as live, not staging.
+
+**Why:** The user corrected the historical staging assumption after the live cutover.
+
+**How to apply:** Keep development-preview verification separate from live publishing. Staging-labelled release checks do not prove the live publishing configuration. Verify the actual deployment mode and database target before making environment claims; never publish without approval.
 - User's key shared links (asked to remember): Roadmap = https://www.aiofusion.ai/roadmap.html ; Tasks/build plan = https://www.aiofusion.ai/build-plan.html (served from aio-fusion `public/`).
 
 An exposed historical database-login address was confirmed to authenticate and to match the separate beta connection, not this staging deployment's main connection. Do not rotate the staging main database credential to fix that exposure.

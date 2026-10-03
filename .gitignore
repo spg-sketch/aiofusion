@@ -67,3 +67,6 @@ Thumbs.db
 # transient and must not be committed.
 /test-results/
 /playwright-report/
+
+# Synthetic saved-media layout review captures.
+/screenshots/saved-media/

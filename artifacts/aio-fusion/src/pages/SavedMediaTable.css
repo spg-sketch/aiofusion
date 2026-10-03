@@ -1,0 +1,77 @@
+.media-saved-table {
+  width: 100%;
+  min-width: 0;
+  color: #1e293b;
+}
+
+.media-saved-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.media-saved-table table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.media-saved-table--contacts table { min-width: 680px; }
+.media-saved-table--publications table { min-width: 600px; }
+
+.media-saved-table th,
+.media-saved-table td {
+  padding: 10px 6px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+/* Wrap multi-word headings without splitting short labels such as LinkedIn. */
+.media-saved-table th { overflow-wrap: normal; }
+
+.media-saved-table td:last-child button {
+  display: block;
+  max-width: 100%;
+  margin: 0 0 8px;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.media-saved-table button:disabled { opacity: 0.5; }
+
+.media-saved-table-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+}
+
+.media-saved-table-scroll-buttons { display: flex; gap: 6px; flex-shrink: 0; }
+
+.media-saved-table-scroll-buttons button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: white;
+  color: #1e293b;
+}
+
+.media-saved-table-scroll:focus-visible,
+.media-saved-table button:focus-visible,
+.media-saved-table a:focus-visible {
+  outline: 2px solid #a52f60;
+  outline-offset: -2px;
+}

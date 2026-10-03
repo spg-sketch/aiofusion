@@ -18,6 +18,7 @@ import { getProjectMediaCategories } from "../IntakeForm";
 import MediaDiscoveryReview from "./MediaDiscoveryReview";
 import MediaDiscoveryInstructions from "./MediaDiscoveryInstructions";
 import { MediaExportDownload, type MediaExportFormat } from "./MediaExportDownload";
+import { SavedMediaTable } from "./SavedMediaTable";
 // ---------------------------------------------------------------------------
 // Searchable outlet combobox for the contact modal
 // ---------------------------------------------------------------------------
@@ -1556,7 +1557,7 @@ function MediaDatabasePage() {
       </section>}
 
       {showCollectionTools && searchActive && <section className="mb-6">
-        <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <p className="text-[13px]" style={{ color: "#ffffff" }}>{searchLoading ? "Searching..." : resultMessage || `${searchType === "contacts" ? searchCounts.contacts : searchCounts.outlets} ${searchType} found`}</p>
            <div className="flex flex-wrap items-center justify-end gap-2">
              <MediaExportDownload scope="saved" disabled={exportBusy || !Array.from(savedMedia).some((key) => key.startsWith(`${searchType === "contacts" ? "contact" : "publication"}:`))} onDownload={(format) => void exportMediaCsv("saved", searchType, undefined, format)} />
@@ -1575,10 +1576,13 @@ function MediaDatabasePage() {
          {resultMessage && !searchLoading && <button onClick={runSearch} className="mb-3 text-[12px] font-semibold underline" style={{ color: vars.accent }}>Retry search</button>}
           {searchScope === "saved" ? (
             <div className="space-y-4" aria-live="polite">
-              {savedSectorGroups.map(([sector, records]) => <section key={sector} className="overflow-hidden rounded-xl border bg-white" style={{ borderColor: vars.g200 }}>
+              {savedSectorGroups.map(([sector, records]) => <section key={sector} className="min-w-0 overflow-hidden rounded-xl border bg-white" style={{ borderColor: vars.g200 }}>
                 <h2 className="border-b px-4 py-3 text-[13px] font-semibold" style={{ borderColor: vars.g100, color: vars.navy }}>{sector}</h2>
-                <div className="overflow-x-auto">
+                <SavedMediaTable type={searchType} sector={sector}>
                   <table className="min-w-full text-left text-[12px]">
+                    <colgroup>
+                      {(searchType === "contacts" ? [7, 9, 10, 10, 15, 9, 8, 14, 9, 9] : [19, 9, 28, 10, 22, 12]).map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}
+                    </colgroup>
                     <thead style={{ background: vars.g50, color: vars.g600 }}>
                       {searchType === "contacts" ? <tr>{["First name", "Last name", "Job title", "Outlet", "Email", "LinkedIn", "Outlet website", "Outlet description", "Country", "Actions"].map((label) => <th key={label} className="whitespace-nowrap px-3 py-2 font-semibold">{label}</th>)}</tr>
                         : <tr>{["Publication", "Website", "Description", "Country", "Linked journalists", "Actions"].map((label) => <th key={label} className="whitespace-nowrap px-3 py-2 font-semibold">{label}</th>)}</tr>}
@@ -1601,7 +1605,7 @@ function MediaDatabasePage() {
                               <button onClick={() => openEditContact(result.contact)} className="mr-3 underline" style={{ color: vars.accent }}>Edit</button>
                               <button disabled={deletingContactId === result.id} onClick={() => { if (window.confirm(`Delete ${contactDisplayName(result.contact)}?`)) void deleteContact(result.id, result.contact); }} className="mr-3 underline" style={{ color: vars.red }}>Delete</button>
                             </>}
-                            <button disabled={bookmarkBusy === key} onClick={() => void toggleBookmark("contact", result.id)} className="underline" style={{ color: vars.accent }}>Remove from My Media Database</button>
+                            <button aria-label="Remove from My Media Database" title="Remove from My Media Database" disabled={bookmarkBusy === key} onClick={() => void toggleBookmark("contact", result.id)} className="underline" style={{ color: vars.accent }}>Remove</button>
                           </td>
                         </tr> : <tr key={key} className="border-t align-top" style={{ borderColor: vars.g100 }}>
                           <td className="whitespace-nowrap px-3 py-3 font-semibold">{result.outlet.name}</td>
@@ -1614,13 +1618,13 @@ function MediaDatabasePage() {
                               <button onClick={() => openEditOutlet(result.outlet)} className="mr-3 underline" style={{ color: vars.accent }}>Edit</button>
                               <button disabled={deletingOutletId === result.id} onClick={() => { if (window.confirm(`Delete "${result.outlet.name}"?`)) void deleteOutlet(result.id, result.outlet); }} className="mr-3 underline" style={{ color: vars.red }}>Delete</button>
                             </>}
-                            <button disabled={bookmarkBusy === key} onClick={() => void toggleBookmark("publication", result.id)} className="underline" style={{ color: vars.accent }}>Remove from My Media Database</button>
+                            <button aria-label="Remove from My Media Database" title="Remove from My Media Database" disabled={bookmarkBusy === key} onClick={() => void toggleBookmark("publication", result.id)} className="underline" style={{ color: vars.accent }}>Remove</button>
                           </td>
                         </tr>;
                       })}
                     </tbody>
                   </table>
-                </div>
+                </SavedMediaTable>
               </section>)}
               {!searchLoading && !resultMessage && visibleSearchResults.length === 0 && (canBroadenSearch ? emptySearchState : <div className="rounded-2xl border bg-white py-12 text-center" style={{ borderColor: vars.g200 }}><p className="font-semibold" style={{ color: vars.navy }}>Your My Media Database is empty</p><p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Save contacts or publications from search results to see them here.</p></div>)}
             </div>

@@ -969,7 +969,9 @@ describe("MediaDatabasePage source health", () => {
     })).toBe(true));
     expectReachHidden();
     expectTableAligned(10);
-    expect(screen.getByRole("button", { name: "Remove from My Media Database" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove from My Media Database" })).toHaveTextContent(/^Remove$/);
+    expect(screen.getByRole("region", { name: "Saved contacts in Energy" })).toHaveAttribute("tabindex", "0");
+    expect(document.querySelectorAll(".media-saved-table col")).toHaveLength(10);
   });
 
   it("shows saved publications in aligned sector tables without reach", async () => {
@@ -983,8 +985,10 @@ describe("MediaDatabasePage source health", () => {
     expectReachHidden();
     expect(screen.queryByText("National")).toBeNull();
     expectTableAligned(6);
+    expect(screen.getByRole("region", { name: "Saved publications in Energy" })).toHaveAttribute("tabindex", "0");
+    expect(document.querySelectorAll(".media-saved-table col")).toHaveLength(6);
     expect(screen.queryByText(/Verified authority/)).toBeNull();
-    expect(screen.getByRole("button", { name: "Remove from My Media Database" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove from My Media Database" })).toHaveTextContent(/^Remove$/);
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
   });
