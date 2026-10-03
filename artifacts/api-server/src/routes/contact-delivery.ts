@@ -58,10 +58,13 @@ export async function deliverContactEmails(id: number): Promise<string[]> {
   }
 
   const errors: string[] = [];
+  const attribution = row.heardAbout ? {
+    heardAbout: row.heardAbout, heardAboutDetail: row.heardAboutDetail,
+  } : {};
   if (!row.internalEmailAccepted) {
     const error = await sendPending(id, "internal", () => row.type === "book-demo"
-      ? sendBookDemoInternalAlert({ submissionId: id, name: row.name, email: row.email, company: row.company, goal: row.goal ?? "" })
-      : sendEnquiryInternalAlert({ submissionId: id, name: row.name, email: row.email, company: row.company, subject: row.subject ?? "", message: row.message ?? "" }));
+      ? sendBookDemoInternalAlert({ submissionId: id, name: row.name, email: row.email, company: row.company, goal: row.goal ?? "", ...attribution })
+      : sendEnquiryInternalAlert({ submissionId: id, name: row.name, email: row.email, company: row.company, subject: row.subject ?? "", message: row.message ?? "", ...attribution }));
     if (error) errors.push(error);
   }
   if (!row.customerEmailAccepted) {

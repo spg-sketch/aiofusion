@@ -1168,6 +1168,8 @@ export async function sendBookDemoInternalAlert(opts: {
   email: string;
   company: string;
   goal: string;
+  heardAbout?: string | null;
+  heardAboutDetail?: string | null;
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
@@ -1182,6 +1184,8 @@ export async function sendBookDemoInternalAlert(opts: {
     `Email:   ${opts.email}`,
     `Company: ${opts.company}`,
     `Goal:    ${opts.goal}`,
+    `How did you hear about us? ${opts.heardAbout || "(not provided)"}`,
+    ...(opts.heardAboutDetail ? [`Additional source information: ${opts.heardAboutDetail}`] : []),
   ].join("\n");
 
   const html = buildEmailHtml({
@@ -1193,6 +1197,8 @@ export async function sendBookDemoInternalAlert(opts: {
         ["Email", opts.email],
         ["Company", opts.company],
         ["What they hope to achieve", opts.goal],
+        ["How did you hear about us?", opts.heardAbout || "(not provided)"],
+        ...(opts.heardAboutDetail ? [["Additional source information", opts.heardAboutDetail] as [string, string]] : []),
       ])}
     `,
     cta: { text: "Reply to enquiry", href: `mailto:${opts.email}` },
@@ -1261,6 +1267,8 @@ export async function sendEnquiryInternalAlert(opts: {
   company: string;
   subject: string;
   message: string;
+  heardAbout?: string | null;
+  heardAboutDetail?: string | null;
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
@@ -1275,6 +1283,8 @@ export async function sendEnquiryInternalAlert(opts: {
     `Email:   ${opts.email}`,
     `Company: ${opts.company || "(not provided)"}`,
     `Subject: ${opts.subject}`,
+    `How did you hear about us? ${opts.heardAbout || "(not provided)"}`,
+    ...(opts.heardAboutDetail ? [`Additional source information: ${opts.heardAboutDetail}`] : []),
     ``,
     `Message:`,
     opts.message,
@@ -1289,6 +1299,8 @@ export async function sendEnquiryInternalAlert(opts: {
         ["Email", opts.email],
         ["Company", opts.company || "(not provided)"],
         ["Subject", opts.subject],
+        ["How did you hear about us?", opts.heardAbout || "(not provided)"],
+        ...(opts.heardAboutDetail ? [["Additional source information", opts.heardAboutDetail] as [string, string]] : []),
       ])}
       <p style="margin: 16px 0 6px 0; font-weight: 600; font-size: 13px; color: #475569;">Message:</p>
       <div style="background: #F8FAFC; border-left: 3px solid #C8497A; padding: 14px 16px;

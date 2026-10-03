@@ -16,6 +16,8 @@ type Submission = {
   goal: string | null;
   subject: string | null;
   message: string | null;
+  heardAbout?: string | null;
+  heardAboutDetail?: string | null;
   status: "pending" | "actioned";
   emailFailed: boolean;
   internalEmailAccepted: boolean | null;
@@ -330,6 +332,11 @@ export function LeadsAdminPage({ onBack }: { onBack: () => void }) {
                   {/* Expanded detail */}
                   {isExpanded && (
                     <div className="px-5 pb-5 border-t" style={{ borderColor: vars.g100 }}>
+                      <div className="pt-4">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] mb-1.5" style={{ color: vars.g400 }}>How did you hear about us?</p>
+                        <p className="text-[13px] break-words" style={{ color: ink }}>{s.heardAbout || "Not provided"}</p>
+                        {s.heardAboutDetail && <p className="text-[13px] break-words mt-1" style={{ color: vars.g600 }}>{s.heardAboutDetail}</p>}
+                      </div>
                       <div className="pt-4 grid sm:grid-cols-2 gap-4 mb-4">
                         <div>
                           <p className="text-[10px] font-bold uppercase tracking-[0.18em] mb-1.5" style={{ color: vars.g400 }}>Contact</p>

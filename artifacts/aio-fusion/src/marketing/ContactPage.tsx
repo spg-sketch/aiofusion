@@ -4,6 +4,7 @@ import MarketingPage from "./MarketingPage";
 import { PageHead } from "./PageHead";
 import { PAGE_META } from "./pageMeta";
 import { vars } from "./vars";
+import HeardAboutField, { hasHeardAboutDetail } from "./HeardAboutField";
 
 const NAVY = "#102B36";
 const RASPBERRY = vars.accent;
@@ -42,6 +43,8 @@ export function BookDemoForm() {
   const [email, setEmail] = useState("");
   const [company, setCompany] = useState("");
   const [goal, setGoal] = useState("");
+  const [heardAbout, setHeardAbout] = useState("");
+  const [heardAboutDetail, setHeardAboutDetail] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -53,7 +56,9 @@ export function BookDemoForm() {
       const res = await fetch(`${import.meta.env.BASE_URL}api/contact/book-demo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, company, goal }),
+        body: JSON.stringify({ name, email, company, goal,
+          ...(heardAbout ? { heardAbout, heardAboutDetail: hasHeardAboutDetail(heardAbout) ? heardAboutDetail.trim() : "" } : {}),
+        }),
       });
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) {
@@ -146,6 +151,8 @@ export function BookDemoForm() {
           style={inputStyle}
         />
       </Field>
+      <HeardAboutField id="book-demo-heard-about" value={heardAbout} detail={heardAboutDetail}
+        onChange={setHeardAbout} onDetailChange={setHeardAboutDetail} />
       {status === "error" && (
         <div
           className="flex items-start gap-2 p-3 rounded-xl text-[13px]"
@@ -171,12 +178,14 @@ export function BookDemoForm() {
   );
 }
 
-function EnquiryForm() {
+export function EnquiryForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [company, setCompany] = useState("");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
+  const [heardAbout, setHeardAbout] = useState("");
+  const [heardAboutDetail, setHeardAboutDetail] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -188,7 +197,9 @@ function EnquiryForm() {
       const res = await fetch(`${import.meta.env.BASE_URL}api/contact/enquiry`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, company, subject, message }),
+        body: JSON.stringify({ name, email, company, subject, message,
+          ...(heardAbout ? { heardAbout, heardAboutDetail: hasHeardAboutDetail(heardAbout) ? heardAboutDetail.trim() : "" } : {}),
+        }),
       });
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) {
@@ -291,6 +302,8 @@ function EnquiryForm() {
           style={inputStyle}
         />
       </Field>
+      <HeardAboutField id="enquiry-heard-about" value={heardAbout} detail={heardAboutDetail}
+        onChange={setHeardAbout} onDetailChange={setHeardAboutDetail} />
       {status === "error" && (
         <div
           className="flex items-start gap-2 p-3 rounded-xl text-[13px]"

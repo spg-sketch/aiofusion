@@ -11,6 +11,8 @@ type Submission = {
   company: string;
   subject: string;
   message: string;
+  heardAbout?: string | null;
+  heardAboutDetail?: string | null;
   emailFailed: string;
   createdAt: string;
 };
@@ -222,6 +224,11 @@ export function ContactSubmissionsAdminPage({ onBack }: { onBack: () => void }) 
 
                   {isOpen && (
                     <div className="px-5 pb-5 border-t" style={{ borderColor: vars.g100 }}>
+                      <div className="pt-4">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] mb-1" style={{ color: vars.g400 }}>How did you hear about us?</p>
+                        <p className="text-[13px] break-words" style={{ color: ink }}>{row.heardAbout || "Not provided"}</p>
+                        {row.heardAboutDetail && <p className="text-[13px] break-words" style={{ color: vars.g600 }}>{row.heardAboutDetail}</p>}
+                      </div>
                       {row.subject && (
                         <div className="pt-4">
                           <p className="text-[11px] font-bold uppercase tracking-[0.14em] mb-1" style={{ color: vars.g400 }}>Subject</p>

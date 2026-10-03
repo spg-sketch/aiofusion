@@ -22,8 +22,11 @@ import type {
 import type {
   AuthUserEnvelope,
   BeginBrowserLoginParams,
+  ContactEnquiryInput,
   ContactRestrictionRequest,
+  ContactSubmissionResult,
   CreateAdminHowto200,
+  DemoRequestInput,
   ErrorEnvelope,
   GetMediaRecommendationBriefParams,
   GetMediaRecommendationsParams,
@@ -83,6 +86,166 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getSubmitDemoRequestUrl = () => {
+
+
+
+
+  return `/api/contact/book-demo`
+}
+
+/**
+ * @summary Submit a public demo request
+ */
+export const submitDemoRequest = async (demoRequestInput: DemoRequestInput, options?: Parameters<typeof customFetch>[1]): Promise<ContactSubmissionResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<ContactSubmissionResult>(getSubmitDemoRequestUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(demoRequestInput)
+  }
+);}
+
+
+
+
+
+export const getSubmitDemoRequestMutationKey = () => ['submitDemoRequest'] as const;
+
+export const getSubmitDemoRequestMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitDemoRequest>>, TError,SubmitDemoRequestMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitDemoRequest>>, TError,SubmitDemoRequestMutationVariables, TContext> => {
+
+const mutationKey = getSubmitDemoRequestMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitDemoRequest>>, SubmitDemoRequestMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  submitDemoRequest(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitDemoRequestMutationResult = NonNullable<Awaited<ReturnType<typeof submitDemoRequest>>>
+    export type SubmitDemoRequestMutationBody = BodyType<DemoRequestInput>
+    export type SubmitDemoRequestMutationError = ErrorType<unknown>
+    export type SubmitDemoRequestMutationVariables = {data: BodyType<DemoRequestInput>}
+
+    /**
+ * @summary Submit a public demo request
+ */
+export const useSubmitDemoRequest = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitDemoRequest>>, TError,SubmitDemoRequestMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitDemoRequest>>,
+        TError,
+        SubmitDemoRequestMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSubmitDemoRequestMutationOptions(options));
+    }
+
+export const getSubmitContactEnquiryUrl = () => {
+
+
+
+
+  return `/api/contact/enquiry`
+}
+
+/**
+ * @summary Submit a public contact enquiry
+ */
+export const submitContactEnquiry = async (contactEnquiryInput: ContactEnquiryInput, options?: Parameters<typeof customFetch>[1]): Promise<ContactSubmissionResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<ContactSubmissionResult>(getSubmitContactEnquiryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(contactEnquiryInput)
+  }
+);}
+
+
+
+
+
+export const getSubmitContactEnquiryMutationKey = () => ['submitContactEnquiry'] as const;
+
+export const getSubmitContactEnquiryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitContactEnquiry>>, TError,SubmitContactEnquiryMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitContactEnquiry>>, TError,SubmitContactEnquiryMutationVariables, TContext> => {
+
+const mutationKey = getSubmitContactEnquiryMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitContactEnquiry>>, SubmitContactEnquiryMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  submitContactEnquiry(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitContactEnquiryMutationResult = NonNullable<Awaited<ReturnType<typeof submitContactEnquiry>>>
+    export type SubmitContactEnquiryMutationBody = BodyType<ContactEnquiryInput>
+    export type SubmitContactEnquiryMutationError = ErrorType<unknown>
+    export type SubmitContactEnquiryMutationVariables = {data: BodyType<ContactEnquiryInput>}
+
+    /**
+ * @summary Submit a public contact enquiry
+ */
+export const useSubmitContactEnquiry = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitContactEnquiry>>, TError,SubmitContactEnquiryMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitContactEnquiry>>,
+        TError,
+        SubmitContactEnquiryMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSubmitContactEnquiryMutationOptions(options));
+    }
 
 export const getSearchGeorgeSupportUrl = (params: SearchGeorgeSupportParams,) => {
   const normalizedParams = new URLSearchParams();

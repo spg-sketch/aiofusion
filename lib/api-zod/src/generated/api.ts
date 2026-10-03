@@ -8,6 +8,51 @@
 import * as zod from 'zod';
 
 
+/**
+ * @summary Submit a public demo request
+ */
+export const submitDemoRequestBodyOneHeardAboutDetailMax = 300;
+
+
+
+export const SubmitDemoRequestBody = zod.object({
+  "heardAbout": zod.enum(['AI assistant - ChatGPT', 'AI assistant - Claude', 'AI assistant - Gemini', 'AI assistant - Microsoft Copilot', 'AI assistant - Grok', 'AI assistant - other', 'LinkedIn', 'Other social media', 'Google or another search engine', 'Spencer Gallagher', 'Recommendation from a colleague or contact', 'Agency or partner recommendation', 'PR / media coverage', 'Article, newsletter or podcast', 'Event, conference or webinar', 'Email', 'Online advertisement', 'Other']).optional(),
+  "heardAboutDetail": zod.string().max(submitDemoRequestBodyOneHeardAboutDetailMax).optional()
+}).and(zod.object({
+  "name": zod.string(),
+  "email": zod.string(),
+  "company": zod.string(),
+  "goal": zod.string()
+}))
+
+export const SubmitDemoRequestResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Submit a public contact enquiry
+ */
+export const submitContactEnquiryBodyOneHeardAboutDetailMax = 300;
+
+
+
+export const SubmitContactEnquiryBody = zod.object({
+  "heardAbout": zod.enum(['AI assistant - ChatGPT', 'AI assistant - Claude', 'AI assistant - Gemini', 'AI assistant - Microsoft Copilot', 'AI assistant - Grok', 'AI assistant - other', 'LinkedIn', 'Other social media', 'Google or another search engine', 'Spencer Gallagher', 'Recommendation from a colleague or contact', 'Agency or partner recommendation', 'PR / media coverage', 'Article, newsletter or podcast', 'Event, conference or webinar', 'Email', 'Online advertisement', 'Other']).optional(),
+  "heardAboutDetail": zod.string().max(submitContactEnquiryBodyOneHeardAboutDetailMax).optional()
+}).and(zod.object({
+  "name": zod.string(),
+  "email": zod.string(),
+  "company": zod.string().optional(),
+  "subject": zod.string(),
+  "message": zod.string()
+}))
+
+export const SubmitContactEnquiryResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
 export const searchGeorgeSupportQueryQMax = 500;
 
 

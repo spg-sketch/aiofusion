@@ -15,6 +15,8 @@ export async function ensureContactSubmissionsTable(): Promise<void> {
         goal         text,
         subject      varchar(256),
         message      text,
+        heard_about varchar(128),
+        heard_about_detail varchar(300),
         status       varchar(32)  NOT NULL DEFAULT 'pending',
         email_failed boolean      NOT NULL DEFAULT false,
         internal_email_accepted boolean,
@@ -25,6 +27,8 @@ export async function ensureContactSubmissionsTable(): Promise<void> {
     `);
 
     // ── Idempotent migrations for tables created by older versions ────────────
+    await db.execute(sql`ALTER TABLE contact_submissions ADD COLUMN IF NOT EXISTS heard_about varchar(128)`);
+    await db.execute(sql`ALTER TABLE contact_submissions ADD COLUMN IF NOT EXISTS heard_about_detail varchar(300)`);
 
     await db.execute(sql`
       ALTER TABLE contact_submissions ADD COLUMN IF NOT EXISTS goal text

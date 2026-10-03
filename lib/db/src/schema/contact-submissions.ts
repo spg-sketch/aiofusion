@@ -19,6 +19,8 @@ export const contactSubmissionsTable = pgTable("contact_submissions", {
   goal: text("goal"),
   subject: varchar("subject", { length: 256 }),
   message: text("message"),
+  heardAbout: varchar("heard_about", { length: 128 }),
+  heardAboutDetail: varchar("heard_about_detail", { length: 300 }),
   status: varchar("status", { length: 32 }).notNull().default("pending"),
   emailFailed: boolean("email_failed").notNull().default(false),
   internalEmailAccepted: boolean("internal_email_accepted"),

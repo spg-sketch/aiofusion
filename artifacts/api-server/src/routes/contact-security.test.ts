@@ -15,6 +15,7 @@ vi.mock("@workspace/db", async () => {
     email varchar(256) NOT NULL, company varchar(128) NOT NULL DEFAULT '',
     goal text NOT NULL DEFAULT '', subject varchar(256) NOT NULL DEFAULT '',
     message text NOT NULL DEFAULT '', status varchar(32) NOT NULL DEFAULT 'new',
+    heard_about varchar(128), heard_about_detail varchar(300),
     email_failed boolean NOT NULL DEFAULT false,
     internal_email_accepted boolean, customer_email_accepted boolean,
     created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
@@ -65,5 +66,21 @@ describe("contact SQL and proxy boundary audit with executed PostgreSQL", () => 
     expect((await submit("enquiry", "fixture", "203.0.113.100, 192.0.2.2")).status).toBe(429);
     // The req.ip chosen under trust proxy=1 is unchanged; the custom key is not.
     expect((await submit("enquiry", "fixture", "203.0.113.101, 192.0.2.2")).status).toBe(200);
+  });
+  it("persists optional attribution and detail for both public forms in PostgreSQL", async () => {
+    for (const type of ["book-demo", "enquiry"]) {
+      const response = await fetch(`${base}/${type}`, {
+        method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": "198.51.100.200" },
+        body: JSON.stringify({ name: "Attribution Fixture", email: "attribution@example.invalid",
+          company: "Example", goal: "Demo", subject: "Question", message: "Question",
+          heardAbout: "AI assistant - other", heardAboutDetail: "  Example tool  " }),
+      });
+      expect(response.status).toBe(200);
+    }
+    expect((await db.execute(sql`SELECT heard_about, heard_about_detail FROM contact_submissions
+      WHERE name = 'Attribution Fixture'`)).rows).toEqual([
+      { heard_about: "AI assistant - other", heard_about_detail: "Example tool" },
+      { heard_about: "AI assistant - other", heard_about_detail: "Example tool" },
+    ]);
   });
 });

@@ -19,6 +19,40 @@ tags:
   - name: How-to
     description: Published How-to library and protected editorial management.
 paths:
+  /contact/book-demo:
+    post:
+      operationId: submitDemoRequest
+      summary: Submit a public demo request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DemoRequestInput"
+      responses:
+        "200":
+          description: Request saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContactSubmissionResult"
+  /contact/enquiry:
+    post:
+      operationId: submitContactEnquiry
+      summary: Submit a public contact enquiry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContactEnquiryInput"
+      responses:
+        "200":
+          description: Enquiry saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContactSubmissionResult"
   /support/search:
     get:
       operationId: searchGeorgeSupport
@@ -659,6 +693,61 @@ components:
       required: true
       schema: { type: string, minLength: 1, maxLength: 200 }
   schemas:
+    ContactHeardAboutSource:
+      type: string
+      enum:
+        - AI assistant - ChatGPT
+        - AI assistant - Claude
+        - AI assistant - Gemini
+        - AI assistant - Microsoft Copilot
+        - AI assistant - Grok
+        - AI assistant - other
+        - LinkedIn
+        - Other social media
+        - Google or another search engine
+        - Spencer Gallagher
+        - Recommendation from a colleague or contact
+        - Agency or partner recommendation
+        - PR / media coverage
+        - Article, newsletter or podcast
+        - Event, conference or webinar
+        - Email
+        - Online advertisement
+        - Other
+    ContactAttributionInput:
+      type: object
+      properties:
+        heardAbout:
+          $ref: "#/components/schemas/ContactHeardAboutSource"
+        heardAboutDetail:
+          type: string
+          maxLength: 300
+    DemoRequestInput:
+      allOf:
+        - $ref: "#/components/schemas/ContactAttributionInput"
+        - type: object
+          required: [name, email, company, goal]
+          properties:
+            name: { type: string }
+            email: { type: string }
+            company: { type: string }
+            goal: { type: string }
+    ContactEnquiryInput:
+      allOf:
+        - $ref: "#/components/schemas/ContactAttributionInput"
+        - type: object
+          required: [name, email, subject, message]
+          properties:
+            name: { type: string }
+            email: { type: string }
+            company: { type: string }
+            subject: { type: string }
+            message: { type: string }
+    ContactSubmissionResult:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
     TargetingBrief:
       type: object
       required: [topic, angle, audience, regions, publicationTypes, whyNow]

@@ -18,3 +18,15 @@ naming engines it doesn't measure is both inaccurate and inconsistent with the c
 prompt strings (`seo-audit.ts`, `content-ai.ts`, `diagnostic.ts`). Leave test fixtures and unused
 mockup-sandbox demo files alone — they're not product-facing. Grep pattern:
 `Perplexity|Gemini|Google AI|CoPilot|Copilot|Bard|Grok|Mistral|Llama`.
+
+## Referral-source exception
+
+The public contact/demo “How did you hear about us?” choices may include Gemini,
+Microsoft Copilot, Grok and other AI assistants. These describe where visitors
+heard about the service, not engines the product audits.
+
+**Why:** the user explicitly approved these as referral-source choices, without
+changing the ChatGPT/Claude measurement scope.
+
+**How to apply:** preserve the broader referral choices while keeping audit,
+scorecard and product-capability claims restricted to ChatGPT and Claude.

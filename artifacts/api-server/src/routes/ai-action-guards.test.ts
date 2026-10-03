@@ -277,6 +277,7 @@ vi.mock("@workspace/db", async () => {
       goal text,
       subject varchar(256),
       message text,
+      heard_about varchar(128), heard_about_detail varchar(300),
       status varchar(32) NOT NULL DEFAULT 'pending',
       email_failed boolean NOT NULL DEFAULT false,
       created_at timestamptz NOT NULL DEFAULT now(),

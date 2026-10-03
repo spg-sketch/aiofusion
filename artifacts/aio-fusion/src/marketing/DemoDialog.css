@@ -58,7 +58,7 @@
 /* Only the dialog's shared form is compacted. Contact keeps its existing layout. */
 @media (max-width: 767px), (max-width: 1023px) and (max-height: 500px) {
   .demo-dialog-form form, .demo-dialog-form form > .grid { gap: 12px; }
-  .demo-dialog-form input:not([type="checkbox"]), .demo-dialog-form textarea {
+  .demo-dialog-form input:not([type="checkbox"]), .demo-dialog-form textarea, .demo-dialog-form select {
     font-size: 16px;
     min-width: 0;
     min-height: 44px;
@@ -71,7 +71,7 @@
 }
 
 @media (pointer: coarse) {
-  .demo-dialog-form input:not([type="checkbox"]), .demo-dialog-form textarea { font-size: 16px; }
+  .demo-dialog-form input:not([type="checkbox"]), .demo-dialog-form textarea, .demo-dialog-form select { font-size: 16px; }
 }
 
 @media (min-width: 768px) and (min-height: 501px), (min-width: 1024px) {

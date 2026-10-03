@@ -16,6 +16,8 @@ const h = vi.hoisted(() => {
     subject: string;
     message: string;
     goal: string;
+    heardAbout?: string | null;
+    heardAboutDetail?: string | null;
     status: string;
     emailFailed: boolean;
     internalEmailAccepted: boolean | null;
@@ -88,6 +90,8 @@ vi.mock("@workspace/db", () => {
                     message: String(v.message ?? ""),
                     goal: String(v.goal ?? ""),
                     status: String(v.status ?? "pending"),
+                    heardAbout: v.heardAbout as string | null,
+                    heardAboutDetail: v.heardAboutDetail as string | null,
                     emailFailed: Boolean(v.emailFailed ?? false),
                     internalEmailAccepted: v.internalEmailAccepted as boolean | null,
                     customerEmailAccepted: v.customerEmailAccepted as boolean | null,
@@ -185,6 +189,43 @@ async function startServer(): Promise<{ url: string; close: () => Promise<void> 
 }
 
 // ── Tests - /contact/book-demo ────────────────────────────────────────────────
+
+describe.each([
+  { path: "book-demo", notify: emailMocks.sendBookDemoInternalAlert },
+  { path: "enquiry", notify: emailMocks.sendEnquiryInternalAlert },
+])("contact attribution delivery: $path", ({ path, notify }) => {
+  beforeEach(() => { h.state.reset(); vi.clearAllMocks(); });
+  it("persists the answer and passes it to the internal notification", async () => {
+    const server = await startServer();
+    try {
+      const response = await fetch(`${server.url}/contact/${path}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Example", email: "source@example.invalid",
+          company: "Example Ltd", goal: "Demo", subject: "Enquiry", message: "Question",
+          heardAbout: "Other", heardAboutDetail: "  Example introduction  " }),
+      });
+      expect(response.status).toBe(200);
+      expect(h.state.rows[0]).toMatchObject({ heardAbout: "Other", heardAboutDetail: "Example introduction" });
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+        heardAbout: "Other", heardAboutDetail: "Example introduction",
+      }));
+    } finally { await server.close(); }
+  });
+  it("rejects unknown source choices before saving or sending email", async () => {
+    const server = await startServer();
+    try {
+      const response = await fetch(`${server.url}/contact/${path}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Example", email: "source@example.invalid",
+          company: "Example Ltd", goal: "Demo", subject: "Enquiry", message: "Question",
+          heardAbout: "Unapproved source" }),
+      });
+      expect(response.status).toBe(400);
+      expect(h.state.rows).toHaveLength(0);
+      expect(notify).not.toHaveBeenCalled();
+    } finally { await server.close(); }
+  });
+});
 
 describe("POST /contact/book-demo", () => {
   const validBody = {

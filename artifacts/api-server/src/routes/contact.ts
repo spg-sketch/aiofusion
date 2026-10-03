@@ -4,6 +4,7 @@ import { db, contactSubmissionsTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { sendContactFormFailedAlert } from "../lib/notify-email";
 import { deliverContactEmails } from "./contact-delivery";
+import { parseContactAttribution } from "../lib/contact-attribution";
 
 const contactRouter = Router();
 
@@ -66,12 +67,18 @@ contactRouter.post(
     }
 
     // ── Step 1: Persist to DB (hard precondition) ────────────────────────────
+    let attribution: ReturnType<typeof parseContactAttribution>;
+    try { attribution = parseContactAttribution(req.body ?? {}); }
+    catch (error) {
+      res.status(400).json({ error: (error as Error).message });
+      return;
+    }
     // If this fails the user gets a 500 and can retry; no lead is silently lost.
     let savedId: number;
     try {
       const [row] = await db
         .insert(contactSubmissionsTable)
-        .values({ type: "book-demo", name, email, company, goal, emailFailed: true,
+        .values({ type: "book-demo", name, email, company, goal, ...attribution, emailFailed: true,
           internalEmailAccepted: false, customerEmailAccepted: false })
         .returning({ id: contactSubmissionsTable.id });
       savedId = row.id;
@@ -152,11 +159,17 @@ contactRouter.post(
     }
 
     // ── Step 1: Persist to DB (hard precondition) ────────────────────────────
+    let attribution: ReturnType<typeof parseContactAttribution>;
+    try { attribution = parseContactAttribution(req.body ?? {}); }
+    catch (error) {
+      res.status(400).json({ error: (error as Error).message });
+      return;
+    }
     let savedId: number;
     try {
       const [row] = await db
         .insert(contactSubmissionsTable)
-        .values({ type: "enquiry", name, email, company, subject, message, emailFailed: true,
+        .values({ type: "enquiry", name, email, company, subject, message, ...attribution, emailFailed: true,
           internalEmailAccepted: false, customerEmailAccepted: false })
         .returning({ id: contactSubmissionsTable.id });
       savedId = row.id;

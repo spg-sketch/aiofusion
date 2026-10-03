@@ -5,6 +5,55 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type ContactHeardAboutSource = typeof ContactHeardAboutSource[keyof typeof ContactHeardAboutSource];
+
+
+export const ContactHeardAboutSource = {
+  'AI_assistant_-_ChatGPT': 'AI assistant - ChatGPT',
+  'AI_assistant_-_Claude': 'AI assistant - Claude',
+  'AI_assistant_-_Gemini': 'AI assistant - Gemini',
+  'AI_assistant_-_Microsoft_Copilot': 'AI assistant - Microsoft Copilot',
+  'AI_assistant_-_Grok': 'AI assistant - Grok',
+  'AI_assistant_-_other': 'AI assistant - other',
+  LinkedIn: 'LinkedIn',
+  Other_social_media: 'Other social media',
+  Google_or_another_search_engine: 'Google or another search engine',
+  Spencer_Gallagher: 'Spencer Gallagher',
+  Recommendation_from_a_colleague_or_contact: 'Recommendation from a colleague or contact',
+  Agency_or_partner_recommendation: 'Agency or partner recommendation',
+  'PR_/_media_coverage': 'PR / media coverage',
+  'Article,_newsletter_or_podcast': 'Article, newsletter or podcast',
+  'Event,_conference_or_webinar': 'Event, conference or webinar',
+  Email: 'Email',
+  Online_advertisement: 'Online advertisement',
+  Other: 'Other',
+} as const;
+
+export interface ContactAttributionInput {
+  heardAbout?: ContactHeardAboutSource;
+  /** @maxLength 300 */
+  heardAboutDetail?: string;
+}
+
+export type DemoRequestInput = ContactAttributionInput & {
+  name: string;
+  email: string;
+  company: string;
+  goal: string;
+};
+
+export type ContactEnquiryInput = ContactAttributionInput & {
+  name: string;
+  email: string;
+  company?: string;
+  subject: string;
+  message: string;
+};
+
+export interface ContactSubmissionResult {
+  ok: boolean;
+}
+
 export interface TargetingBrief {
   topic: string;
   angle: string;
