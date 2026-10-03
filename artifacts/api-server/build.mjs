@@ -59,7 +59,6 @@ async function buildAll() {
       "pg-native",
       "oracledb",
       "mongodb-client-encryption",
-      "nodemailer",
       "handlebars",
       "knex",
       "typeorm",

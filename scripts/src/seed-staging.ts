@@ -754,7 +754,7 @@ async function printSummary(includeRepresentativeData: boolean): Promise<void> {
   console.log("[seed-staging] Staging review access is ready:");
   console.log("[seed-staging]");
   for (const account of ACCOUNTS) {
-    console.log(`[seed-staging]   ${account.role.padEnd(8)} login: ${account.username}`);
+    console.log(`[seed-staging]   ${account.role.padEnd(8)} account ready (login details in staging review configuration)`);
     console.log("[seed-staging]            password: supplied via STAGING_REVIEW_PASSWORD");
   }
   if (includeRepresentativeData) {

@@ -7,6 +7,7 @@ import {
   LogoutMobileSessionResponse,
 } from "@workspace/api-zod";
 import { db, usersTable } from "@workspace/db";
+import { getSafeReturnTo } from "../lib/safe-return-to";
 import {
   clearSession,
   getOidcConfig,
@@ -48,13 +49,6 @@ function setOidcCookie(res: Response, name: string, value: string) {
     path: "/",
     maxAge: OIDC_COOKIE_TTL,
   });
-}
-
-function getSafeReturnTo(value: unknown): string {
-  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) {
-    return "/";
-  }
-  return value;
 }
 
 async function upsertUser(claims: Record<string, unknown>) {
