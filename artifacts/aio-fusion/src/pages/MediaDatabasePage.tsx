@@ -110,6 +110,16 @@ type UnifiedResult =
   | { type: "contact"; id: number; contact: Contact; matchedFields: string[]; matchedPhrases: string[]; reasons: string[]; authority: number }
   | { type: "outlet"; id: number; outlet: Outlet; matchedFields: string[]; matchedPhrases: string[]; reasons: string[]; authority: number };
 
+type MediaSearchCriteria = {
+  phrase: string;
+  topic: string;
+  location: string;
+  category: string;
+  authority: string;
+  type: "contacts" | "publications";
+  scope: "all" | "added" | "saved";
+};
+
 type CorrectionReport = {
   id: number;
   fields: string[];
@@ -422,6 +432,7 @@ function MediaDatabasePage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchType, setSearchType] = useState<"contacts" | "publications">("contacts");
   const [searchScope, setSearchScope] = useState<"all" | "added" | "saved">("all");
+  const [completedSearch, setCompletedSearch] = useState<MediaSearchCriteria | null>(null);
   const [savedMedia, setSavedMedia] = useState<Set<string>>(new Set());
   const [bookmarkError, setBookmarkError] = useState("");
   const [bookmarkBusy, setBookmarkBusy] = useState<string | null>(null);
@@ -795,6 +806,9 @@ function MediaDatabasePage() {
 
   const searchActive = resultMode === "search";
   const runSearch = () => {
+    searchRequestSequence.current += 1;
+    setCompletedSearch(null);
+    setSearchLoading(true);
     setShowManagement(false);
     setSelectedMedia(new Set());
     setResultMode("search");
@@ -808,6 +822,10 @@ function MediaDatabasePage() {
     const controller = new AbortController();
     let timedOut = false;
     const timeout = window.setTimeout(() => { timedOut = true; controller.abort(); }, 10_000);
+    const criteria: MediaSearchCriteria = {
+      phrase: searchPhrase, topic: searchTopic, location: searchLocation,
+      category: searchCategory, authority: searchAuthority, type: searchType, scope: searchScope,
+    };
     const params = new URLSearchParams({ page: String(searchPage), pageSize: "25" });
     if (searchPhrase.trim()) params.set("phrase", searchPhrase.trim());
     params.set("type", searchType);
@@ -817,6 +835,7 @@ function MediaDatabasePage() {
     if (searchCategory) params.set("category", searchCategory);
     if (searchAuthority) params.set("authority", searchAuthority);
     setSearchLoading(true);
+    setCompletedSearch(null);
     setResultMessage("");
     fetch(`${apiBase()}/api/store/media-db/search?${params}`, { credentials: "include", signal: controller.signal })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not search the media database.")))
@@ -824,6 +843,7 @@ function MediaDatabasePage() {
         if (sequence !== searchRequestSequence.current) return;
         setSearchResults(data.results ?? []); setSearchTotal(data.total ?? 0);
         setSearchCounts(data.counts ?? { contacts: 0, outlets: 0 });
+        setCompletedSearch(criteria);
       })
       .catch((error) => {
         if (error.name === "AbortError") {
@@ -833,7 +853,12 @@ function MediaDatabasePage() {
         if (sequence === searchRequestSequence.current) setResultMessage(error instanceof Error ? error.message : "Search failed. Try again.");
       })
       .finally(() => { window.clearTimeout(timeout); if (sequence === searchRequestSequence.current) setSearchLoading(false); });
-    return () => { controller.abort(); window.clearTimeout(timeout); };
+    return () => {
+      // Invalidate even if a late response ignores the aborted signal.
+      if (sequence === searchRequestSequence.current) searchRequestSequence.current += 1;
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
   }, [searchActive, searchPage, resultRefreshToken, searchType, searchScope]);
 
   const browseResults = (tab: "outlets" | "contacts" = activeTab === "outlets" ? "outlets" : "contacts") => {
@@ -1413,6 +1438,30 @@ function MediaDatabasePage() {
   const visibleSearchResults = searchResults.filter((result) => searchType === "contacts"
     ? result.type === "contact"
     : result.type === "outlet");
+  const canBroadenSearch = searchActive && !searchLoading && !resultMessage
+    && searchTotal === 0 && visibleSearchResults.length === 0
+    && Boolean(completedSearch?.category)
+    && completedSearch?.type === searchType && completedSearch?.scope === searchScope;
+  const broadenSearch = () => {
+    if (!canBroadenSearch || !completedSearch) return;
+    // Restore the completed search, not any unsubmitted edits in the form.
+    setSearchPhrase(completedSearch.phrase);
+    setSearchTopic(completedSearch.topic);
+    setSearchLocation(completedSearch.location);
+    setSearchAuthority(completedSearch.authority);
+    setSearchType(completedSearch.type);
+    setSearchScope(completedSearch.scope);
+    setSearchCategory("");
+    runSearch();
+  };
+  const emptySearchState = <div className="rounded-2xl border bg-white px-4 py-12 text-center" style={{ borderColor: vars.g200 }} aria-live="polite">
+    <Search size={28} className="mx-auto mb-2" color={vars.g300} />
+    <p className="font-semibold" style={{ color: vars.navy }}>No matching {searchType}</p>
+    <p className="text-[12px] mt-1" style={{ color: vars.g500 }}>{canBroadenSearch
+      ? `No matches in ${completedSearch?.category}. Remove only the sector filter and keep the rest of this search.`
+      : "Clear a filter or broaden the search."}</p>
+    {canBroadenSearch && <button type="button" data-testid="button-search-all-sectors" onClick={broadenSearch} className="mt-4 rounded-lg px-4 py-2 text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Search across all sectors</button>}
+  </div>;
   const savedSectorGroups = Array.from(visibleSearchResults.reduce((groups, result) => {
     const sector = result.type === "contact"
       ? result.contact.sectors?.[0] || result.contact.outletCategory || "Unspecified"
@@ -1573,7 +1622,7 @@ function MediaDatabasePage() {
                   </table>
                 </div>
               </section>)}
-              {!searchLoading && !resultMessage && visibleSearchResults.length === 0 && <div className="rounded-2xl border bg-white py-12 text-center" style={{ borderColor: vars.g200 }}><p className="font-semibold" style={{ color: vars.navy }}>Your My Media Database is empty</p><p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Save contacts or publications from search results to see them here.</p></div>}
+              {!searchLoading && !resultMessage && visibleSearchResults.length === 0 && (canBroadenSearch ? emptySearchState : <div className="rounded-2xl border bg-white py-12 text-center" style={{ borderColor: vars.g200 }}><p className="font-semibold" style={{ color: vars.navy }}>Your My Media Database is empty</p><p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Save contacts or publications from search results to see them here.</p></div>)}
             </div>
           ) : <div className="space-y-3" aria-live="polite">
            {visibleSearchResults.map((result) => {
@@ -1642,7 +1691,7 @@ function MediaDatabasePage() {
               </div>
             </article>;
           })}
-          {!searchLoading && !resultMessage && visibleSearchResults.length === 0 && <div className="rounded-2xl border bg-white py-12 text-center" style={{ borderColor: vars.g200 }}><Search size={28} className="mx-auto mb-2" color={vars.g300} /><p className="font-semibold" style={{ color: vars.navy }}>No matching {searchType}</p><p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Clear a filter or broaden the search.</p></div>}
+          {!searchLoading && !resultMessage && visibleSearchResults.length === 0 && emptySearchState}
          </div>}
         {searchTotal > 25 && <div className="flex justify-end items-center gap-3 mt-3 text-[12px]" style={{ color: "#ffffff" }}><button disabled={searchPage === 1} onClick={() => { setSelectedMedia(new Set()); setSearchPage((page) => page - 1); }} className="px-3 py-1 border rounded disabled:opacity-40">Previous</button><span>Page {searchPage} of {Math.ceil(searchTotal / 25)}</span><button disabled={searchPage * 25 >= searchTotal} onClick={() => { setSelectedMedia(new Set()); setSearchPage((page) => page + 1); }} className="px-3 py-1 border rounded disabled:opacity-40">Next</button></div>}
       </section>}
