@@ -83,7 +83,7 @@ export async function settleMediaDiscoveryCandidate(
                 THEN ${replacement ? JSON.stringify(replacement) : null}::jsonb
               ELSE candidate || jsonb_build_object(
                 'evidenceStatus', 'failed',
-                'evidenceFailure', ${failure}
+                'evidenceFailure', ${failure}::text
               )
             END
           ELSE candidate

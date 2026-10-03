@@ -885,6 +885,46 @@ describe("MediaResearchPage live discovery", () => {
     expect(screen.queryByTestId("empty-live-discovery")).toBeNull();
   });
 
+  it("restores a failed provider run without presenting it as empty success", async () => {
+    const error = "Live media research received an unusable search response. No completed result was available. Please try again.";
+    serverDiscoveryHistory.latest = { runId: "invalid-provider-run", status: "failed", items: [], error, discoveryToken: "" };
+    const first = render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByText(error)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry live search" })).toBeTruthy();
+    expect(screen.queryByTestId("empty-live-discovery")).toBeNull();
+    first.unmount();
+    clearAiRuns();
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByText(error)).toBeTruthy();
+    expect(requests.some((request) => request.url.endsWith("/content/media-discover"))).toBe(false);
+    expect(screen.queryByTestId("empty-live-discovery")).toBeNull();
+    // Other stories do not receive this run from the real scoped API.
+    // Use an empty latest fixture for the new scope.
+    serverDiscoveryHistory.latest = null;
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-2" } });
+    await waitFor(() => expect(screen.queryByText(error)).toBeNull());
+  });
+
+  it("retains a failed source card on remount rather than showing empty feedback or allowing review", async () => {
+    serverDiscoveryHistory.latest = {
+      runId: "source-failed-run", status: "succeeded", discoveryToken: "",
+      items: [{ ...candidate, evidenceStatus: "failed", evidenceFailure: "The cited page could not be checked." }],
+    };
+    const first = render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByText("The cited page could not be checked.")).toBeTruthy();
+    expect(screen.queryByTestId("empty-live-discovery")).toBeNull();
+    expect(screen.queryByRole("button", { name: /send for review/i })).toBeNull();
+    first.unmount();
+    clearAiRuns();
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByText("The cited page could not be checked.")).toBeTruthy();
+    expect(screen.queryByTestId("empty-live-discovery")).toBeNull();
+  });
+
   it("keeps incremental evidence counts and review controls visible while the search runs", async () => {
     const originalFetch = globalThis.fetch;
     let finishPoll: ((response: Response) => void) | undefined;

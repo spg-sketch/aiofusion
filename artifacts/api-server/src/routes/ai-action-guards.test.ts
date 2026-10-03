@@ -417,8 +417,11 @@ vi.mock("../lib/notify-email", async (importOriginal) => {
   };
 });
 
+const { fetchSiteContentMock } = vi.hoisted(() => ({
+  fetchSiteContentMock: vi.fn(() => Promise.resolve({ title: "", description: "", text: "" })),
+}));
 vi.mock("../lib/safe-fetch", () => ({
-  fetchSiteContent: () => Promise.resolve(""),
+  fetchSiteContent: fetchSiteContentMock,
   fetchSiteContentWithSubpages: () => Promise.resolve({ main: "", subpages: [] }),
   fetchGeoAuditContext: () => Promise.resolve(null),
 }));
@@ -1348,6 +1351,7 @@ describe("media discovery house prompt integration", () => {
     expect(providerInput).not.toContain("MALICIOUS REQUEST OVERRIDE");
     expect(responsesCreate.mock.calls[0]?.[1]).toMatchObject({ timeout: 45_000 });
     finishSearch({
+      status: "completed",
       output_text: JSON.stringify({ items: [] }),
       output: [],
       usage: { input_tokens: 10, output_tokens: 2 },
@@ -1395,6 +1399,126 @@ describe("media discovery house prompt integration", () => {
       status: "failed",
       error: "Live media research search timed out. Please try again.",
     });
+
+    // The screenshot's story/sector/region, exercised only against isolated
+    // PGlite and controlled provider/public-page fixtures, never a paid search.
+    const screenshotRequest = {
+      projectId,
+      content: { title: "Professional Website, Three Days, From £500: The Smarter Route for UK Small Businesses" },
+      sectorTopic: "Marketing & Advertising",
+      mediaCategories: ["Marketing & Advertising"],
+      regions: ["UK"],
+    };
+    const candidate = {
+      firstName: "Jane", lastName: "Reporter", outletName: "Marketing Daily",
+      sourceUrl: "https://marketing.example/authors/jane",
+      email: "jane@marketing.example", role: "Marketing editor",
+      evidence: "Current author profile", beats: ["small business websites"],
+      outletWebsite: "https://marketing.example", sectors: ["Marketing & Advertising"],
+      geography: "UK", mediaOpportunity: "", recentBylines: [], journalistInterests: [],
+      mediaOpportunities: [], phraseAttributions: [], confidence: "High",
+    };
+    const completed = (items: unknown[], cited = true) => ({
+      status: "completed",
+      output_text: JSON.stringify({ items }),
+      output: [
+        { type: "web_search_call", status: "completed" },
+        { type: "message", status: "completed", content: [{
+          type: "output_text",
+          annotations: cited ? [{ type: "url_citation", url: candidate.sourceUrl }] : [],
+        }] },
+      ],
+      usage: { input_tokens: 10, output_tokens: 2 },
+    });
+    const readUntilSettled = async (runId: string) => {
+      let run = await api(`/api/content/journalist-search-runs/${runId}`, { sid });
+      for (let attempt = 0; run.json?.status === "running" && attempt < 100; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        run = await api(`/api/content/journalist-search-runs/${runId}`, { sid });
+      }
+      expect(run.json.status).not.toBe("running");
+      return run;
+    };
+    for (const [label, providerResponse, status] of [
+      ["explicit-empty", completed([]), "succeeded"],
+      ["missing-output", { status: "completed", output: [] }, "failed"],
+      ["incomplete", { ...completed([]), status: "incomplete" }, "failed"],
+      ["refused", { ...completed([]), output: [{ type: "message", content: [{ type: "refusal" }] }] }, "failed"],
+      ["malformed-json", { ...completed([]), output_text: "{" }, "failed"],
+      ["malformed-shape", { ...completed([]), output_text: '{"items":null}' }, "failed"],
+      ["malformed-candidate", completed([null]), "failed"],
+      ["citation-rejected", completed([candidate], false), "succeeded"],
+      ["source-rejected", completed([candidate]), "succeeded"],
+    ] as const) {
+      fetchSiteContentMock.mockReset();
+      fetchSiteContentMock.mockResolvedValue({ title: "Unrelated page", description: "", text: "" });
+      responsesCreate.mockReset();
+      responsesCreate.mockResolvedValue(providerResponse);
+      const started = await api("/api/content/media-discover", {
+        sid, body: { ...screenshotRequest, storyKey: label },
+      });
+      expect(started.status).toBe(200);
+      const result = await readUntilSettled(started.json.runId);
+      expect(result.json.status, label).toBe(status);
+      expect(responsesCreate).toHaveBeenCalledTimes(1);
+      expect(responsesCreate.mock.calls[0]?.[0]?.input).toContain("Requested sector or topic: Marketing & Advertising");
+      expect(responsesCreate.mock.calls[0]?.[0]?.input).toContain("Search these markets: UK");
+      if (status === "failed") {
+        expect(result.json.error).toContain("unusable search response");
+        expect(result.json.items).toEqual([]);
+        expect(result.json.discoveryToken).toBe("");
+      } else if (label === "source-rejected") {
+        expect(result.json.items).toMatchObject([{ evidenceStatus: "failed", evidenceFailure: "The cited page did not verify this journalist." }]);
+        expect(fetchSiteContentMock).toHaveBeenCalledTimes(1);
+      } else {
+        expect(result.json.items).toEqual([]);
+        expect(fetchSiteContentMock).not.toHaveBeenCalled();
+      }
+      const restored = await api(`/api/content/journalist-search-runs/latest?projectId=${projectId}&storyKey=${label}`, { sid });
+      expect(restored.json).toMatchObject({ runId: started.json.runId, status, items: result.json.items });
+    }
+
+    // Pending evidence survives reads; only page-verified candidates get an
+    // approval token, and inferred emails are removed if absent on the page.
+    let finishPage!: (value: { title: string; description: string; text: string }) => void;
+    fetchSiteContentMock.mockReset();
+    fetchSiteContentMock.mockImplementation(() => new Promise((resolve) => { finishPage = resolve; }));
+    responsesCreate.mockReset();
+    responsesCreate.mockResolvedValue(completed([candidate]));
+    const verifiedStart = await api("/api/content/media-discover", {
+      sid, body: { ...screenshotRequest, storyKey: "verified-story" },
+    });
+    let pendingRun = await api(`/api/content/journalist-search-runs/${verifiedStart.json.runId}`, { sid });
+    for (let attempt = 0; !pendingRun.json.items?.length && attempt < 100; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      pendingRun = await api(`/api/content/journalist-search-runs/${verifiedStart.json.runId}`, { sid });
+    }
+    expect(pendingRun.json).toMatchObject({ status: "running", items: [{ evidenceStatus: "pending" }], discoveryToken: "" });
+    expect((await api(`/api/content/journalist-search-runs/${verifiedStart.json.runId}`)).status).toBe(401);
+    const otherWorkspace = await seedAgency("discovery-other-workspace", "owner@discovery-other.test");
+    await db.update(platformCompaniesTable).set({ freeAccess: true })
+      .where(eq(platformCompaniesTable.id, otherWorkspace.company.id));
+    expect((await api(`/api/content/journalist-search-runs/${verifiedStart.json.runId}`, { sid: otherWorkspace.sid })).status).toBe(404);
+    finishPage({ title: "Jane Reporter", description: "Marketing editor", text: "Jane Reporter covers small business websites." });
+    const verifiedRun = await readUntilSettled(verifiedStart.json.runId);
+    expect(verifiedRun.json).toMatchObject({ status: "succeeded", items: [{ evidenceStatus: "verified", firstName: "Jane", email: "" }] });
+    expect(verifiedRun.json.discoveryToken).toBeTruthy();
+    const refreshed = await api(`/api/content/journalist-search-runs/latest?projectId=${projectId}&storyKey=verified-story`, { sid });
+    expect(refreshed.json.items).toEqual(verifiedRun.json.items);
+    expect((await api(`/api/content/journalist-search-runs/latest?projectId=${projectId}&storyKey=another-story`, { sid })).json).toBeNull();
+    fetchSiteContentMock.mockReset();
+    fetchSiteContentMock.mockRejectedValue(new Error("URL resolves to a private IP address"));
+    responsesCreate.mockResolvedValue(completed([candidate]));
+    const sourceFailure = await api("/api/content/media-discover", {
+      sid, body: { ...screenshotRequest, storyKey: "source-check-failure" },
+    });
+    const sourceFailureRun = await readUntilSettled(sourceFailure.json.runId);
+    expect(sourceFailureRun.json).toMatchObject({
+      status: "succeeded", items: [{ evidenceStatus: "failed", evidenceFailure: "The cited page could not be checked." }],
+    });
+    expect(fetchSiteContentMock).toHaveBeenCalledTimes(1); // No SSRF retries.
+    fetchSiteContentMock.mockReset();
+    fetchSiteContentMock.mockResolvedValue({ title: "", description: "", text: "" });
     checkFairUsageMock.mockReset();
     checkFairUsageMock.mockResolvedValue({ allowed: true, callCount: 0, limit: 50 });
     checkMonthlySpendLimitMock.mockReset();

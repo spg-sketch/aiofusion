@@ -1000,7 +1000,7 @@ function MediaResearchPage() {
       setRemoteEmptyDiscoveryKey(remote.status === "succeeded" && Array.isArray(remote.items) && remote.items.length === 0 ? discoveryRunKey : "");
       setLiveItems(Array.isArray(remote.items) ? remote.items : []);
       if (remote.discoveryToken) setDiscoveryToken(remote.discoveryToken);
-      if (remote.status === "running" && !discoveryRun) {
+      if ((remote.status === "running" || remote.status === "failed") && !discoveryRun) {
         startAiRun<{ resumedRunId: string }, DiscoveryRunResult>({
           key: discoveryRunKey,
           scope: discoveryScope,
@@ -1008,7 +1008,10 @@ function MediaResearchPage() {
           subjectId: storyKey,
           input: { resumedRunId: remote.runId },
           estimateSeconds: 90,
-          execute: (progress) => pollDiscoveryRun(remote.runId, progress),
+          // Restore a stored failure without starting another provider search.
+          execute: (progress) => remote.status === "failed"
+            ? Promise.reject(new Error(remote.error || "Could not complete live media research."))
+            : pollDiscoveryRun(remote.runId, progress),
         });
       }
     })().catch(() => {

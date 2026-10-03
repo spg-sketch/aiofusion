@@ -12,7 +12,7 @@ description: Lessons about staging domains, production aliases, and live OAuth c
 
 **How to apply:** Compare public NS and the Replit-required TXT record against the actual zone in the screenshot. Treat a DNS table with no visible zone name as ambiguous; do not infer its domain from the user's current goal.
 - Deployment visibility can change; check current deployment metadata rather than assuming the historical password shield still applies.
-- The user clarified: "this isnt stagin anymore - its live." Treat this app as live, not staging.
+- The user clarified: "this isnt stagin anymore - its live." They also confirm www.aiofusion.ai is the only live site now. Treat this app as live, not staging.
 
 **Why:** The user corrected the historical staging assumption after the live cutover.
 

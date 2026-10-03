@@ -16,6 +16,7 @@ import { getVisibleUsernames, normUsername } from "../lib/platform-auth";
 import { inAssignedScope } from "../lib/member-guards";
 import { signMediaDiscoveries, type TrustedMediaDiscovery } from "../lib/media-discovery-token";
 import { countWebSearchCalls } from "../lib/media-discovery-usage";
+import { MediaDiscoveryResponseError, parseMediaDiscoveryResponse } from "../lib/media-discovery-response";
 import { dateAppearsOnPage, deadlineAppearsOnPage, eventNameAppearsOnPage, normaliseEventResults, publishedValueAppearsOnPage, recomputeActionableOpportunities, regionAppearsOnPage } from "../lib/events-search";
 import { TRADE_MEDIA_CATEGORIES } from "../lib/trade-media-categories";
 import { normaliseMediaResearchRegions } from "../lib/media-research-regions";
@@ -1419,10 +1420,11 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
         // Responses request may search more than once.
         Math.max(1, countWebSearchCalls(response.output)) * 0.02,
       );
-      const parsed = JSON.parse(response.output_text || "{\"items\":[]}") as { items?: unknown[] };
+      const returnedItems = parseMediaDiscoveryResponse(response);
       const citations = citedUrls(response.output);
       const now = new Date().toISOString();
-      const candidates: TrustedMediaDiscovery[] = (Array.isArray(parsed.items) ? parsed.items : []).slice(0, 30).flatMap((raw) => {
+      let citationRejectedCount = 0;
+      const candidates: TrustedMediaDiscovery[] = returnedItems.slice(0, 30).flatMap((raw) => {
         if (!raw || typeof raw !== "object") return [];
         const item = raw as Record<string, unknown>;
         const firstName = asString(item.firstName, 120);
@@ -1430,7 +1432,11 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
         const outletName = asString(item.outletName, 240);
         const sourceUrl = asString(item.sourceUrl, 2000);
         if ((!firstName && !lastName) || hasNumericJournalistNameIdentifier(firstName, lastName)
-            || !outletName || !isSupportedByCitation(sourceUrl, citations)) return [];
+            || !outletName) return [];
+        if (!isSupportedByCitation(sourceUrl, citations)) {
+          citationRejectedCount += 1;
+          return [];
+        }
         const rawConfidence = asString(item.confidence, 20);
         const confidence: TrustedMediaDiscovery["confidence"] =
           rawConfidence === "High" || rawConfidence === "Medium" ? rawConfidence : "Low";
@@ -1504,6 +1510,8 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
       logger.info({
         runId,
         stage: "source_verification",
+        returnedCount: returnedItems.length,
+        citationRejectedCount,
         durationMs: boundedMediaDiscoveryDurationMs(verificationStartedAt),
         candidateCount: candidates.length,
         verifiedCount,
@@ -1533,10 +1541,13 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
         runId: (req as Request & { mediaDiscoveryRunId?: string }).mediaDiscoveryRunId,
         durationMs: boundedMediaDiscoveryDurationMs(discoveryStartedAt),
         searchDurationMs,
+        providerFailureReason: error instanceof MediaDiscoveryResponseError ? error.reason : undefined,
       }, "content-ai: live media discovery failed");
       const timedOut = error instanceof Error && /timed out|timeout/i.test(error.message);
       res.status(502).json({
-        error: timedOut
+        error: error instanceof MediaDiscoveryResponseError
+          ? error.message
+          : timedOut
           ? "Live media research search timed out. Please try again."
           : "Live media research could not be completed right now. Please try again.",
       });
