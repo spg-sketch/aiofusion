@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const list = vi.fn();
@@ -89,11 +89,49 @@ describe("GuidancePage", () => {
     expect(screen.queryByRole("img", { name: "Project set-up screen" })).toBeNull();
     expect(frame).toHaveClass("aspect-[16/10]");
     fireEvent.click(screen.getByRole("button", { name: /Alpha guide.*Read guide/ }));
+    screen.getAllByTestId("block-image").forEach((figure) => {
+      const image = figure.querySelector("img");
+      if (image) fireEvent.load(image);
+    });
     expect(screen.getByRole("img", { name: "Project set-up screen" })).toHaveAttribute("src", "https://example.com/first.jpg");
     expect(screen.getByRole("img", { name: "Second screen" })).toBeTruthy();
     expect(screen.getByText("Original caption")).toBeTruthy();
     fireEvent.click(screen.getByTestId("button-back-guidance"));
     expect(screen.getByTestId("card-howto-a-guide")).toBeTruthy();
+  });
+
+  it("keeps body instructions, descriptions and captions readable for missing, slow and failed images", () => {
+    const guide = { ...entries[0], body: [
+      { type: "paragraph", runs: [{ text: "Instructions before the images." }] },
+      { type: "image", mediaId: "missing", altText: "Missing settings screen", caption: "Missing caption" },
+      { type: "image", mediaId: "slow", url: "https://example.com/slow.png", altText: "Slow settings screen", caption: "Slow caption" },
+      { type: "image", mediaId: "failed", url: "https://example.com/failed.png", altText: "Failed settings screen", caption: "Failed caption" },
+      { type: "paragraph", runs: [{ text: "Instructions after the images." }] },
+    ] };
+    const saved = JSON.stringify(guide);
+    list.mockReturnValue(ok([guide]));
+    detail.mockReturnValue(ok(guide));
+    render(<GuidancePage onBack={() => {}} />);
+    fireEvent.click(screen.getByTestId("card-howto-a-guide"));
+    const [missing, slow, failed] = screen.getAllByTestId("block-image");
+    expect(missing.querySelector("img")).toBeNull();
+    expect(missing).toHaveTextContent("Image preview unavailable");
+    expect(missing).toHaveTextContent("Missing settings screen");
+    expect(slow).toHaveTextContent("Loading image");
+    expect(slow.querySelector("img")).toHaveClass("hidden");
+    fireEvent.error(failed.querySelector("img")!);
+    expect(failed.querySelector("img")).toBeNull();
+    expect(failed).toHaveTextContent("Image preview unavailable");
+    expect(failed).toHaveTextContent("Failed settings screen");
+    [missing, slow, failed].forEach((figure, i) => {
+      expect(figure.querySelector("figcaption")).toHaveTextContent(["Missing caption", "Slow caption", "Failed caption"][i]);
+    });
+    fireEvent.load(slow.querySelector("img")!);
+    expect(within(slow).getByRole("img", { name: "Slow settings screen" })).toBeTruthy();
+    expect(slow).not.toHaveTextContent("Loading image");
+    expect(screen.getByText("Instructions before the images.")).toBeTruthy();
+    expect(screen.getByText("Instructions after the images.")).toBeTruthy();
+    expect(JSON.stringify(guide)).toBe(saved);
   });
 
   it("provides no-image fallbacks, all three opening actions, and intentional single and collection layouts", () => {

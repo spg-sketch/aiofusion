@@ -77,6 +77,10 @@ test("synthetic library: Project Hub navigation, saved images, fallbacks and rea
     await page.getByTestId("card-howto-saved-image").click();
     await expect(page.getByTestId("detail-title")).toHaveText(entries[0].title);
     await expect(page.locator("article")).toContainText("Complete guide body retained.");
+    const unresolved = page.getByTestId("block-image").first();
+    await expect(unresolved).toContainText("Image preview unavailable");
+    await expect(unresolved).toContainText("Unresolved image");
+    await expect(unresolved.locator("img")).toHaveCount(0);
     await expect(page.locator("figcaption")).toHaveText(["Original saved caption", "Second caption"]);
     await expect(page.getByRole("img", { name: "Saved project screen", exact: true })).toBeVisible();
     await expect.poll(() => page.getByRole("img", { name: "Saved project screen", exact: true }).evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(1000);
@@ -84,6 +88,13 @@ test("synthetic library: Project Hub navigation, saved images, fallbacks and rea
     await page.getByTestId("button-back-guidance").click();
     await expect(page.getByTestId("filter-Guide")).toHaveAttribute("aria-pressed", "true");
     await page.getByTestId("filter-All").click();
+    await page.getByTestId("card-howto-failed-image").click();
+    const failed = page.getByTestId("block-image");
+    await expect(failed).toContainText("Image preview unavailable");
+    await expect(failed).toContainText("Unavailable screen");
+    await expect(failed.locator("img")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Watch the walkthrough" })).toBeVisible();
+    await page.getByTestId("button-back-guidance").click();
     await page.goBack();
     await expect(page).toHaveURL(/\/project-hub$/);
     await page.getByRole("button", { name: "Platform home", exact: true }).click();
@@ -99,4 +110,85 @@ test("synthetic library: Project Hub navigation, saved images, fallbacks and rea
   await page.goto("/guidance");
   await expect(page.getByTestId("guidance-collection")).not.toHaveClass(/sm:grid-cols-2/);
   await expect(page.getByTestId("preview-howto-saved-image")).toBeVisible();
+});
+
+test("isolated reader and CMS preview retain instructions during missing, slow and failed body image loads", async ({ page }) => {
+  await page.goto("/platform");
+  await page.getByPlaceholder("Email or username").fill("howto-editor@aiofusion.ai");
+  await page.getByPlaceholder("Password", { exact: true }).fill("release-harness-password");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Manage How-to Library", exact: true })).toBeVisible();
+
+  const png = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 32; canvas.height = 32;
+    return canvas.toDataURL("image/png").split(",")[1]!;
+  });
+  const entry = {
+    id: "body-image-states", title: "Body image states", description: "Isolated synthetic guide",
+    type: "Guide", readTime: "2 min", displayOrder: 0, status: "published",
+    createdAt: "", updatedAt: "", publishedAt: "",
+    body: [
+      { type: "paragraph", runs: [{ text: "Instructions before the images." }] },
+      { type: "image", mediaId: "missing", altText: "Missing description", caption: "Missing caption" },
+      { type: "image", mediaId: "slow", url: "http://127.0.0.1:5000/__body-fixture/slow.png", altText: "Slow description", caption: "Slow caption" },
+      { type: "image", mediaId: "failed", url: "http://127.0.0.1:5000/__body-fixture/failed.png", altText: "Failed description", caption: "Failed caption" },
+      { type: "paragraph", runs: [{ text: "Instructions after the images." }] },
+    ],
+  };
+  const original = JSON.stringify(entry);
+  // These are read-only synthetic responses in the disposable local harness.
+  await page.route(/\/api\/(?:admin\/)?howto(?:\/[^/?]+)?(?:\?.*)?$/, (route) => {
+    expect(route.request().method()).toBe("GET");
+    const path = new URL(route.request().url()).pathname;
+    return route.fulfill({ json: path.endsWith(entry.id) ? entry : [entry] });
+  });
+  await page.route("**/__body-fixture/failed.png", (route) => route.abort());
+
+  for (const mode of ["reader", "cms"] as const) {
+    let releaseSlow!: () => void;
+    const slowGate = new Promise<void>((resolve) => { releaseSlow = resolve; });
+    const slowHandler = async (route: import("@playwright/test").Route) => {
+      await slowGate;
+      await route.fulfill({ contentType: "image/png", body: Buffer.from(png, "base64") });
+    };
+    await page.route("**/__body-fixture/slow.png", slowHandler);
+    if (mode === "reader") {
+      await page.goto("/guidance", { waitUntil: "domcontentloaded" });
+      await page.getByTestId(`card-howto-${entry.id}`).click();
+      await expect(page.getByTestId("detail-title")).toHaveText(entry.title);
+    } else {
+      await page.goto("/platform");
+      await page.getByRole("button", { name: "Manage How-to Library", exact: true }).click();
+      await page.getByTestId(`row-entry-${entry.id}`).click();
+      await page.getByTestId("tab-preview").click();
+    }
+    const content = mode === "reader" ? page.locator("article") : page.getByTestId("preview");
+    try {
+      const figures = content.getByTestId("block-image");
+      await expect(figures).toHaveCount(3);
+      const missing = figures.nth(0), slow = figures.nth(1), failed = figures.nth(2);
+      for (const [figure, description] of [[missing, "Missing description"], [failed, "Failed description"]] as const) {
+        await expect(figure).toContainText("Image preview unavailable");
+        await expect(figure).toContainText(description);
+        await expect(figure.locator("img")).toHaveCount(0);
+      }
+      await expect(slow).toContainText("Loading image");
+      await expect(slow).toContainText("Slow description");
+      await expect(slow.locator("img")).toBeHidden();
+      await expect(content.locator("figcaption")).toHaveText(["Missing caption", "Slow caption", "Failed caption"]);
+      await expect(content).toContainText("Instructions before the images.");
+      await expect(content).toContainText("Instructions after the images.");
+      releaseSlow();
+      const image = slow.getByRole("img", { name: "Slow description" });
+      await expect(image).toBeVisible();
+      await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(32);
+      await expect(slow).not.toContainText("Loading image");
+      await page.screenshot({ path: `test-results/howto-body-images-${mode}.png`, fullPage: true });
+    } finally {
+      releaseSlow();
+      await page.unroute("**/__body-fixture/slow.png", slowHandler);
+    }
+  }
+  expect(JSON.stringify(entry)).toBe(original);
 });

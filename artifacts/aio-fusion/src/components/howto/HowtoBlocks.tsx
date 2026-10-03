@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { vars } from "../../marketing/vars";
 import { isHttps } from "../../lib/howto";
 import type { HowtoBlock, InlineRun } from "../../lib/howto";
@@ -24,6 +25,32 @@ export function Runs({ runs }: { runs: InlineRun[] }) {
 }
 
 const body = "text-[14px] leading-[1.8]";
+
+function BodyImage({ block }: { block: Extract<HowtoBlock, { type: "image" }> }) {
+  const [state, setState] = useState<"loading" | "loaded" | "failed">("loading");
+  const unavailable = !block.url?.trim() || state === "failed";
+  return (
+    <figure className="my-5" data-testid="block-image">
+      {!unavailable && (
+        <img
+          src={block.url}
+          alt={block.altText}
+          className={`w-full h-auto rounded-xl border${state === "loading" ? " hidden" : ""}`}
+          style={{ borderColor: vars.g200 }}
+          onLoad={() => setState("loaded")}
+          onError={() => setState("failed")}
+        />
+      )}
+      {state !== "loaded" || unavailable ? (
+        <div className="rounded-xl border px-4 py-8 text-center text-[12px]" style={{ borderColor: vars.g200, color: vars.g500 }}>
+          <p>{unavailable ? "Image preview unavailable" : "Loading image…"}</p>
+          {block.altText && <p className="mt-2">{block.altText}</p>}
+        </div>
+      ) : null}
+      {block.caption && <figcaption className="text-[12px] mt-2 text-center" style={{ color: vars.g500 }}>{block.caption}</figcaption>}
+    </figure>
+  );
+}
 
 export function BlockView({ block }: { block: HowtoBlock }) {
   switch (block.type) {
@@ -57,16 +84,7 @@ export function BlockView({ block }: { block: HowtoBlock }) {
         </ul>
       );
     case "image":
-      return (
-        <figure className="my-5" data-testid="block-image">
-          {block.url ? (
-            <img src={block.url} alt={block.altText} className="w-full h-auto rounded-xl border" style={{ borderColor: vars.g200 }} />
-          ) : (
-            <div className="rounded-xl border px-4 py-8 text-center text-[12px]" style={{ borderColor: vars.g200, color: vars.g500 }}>Image preview unavailable</div>
-          )}
-          {block.caption && <figcaption className="text-[12px] mt-2 text-center" style={{ color: vars.g500 }}>{block.caption}</figcaption>}
-        </figure>
-      );
+      return <BodyImage key={`${block.mediaId}:${block.url ?? ""}`} block={block} />;
     case "video":
       return (
         <div className="my-5 rounded-xl border px-4 py-3" style={{ borderColor: vars.g200, background: vars.g100 }} data-testid="block-video">
