@@ -102,7 +102,7 @@ beforeEach(async () => {
   await db.delete(insightMediaTable);
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 const entry = (id: string, status: "draft" | "published" = "published") => ({
   id,
@@ -123,6 +123,64 @@ async function request(path: string, options: RequestInit = {}, role = "reader")
 }
 
 describe("How-to CMS", () => {
+  it("creates draft batches atomically, preserves edited and deleted entries, and never exposes drafts to readers or George", async () => {
+    vi.stubEnv("DEPLOYMENT_ENV", "development");
+    vi.stubEnv("DATABASE_URL", "postgres://fixture@127.0.0.1:5432/disposable");
+    vi.stubEnv("PRODUCTION_DATABASE_URL", "postgres://fixture@127.0.0.1:5432/protected");
+    vi.stubEnv("BETA_DATABASE_URL", "");
+    vi.stubEnv("STAGING_TIER_VERIFICATION_DATABASE_URL", "");
+    const headers = { "X-Howto-Draft-Batch": "howto-editorial-review-v1", "X-Howto-Target": "development" };
+    await db.insert(insightMediaTable).values({
+      id: "review-image", fileName: "review.png", contentType: "image/png",
+      sizeBytes: "100", publicUrl: "/images/review.png", altText: "Original",
+    });
+    const body = { ...entry("review-test", "draft"), body: [
+      { type: "paragraph", runs: [{ text: "batchhiddenword" }] },
+      { type: "image", mediaId: "review-image", altText: "Described illustration" },
+    ] };
+    const send = (payload = body, role = "admin", target = "development") =>
+      request("/admin/howto", { method: "POST", headers: { ...headers, "X-Howto-Target": target }, body: JSON.stringify(payload) }, role);
+    expect((await send(body, "reader")).status).toBe(403);
+    expect((await send(body, "admin", "production")).status).toBe(400);
+    expect((await send({ ...body, status: "published" })).status).toBe(400);
+    expect((await send({ ...body, body: [{ type: "image", mediaId: "missing", altText: "Missing" }] })).status).toBe(400);
+    expect(await db.select().from(howtoMigrationLedgerTable)).toHaveLength(0);
+    expect((await send()).status).toBe(201);
+    expect((await request("/howto/review-test")).status).toBe(404);
+    expect(((await (await request("/support/search?q=batchhiddenword")).json()) as { results: unknown[] }).results).toHaveLength(0);
+    expect((await send()).status).toBe(200);
+    expect((await request("/admin/howto/review-test", { method: "PATCH", body: JSON.stringify({ title: "Natalie's edit", status: "published", includeInGeorge: false }) }, "admin")).status).toBe(200);
+    expect((await send()).status).toBe(200);
+    expect(((await (await request("/howto/review-test")).json()) as { title: string }).title).toBe("Natalie's edit");
+    expect((await request("/admin/howto/review-test", { method: "DELETE" }, "admin")).status).toBe(204);
+    expect((await send()).status).toBe(200);
+    expect((await request("/admin/howto/review-test", {}, "admin")).status).toBe(404);
+    const inventory = await request("/admin/howto", { headers }, "admin");
+    expect(inventory.headers.get("X-Howto-Batch-Completed")).toBe("review-test");
+    expect(inventory.headers.get("X-Howto-Target")).toBe("development");
+  });
+
+  it("preserves id collisions and serializes concurrent draft creates", async () => {
+    vi.stubEnv("DEPLOYMENT_ENV", "development");
+    vi.stubEnv("DATABASE_URL", "postgres://fixture@127.0.0.1:5432/disposable");
+    vi.stubEnv("PRODUCTION_DATABASE_URL", "");
+    vi.stubEnv("BETA_DATABASE_URL", "");
+    vi.stubEnv("STAGING_TIER_VERIFICATION_DATABASE_URL", "");
+    const headers = { "X-Howto-Draft-Batch": "howto-editorial-review-v1", "X-Howto-Target": "development" };
+    await db.insert(insightMediaTable).values({
+      id: "review-image", fileName: "review.png", contentType: "image/png", sizeBytes: "100",
+      publicUrl: "/images/review.png", altText: "Original",
+    });
+    const body = { ...entry("review-collision", "draft"), body: [{ type: "image", mediaId: "review-image", altText: "Illustration" }] };
+    await db.insert(howtoEntriesTable).values(entry("review-collision"));
+    const send = (id: string) => request("/admin/howto", { method: "POST", headers, body: JSON.stringify({ ...body, id }) }, "admin");
+    expect((await send("review-collision")).status).toBe(200);
+    expect(((await (await request("/howto/review-collision")).json()) as { body: unknown }).body).toEqual(entry("review-collision").body);
+    const results = await Promise.all([send("review-concurrent"), send("review-concurrent")]);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 201]);
+    expect((await db.select().from(howtoEntriesTable)).filter((r) => r.id === "review-concurrent")).toHaveLength(1);
+  });
+
   it("searches written guide material, not media URLs, and keeps long excerpts around the matching instructions", () => {
     const paragraphs = guideParagraphs([
       { type: "image", mediaId: "asset", altText: "Measurement screenshot", caption: "Select the saved audit" },

@@ -1,0 +1,14 @@
+{
+  "batch": "howto-editorial-review-v1",
+  "target": "development",
+  "origin": "http://127.0.0.1:8080",
+  "mode": "blocked",
+  "created": 0,
+  "skipped": 0,
+  "failed": 0,
+  "uncertain": 0,
+  "planned": 0,
+  "blocked": 30,
+  "reason": "No existing approved target editorial session was available. No guide or media write was attempted. Prepared catalogue identifiers are reserved, not saved draft identifiers.",
+  "outcomes": []
+}

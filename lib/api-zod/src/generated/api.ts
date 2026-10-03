@@ -328,6 +328,7 @@ export const GetPublishedHowtoResponse = zod.object({
 
 
 /**
+ * With X-Howto-Draft-Batch and X-Howto-Target, checks the explicitly matching nonproduction target and returns the X-Howto-Batch-Completed reconciliation header. Ordinary reads are unchanged.
  * @summary List all How-to entries for editors
  */
 export const listAdminHowtoResponseBodyItemOneRunsItemTextMax = 12000;
@@ -409,6 +410,7 @@ export const ListAdminHowtoResponse = zod.array(ListAdminHowtoResponseItem)
 
 
 /**
+ * The one-off importer supplies X-Howto-Draft-Batch=howto-editorial-review-v1 and X-Howto-Target=development or staging. These headers require a matching nonproduction service and restrict creation to illustrated review-* drafts. Transactional completion records prevent restoration after edits or deletion. Existing editorial authorization applies.
  * @summary Create a How-to entry
  */
 export const createAdminHowtoBodyIdMax = 100;
@@ -498,80 +500,10 @@ export const CreateAdminHowtoBody = zod.object({
 })])).max(createAdminHowtoBodyBodyMax)
 })
 
-export const createAdminHowtoResponseBodyItemOneRunsItemTextMax = 12000;
-
-export const createAdminHowtoResponseBodyItemOneRunsMax = 100;
-
-export const createAdminHowtoResponseBodyItemTwoNumberMax = 100;
-
-export const createAdminHowtoResponseBodyItemTwoTitleMax = 300;
-
-export const createAdminHowtoResponseBodyItemTwoRunsItemTextMax = 12000;
-
-export const createAdminHowtoResponseBodyItemTwoRunsMax = 100;
-
-export const createAdminHowtoResponseBodyItemThreeItemsItemMax = 4000;
-
-export const createAdminHowtoResponseBodyItemThreeItemsMax = 100;
-
-export const createAdminHowtoResponseBodyItemFourMediaIdMax = 200;
-
-export const createAdminHowtoResponseBodyItemFourAltTextMax = 1000;
-
-export const createAdminHowtoResponseBodyItemFourCaptionMax = 2000;
-
-export const createAdminHowtoResponseBodyItemFiveUrlMax = 2000;
-
-export const createAdminHowtoResponseBodyItemFiveCaptionMax = 2000;
-
-export const createAdminHowtoResponseBodyMax = 300;
-
-
-
 export const CreateAdminHowtoResponse = zod.object({
   "id": zod.string(),
-  "title": zod.string(),
-  "description": zod.string(),
-  "type": zod.enum(['Article', 'Guide', 'Video']),
-  "readTime": zod.string(),
-  "displayOrder": zod.number().int(),
-  "status": zod.enum(['draft', 'published']),
-  "includeInGeorge": zod.boolean().optional(),
-  "body": zod.array(zod.union([zod.object({
-  "type": zod.enum(['heading', 'paragraph', 'tip']),
-  "runs": zod.array(zod.object({
-  "text": zod.string().max(createAdminHowtoResponseBodyItemOneRunsItemTextMax),
-  "bold": zod.boolean().optional(),
-  "italic": zod.boolean().optional(),
-  "href": zod.string().url().optional()
-})).max(createAdminHowtoResponseBodyItemOneRunsMax)
-}),zod.object({
-  "type": zod.literal("step"),
-  "number": zod.number().int().min(1).max(createAdminHowtoResponseBodyItemTwoNumberMax),
-  "title": zod.string().max(createAdminHowtoResponseBodyItemTwoTitleMax),
-  "runs": zod.array(zod.object({
-  "text": zod.string().max(createAdminHowtoResponseBodyItemTwoRunsItemTextMax),
-  "bold": zod.boolean().optional(),
-  "italic": zod.boolean().optional(),
-  "href": zod.string().url().optional()
-})).max(createAdminHowtoResponseBodyItemTwoRunsMax)
-}),zod.object({
-  "type": zod.literal("list"),
-  "items": zod.array(zod.string().max(createAdminHowtoResponseBodyItemThreeItemsItemMax)).max(createAdminHowtoResponseBodyItemThreeItemsMax)
-}),zod.object({
-  "type": zod.literal("image"),
-  "mediaId": zod.string().min(1).max(createAdminHowtoResponseBodyItemFourMediaIdMax),
-  "altText": zod.string().max(createAdminHowtoResponseBodyItemFourAltTextMax),
-  "caption": zod.string().max(createAdminHowtoResponseBodyItemFourCaptionMax).optional(),
-  "url": zod.string().nullish()
-}),zod.object({
-  "type": zod.literal("video"),
-  "url": zod.string().url().max(createAdminHowtoResponseBodyItemFiveUrlMax),
-  "caption": zod.string().max(createAdminHowtoResponseBodyItemFiveCaptionMax).optional()
-})])).max(createAdminHowtoResponseBodyMax),
-  "createdAt": zod.date(),
-  "updatedAt": zod.date(),
-  "publishedAt": zod.date().nullable()
+  "outcome": zod.enum(['skipped']),
+  "reason": zod.string()
 })
 
 

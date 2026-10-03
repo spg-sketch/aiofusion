@@ -16,6 +16,7 @@ import { requirePlatformAuth } from "../middleware/platform-auth";
 import { canAccessInsightsCms } from "../lib/insights-cms-access";
 import { lockSharedMediaReferences } from "../lib/shared-media-reference-lock";
 import { excludedGeorgeGuideIds, GEORGE_GUIDE_PREFIX, setGeorgeGuidePreference } from "../lib/george-guides";
+import { HOWTO_REVIEW_BATCH, assertDraftBatchTarget, completedDraftBatchIds, draftBatchCompleted, recordDraftBatchCompleted } from "../lib/howto-draft-batch";
 
 const router = Router();
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
@@ -39,6 +40,19 @@ function authorized(req: Request, res: Response): boolean {
     return false;
   }
   return true;
+}
+
+function batchRequest(req: Request, res: Response): boolean | null {
+  const batch = req.get("X-Howto-Draft-Batch");
+  if (!batch) return false;
+  try {
+    if (batch !== HOWTO_REVIEW_BATCH) throw new Error("Unknown editorial draft batch.");
+    assertDraftBatchTarget(req.get("X-Howto-Target"));
+    return true;
+  } catch {
+    res.status(400).json({ error: "Draft batch requires an explicit matching nonproduction target." });
+    return null;
+  }
 }
 
 function httpsUrl(value: string): boolean {
@@ -153,6 +167,12 @@ router.get("/howto/:id", async (req, res) => {
 
 router.get("/admin/howto", requirePlatformAuth, async (req, res) => {
   if (!authorized(req, res)) return;
+  const batch = batchRequest(req, res);
+  if (batch === null) return;
+  if (batch) {
+    res.setHeader("X-Howto-Batch-Completed", (await completedDraftBatchIds(db)).join(","));
+    res.setHeader("X-Howto-Target", req.get("X-Howto-Target")!);
+  }
   const rows = await db.select().from(howtoEntriesTable)
     .orderBy(asc(howtoEntriesTable.displayOrder), asc(howtoEntriesTable.id));
   const excluded = await excludedGeorgeGuideIds();
@@ -172,6 +192,8 @@ router.get("/admin/howto/:id", requirePlatformAuth, async (req, res) => {
 
 router.post("/admin/howto", requirePlatformAuth, async (req, res) => {
   if (!authorized(req, res)) return;
+  const batch = batchRequest(req, res);
+  if (batch === null) return;
   const parsed = CreateAdminHowtoBody.safeParse(req.body);
   if (!parsed.success || !requestBodyIsStrict(req.body, new Set(["id", ...BODY_FIELDS])) ||
       !rawBodyIsStrict((req.body as Record<string, unknown>)?.["body"])) {
@@ -179,6 +201,11 @@ router.post("/admin/howto", requirePlatformAuth, async (req, res) => {
     return;
   }
   const input = parsed.data;
+  if (batch && (input.status !== "draft" || !input.id.startsWith("review-") ||
+      !input.body.some((block) => block.type === "image" && block.altText.trim()))) {
+    res.status(400).json({ error: "Review batches create only illustrated review-* drafts." });
+    return;
+  }
   const { includeInGeorge = true, ...entryInput } = input;
   const body = stripResolvedImageUrls(input.body as HowtoBlock[]);
   if (!validBody(body)) {
@@ -188,6 +215,16 @@ router.post("/admin/howto", requirePlatformAuth, async (req, res) => {
   try {
     const created = await db.transaction(async (tx) => {
       await lockSharedMediaReferences(tx);
+        if (batch) {
+          if (await draftBatchCompleted(tx, input.id)) return null;
+          const [existing] = await tx.select({ id: howtoEntriesTable.id }).from(howtoEntriesTable)
+            .where(eq(howtoEntriesTable.id, input.id)).limit(1);
+          if (existing) {
+            // Preserve collisions and remember them even if later deleted.
+            await recordDraftBatchCompleted(tx, input.id);
+            return null;
+          }
+        }
       if (!(await hasValidImageReferences(tx, body))) throw new Error("invalid-media");
       const now = new Date();
       const [entry] = await tx.insert(howtoEntriesTable).values({
@@ -198,8 +235,13 @@ router.post("/admin/howto", requirePlatformAuth, async (req, res) => {
         publishedAt: input.status === "published" ? now : null,
       }).returning();
       await setGeorgeGuidePreference(tx, entry!.id, includeInGeorge);
+      if (batch) await recordDraftBatchCompleted(tx, entry!.id);
       return entry!;
     });
+    if (!created) {
+      res.status(200).json({ id: input.id, outcome: "skipped", reason: "Existing or previously completed entry; no content changed." });
+      return;
+    }
     res.status(201).json(await serializeEntry(created, await excludedGeorgeGuideIds()));
   } catch (error) {
     if (error instanceof Error && error.message === "invalid-media") {

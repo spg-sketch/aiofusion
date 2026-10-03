@@ -167,6 +167,17 @@ if (howtoMode) {
     "-v", "ON_ERROR_STOP=1", "-c", editorialSql], { env: { DATABASE_URL: dbUrl } }).status !== 0) throw new Error("isolated editorial seed failed");
   if (run("pnpm", ["--filter", "@workspace/api-server", "run", "migrate:howto"],
     { env: { DATABASE_URL: dbUrl, DEPLOYMENT_ENV: "test" } }).status !== 0) throw new Error("How-to seed migration failed");
+  // Existing editorial illustrations, registered only in the disposable DB.
+  // No customer assets, new privileges or target-database mutations.
+  const illustrationSql = `
+    INSERT INTO insight_media (id,file_name,content_type,size_bytes,public_url,alt_text)
+    VALUES
+      ('article-1-pr-ai','article-1-pr-ai.webp','image/webp','0','/images/insights/article-1-pr-ai.webp','Collaboration illustration'),
+      ('article-3-b2b-authority','article-3-b2b-authority.webp','image/webp','0','/images/insights/article-3-b2b-authority.webp','Strategy illustration'),
+      ('article-4-agentic-media','article-4-agentic-media.webp','image/webp','0','/images/insights/article-4-agentic-media.webp','Communication illustration');
+  `;
+  if (run("psql", ["-h", "127.0.0.1", "-p", String(port), "-U", "release", "-d", "release",
+    "-v", "ON_ERROR_STOP=1", "-c", illustrationSql]).status !== 0) throw new Error("isolated illustration fixture failed");
 }
 if (featureMode) {
   const betaSql = `
@@ -229,7 +240,7 @@ start("node", [
   "--enable-source-maps",
   "artifacts/api-server/dist/index.mjs",
 ], {
-  DATABASE_URL: dbUrl, PORT: String(apiPort), NODE_ENV: "test", DEPLOYMENT_ENV: "test",
+  DATABASE_URL: dbUrl, PORT: String(apiPort), NODE_ENV: "test", DEPLOYMENT_ENV: howtoMode ? "development" : "test",
   ALLOWED_ORIGIN: "http://127.0.0.1:5000", SESSION_COOKIE_SECURE: "false",
   SESSION_SECRET: "release-harness-session-secret",
   PLATFORM_ADMIN_PASSWORD: "release-harness-admin-password",

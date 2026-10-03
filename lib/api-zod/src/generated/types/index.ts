@@ -11,6 +11,8 @@ export * from './authUser';
 export * from './authUserEnvelope';
 export * from './beginBrowserLoginParams';
 export * from './contactRestrictionRequest';
+export * from './createAdminHowto200';
+export * from './createAdminHowto200Outcome';
 export * from './errorEnvelope';
 export * from './georgeSearchResult';
 export * from './georgeSearchResultSource';

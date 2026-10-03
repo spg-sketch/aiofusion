@@ -23,6 +23,7 @@ import type {
   AuthUserEnvelope,
   BeginBrowserLoginParams,
   ContactRestrictionRequest,
+  CreateAdminHowto200,
   ErrorEnvelope,
   GetMediaRecommendationBriefParams,
   GetMediaRecommendationsParams,
@@ -955,6 +956,7 @@ export const getListAdminHowtoUrl = () => {
 }
 
 /**
+ * With X-Howto-Draft-Batch and X-Howto-Target, checks the explicitly matching nonproduction target and returns the X-Howto-Batch-Completed reconciliation header. Ordinary reads are unchanged.
  * @summary List all How-to entries for editors
  */
 export const listAdminHowto = async ( options?: Parameters<typeof customFetch>[1]): Promise<HowtoEntry[]> => {
@@ -1032,9 +1034,10 @@ export const getCreateAdminHowtoUrl = () => {
 }
 
 /**
+ * The one-off importer supplies X-Howto-Draft-Batch=howto-editorial-review-v1 and X-Howto-Target=development or staging. These headers require a matching nonproduction service and restrict creation to illustrated review-* drafts. Transactional completion records prevent restoration after edits or deletion. Existing editorial authorization applies.
  * @summary Create a How-to entry
  */
-export const createAdminHowto = async (howtoEntryInput: HowtoEntryInput, options?: Parameters<typeof customFetch>[1]): Promise<HowtoEntry> => {
+export const createAdminHowto = async (howtoEntryInput: HowtoEntryInput, options?: Parameters<typeof customFetch>[1]): Promise<CreateAdminHowto200 | HowtoEntry> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -1042,7 +1045,7 @@ export const createAdminHowto = async (howtoEntryInput: HowtoEntryInput, options
     if (Array.isArray(h)) return Object.fromEntries(h);
     return h;
   };
-return customFetch<HowtoEntry>(getCreateAdminHowtoUrl(),
+return customFetch<CreateAdminHowto200 | HowtoEntry>(getCreateAdminHowtoUrl(),
   {
     ...options,
     method: 'POST',

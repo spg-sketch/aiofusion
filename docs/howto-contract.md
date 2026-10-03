@@ -15,6 +15,7 @@ type HowtoEntry = {
   readTime: string;
   displayOrder: number;
   status: "draft" | "published";
+  includeInGeorge?: boolean; // published guides default to inclusion; drafts never appear
   body: HowtoBlock[];
   createdAt: string; // server-owned ISO timestamp
   updatedAt: string; // server-owned ISO timestamp
@@ -77,3 +78,29 @@ schema in production. Then run
 data-only seed migration. The command requires both tables to exist and never
 runs at application startup. Its durable migration ledger prevents deleted or
 edited initial seed entries from being restored on rerun.
+
+## Explicit editorial review batch
+
+The one-off importer uses the same list/create endpoints with
+`X-Howto-Draft-Batch: howto-editorial-review-v1` and an explicit
+`X-Howto-Target: development|staging`. Authorization is unchanged.
+The service verifies the matching runtime environment and refuses a database
+matching `PRODUCTION_DATABASE_URL`, including staging bound to that database.
+Development additionally refuses the protected beta/staging verification targets.
+Missing schema is an error; no startup tables or content writes are added.
+
+For the batch, list responses include `X-Howto-Target` and
+`X-Howto-Batch-Completed` (comma-separated stable entry IDs).
+Create accepts only illustrated `review-*` draft entries, using the normal
+strict payload, HTTPS and active shared-media validation. HTTP 201 is the normal
+created entry. HTTP 200 `{id, outcome:"skipped", reason}` means an existing or
+previously completed entry was preserved, including after deliberate deletion.
+Creation and completion bookkeeping commit together under the shared-media lock.
+No batch operation can modify an existing guide or restore a completed deletion.
+The fixed batch identities are separate from the initial published seed ledger.
+
+The CLI performs a content-read-only preview and image-delivery checks before
+applying. It never automatically retries an uncertain write. Reconcile the
+completion header in a subsequent preview before resuming. Authenticated
+sign-in/logout still have their normal session side effects; the importer
+does not bypass MFA or create editorial privileges.

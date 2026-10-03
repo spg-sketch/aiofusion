@@ -215,6 +215,7 @@ paths:
       tags: [How-to]
       operationId: listAdminHowto
       summary: List all How-to entries for editors
+      description: With X-Howto-Draft-Batch and X-Howto-Target, checks the explicitly matching nonproduction target and returns the X-Howto-Batch-Completed reconciliation header. Ordinary reads are unchanged.
       responses:
         '200':
           description: Editorial entries.
@@ -227,12 +228,24 @@ paths:
       tags: [How-to]
       operationId: createAdminHowto
       summary: Create a How-to entry
+      description: The one-off importer supplies X-Howto-Draft-Batch=howto-editorial-review-v1 and X-Howto-Target=development or staging. These headers require a matching nonproduction service and restrict creation to illustrated review-* drafts. Transactional completion records prevent restoration after edits or deletion. Existing editorial authorization applies.
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/HowtoEntryInput' }
       responses:
+        '200':
+          description: Review batch entry already exists or was previously completed. No content changed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, outcome, reason]
+                properties:
+                  id: { type: string }
+                  outcome: { type: string, enum: [skipped] }
+                  reason: { type: string }
         '201':
           description: Entry created.
           content:

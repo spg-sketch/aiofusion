@@ -559,6 +559,19 @@ state?: string;
 iss?: string;
 };
 
+export type CreateAdminHowto200Outcome = typeof CreateAdminHowto200Outcome[keyof typeof CreateAdminHowto200Outcome];
+
+
+export const CreateAdminHowto200Outcome = {
+  skipped: 'skipped',
+} as const;
+
+export type CreateAdminHowto200 = {
+  id: string;
+  outcome: CreateAdminHowto200Outcome;
+  reason: string;
+};
+
 export type GetMediaRecommendationBriefParams = {
 /**
  * @minLength 1
