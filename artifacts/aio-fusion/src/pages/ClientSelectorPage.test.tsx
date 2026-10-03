@@ -23,6 +23,8 @@ vi.mock("../lib/auditSync", () => ({
 }));
 
 beforeEach(() => {
+  // Reset shared module mocks explicitly; restoring spies does not reset them.
+  vi.resetAllMocks();
   vi.spyOn(global, "fetch").mockResolvedValue(new Response(null, { status: 404 }));
   loadServerAuditsForProjectMock.mockResolvedValue([]);
 });

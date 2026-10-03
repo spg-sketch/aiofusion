@@ -57,3 +57,9 @@ App refresh tests must count collection GET requests, not every URL containing t
 **Why:** Active-project navigation can trigger nested autosave mutations while a background list is refreshing. Prefix-only counters mistake those writes for extra list reads and fail depending on timing.
 
 **How to apply:** Match the exact collection pathname and HTTP method when asserting omission/reconfirmation read counts; retain the selected-project and two-read behavior checks.
+
+Vitest 4's `restoreAllMocks()` restores spies but does not reset shared `vi.fn()` module mocks. Treat spy restoration and fixture reset as separate responsibilities.
+
+**Why:** Shared module mocks can retain earlier tests' call history and implementations after a runner upgrade, making exact-call assertions fail despite unchanged application behavior.
+
+**How to apply:** Reset shared mocks in `beforeEach` and then establish each fixture's default implementations. Use history-only clearing only when preserving implementations is deliberate; retain exact-call assertions.

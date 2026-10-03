@@ -42,6 +42,8 @@ vi.mock("../lib/auth", () => ({
 
 // Silence fetch calls from the admin useEffects (token-usage, audit-locks).
 beforeEach(() => {
+  // Vitest 4 restores spies without resetting shared vi.fn() module mocks.
+  vi.resetAllMocks();
   sessionStorage.clear();
   mockLoadStoredProjects.mockReturnValue([]);
   mockServerImpersonate.mockResolvedValue({
