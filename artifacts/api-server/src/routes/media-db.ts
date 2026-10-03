@@ -478,9 +478,27 @@ router.get(
         return visible.includes(r.accountId);
       });
 
+      // Aggregate shared collection size only: never expose private workspace
+      // counts or fetch full media rows just to display this search-page total.
+      const [[contacts], [publications]] = await Promise.all([
+        db.select({ total: count() }).from(mediaContactsTable).where(and(
+          isNull(mediaContactsTable.deletedAt),
+          isNull(mediaContactsTable.accountId),
+        )),
+        db.select({ total: count() }).from(mediaOutletsTable).where(and(
+          isNull(mediaOutletsTable.deletedAt),
+          isNull(mediaOutletsTable.accountId),
+        )),
+      ]);
       res.json({
         standard: TRADE_MEDIA_CATEGORIES,
         custom: custom.map((r) => ({ id: r.id, name: r.name, accountId: r.accountId })),
+        sharedCollection: {
+          contacts: contacts.total,
+          publications: publications.total,
+          total: contacts.total + publications.total,
+          asOf: new Date().toISOString(),
+        },
       });
     } catch {
       res.status(500).json({ error: "Failed to load categories" });

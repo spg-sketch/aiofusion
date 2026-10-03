@@ -298,6 +298,24 @@ describe("MediaDatabasePage source health", () => {
     vi.restoreAllMocks();
   });
 
+  it("shows the dated shared database size below Topic and Authority, not in saved media", async () => {
+    const originalFetch = fetch;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/media-categories")) return new Response(JSON.stringify({
+        standard: ["Energy"], custom: [],
+        sharedCollection: { contacts: 3025, publications: 1050, total: 4075, asOf: "2026-10-03T12:00:00.000Z" },
+      }));
+      return originalFetch(input, init);
+    }));
+    render(<MediaDatabasePage />);
+    const summary = await screen.findByTestId("media-database-size");
+    expect(summary.textContent).toBe("As of 3 October 2026, the shared database contains 4,075 records (3,025 contacts and 1,050 publications).");
+    expect(screen.getByPlaceholderText("e.g. fintech").compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByPlaceholderText("0-100").compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "My Media Database" }));
+    expect(screen.queryByTestId("media-database-size")).toBeNull();
+  });
+
   it("treats uploaded rows as verified records and marks 80 percent as complete", () => {
     const eightyPercent = {
       ...changedContact,

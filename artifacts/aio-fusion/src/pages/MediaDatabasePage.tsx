@@ -402,6 +402,7 @@ function MediaDatabasePage() {
   const [identityReviewLoading, setIdentityReviewLoading] = useState(false);
   const [identityReviewError, setIdentityReviewError] = useState("");
   const [allCategories, setAllCategories] = useState<string[]>([]);
+  const [sharedCollection, setSharedCollection] = useState<{ contacts: number; publications: number; total: number; asOf: string } | null>(null);
   const [loadError, setLoadError] = useState("");
   const loadRequestSequence = useRef(0);
   const searchRequestSequence = useRef(0);
@@ -548,6 +549,12 @@ function MediaDatabasePage() {
         const custom: string[] = (categoryData.custom ?? []).map((c: { name: string }) => c.name);
         const merged = Array.from(new Set([...(categoryData.standard ?? TRADE_MEDIA_CATEGORIES), ...custom])).sort((a, b) => a.localeCompare(b));
         setAllCategories(merged);
+        const size = categoryData.sharedCollection;
+        setSharedCollection(size
+          && [size.contacts, size.publications, size.total].every((value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0)
+          && size.total === size.contacts + size.publications
+          && typeof size.asOf === "string" && Number.isFinite(Date.parse(size.asOf))
+          ? size : null);
       }
       if (outletData) {
         setOutlets(outletData.outlets ?? []);
@@ -604,6 +611,7 @@ function MediaDatabasePage() {
     setShowContactModal(false);
     setContactSaving(false);
     setContactSaveError("");
+    setSharedCollection(null);
     void loadData();
     return () => {
       mountedRef.current = false;
@@ -1626,6 +1634,9 @@ function MediaDatabasePage() {
              <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Topic<input value={searchTopic} onChange={(event) => { setSearchTopic(event.target.value); setSearchPage(1); }} placeholder="e.g. fintech" className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-[13px] font-normal" style={{ borderColor: vars.g200 }} /></label>
              <label className="text-[11px] font-semibold" style={{ color: vars.g600 }}>Minimum authority<input type="number" min="0" max="100" value={searchAuthority} onChange={(event) => { setSearchAuthority(event.target.value); setSearchPage(1); }} placeholder="0-100" className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-[13px] font-normal" style={{ borderColor: vars.g200 }} /></label>
            </div>
+            {searchScope === "all" && sharedCollection && <p data-testid="media-database-size" className="mt-3 text-[12px]" style={{ color: vars.g600 }}>
+              As of {new Date(sharedCollection.asOf).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}, the shared database contains <strong>{sharedCollection.total.toLocaleString("en-GB")} records</strong> ({sharedCollection.contacts.toLocaleString("en-GB")} contacts and {sharedCollection.publications.toLocaleString("en-GB")} publications).
+            </p>}
             <div className="mt-4 flex justify-end">
               <button data-testid="button-search-media-bottom" onClick={runSearch} className="rounded-lg px-4 py-2 text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Search</button>
             </div>

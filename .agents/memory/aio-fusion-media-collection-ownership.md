@@ -14,3 +14,9 @@ Customer spreadsheet presentation requests do not authorise replacing the intern
 **Why:** Personal-list exports serve a different purpose from internal collection maintenance and story outreach. Improving customer-facing spreadsheets must not silently change those separate workflows.
 
 **How to apply:** Consult the canonical customer download policy in replit.md. Preserve Master maintenance and separate story exports, and do not broaden visibility to populate linked-journalist cells.
+
+The shared Search Media Database page may show a dated aggregate collection size, while management totals must still describe only the active workspace's own additions.
+
+**Why:** The user explicitly requested the total database size beneath Topic and Authority so customers understand the scale of the shared collection they can search.
+
+**How to apply:** Keep this aggregate informational, not permission to browse or export the full collection. Never include other workspaces' private records in the advertised shared total.

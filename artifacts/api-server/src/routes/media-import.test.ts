@@ -15,6 +15,10 @@ vi.mock("@workspace/db", async () => {
   const db = drizzle(client, { schema });
 
   await client.exec(`
+    CREATE TABLE media_categories (
+      id serial PRIMARY KEY, name text NOT NULL, account_id varchar,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE TABLE media_outlets (
       id serial PRIMARY KEY, name text NOT NULL, category text NOT NULL DEFAULT '',
       website text NOT NULL DEFAULT '', description text NOT NULL DEFAULT '',
@@ -382,6 +386,34 @@ beforeAll(async () => {
 });
 
 describe("media export route regressions", () => {
+  it("reports dated shared collection counts without private or deleted records", async () => {
+    const before = await mediaRequest("GET", "/api/store/media-categories", "size-customer");
+    const sizeContacts = await db.insert(mediaContactsTable).values([
+      { firstName: "Size Shared", accountId: null },
+      { firstName: "Size Master", accountId: "admin" },
+      { firstName: "Size Private", accountId: "size-private" },
+      { firstName: "Size Deleted", accountId: null, deletedAt: new Date() },
+    ]).returning();
+    const sizeOutlets = await db.insert(mediaOutletsTable).values([
+      { name: "Size Shared Publication", accountId: null },
+      { name: "Size Master Publication", accountId: "admin" },
+      { name: "Size Private Publication", accountId: "size-private" },
+      { name: "Size Deleted Publication", accountId: null, deletedAt: new Date() },
+    ]).returning();
+    try {
+      const after = await mediaRequest("GET", "/api/store/media-categories", "size-customer");
+      expect(after.status).toBe(200);
+      expect(after.json.sharedCollection.contacts).toBe(before.json.sharedCollection.contacts + 1);
+      expect(after.json.sharedCollection.publications).toBe(before.json.sharedCollection.publications + 1);
+      expect(after.json.sharedCollection.total).toBe(before.json.sharedCollection.total + 2);
+      expect(Number.isFinite(Date.parse(after.json.sharedCollection.asOf))).toBe(true);
+      expect(after.json).not.toHaveProperty("contacts");
+    } finally {
+      await db.delete(mediaContactsTable).where(inArray(mediaContactsTable.id, sizeContacts.map((row) => row.id)));
+      await db.delete(mediaOutletsTable).where(inArray(mediaOutletsTable.id, sizeOutlets.map((row) => row.id)));
+    }
+  });
+
   it.each(["csv", "xlsx"])("preserves the unrestricted Master saved %s contract above 25 records", async (format) => {
     const marker = `MasterMaintenance${format}`;
     const rows = await db.insert(mediaContactsTable).values(Array.from({ length: 26 }, (_, index) => ({
