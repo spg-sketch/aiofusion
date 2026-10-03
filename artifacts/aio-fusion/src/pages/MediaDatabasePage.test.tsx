@@ -37,6 +37,8 @@ let outletTotalOverride = 0;
 let bookmarkTestRows: Array<Record<string, unknown>> = [];
 let bookmarkTotalOverride: number | null = null;
 let contactSaveFailure = false;
+let manualContactRows: Array<Record<string, unknown>> | null = null;
+let contactListFailure = false;
 let identityReviewRows: Array<Record<string, unknown>> = [];
 let identityReviewTotalOverride: number | null = null;
 let identityReviewFailure = false;
@@ -222,9 +224,24 @@ describe("MediaDatabasePage source health", () => {
           identityReviewRows = identityReviewRows.filter((contact) => Number(contact.id) !== contactId);
           if (contactId === 41) Object.assign(changedContact, { firstName: payload.firstName, lastName: payload.lastName });
         }
+        if (init.method === "POST" && manualContactRows) {
+          const payload = JSON.parse(String(init.body));
+          const contact = { ...changedContact, ...payload, id: 1001, accountId: "account-a", outletId: payload.outletName ? 1002 : null };
+          manualContactRows = [contact, ...manualContactRows];
+          if (payload.outletName) testOutlets = [{ id: 1002, name: payload.outletName, accountId: "account-a" }];
+          return new Response(JSON.stringify({ ok: true, contact }), { status: 200 });
+        }
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
       if (url.includes("/contacts")) {
+        if (contactListFailure) return new Response(JSON.stringify({ error: "List unavailable." }), { status: 503 });
+        if (manualContactRows) {
+          const params = new URL(url, "http://test.local").searchParams;
+          const q = params.get("q")?.toLowerCase() || "";
+          const rows = manualContactRows.filter((row) => `${row.firstName} ${row.lastName}`.toLowerCase().includes(q));
+          const start = (Number(params.get("page") || 1) - 1) * 50;
+          return new Response(JSON.stringify({ contacts: rows.slice(start, start + 50), total: rows.length }), { status: 200 });
+        }
         return new Response(JSON.stringify({
           contacts: [changedContact, {
             ...changedContact, id: 13, firstName: "No", lastName: "Source", sourceUrl: "", sourceStatus: "unverified", sourceCheck: null,
@@ -257,6 +274,8 @@ describe("MediaDatabasePage source health", () => {
     bookmarkTestRows = [];
     bookmarkTotalOverride = null;
     contactSaveFailure = false;
+    manualContactRows = null;
+    contactListFailure = false;
     identityReviewRows = [];
     identityReviewTotalOverride = null;
     identityReviewFailure = false;
@@ -903,8 +922,11 @@ describe("MediaDatabasePage source health", () => {
   });
 
   it("saves a free-typed publication name on a new contact and closes the form", async () => {
+    manualContactRows = [];
     render(<MediaDatabasePage />);
     fireEvent.click(screen.getByRole("button", { name: "Manage my records" }));
+    expect(await screen.findByText("No contacts yet")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Contacts (0)" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Add contact" }));
     expectReachHidden();
 
@@ -929,6 +951,112 @@ describe("MediaDatabasePage source health", () => {
       outletName: "Independent Review",
     });
     await waitFor(() => expect(screen.queryByRole("heading", { name: "Add contact" })).toBeNull());
+    expect(await screen.findByText("Alex Editor")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Contacts (1)" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Publications (1)" })).toBeTruthy();
+    expect(screen.getByRole("status")).toHaveTextContent("Contact added.");
+    expect(screen.getByText("Independent Review")).toBeTruthy();
+    cleanup();
+    render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Manage my records" }));
+    expect(await screen.findByText("Alex Editor")).toBeTruthy();
+    expect(screen.getByText("Independent Review")).toBeTruthy();
+  });
+
+  it("clears filters and pagination and uses newest-first after a successful addition", async () => {
+    manualContactRows = Array.from({ length: 61 }, (_, index) => ({ ...changedContact, id: index + 1, firstName: `Existing ${index}` }));
+    render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Manage my records" }));
+    await screen.findByRole("button", { name: "Contacts (61)" });
+    fireEvent.change(screen.getByPlaceholderText("Natural language search (e.g. 'tech reporters in London')"), { target: { value: "Existing" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("page=2"))).toBe(true));
+    fireEvent.click(screen.getByRole("button", { name: "Add contact" }));
+    fireEvent.change(screen.getByPlaceholderText("Jane"), { target: { value: "New" } });
+    fireEvent.change(screen.getByPlaceholderText("Smith"), { target: { value: "Writer" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save contact" }));
+    expect(await screen.findByText("New Writer")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Contacts (62)" })).toBeTruthy();
+    expect(screen.getByRole("status")).toHaveTextContent("previous contact filters have been cleared");
+    const requests = vi.mocked(fetch).mock.calls.map(([input]) => new URL(String(input), "http://test.local"));
+    expect(requests.some((url) => url.pathname.endsWith("/contacts") && url.searchParams.get("sort") === "createdAt" && url.searchParams.get("direction") === "desc" && url.searchParams.get("page") === "1" && !url.searchParams.has("q"))).toBe(true);
+  });
+
+  it("distinguishes persisted success from list refresh failure and provides retry without duplicate creation", async () => {
+    manualContactRows = [];
+    render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Manage my records" }));
+    await screen.findByText("No contacts yet");
+    fireEvent.click(screen.getByRole("button", { name: "Add contact" }));
+    fireEvent.change(screen.getByPlaceholderText("Jane"), { target: { value: "Saved" } });
+    fireEvent.change(screen.getByPlaceholderText("Smith"), { target: { value: "Writer" } });
+    contactListFailure = true;
+    fireEvent.click(screen.getByRole("button", { name: "Save contact" }));
+    expect(await screen.findByText(/The contact was saved, but the list could not be refreshed/)).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Add contact" })).toBeNull();
+    expect(screen.getByRole("button", { name: "View saved contact: Saved Writer" })).toBeTruthy();
+    contactListFailure = false;
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Saved Writer")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Contacts (1)" })).toBeTruthy();
+    expect(vi.mocked(fetch).mock.calls.filter(([input, init]) => String(input).endsWith("/contacts") && init?.method === "POST")).toHaveLength(1);
+  });
+
+  it("keeps entered values and the form open on a network save failure without success", async () => {
+    const originalFetch = fetch;
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST" && String(input).endsWith("/contacts")) return Promise.reject(new TypeError("Network unavailable."));
+      return originalFetch(input, init);
+    }));
+    render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Manage my records" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add contact" }));
+    fireEvent.change(screen.getByPlaceholderText("Jane"), { target: { value: "Unsaved" } });
+    fireEvent.change(screen.getByLabelText("Publication / outlet"), { target: { value: "Keep this publication" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save contact" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Network unavailable.");
+    expect(screen.getByPlaceholderText("Jane")).toHaveValue("Unsaved");
+    expect(screen.getByLabelText("Publication / outlet")).toHaveValue("Keep this publication");
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("preserves a rejected new contact and typed publication without reporting success", async () => {
+    manualContactRows = [];
+    contactSaveFailure = true;
+    render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Manage my records" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add contact" }));
+    fireEvent.change(screen.getByPlaceholderText("Jane"), { target: { value: "Rejected" } });
+    fireEvent.change(screen.getByLabelText("Publication / outlet"), { target: { value: "Retained Publication" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save contact" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Contact save rejected.");
+    expect(screen.getByPlaceholderText("Jane")).toHaveValue("Rejected");
+    expect(screen.getByLabelText("Publication / outlet")).toHaveValue("Retained Publication");
+    expect(screen.getByRole("button", { name: "Contacts (0)" })).toBeTruthy();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("ignores a late save response after switching the active workspace", async () => {
+    let resolveSave!: (response: Response) => void;
+    const originalFetch = fetch;
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST" && String(input).endsWith("/contacts")) return new Promise<Response>((resolve) => { resolveSave = resolve; });
+      return originalFetch(input, init);
+    }));
+    const view = render(<MediaDatabasePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Manage my records" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add contact" }));
+    fireEvent.change(screen.getByPlaceholderText("Jane"), { target: { value: "Previous workspace" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save contact" }));
+    await waitFor(() => expect(resolveSave).toBeTruthy());
+    localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "account-b", role: "agency", membershipRole: "owner" }));
+    manualContactRows = [];
+    view.rerender(<MediaDatabasePage />);
+    resolveSave(new Response(JSON.stringify({ ok: true, contact: { ...changedContact, firstName: "Previous workspace" } }), { status: 200 }));
+    await screen.findByText("No contacts yet");
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByText(/View saved contact/)).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Add contact" })).toBeNull();
   });
 
   it("preserves an existing publication link unless its name is changed to a free-typed outlet", async () => {

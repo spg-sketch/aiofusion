@@ -456,6 +456,9 @@ function MediaDatabasePage() {
   });
   const [contactSaving, setContactSaving] = useState(false);
   const [contactSaveError, setContactSaveError] = useState("");
+  const [contactSaveConfirmation, setContactSaveConfirmation] = useState("");
+  const [savedContact, setSavedContact] = useState<Contact | null>(null);
+  const mountedRef = useRef(true);
   const [deletingContactId, setDeletingContactId] = useState<number | null>(null);
   const [sourceCheckingId, setSourceCheckingId] = useState<number | null>(null);
   const [sourceActionError, setSourceActionError] = useState("");
@@ -482,6 +485,7 @@ function MediaDatabasePage() {
   const importJobStorageKey = `aio.media-import-job:${session?.username || "anonymous"}`;
   const projectCategories = getProjectMediaCategories();
   const loadData = async (requestedMode = resultMode, requestedTab = activeTab) => {
+    const workspace = session?.username;
     const sequence = ++loadRequestSequence.current;
     loadControllerRef.current?.abort();
     const controller = new AbortController();
@@ -505,8 +509,9 @@ function MediaDatabasePage() {
         if (contactCountryFilter) params.set("country", contactCountryFilter);
         if (contactOutletFilter) params.set("outletId", contactOutletFilter);
         requests.push(fetch(`${apiBase()}/api/store/media-db/contacts?${params}`, { credentials: "include", signal: controller.signal }));
+        requests.push(fetch(`${apiBase()}/api/store/media-db/outlets?page=1&pageSize=1`, { credentials: "include", signal: controller.signal }));
       }
-      const [catR, optionalR] = await Promise.all(requests);
+      const [catR, optionalR, outletCountR] = await Promise.all(requests);
       const outR = requestedTab === "outlets" && requestedMode === "browse" ? (optionalR ?? null) : null;
       const conR = requestedTab === "contacts" && requestedMode === "browse" ? (optionalR ?? null) : null;
       const failed = [
@@ -519,15 +524,15 @@ function MediaDatabasePage() {
       const categoryData = catR.ok ? await catR.json() : null;
       const outletData = outR ? await outR.json() : null;
       const contactData = conR ? await conR.json() : null;
-      // Category metadata is independent of the requested record page. A
-      // concurrent browse/search can make this list request stale; still
-      // hydrate the shared filter options from its successful response.
+      const outletCountData = outletCountR?.ok ? await outletCountR.json() : null;
+      if (!mountedRef.current || getLocalSession()?.username !== workspace || sequence !== loadRequestSequence.current) return;
+      // Custom categories are workspace-scoped too; only the current request
+      // may hydrate either metadata or contact results.
       if (catR.ok && categoryData) {
         const custom: string[] = (categoryData.custom ?? []).map((c: { name: string }) => c.name);
         const merged = Array.from(new Set([...(categoryData.standard ?? TRADE_MEDIA_CATEGORIES), ...custom])).sort((a, b) => a.localeCompare(b));
         setAllCategories(merged);
       }
-      if (sequence !== loadRequestSequence.current) return;
       if (outletData) {
         setOutlets(outletData.outlets ?? []);
         setOutletTotal(outletData.total ?? outletData.outlets?.length ?? 0);
@@ -536,13 +541,14 @@ function MediaDatabasePage() {
         setContacts(contactData.contacts ?? []);
         setContactTotal(contactData.total ?? contactData.contacts?.length ?? 0);
       }
+      if (outletCountData) setOutletTotal(outletCountData.total ?? 0);
       if (!catR.ok || !categoryData) {
         setLoadError("Filters are temporarily unavailable. You can still search or browse.");
       }
       if (requestedMode === "search") setResultRefreshToken((value) => value + 1);
     } catch (error) {
       controller.abort();
-      if (sequence !== loadRequestSequence.current) return;
+      if (!mountedRef.current || getLocalSession()?.username !== workspace || sequence !== loadRequestSequence.current) return;
       setAllCategories([...TRADE_MEDIA_CATEGORIES]);
       setLoadError(
         error instanceof DOMException && error.name === "AbortError"
@@ -558,13 +564,26 @@ function MediaDatabasePage() {
   };
 
   useEffect(() => {
+    mountedRef.current = true;
+    setContacts([]);
+    setContactTotal(0);
+    setOutlets([]);
+    setOutletTotal(0);
+    setAllCategories([]);
+    setSavedContact(null);
+    setShowContactProfile(null);
+    setContactSaveConfirmation("");
+    setShowContactModal(false);
+    setContactSaving(false);
+    setContactSaveError("");
     void loadData();
     return () => {
+      mountedRef.current = false;
       loadRequestSequence.current += 1;
       loadControllerRef.current?.abort();
       loadControllerRef.current = null;
     };
-  }, []);
+  }, [session?.username]);
 
   useEffect(() => {
     if (searchLocation && searchLocation !== "UK" && searchLocation !== "US") setSearchLocation("");
@@ -827,7 +846,7 @@ function MediaDatabasePage() {
     if (resultMode !== "browse") return;
     if (activeTab === "contacts") void loadData("browse", "contacts");
     if (activeTab === "outlets") void loadData("browse", "outlets");
-  }, [resultMode, activeTab, contactPage, contactSort, contactDirection, contactSearch, contactCategoryFilter, contactCountryFilter, contactOutletFilter, outletPage]);
+  }, [resultMode, activeTab, contactPage, contactSort, contactDirection, contactSearch, contactCategoryFilter, contactCountryFilter, contactOutletFilter, outletPage, resultRefreshToken]);
 
   const resetImport = () => {
     importPreviewSequence.current += 1;
@@ -1020,6 +1039,8 @@ function MediaDatabasePage() {
     if (!canWriteMediaDatabase) return;
     setEditingContact(null);
     setContactSaveError("");
+    setContactSaveConfirmation("");
+    setSavedContact(null);
     setContactForm({
       outletId: "", outletName: "", firstName: "", lastName: "", role: "", email: "", phone: "", notes: "",
       mobile: "", linkedinUrl: "", twitterHandle: "", beats: "", sectors: "", geography: "",
@@ -1033,6 +1054,8 @@ function MediaDatabasePage() {
     if (!canManageCollectionItem(c, isMaster, canWriteMediaDatabase, session?.username)) return;
     setEditingContact(c);
     setContactSaveError("");
+    setContactSaveConfirmation("");
+    setSavedContact(null);
     setContactForm({
       outletId: c.outletId ? String(c.outletId) : "",
       outletName: c.outletName || outlets.find((outlet) => outlet.id === c.outletId)?.name || "",
@@ -1054,6 +1077,7 @@ function MediaDatabasePage() {
     if (!canWriteMediaDatabase || (editingContact && !canManageCollectionItem(editingContact, isMaster, canWriteMediaDatabase, session?.username)) || (!contactForm.firstName.trim() && !contactForm.lastName.trim()) || contactSaving) return;
     setContactSaving(true);
     setContactSaveError("");
+    const workspace = session?.username;
     try {
       const payload = {
         ...contactForm,
@@ -1071,19 +1095,41 @@ function MediaDatabasePage() {
         const error = await resp.json().catch(() => ({}));
         throw new Error(error.error || "Could not save this contact.");
       }
+      const data = await resp.json().catch(() => null);
+      if (!mountedRef.current || getLocalSession()?.username !== workspace) return;
       setShowContactModal(false);
-      await loadData();
-      if (isMaster && canWriteMediaDatabase) {
-        if (activeTab === "identityReview") {
-          await Promise.all([loadIdentityReview(identityReviewPage), loadData("browse", "contacts")]);
-        } else if (resultMode === "browse" && activeTab === "contacts") {
-          await loadData("browse", "contacts");
-        }
+      setContactSaveConfirmation(editingContact ? "Contact saved." : "Contact added. Showing newest contacts first; previous contact filters have been cleared.");
+      if (data?.contact?.id) {
+        setSavedContact({ ...data.contact, outletName: contactForm.outletName.trim() });
+      } else {
+        setSavedContact(null);
+      }
+      if (!editingContact) {
+        // Let the browse effect fetch with the committed state, never the
+        // pre-save filters/page captured by this async handler.
+        searchRequestSequence.current += 1;
+        setSearchLoading(false);
+        setContactSearch("");
+        setContactCategoryFilter("");
+        setContactCountryFilter("");
+        setContactOutletFilter("");
+        setContactSort("createdAt");
+        setContactDirection("desc");
+        setContactPage(1);
+        setSelectedMedia(new Set());
+        setShowManagement(true);
+        setActiveTab("contacts");
+        setResultMode("browse");
+        setResultRefreshToken((value) => value + 1);
+      } else {
+        await loadData();
+        if (activeTab === "identityReview") await loadIdentityReview(identityReviewPage);
       }
     } catch (error) {
+      if (!mountedRef.current || getLocalSession()?.username !== workspace) return;
       setContactSaveError(error instanceof Error ? error.message : "Could not save this contact.");
     } finally {
-      setContactSaving(false);
+      if (mountedRef.current && getLocalSession()?.username === workspace) setContactSaving(false);
     }
   };
   const deleteContact = async (id: number, savedContact?: Contact) => {
@@ -1404,7 +1450,7 @@ function MediaDatabasePage() {
          <nav aria-label="Media Database sections" className="mt-3 flex flex-wrap gap-2">
            <button onClick={openSearchMedia} aria-current={activeNavigation === "search" ? "page" : undefined} className={navigationButtonClass} style={navigationButtonStyle("search")}>Search Media Database</button>
            <button onClick={() => openSavedMedia("contacts")} aria-current={activeNavigation === "saved" ? "page" : undefined} className={navigationButtonClass} style={navigationButtonStyle("saved")}>My Media Database</button>
-           <button onClick={() => { setShowManagement(true); setResultMode("none"); setActiveTab("contacts"); setInternalToolsOpen(false); }} aria-current={activeNavigation === "manage" ? "page" : undefined} className={navigationButtonClass} style={navigationButtonStyle("manage")}>Manage my records</button>
+           <button onClick={() => { setShowManagement(true); setResultMode("browse"); setActiveTab("contacts"); setInternalToolsOpen(false); setResultRefreshToken((value) => value + 1); }} aria-current={activeNavigation === "manage" ? "page" : undefined} className={navigationButtonClass} style={navigationButtonStyle("manage")}>Manage my records</button>
          </nav>
       </div>
       {loadError && <div role="alert" className="mb-4 rounded-xl border bg-white px-4 py-3 text-[13px]" style={{ borderColor: "#FECACA", color: vars.red }}>
@@ -1602,6 +1648,11 @@ function MediaDatabasePage() {
           <h2 className="text-[18px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Manage my records</h2>
         </div>
       <div className="mt-4">
+       {contactSaveConfirmation && <div role="status" className="mb-4 text-[13px]" style={{ color: vars.navy }}>
+         <p>{contactSaveConfirmation}</p>
+         {savedContact && <button onClick={() => setShowContactProfile(savedContact)} className="mt-1 underline font-semibold">View saved contact: {contactDisplayName(savedContact)}</button>}
+         {loadError && <p>The contact was saved, but the list could not be refreshed. Use Try again to reload the list. Do not add it again.</p>}
+       </div>}
        {canWriteMediaDatabase && <div className="mb-4 flex flex-wrap gap-2">
          <button onClick={openAddContact} className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold text-white" style={{ background: vars.accent }}><Plus size={13} /> Add contact</button>
          <button onClick={openAddOutlet} className="flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}><Building2 size={13} /> Add publication</button>
@@ -1609,8 +1660,8 @@ function MediaDatabasePage() {
       {/* Tabs */}
       <div className="flex gap-1 mb-6 p-1 rounded-xl inline-flex" style={{ background: vars.g100 }}>
         {([
-          { id: "outlets" as const, label: `Publications (${outlets.length})` },
-          { id: "contacts" as const, label: `Contacts (${contacts.length})` },
+          { id: "outlets" as const, label: `Publications (${outletTotal})` },
+          { id: "contacts" as const, label: `Contacts (${contactTotal})` },
         ]).map(({ id: t, label }) => (
           <button key={t} onClick={() => setActiveTab(t)} className="px-5 py-2 rounded-lg text-[13px] font-bold transition-all capitalize" style={{ background: activeTab === t ? "rgba(201,160,78,0.18)" : "transparent", color: activeTab === t ? "#7A5E25" : vars.g500, boxShadow: activeTab === t ? "0 1px 3px rgba(0,0,0,0.1)" : "none", border: activeTab === t ? `1px solid ${vars.gold}` : "1px solid transparent" }}>
             {label}

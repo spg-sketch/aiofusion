@@ -13,6 +13,7 @@ const publicDir = resolve(root, "artifacts/aio-fusion/dist/public");
 const featureMode = process.argv.includes("--features");
 const howtoMode = process.argv.includes("--howto");
 const mediaResearchMode = process.argv.includes("--media-research");
+const manualContactsMode = process.argv.includes("--manual-contacts");
 const liveAi = featureMode && process.env.AIO_FEATURE_LIVE_AI === "1";
 const liveAiEnv = {};
 if (liveAi) {
@@ -81,10 +82,10 @@ process.on("exit", cleanup);
 process.on("SIGTERM", () => { cleanup(); process.exit(0); });
 process.on("SIGINT", () => { cleanup(); process.exit(0); });
 
-if (featureMode || howtoMode || mediaResearchMode || !existsSync(join(publicDir, "index.html"))) {
+if (featureMode || howtoMode || mediaResearchMode || manualContactsMode || !existsSync(join(publicDir, "index.html"))) {
   if (run("pnpm", ["--filter", "@workspace/aio-fusion", "run", "build"]).status !== 0) throw new Error("web build failed");
 }
-if (featureMode || howtoMode || mediaResearchMode || !existsSync(resolve(root, "artifacts/api-server/dist/index.mjs"))) {
+if (featureMode || howtoMode || mediaResearchMode || manualContactsMode || !existsSync(resolve(root, "artifacts/api-server/dist/index.mjs"))) {
   if (run("pnpm", ["--filter", "@workspace/api-server", "run", "build"]).status !== 0) throw new Error("API build failed");
 }
 if (run("initdb", ["-D", pgDir, "--username=release", "--auth=trust", "--no-locale"]).status !== 0) throw new Error("initdb failed");
@@ -127,6 +128,28 @@ INSERT INTO projects (id,name,data,owner)
 VALUES ('other-workspace','Other workspace project','{"client":"other-workspace"}','other-workspace')
 ON CONFLICT (id) DO NOTHING;`;
 if (run("psql", ["-h", "127.0.0.1", "-p", String(port), "-U", "release", "-d", "release", "-v", "ON_ERROR_STOP=1", "-c", sql], { env: { DATABASE_URL: dbUrl } }).status !== 0) throw new Error("seed failed");
+if (manualContactsMode) {
+  // These identities exist only in this harness's disposable PostgreSQL.
+  const manualSql = `
+    WITH company AS (
+      INSERT INTO platform_companies (slug,role,email,display_name,status,setup_complete,free_access)
+      VALUES ('other-workspace','agency','other@example.invalid','Other Synthetic Workspace','active',true,true)
+      RETURNING id
+    ), app_user AS (
+      INSERT INTO platform_users (email,name,password_hash,email_verified)
+      VALUES ('other@example.invalid','other@example.invalid','${hash}',true) RETURNING id
+    )
+    INSERT INTO platform_memberships (user_id,company_id,company_slug,role)
+    SELECT app_user.id,company.id,'other-workspace','owner' FROM app_user,company;
+    WITH app_user AS (
+      INSERT INTO platform_users (email,name,password_hash,email_verified)
+      VALUES ('viewer@example.invalid','viewer@example.invalid','${hash}',true) RETURNING id
+    )
+    INSERT INTO platform_memberships (user_id,company_id,company_slug,role)
+    SELECT app_user.id,company.id,'release-workspace','viewer'
+    FROM app_user,platform_companies company WHERE company.slug='release-workspace';`;
+  if (run("psql", ["-h", "127.0.0.1", "-p", String(port), "-U", "release", "-d", "release", "-v", "ON_ERROR_STOP=1", "-c", manualSql]).status !== 0) throw new Error("manual contact synthetic identities seed failed");
+}
 if (howtoMode) {
   // Synthetic, verified editorial identity. This is not an administrator and
   // has no project access. Never seed or modify a real staff/customer account.

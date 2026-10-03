@@ -61,6 +61,17 @@ vi.mock("@workspace/db", async () => {
     );
     CREATE UNIQUE INDEX media_discoveries_test_identity
       ON media_discoveries (account_id, project_id, candidate_key);
+    CREATE TABLE media_contact_status_events (
+      id serial PRIMARY KEY, contact_id integer NOT NULL, account_id varchar NOT NULL,
+      status varchar(20) NOT NULL, note text NOT NULL DEFAULT '', created_by varchar NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE media_contact_correction_reports (
+      id serial PRIMARY KEY, contact_id integer NOT NULL, account_id varchar NOT NULL,
+      fields text[] NOT NULL DEFAULT '{}', details text NOT NULL, status varchar(20) NOT NULL DEFAULT 'pending',
+      reported_by varchar NOT NULL, resolution_note text NOT NULL DEFAULT '', reviewed_by varchar,
+      source_check_id integer, reviewed_at timestamptz, created_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE TABLE media_suppressions (
       id serial PRIMARY KEY, request_id integer, email_hash text, name_hash text, outlet_hash text, linkedin_hash text,
       scope text NOT NULL DEFAULT 'shared', account_id varchar, reason text NOT NULL DEFAULT '',
@@ -159,6 +170,53 @@ beforeEach(async () => {
 });
 
 describe("media discovery approval queue", () => {
+  it.each(["", "Synthetic Manual Publication"])("persists manual contact and its typed publication %j only in the active workspace", async (outletName) => {
+    const created = await request({ username: "account-a" }, "/store/media-db/contacts", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ firstName: "Synthetic", lastName: "Writer", outletName, email: "writer@example.invalid" }),
+    });
+    expect(created.status).toBe(200);
+    const body = await created.json() as { contact: { id: number; outletId: number | null; accountId: string } };
+    expect(body.contact.accountId).toBe("account-a");
+    expect(Boolean(body.contact.outletId)).toBe(Boolean(outletName));
+    const list = await request({ username: "account-a" }, "/store/media-db/contacts");
+    expect(list.status).toBe(200);
+    expect(await list.json()).toMatchObject({
+      total: 1,
+      contacts: [{ id: body.contact.id, firstName: "Synthetic", lastName: "Writer", outletName: outletName || null }],
+    });
+    const other = await request({ username: "account-b", visibleAccounts: ["account-a", "account-b"] }, "/store/media-db/contacts");
+    expect(other.status).toBe(200);
+    expect(await other.json()).toMatchObject({ total: 0, contacts: [] });
+    const denied = await request({ username: "account-b" }, `/store/media-db/contacts/${body.contact.id}`, {
+      method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ role: "Not allowed" }),
+    });
+    expect(denied.status).toBe(403);
+    const persisted = (await db.select().from(mediaContactsTable))[0];
+    expect(persisted).toMatchObject({ id: body.contact.id, accountId: "account-a", role: "" });
+    const publications = await db.select().from(mediaOutletsTable);
+    if (outletName) expect(publications).toEqual([expect.objectContaining({ id: body.contact.outletId, name: outletName, accountId: "account-a" })]);
+    else expect(publications).toHaveLength(0);
+  });
+
+  it("retains Master shared entry and rejects privacy-suppressed manual additions before publication creation", async () => {
+    const master = await request({ username: "admin", role: "admin" }, "/store/media-db/contacts", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ firstName: "Shared", lastName: "Writer", outletName: "Shared Publication" }),
+    });
+    expect(master.status).toBe(200);
+    expect((await db.select().from(mediaContactsTable))[0]?.accountId).toBeNull();
+    expect((await db.select().from(mediaOutletsTable))[0]?.accountId).toBeNull();
+    await db.insert(mediaSuppressionsTable).values({ emailHash: privacyHash("suppressed@example.invalid"), scope: "workspace", accountId: "account-a", active: 1, reason: "Synthetic privacy regression" });
+    const denied = await request({ username: "account-a" }, "/store/media-db/contacts", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ firstName: "Private", lastName: "Writer", email: "suppressed@example.invalid", outletName: "Must Not Exist" }),
+    });
+    expect(denied.status).toBe(409);
+    expect(await db.select().from(mediaContactsTable)).toHaveLength(1);
+    expect(await db.select().from(mediaOutletsTable)).toHaveLength(1);
+  });
+
   it("queues candidates without creating trusted contact or outlet rows and is idempotent", async () => {
     const body = { discoveryToken: token(), candidateKey: candidate.candidateKey };
     const first = await request({ username: "account-a" }, "/store/media-db/discoveries", {
