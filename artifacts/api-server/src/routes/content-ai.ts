@@ -17,6 +17,7 @@ import { inAssignedScope } from "../lib/member-guards";
 import { signMediaDiscoveries, type TrustedMediaDiscovery } from "../lib/media-discovery-token";
 import { countWebSearchCalls } from "../lib/media-discovery-usage";
 import { MediaDiscoveryResponseError, parseMediaDiscoveryResponse } from "../lib/media-discovery-response";
+import { mediaDiscoverySourceUrls } from "../lib/media-discovery-sources";
 import { dateAppearsOnPage, deadlineAppearsOnPage, eventNameAppearsOnPage, normaliseEventResults, publishedValueAppearsOnPage, recomputeActionableOpportunities, regionAppearsOnPage } from "../lib/events-search";
 import { TRADE_MEDIA_CATEGORIES } from "../lib/trade-media-categories";
 import { normaliseMediaResearchRegions } from "../lib/media-research-regions";
@@ -1305,6 +1306,7 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
         response = await client.responses.create({
         model: "gpt-5.4-mini",
         tools: [{ type: "web_search" }],
+        include: ["web_search_call.action.sources"],
         max_output_tokens: 16384,
         input: prompt + phrasePrompt,
         text: {
@@ -1421,7 +1423,7 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
         Math.max(1, countWebSearchCalls(response.output)) * 0.02,
       );
       const returnedItems = parseMediaDiscoveryResponse(response);
-      const citations = citedUrls(response.output);
+      const citations = mediaDiscoverySourceUrls(response.output);
       const now = new Date().toISOString();
       let citationRejectedCount = 0;
       const candidates: TrustedMediaDiscovery[] = returnedItems.slice(0, 30).flatMap((raw) => {
@@ -1463,6 +1465,18 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
         }];
       });
       const runId = (req as Request & { mediaDiscoveryRunId?: string }).mediaDiscoveryRunId;
+      if (candidates.length === 0 && citationRejectedCount > 0) {
+        logger.warn({
+          runId, stage: "source_validation",
+          returnedCount: returnedItems.length,
+          sourceEvidenceUrlCount: citations.length,
+          citationRejectedCount,
+        }, "content-ai: media discovery source evidence rejected");
+        throw new MediaDiscoveryResponseError(
+          "unmatched_source_evidence",
+          "Live media research returned potential journalists, but their search-source references could not be verified. Please try again.",
+        );
+      }
       if (runId) await setMediaDiscoveryCandidates(runId, candidates);
       const verificationStartedAt = Date.now();
       let verifiedCount = 0;
@@ -1512,6 +1526,7 @@ Key messages: ${keyMessages.join("; ") || "(not supplied)"}`;
         stage: "source_verification",
         returnedCount: returnedItems.length,
         citationRejectedCount,
+        sourceEvidenceUrlCount: citations.length,
         durationMs: boundedMediaDiscoveryDurationMs(verificationStartedAt),
         candidateCount: candidates.length,
         verifiedCount,

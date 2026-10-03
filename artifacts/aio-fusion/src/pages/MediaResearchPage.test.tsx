@@ -887,8 +887,10 @@ describe("MediaResearchPage live discovery", () => {
     expect(screen.queryByTestId("empty-live-discovery")).toBeNull();
   });
 
-  it("restores a failed provider run without presenting it as empty success", async () => {
-    const error = "Live media research received an unusable search response. No completed result was available. Please try again.";
+  it.each([
+    "Live media research received an unusable search response. No completed result was available. Please try again.",
+    "Live media research returned potential journalists, but their search-source references could not be verified. Please try again.",
+  ])("restores a failed search without presenting it as empty success: %s", async (error) => {
     serverDiscoveryHistory.latest = { runId: "invalid-provider-run", status: "failed", items: [], error, discoveryToken: "" };
     const first = render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });

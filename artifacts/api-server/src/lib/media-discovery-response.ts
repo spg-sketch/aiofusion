@@ -4,8 +4,8 @@
  * Citation and public-page validation remain separate, subsequent checks.
  */
 export class MediaDiscoveryResponseError extends Error {
-  constructor(public readonly reason: string) {
-    super("Live media research received an unusable search response. No completed result was available. Please try again.");
+  constructor(public readonly reason: string, message = "Live media research received an unusable search response. No completed result was available. Please try again.") {
+    super(message);
     this.name = "MediaDiscoveryResponseError";
   }
 }

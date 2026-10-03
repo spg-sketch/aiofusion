@@ -101,7 +101,7 @@ in generated documents.
 ## Live public-web media discovery integrity
 
 Treat search-model output as untrusted even when the provider reports web grounding. A discovery
-is saveable only when its exact normalized source page appears in the provider citations, the
+is saveable only when its exact normalized source page appears in provider-owned search evidence, the
 person's full name appears on an SSRF-safe bounded fetch of that page, and any email is an exact
 complete address found in that fetched text. Bind saveable results to the authenticated account
 with a short-lived signed token so the browser cannot rewrite provenance.
@@ -116,6 +116,10 @@ being fabricated or mismatched. Host-only citation checks also let a homepage va
 profile, and browser-submitted discoveries can falsely acquire a "verified" label.
 
 **How to apply:** keep source downloads bounded through body consumption, not just response headers.
+Structured JSON answers may omit inline citation annotations even after genuine web searches.
+Accept exact page references from completed search-tool source metadata as well as inline citations;
+never substitute model-written links or a same-host match for this evidence. If every candidate
+fails this evidence boundary, show a source-validation failure, not a successful empty search.
 Serialize account saves and deduplicate by person plus outlet rather than source page alone because
 several journalists may share a staff page or article. Count every web-search tool call in spend
 accounting, including responses that fail JSON parsing.

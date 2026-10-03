@@ -1431,6 +1431,17 @@ describe("media discovery house prompt integration", () => {
       ],
       usage: { input_tokens: 10, output_tokens: 2 },
     });
+    const toolSourced = (items: unknown[], url = candidate.sourceUrl) => ({
+      ...completed(items, false),
+      output: [
+        { type: "web_search_call", status: "completed", action: {
+          type: "search", sources: [{ type: "url", url }],
+        } },
+        { type: "message", status: "completed", content: [{
+          type: "output_text", annotations: [],
+        }] },
+      ],
+    });
     const readUntilSettled = async (runId: string) => {
       let run = await api(`/api/content/journalist-search-runs/${runId}`, { sid });
       for (let attempt = 0; run.json?.status === "running" && attempt < 100; attempt += 1) {
@@ -1448,11 +1459,18 @@ describe("media discovery house prompt integration", () => {
       ["malformed-json", { ...completed([]), output_text: "{" }, "failed"],
       ["malformed-shape", { ...completed([]), output_text: '{"items":null}' }, "failed"],
       ["malformed-candidate", completed([null]), "failed"],
-      ["citation-rejected", completed([candidate], false), "succeeded"],
+      ["citation-rejected", completed([candidate], false), "failed"],
+      ["tool-source-unmatched", toolSourced([candidate], "https://marketing.example/about"), "failed"],
+      ["tool-source-verified", toolSourced([candidate]), "succeeded"],
+      ["tool-source-partial", toolSourced([{ ...candidate, sourceUrl: "https://marketing.example/uncited" }, candidate]), "succeeded"],
       ["source-rejected", completed([candidate]), "succeeded"],
     ] as const) {
       fetchSiteContentMock.mockReset();
-      fetchSiteContentMock.mockResolvedValue({ title: "Unrelated page", description: "", text: "" });
+      fetchSiteContentMock.mockResolvedValue({
+        title: "Unrelated page", description: "",
+        text: label === "tool-source-verified" || label === "tool-source-partial"
+          ? "Jane Reporter is the Marketing Daily marketing editor." : "",
+      });
       responsesCreate.mockReset();
       responsesCreate.mockResolvedValue(providerResponse);
       const started = await api("/api/content/media-discover", {
@@ -1464,12 +1482,19 @@ describe("media discovery house prompt integration", () => {
       expect(responsesCreate).toHaveBeenCalledTimes(1);
       expect(responsesCreate.mock.calls[0]?.[0]?.input).toContain("Requested sector or topic: Marketing & Advertising");
       expect(responsesCreate.mock.calls[0]?.[0]?.input).toContain("Search these markets: UK");
+      expect(responsesCreate.mock.calls[0]?.[0]?.include).toContain("web_search_call.action.sources");
       if (status === "failed") {
-        expect(result.json.error).toContain("unusable search response");
+        expect(result.json.error).toContain(label === "citation-rejected" || label === "tool-source-unmatched"
+          ? "search-source references could not be verified" : "unusable search response");
         expect(result.json.items).toEqual([]);
         expect(result.json.discoveryToken).toBe("");
       } else if (label === "source-rejected") {
         expect(result.json.items).toMatchObject([{ evidenceStatus: "failed", evidenceFailure: "The cited page did not verify this journalist." }]);
+        expect(fetchSiteContentMock).toHaveBeenCalledTimes(1);
+      } else if (label === "tool-source-verified" || label === "tool-source-partial") {
+        expect(result.json.items).toMatchObject([{ evidenceStatus: "verified", firstName: "Jane", email: "" }]);
+        expect(result.json.items).toHaveLength(1);
+        expect(result.json.discoveryToken).toBeTruthy();
         expect(fetchSiteContentMock).toHaveBeenCalledTimes(1);
       } else {
         expect(result.json.items).toEqual([]);
