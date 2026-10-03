@@ -13,7 +13,8 @@ const publicDir = resolve(root, "artifacts/aio-fusion/dist/public");
 const featureMode = process.argv.includes("--features");
 const howtoMode = process.argv.includes("--howto");
 const mediaResearchMode = process.argv.includes("--media-research");
-const manualContactsMode = process.argv.includes("--manual-contacts");
+const customerMediaMode = process.argv.includes("--customer-media");
+const manualContactsMode = process.argv.includes("--manual-contacts") || customerMediaMode;
 const securityMode = process.argv.includes("--security");
 const liveAi = featureMode && process.env.AIO_FEATURE_LIVE_AI === "1";
 const liveAiEnv = {};
@@ -42,6 +43,7 @@ const freePort = () => new Promise((resolvePort, reject) => {
 });
 const port = await freePort();
 const apiPort = await freePort();
+const secondApiPort = customerMediaMode ? await freePort() : null;
 const dbUrl = `postgres://release@127.0.0.1:${port}/release`;
 const children = [];
 const run = (command, args, options = {}) => spawnSync(command, args, {
@@ -200,6 +202,77 @@ if (featureMode) {
   if (run("psql", ["-h", "127.0.0.1", "-p", String(port), "-U", "release", "-d", "release",
     "-v", "ON_ERROR_STOP=1", "-c", betaSql], { env: { DATABASE_URL: dbUrl } }).status !== 0) throw new Error("isolated beta seed failed");
 }
+if (customerMediaMode) {
+  const adminSalt = randomBytes(16).toString("hex");
+  const adminHash = `scrypt$${adminSalt}$${scryptSync("release-harness-admin-password", adminSalt, 64).toString("hex")}`;
+  const customerMediaSql = `
+    INSERT INTO platform_accounts(username,password_hash,role,email,status)
+    VALUES ('admin','${adminHash}','admin','admin@example.invalid','active')
+    ON CONFLICT (username) DO UPDATE SET password_hash=EXCLUDED.password_hash;
+    INSERT INTO platform_companies(slug,role,email,display_name,status,setup_complete,free_access)
+    VALUES ('admin','admin','admin@example.invalid','Master Media Fixture','active',true,true)
+    ON CONFLICT (slug) DO NOTHING;
+    WITH master_user AS (
+      INSERT INTO platform_users(email,name,password_hash,email_verified)
+      VALUES ('admin@example.invalid','Master Media Fixture','${adminHash}',true)
+      ON CONFLICT (email) DO UPDATE SET password_hash=EXCLUDED.password_hash RETURNING id
+    )
+    INSERT INTO platform_memberships(user_id,company_id,company_slug,role)
+    SELECT u.id,c.id,c.slug,'owner' FROM master_user u,platform_companies c WHERE c.slug='admin'
+    ON CONFLICT (user_id,company_id) DO NOTHING;
+    INSERT INTO projects(id,name,data,owner) VALUES ('master-media-project','Master fixture','{}','admin');
+    INSERT INTO platform_meta(key,value)
+    SELECT 'person:mfa:' || id,'{"secret":"JBSWY3DPEHPK3PXP","enabled":true,"recoveryHashes":[],"updatedAt":"synthetic-master-factor"}'
+      FROM platform_users WHERE email='admin@example.invalid';
+    INSERT INTO platform_accounts (username,password_hash,role,email,status,parent)
+    VALUES ('direct-media','${hash}','client','direct-media@example.invalid','active',null),
+      ('managed-media','${hash}','client','managed-media@example.invalid','active','release-workspace');
+    INSERT INTO platform_companies (slug,role,email,display_name,status,setup_complete,free_access,parent_slug)
+    VALUES ('direct-media','client','direct-media@example.invalid','Direct Media Fixture','active',true,true,null),
+      ('managed-media','client','managed-media@example.invalid','Managed Media Fixture','active',true,true,'release-workspace');
+    WITH person AS (
+      INSERT INTO platform_users(email,name,password_hash,email_verified)
+      VALUES ('direct-media@example.invalid','direct-media@example.invalid','${hash}',true) RETURNING id
+    )
+    INSERT INTO platform_memberships(user_id,company_id,company_slug,role)
+    SELECT person.id,c.id,c.slug,'owner' FROM person,platform_companies c WHERE c.slug='direct-media';
+    INSERT INTO platform_memberships(user_id,company_id,company_slug,role)
+    SELECT u.id,c.id,c.slug,'owner' FROM platform_users u,platform_companies c
+    WHERE u.email='release@example.invalid' AND c.slug='managed-media';
+    INSERT INTO projects(id,name,data,owner)
+    VALUES ('direct-media-project','Direct fixture','{}','direct-media'),
+      ('managed-media-project','Managed fixture','{}','managed-media');
+    INSERT INTO media_outlets(name,category,country,website,account_id)
+    SELECT 'Batch Publication ' || lpad(n::text,2,'0'),'Energy','UK','https://publication.example.invalid',null FROM generate_series(1,26) n;
+    INSERT INTO media_contacts(first_name,last_name,email,role,sectors,account_id,outlet_id)
+    SELECT 'Batch','Journalist ' || lpad(n::text,2,'0'),'batch-' || n || '@example.invalid','Reporter',ARRAY['Energy'],null,
+      (SELECT id FROM media_outlets WHERE name='Batch Publication ' || lpad(n::text,2,'0'))
+      FROM generate_series(1,26) n;
+    INSERT INTO media_outlets(name,account_id)
+    SELECT 'Private Publication ' || slug,slug FROM platform_companies WHERE slug IN ('release-workspace','direct-media','managed-media','other-workspace');
+    INSERT INTO media_contacts(first_name,last_name,email,account_id,outlet_id)
+    SELECT 'Private',slug,'private-' || slug || '@example.invalid',slug,
+      (SELECT id FROM media_outlets WHERE name='Private Publication ' || slug)
+      FROM platform_companies WHERE slug IN ('release-workspace','direct-media','managed-media','other-workspace');
+    INSERT INTO media_bookmarks(account_id,contact_id)
+    SELECT c.slug,m.id FROM platform_companies c,media_contacts m
+      WHERE c.slug IN ('release-workspace','direct-media','managed-media') AND m.account_id IS NULL;
+    INSERT INTO media_bookmarks(account_id,outlet_id)
+    SELECT c.slug,m.id FROM platform_companies c,media_outlets m
+      WHERE c.slug IN ('release-workspace','direct-media','managed-media') AND m.account_id IS NULL;
+    WITH people AS (
+      INSERT INTO platform_users(email,name,password_hash,email_verified)
+      VALUES ('editor-media@example.invalid','Editor Media Fixture','${hash}',true),
+        ('billing-media@example.invalid','Billing Media Fixture','${hash}',true) RETURNING id,email
+    )
+    INSERT INTO platform_memberships(user_id,company_id,company_slug,role)
+    SELECT p.id,c.id,c.slug,CASE WHEN p.email='editor-media@example.invalid' THEN 'content' ELSE 'billing' END
+      FROM people p,platform_companies c WHERE c.slug='other-workspace';
+  `;
+  if (run("psql", ["-h", "127.0.0.1", "-p", String(port), "-U", "release", "-d", "release",
+    "-v", "ON_ERROR_STOP=1", "-c", customerMediaSql]).status !== 0) throw new Error("isolated customer media fixtures failed");
+}
+
 if (mediaResearchMode) {
   const mediaResearchSql = `
     INSERT INTO archive_items (
@@ -273,6 +346,15 @@ start("node", [
 await waitFor(`http://127.0.0.1:${apiPort}/api/platform/me`).catch((error) => {
   if (error) throw error;
 });
+if (secondApiPort) {
+  start("node", ["--enable-source-maps", "artifacts/api-server/dist/index.mjs"], {
+    DATABASE_URL: dbUrl, PORT: String(secondApiPort), NODE_ENV: "test", DEPLOYMENT_ENV: "test",
+    ALLOWED_ORIGIN: "http://127.0.0.1:5000", SESSION_COOKIE_SECURE: "false",
+    SESSION_SECRET: "release-harness-session-secret",
+    PLATFORM_ADMIN_PASSWORD: "release-harness-admin-password",
+  });
+  await waitFor(`http://127.0.0.1:${secondApiPort}/api/platform/me`);
+}
 
 const server = createServer(async (req, res) => {
   if (securityMode && req.method === "GET" && req.url === "/__test/security-state") {
@@ -345,7 +427,8 @@ const server = createServer(async (req, res) => {
   }
   if (req.url.startsWith("/api/")) {
     try {
-      const upstream = await fetch(`http://127.0.0.1:${apiPort}${req.url}`, {
+      const targetPort = customerMediaMode && secondApiPort && req.headers["x-release-api-worker"] === "second" ? secondApiPort : apiPort;
+      const upstream = await fetch(`http://127.0.0.1:${targetPort}${req.url}`, {
         method: req.method,
         headers: req.headers,
         redirect: "manual",

@@ -13,4 +13,4 @@ Customer spreadsheet presentation requests do not authorise replacing the intern
 
 **Why:** Personal-list exports serve a different purpose from internal collection maintenance and story outreach. Improving customer-facing spreadsheets must not silently change those separate workflows.
 
-**How to apply:** Keep customer workbook columns focused on the requested fields, preserve the separate CSV workflows, and do not broaden record visibility to populate otherwise empty linked-journalist cells.
+**How to apply:** Consult the canonical customer download policy in replit.md. Preserve Master maintenance and separate story exports, and do not broaden visibility to populate linked-journalist cells.

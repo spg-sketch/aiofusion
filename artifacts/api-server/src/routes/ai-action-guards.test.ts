@@ -1000,6 +1000,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   // CSV export performs no paid AI action; the route enforces platform auth,
   // internal-admin full-export access, and scoped saved/selected access.
   "POST /store/media-db/export",
+  "GET /store/media-db/export-allowance",
   "GET /store/media-db/import-jobs/:jobId",
   // Media routes use memberProjectGate and per-route authentication/visibility.
   "POST /store/media-db/discoveries",

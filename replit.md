@@ -47,6 +47,12 @@ artifacts-monorepo/
 ```
 
 ## TypeScript & Composite Projects
+### Customer media access and download policy
+
+Customers manage only records added to their active workspace; saved shared records are private bookmarks, not copies. Agency hierarchy never pools private media. Shared discovery requires meaningful criteria and uses batches of up to 25.
+
+Customer media downloads are CSV-only, at most 25 requested records per download and 100 shared-database records per active workspace per UTC calendar day, shared across team members, saved/selected paths and contacts/publications. Repeated downloads count again, except retries of the same operation. Workspace-added records do not consume the daily allowance. Display the reset in the user's local time. Never silently truncate, discard bookmarks or refund uncertain network delivery. Master maintenance contracts and unrelated exports remain separate. Limits do not prevent all copying of legitimately displayed information. Live publication requires separate approval.
+
 
 Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
 

@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/release",
-   testIgnore: ["**/media-research-pagination.spec.ts", "**/manual-contact-creation.spec.ts"],
+   testIgnore: ["**/media-research-pagination.spec.ts", "**/manual-contact-creation.spec.ts", "**/customer-media*.spec.ts"],
   fullyParallel: false,
   forbidOnly: true,
   retries: 0,

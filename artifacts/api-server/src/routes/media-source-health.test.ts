@@ -263,8 +263,8 @@ describe("media source health routes", () => {
     expect((await post(`/store/media-db/contacts/${contact.id}/status`, "account-a", { status: "departed" })).status).toBe(200);
     expect((await post(`/store/media-db/contacts/${contact.id}/corrections`, "account-a", { fields: ["email"], details: "This address bounces." })).status).toBe(200);
 
-    const accountA = await (await get("/store/media-db/search?topic=Editor", "account-a")).json() as { results: Array<{ contact: { lifecycleStatus: string; hasPendingCorrection: boolean; email: string } }> };
-    const accountB = await (await get("/store/media-db/search?topic=Editor", "account-b")).json() as { results: Array<{ contact: { lifecycleStatus: string; hasPendingCorrection: boolean; email: string } }> };
+    const accountA = await (await get("/store/media-db/search?phrase=Global", "account-a")).json() as { results: Array<{ contact: { lifecycleStatus: string; hasPendingCorrection: boolean; email: string } }> };
+    const accountB = await (await get("/store/media-db/search?phrase=Global", "account-b")).json() as { results: Array<{ contact: { lifecycleStatus: string; hasPendingCorrection: boolean; email: string } }> };
     expect(accountA.results[0].contact).toEqual(expect.objectContaining({ lifecycleStatus: "departed", hasPendingCorrection: true, email: "trusted@example.com" }));
     expect(accountB.results[0].contact).toEqual(expect.objectContaining({ lifecycleStatus: "active", hasPendingCorrection: false, email: "trusted@example.com" }));
   });

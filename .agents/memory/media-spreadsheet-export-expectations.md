@@ -3,9 +3,9 @@ name: Media spreadsheet export expectations
 description: Working-spreadsheet intent, CSV contract separation and Calc compatibility verification.
 ---
 
-Customer-facing saved/selected media downloads should remain compact working spreadsheets, not decorated reports. Excel is the primary download and CSV is the secondary format for other tools; their existing field sets deliberately differ.
+Workbook and CSV field sets deliberately differ. Historical workbook presentation approval applies to preserved workbook uses, not as authority to override the current customer download policy in replit.md.
 
-**Why:** The user explicitly rejected CSV as a workaround for Excel formatting. Long URL wrapping caused oversized rows, and extra report structure would interfere with sorting.
+**Why:** A later customer download-policy change superseded the earlier customer workbook request, without removing authorised Master maintenance or unrelated workbook exports.
 
 **How to apply:** Preserve machine-friendly CSV fields independently of workbook presentation. Use synthetic examples for review, not customer contact data. Publication still requires separate approval.
 

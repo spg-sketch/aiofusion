@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
 import { inflateRawSync } from "node:zlib";
+import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import express, { type Request } from "express";
@@ -169,6 +170,7 @@ import {
   pool,
   mediaContactsTable,
   mediaBookmarksTable,
+  platformMetaTable,
   mediaContactFieldOverridesTable,
   mediaContactStatusEventsTable,
   mediaImportBatchesTable,
@@ -183,6 +185,7 @@ import {
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { privacyHash } from "../lib/journalist-privacy";
 import mediaRouter from "./media-db";
+import { mediaExportWindow } from "../lib/media-export-allowance";
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
 
@@ -270,7 +273,7 @@ async function mediaExportRequest(workspace: string, body: Record<string, unknow
       "x-test-workspace": workspace,
       "x-test-platform-role": platformRole,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ operationId: randomUUID(), ...body }),
   });
   const bytes = Buffer.from(await response.arrayBuffer());
   return { status: response.status, contentType: response.headers.get("content-type"),
@@ -379,6 +382,126 @@ beforeAll(async () => {
 });
 
 describe("media export route regressions", () => {
+  it.each(["csv", "xlsx"])("preserves the unrestricted Master saved %s contract above 25 records", async (format) => {
+    const marker = `MasterMaintenance${format}`;
+    const rows = await db.insert(mediaContactsTable).values(Array.from({ length: 26 }, (_, index) => ({
+      firstName: marker, lastName: `Synthetic ${index}`, accountId: null,
+    }))).returning();
+    await db.insert(mediaBookmarksTable).values(rows.map((row) => ({ accountId: "admin", contactId: row.id })));
+    const response = await mediaExportRequest("admin", { scope: "saved", type: "contacts", format }, "admin");
+    expect(response.status).toBe(200);
+    const content = format === "xlsx" ? exportedWorksheet(response.bytes) : response.text;
+    expect(content.match(new RegExp(marker, "g"))).toHaveLength(26);
+    const ledger = await db.select().from(platformMetaTable);
+    expect(ledger.some((row) => row.key.startsWith("media-export:day:admin:"))).toBe(false);
+  });
+
+  it("enforces workspace-only management, meaningful shared discovery and bounded stable batches for every customer type", async () => {
+    const contacts = await db.insert(mediaContactsTable).values(Array.from({ length: 27 }, (_, index) => ({
+      firstName: "Boundary", lastName: `Synthetic ${String(index).padStart(2, "0")}`, accountId: null,
+    }))).returning();
+    const [own] = await db.insert(mediaContactsTable).values({ firstName: "Private", lastName: "Boundary", accountId: "boundary-direct" }).returning();
+    for (const [workspace, platformRole] of [["boundary-direct", "client"], ["boundary-agency", "agency"], ["boundary-managed", "client"], ["boundary-other-admin", "admin"]]) {
+      const management = await mediaRequest("GET", "/api/store/media-db/contacts?pageSize=99999", workspace!, undefined, "owner", platformRole!);
+      expect(management.status).toBe(200);
+      expect(management.json.contacts.map((row: any) => row.id)).toEqual(workspace === "boundary-direct" ? [own!.id] : []);
+      for (const path of ["/search?scope=all", "/search?scope=shared", "/search?scope=all&phrase=%25___", "/search?scope=all&phrase=and", "/search?scope=all&phrase=a%20b", "/outlets?scope=all", "/contacts?scope=all", "/contacts?scope=all&q=and"]) {
+        expect((await mediaRequest("GET", `/api/store/media-db${path}`, workspace!, undefined, "owner", platformRole!)).status).toBe(400);
+      }
+      const first = await mediaRequest("GET", "/api/store/media-db/search?scope=all&type=contacts&phrase=Boundary%20Synthetic&pageSize=9999", workspace!, undefined, "owner", platformRole!);
+      const last = await mediaRequest("GET", "/api/store/media-db/search?scope=all&type=contacts&phrase=Boundary%20Synthetic&page=2", workspace!, undefined, "owner", platformRole!);
+      expect(first.json.results).toHaveLength(25);
+      expect(first.json.pageSize).toBe(25);
+      expect(last.json.results).toHaveLength(2);
+      expect(new Set([...first.json.results, ...last.json.results].map((row: any) => row.id)).size).toBe(contacts.length);
+    }
+    expect((await mediaRequest("GET", "/api/store/media-db/contacts", "boundary-direct", undefined, "viewer", "client")).status).toBe(200);
+    expect((await mediaRequest("PUT", `/api/store/media-db/contacts/${own!.id}`, "boundary-direct", { firstName: "Denied" }, "viewer", "client")).status).toBe(403);
+    expect((await mediaRequest("GET", "/api/store/media-db/contacts", "boundary-direct", undefined, "billing", "client")).status).toBe(403);
+    expect((await mediaRequest("GET", "/api/store/media-db/search?scope=all", "admin", undefined, "owner", "admin")).status).toBe(200);
+  });
+
+  it("shares the exact 100-record daily ceiling across contacts, publications, saved/selected, retries and repeated batches", async () => {
+    const workspace = "daily-exact-boundary";
+    const contacts = await db.insert(mediaContactsTable).values(Array.from({ length: 25 }, (_, index) => ({
+      firstName: "Daily", lastName: `Synthetic ${index}`, accountId: null,
+    }))).returning();
+    const outlets = await db.insert(mediaOutletsTable).values(Array.from({ length: 25 }, (_, index) => ({ name: `Daily Publication ${index}`, accountId: null }))).returning();
+    await db.insert(mediaBookmarksTable).values(contacts.map((row) => ({ accountId: workspace, contactId: row.id })));
+    const ids = contacts.map((row) => row.id);
+    const operationId = randomUUID();
+    expect((await mediaExportRequest(workspace, { scope: "saved", type: "contacts", ids, operationId })).status).toBe(200);
+    expect((await mediaExportRequest(workspace, { scope: "saved", type: "contacts", ids, operationId })).status).toBe(200);
+    expect((await mediaRequest("GET", "/api/store/media-db/export-allowance", workspace)).json.remaining).toBe(75);
+    expect((await mediaExportRequest(workspace, { scope: "selected", type: "contacts", ids })).status).toBe(200);
+    expect((await mediaExportRequest(workspace, { scope: "selected", type: "publications", ids: outlets.map((row) => row.id) })).status).toBe(200);
+    expect((await mediaExportRequest(workspace, { scope: "selected", type: "contacts", ids: ids.slice(0, 16) })).status).toBe(200);
+    expect((await mediaRequest("GET", "/api/store/media-db/export-allowance", workspace)).json.remaining).toBe(9);
+    const oversizedRemaining = await mediaExportRequest(workspace, { scope: "selected", type: "contacts", ids });
+    expect(oversizedRemaining.status).toBe(429);
+    expect(oversizedRemaining.text).toContain("Only 9 shared records");
+    expect((await mediaExportRequest(workspace, { scope: "selected", type: "contacts", ids: ids.slice(0, 9) })).status).toBe(200);
+    expect((await mediaRequest("GET", "/api/store/media-db/export-allowance", workspace)).json.remaining).toBe(0);
+    expect((await mediaExportRequest(workspace, { scope: "selected", type: "contacts", ids: [ids[0]] })).status).toBe(429);
+    const [privateRow] = await db.insert(mediaContactsTable).values({ firstName: "Private", lastName: "Permitted", accountId: workspace }).returning();
+    expect((await mediaExportRequest(workspace, { scope: "selected", type: "contacts", ids: [privateRow!.id] })).status).toBe(200);
+    expect((await mediaExportRequest(workspace, { scope: "selected", type: "contacts", ids, operationId, format: "xlsx" })).status).toBe(400);
+    expect((await mediaExportRequest(workspace, { scope: "selected", type: "contacts", ids: ids.slice(0, 1), operationId })).status).toBe(409);
+  });
+
+  it("rejects oversized saved lists explicitly without deleting bookmarks and charges only shared records in mixed files", async () => {
+    const workspace = "mixed-saved-boundary";
+    const rows = await db.insert(mediaContactsTable).values(Array.from({ length: 26 }, (_, index) => ({
+      firstName: "Mixed", lastName: `Synthetic ${index}`, accountId: index < 10 ? null : workspace,
+    }))).returning();
+    await db.insert(mediaBookmarksTable).values(rows.map((row) => ({ accountId: workspace, contactId: row.id })));
+    expect((await mediaExportRequest(workspace, { scope: "saved", type: "contacts" })).status).toBe(400);
+    expect((await mediaExportRequest(workspace, { scope: "saved", type: "contacts", ids: rows.map((row) => row.id) })).status).toBe(400);
+    expect((await mediaExportRequest(workspace, { scope: "saved", type: "contacts", ids: rows.slice(0, 25).map((row) => row.id) })).status).toBe(200);
+    expect((await mediaRequest("GET", "/api/store/media-db/export-allowance", workspace)).json.remaining).toBe(90);
+    expect((await mediaRequest("GET", "/api/store/media-db/bookmarks", workspace)).json.total).toBe(26);
+    const [foreign] = await db.insert(mediaContactsTable).values({ firstName: "Foreign", lastName: "Synthetic", accountId: "mixed-other" }).returning();
+    expect((await mediaExportRequest(workspace, { scope: "selected", type: "contacts", ids: [foreign!.id] })).status).toBe(403);
+    expect((await mediaExportRequest(workspace, { scope: "saved", type: "contacts", ids: [foreign!.id] })).status).toBe(403);
+  });
+
+  it("atomically serializes simultaneous operations and same-operation retries", async () => {
+    const workspace = "concurrent-daily";
+    const rows = await db.insert(mediaContactsTable).values(Array.from({ length: 25 }, (_, index) => ({ firstName: "Concurrent", lastName: `Synthetic ${index}`, accountId: null }))).returning();
+    const body = { scope: "selected", type: "contacts", ids: rows.map((row) => row.id) };
+    const same = { ...body, operationId: randomUUID() };
+    expect((await Promise.all([mediaExportRequest(workspace, same), mediaExportRequest(workspace, same)])).map((row) => row.status)).toEqual([200, 200]);
+    const results = await Promise.all(Array.from({ length: 5 }, () => mediaExportRequest(workspace, body)));
+    expect(results.filter((row) => row.status === 200)).toHaveLength(3);
+    expect(results.filter((row) => row.status === 429)).toHaveLength(2);
+    expect((await mediaRequest("GET", "/api/store/media-db/export-allowance", workspace)).json.remaining).toBe(0);
+  });
+
+  it("does not charge failed preparation and resets at midnight UTC while preserving retry receipts", async () => {
+    const workspace = "reset-daily";
+    const [row] = await db.insert(mediaContactsTable).values({ firstName: "Reset", lastName: "Synthetic", accountId: null }).returning();
+    const body = { scope: "selected", type: "contacts", ids: [row!.id], operationId: randomUUID() };
+    const failure = vi.spyOn(db, "select").mockImplementationOnce(() => { throw new Error("Synthetic export preparation failure"); });
+    expect((await mediaExportRequest(workspace, body)).status).toBe(500);
+    failure.mockRestore();
+    expect((await mediaRequest("GET", "/api/store/media-db/export-allowance", workspace)).json.remaining).toBe(100);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-10-03T23:59:59Z"));
+      expect(mediaExportWindow().day).toBe("2026-10-03");
+      expect((await mediaExportRequest(workspace, body)).status).toBe(200);
+      const before = await mediaRequest("GET", "/api/store/media-db/export-allowance", workspace);
+      expect(before.json.remaining).toBe(99);
+      expect(before.json.resetsAt).toBe("2026-10-04T00:00:00.000Z");
+      vi.setSystemTime(new Date("2026-10-04T00:00:00Z"));
+      expect((await mediaRequest("GET", "/api/store/media-db/export-allowance", workspace)).json.remaining).toBe(100);
+      expect((await mediaExportRequest(workspace, body)).status).toBe(200);
+      expect((await mediaRequest("GET", "/api/store/media-db/export-allowance", workspace)).json.remaining).toBe(100);
+      expect((await mediaExportRequest(workspace, { ...body, operationId: randomUUID() })).status).toBe(200);
+      expect((await mediaRequest("GET", "/api/store/media-db/export-allowance", workspace)).json.remaining).toBe(99);
+    } finally { vi.useRealTimers(); }
+  });
+
   it("allows only the canonical platform admin to export the full collection", async () => {
     const [publication] = await db.insert(mediaOutletsTable).values({ name: "Export Shared Publication", accountId: null }).returning();
     await db.insert(mediaContactsTable).values({
@@ -534,7 +657,7 @@ describe("media export route regressions", () => {
   });
 
   it("exports exactly the requested contact Excel fields and imported reach, without authority or notes", async () => {
-    const workspace = "contact-excel-fields";
+    const workspace = "admin";
     const [outlet] = await db.insert(mediaOutletsTable).values({
       name: "Excel News", accountId: workspace, website: "https://excel.example.test",
       description: "Not requested for contacts", category: "Energy", country: "UK", reachBand: "300",
@@ -549,7 +672,7 @@ describe("media export route regressions", () => {
     for (const scope of ["saved", "selected"]) {
       const response = await mediaExportRequest(workspace, {
         scope, type: "contacts", format: "xlsx", ...(scope === "selected" ? { ids: [contact!.id] } : {}),
-      });
+      }, "admin");
       expect(response.status).toBe(200);
       expect(response.contentType).toContain("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       expect(response.disposition).toContain('filename="Media Contacts.xlsx"');
@@ -563,7 +686,7 @@ describe("media export route regressions", () => {
       for (const absent of ["Private notes not exported", "Not requested for contacts", "Authority", ">88<", ">77<", "<f>"]) expect(sheet).not.toContain(absent);
       const csv = await mediaExportRequest(workspace, {
         scope, type: "contacts", format: "csv", ...(scope === "selected" ? { ids: [contact!.id] } : {}),
-      });
+      }, "admin");
       expect(csv.status).toBe(200);
       expect(csv.contentType).toContain("text/csv");
       expect(csv.disposition).toContain('filename="Media Contacts.csv"');
@@ -575,8 +698,8 @@ describe("media export route regressions", () => {
       expect(csv.text).not.toContain('"Review Notes"');
     }
     const denied = await mediaExportRequest("another-excel-workspace", { scope: "selected", type: "contacts", ids: [contact!.id], format: "xlsx" });
-    expect(denied.status).toBe(403);
-    expect((await mediaExportRequest(workspace, { scope: "full", type: "contacts", format: "xlsx" })).status).toBe(403);
+    expect(denied.status).toBe(400);
+    expect((await mediaExportRequest(workspace, { scope: "full", type: "contacts", format: "xlsx" })).status).toBe(400);
     expect((await mediaExportRequest(workspace, { scope: "selected", type: "contacts", ids: Array.from({ length: 26 }, (_, i) => i + 1), format: "xlsx" })).status).toBe(400);
     expect((await mediaExportRequest(workspace, { scope: "saved", type: "contacts", format: "html" })).status).toBe(400);
   });
@@ -629,7 +752,7 @@ describe("media export route regressions", () => {
     expect(saved.text.split("\r\n")[0]).toBe(expectedHeader);
     expect(selected.text.split("\r\n")[0]).toBe(expectedHeader);
     for (const response of [saved, selected]) {
-      expect(response.text).toContain("Independently Saved");
+      expect(response.text).not.toContain("Independently Saved");
       expect(response.text).not.toContain("Publication Only");
       expect(response.text).not.toContain("No Visibility");
       expect(response.text).not.toContain("independently-saved@example.test");
@@ -639,16 +762,8 @@ describe("media export route regressions", () => {
     for (const scope of ["saved", "selected"]) {
       const response = await mediaExportRequest(workspace, { scope, type: "publications", format: "xlsx",
         ...(scope === "selected" ? { ids: [publication!.id] } : {}) });
-      expect(response.status).toBe(200);
-      expect(response.disposition).toContain('filename="Media Publications.xlsx"');
-      const sheet = exportedWorksheet(response.bytes);
-      const header = sheet.match(/<row r="1"[^>]*>(.*?)<\/row>/s)![1]!;
-      expect([...header.matchAll(/<t[^>]*>(.*?)<\/t>/g)].map((match) => match[1])).toEqual([
-        "Outlet name", "Outlet website", "Outlet description", "Country", "Linked journalists", "Source reach value",
-      ]);
-      for (const value of ["Journalist Isolation Publication", "publication-excel.example.test", "Energy &amp; business reporting", "UK", "Independently Saved", "00029"]) expect(sheet).toContain(value);
-      for (const absent of ["Publication Only", "No Visibility", "independently-saved@example.test",
-        "publication-only@example.test", "private-linked@example.test", "Verified authority"]) expect(sheet).not.toContain(absent);
+      expect(response.status).toBe(400);
+      expect(response.text).toContain("CSV only");
     }
   });
 
@@ -688,7 +803,7 @@ describe("media export route regressions", () => {
     for (const format of ["csv", "xlsx"]) {
       expect((await mediaExportRequest("selected-export-workspace", {
         scope: "selected", type: "contacts", ids: [contact!.id], format,
-      })).status).toBe(403);
+      })).status).toBe(format === "csv" ? 403 : 400);
       expect((await mediaExportRequest("selected-export-workspace", {
         scope: "selected", type: "publications", ids: [publication!.id, publication!.id], format,
       })).status).toBe(400);
@@ -715,7 +830,7 @@ describe("media export route regressions", () => {
     await db.insert(mediaBookmarksTable).values([active!, departed!, suppressed!, foreign!].map((contact) => ({
       accountId: workspace, contactId: contact.id, outletId: null,
     })));
-    for (const format of ["csv", "xlsx"]) {
+    for (const format of ["csv"]) {
       const saved = await mediaExportRequest(workspace, { scope: "saved", type: "contacts", format });
       expect(saved.status).toBe(200);
       const text = format === "csv" ? saved.text : exportedWorksheet(saved.bytes);
@@ -1323,7 +1438,7 @@ describe("media import route regressions", () => {
       `/api/store/media-db/contacts?outletId=${publication!.id}`,
       "person-search-workspace",
     );
-    expect(stewardContacts.json.contacts.map((contact: any) => contact.id)).toContain(unnamedContact!.id);
+    expect(stewardContacts.json.contacts.map((contact: any) => contact.id)).not.toContain(unnamedContact!.id);
   });
 
   it("keeps private media and reusable bookmarks inside the active account and includes only eligible linked journalists", async () => {
@@ -1377,7 +1492,7 @@ describe("media import route regressions", () => {
 
     const parentContactList = await mediaRequest("GET", "/api/store/media-db/contacts?q=Journalist", "media-parent-430");
     const parentContactIds = parentContactList.json.contacts.map((contact: any) => contact.id);
-    expect(parentContactIds).toContain(sharedJournalist!.id);
+    expect(parentContactIds).not.toContain(sharedJournalist!.id);
     expect(parentContactIds).not.toContain(childJournalist!.id);
     expect(parentContactIds).not.toContain(otherJournalist!.id);
 

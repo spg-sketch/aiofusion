@@ -8,6 +8,7 @@
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "test": "pnpm --filter @workspace/api-server run test && pnpm --filter @workspace/aio-fusion run test",
     "test:features": "playwright test --config=playwright.features.config.ts",
+    "test:customer-media": "playwright test --config=playwright.customer-media.config.ts",
     "test:tools": "playwright test --config=playwright.tools.config.ts",
     "test:tools:ai": "AIO_FEATURE_LIVE_AI=1 pnpm test:tools",
     "typecheck:libs": "tsc --build",

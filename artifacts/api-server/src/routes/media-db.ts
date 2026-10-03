@@ -58,6 +58,7 @@ import {
 } from "../lib/token-usage";
 import { acquirePrivacyIdentityLock, createSuppressionMatcher, createSuppressionMatcherWithDb, filterSuppressedContacts, isContactSuppressed, isSuppressed, isSuppressedWithDb, privacyHash } from "../lib/journalist-privacy";
 import { logger } from "../lib/logger";
+import { mediaExportAllowance, settleMediaExport, MediaAllowanceError } from "../lib/media-export-allowance";
 
 const router: IRouter = Router();
 const recommendationEnrichmentCommitQueues = new Map<string, Promise<void>>();
@@ -315,6 +316,10 @@ async function accessibleMediaContactTotal(
 function isMasterWorkspace(req: Request): boolean {
   return req.account?.role === "admin"
     && normUsername(req.account.username) === DEFAULT_ADMIN_USERNAME;
+}
+
+function meaningfulMediaCriteria(values: unknown[]): boolean {
+  return values.some((value) => typeof value === "string" && (value.match(/[\p{L}\p{N}]/gu)?.length ?? 0) >= 2);
 }
 
 function isWritableMaster(req: Request): boolean {
@@ -698,6 +703,11 @@ function mediaExportCsv(headers: string[], rows: unknown[][]): string {
 router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { scope, type, ids, format = "csv" } = req.body ?? {};
+    const customer = !isMasterWorkspace(req);
+    if (customer && format !== "csv") {
+      res.status(400).json({ error: "Customer media downloads support CSV only." });
+      return;
+    }
     if (format !== "csv" && format !== "xlsx") {
       res.status(400).json({ error: 'format must be "csv" or "xlsx".' });
       return;
@@ -711,7 +721,7 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
       return;
     }
     let requestedIds: number[] | null = null;
-    if (scope === "selected") {
+    if (scope === "selected" || (scope === "saved" && ids !== undefined)) {
       if (!Array.isArray(ids) || ids.length < 1 || ids.length > 25
           || ids.some((id: unknown) => !Number.isSafeInteger(id) || (id as number) < 1)
           || new Set(ids).size !== ids.length) {
@@ -735,9 +745,18 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
         res.status(413).json({ error: "Saved connections exceed the safe CSV export limit. Contact the platform admin for an assisted export." });
         return;
       }
-      requestedIds = bookmarks.flatMap((bookmark) => type === "contacts"
+      const savedIds = bookmarks.flatMap((bookmark) => type === "contacts"
         ? bookmark.contactId === null ? [] : [bookmark.contactId]
         : bookmark.outletId === null ? [] : [bookmark.outletId]);
+      if (requestedIds && requestedIds.some((id) => !savedIds.includes(id))) {
+        res.status(403).json({ error: "Saved export IDs must be bookmarked in the active workspace." });
+        return;
+      }
+      requestedIds ??= savedIds;
+      if (customer && requestedIds.length > 25) {
+        res.status(400).json({ error: "Choose a saved batch of at most 25 records. Your bookmarks have not changed." });
+        return;
+      }
     }
     const visible = await visibleAccounts(req);
 
@@ -776,7 +795,7 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
         && !isFormerJournalistStatus(contact.editorialStatus)
         && latest.get(`${contact.id}\0${contact.sourceUrl}`)?.outcome !== "unavailable"
         && !matcher({ name: `${contact.firstName} ${contact.lastName}`, email: contact.email, linkedinUrl: contact.linkedinUrl, outlet: outlet?.name ?? "" }));
-      if (scope === "selected" && eligible.length !== requestedIds!.length) {
+      if ((scope === "selected" || (scope === "saved" && ids !== undefined)) && eligible.length !== requestedIds!.length) {
         res.status(403).json({ error: "One or more selected contacts are unavailable for export." });
         return;
       }
@@ -813,8 +832,10 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
         };
         return headers.map((header) => data[header] ?? "");
       });
+      const csv = mediaExportCsv(headers, output);
+      if (customer) await settleMediaExport(accountId, req.body.operationId, JSON.stringify({ scope, type, ids: requestedIds, csv }), eligible.filter(({ contact }) => contact.accountId === null).length);
       if (scope !== "full") res.set("Content-Disposition", 'attachment; filename="Media Contacts.csv"');
-      res.status(200).type("text/csv; charset=utf-8").send(mediaExportCsv(headers, output));
+      res.status(200).type("text/csv; charset=utf-8").send(csv);
       return;
     }
     const ownerCondition = scope === "full"
@@ -829,7 +850,7 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
       res.status(413).json({ error: "The publication collection exceeds the safe CSV export limit; no partial file was created." });
       return;
     }
-    if (scope === "selected" && publications.length !== requestedIds!.length) {
+    if ((scope === "selected" || (scope === "saved" && ids !== undefined)) && publications.length !== requestedIds!.length) {
       res.status(403).json({ error: "One or more selected publications are unavailable for export." });
       return;
     }
@@ -837,7 +858,7 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
     // journalist linked to it. Non-admin exports may include only contacts
     // independently saved by this workspace.
     const publicationIds = publications.map((publication) => publication.id);
-    const linkedRows = publicationIds.length ? await db.select({
+    const linkedRows = publicationIds.length && !customer ? await db.select({
       contact: mediaContactsTable,
       outletName: mediaOutletsTable.name,
     }).from(mediaContactsTable)
@@ -902,9 +923,12 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
     const headers = scope === "full"
       ? MEDIA_EXPORT_PUBLICATION_HEADERS
       : MEDIA_EXPORT_PUBLICATION_HEADERS.filter((header) => header !== "Linked journalist emails");
+    const csv = mediaExportCsv(headers, output.map((row) => row.slice(0, headers.length)));
+    if (customer) await settleMediaExport(accountId, req.body.operationId, JSON.stringify({ scope, type, ids: requestedIds, csv }), publications.filter((publication) => publication.accountId === null).length);
     if (scope !== "full") res.set("Content-Disposition", 'attachment; filename="Media Publications.csv"');
-    res.status(200).type("text/csv; charset=utf-8").send(mediaExportCsv(headers, output.map((row) => row.slice(0, headers.length))));
+    res.status(200).type("text/csv; charset=utf-8").send(csv);
   } catch (error) {
+    if (error instanceof MediaAllowanceError) { res.status(error.status).json({ error: error.message }); return; }
     if (error instanceof MediaExcelExportLimitError) {
       res.status(413).json({ error: error.message });
       return;
@@ -912,6 +936,11 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
     req.log.error({ err: error }, "Failed to export media database");
     res.status(500).json({ error: "Failed to export media database." });
   }
+});
+
+router.get("/store/media-db/export-allowance", requirePlatformAuth, async (req, res) => {
+  try { res.json(await mediaExportAllowance(normUsername(req.account!.username))); }
+  catch { res.status(503).json({ error: "Download allowance is temporarily unavailable." }); }
 });
 
 // Distinct category/industry labels used by the contact category filter.  This
@@ -1927,13 +1956,16 @@ router.get(
       const q = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 200) : "";
       const category = typeof req.query.category === "string" ? req.query.category.trim().slice(0, 200) : "";
       const location = typeof req.query.location === "string" ? req.query.location.trim().slice(0, 200) : "";
-      const scope = req.query.scope === undefined ? "all" : req.query.scope;
+      const scope = req.query.scope === undefined ? (isMasterWorkspace(req) || meaningfulMediaCriteria([q, category, location]) ? "all" : "added") : req.query.scope;
       if (scope !== "all" && scope !== "added" && scope !== "saved") {
         res.status(400).json({ error: "scope must be all, added, or saved." });
         return;
       }
       const page = positivePage(req.query.page);
-      const pageSize = Math.max(1, Math.min(200, Number(req.query.pageSize) || (q ? 50 : 25)));
+      if (!isMasterWorkspace(req) && scope === "all" && !meaningfulMediaCriteria([q, category, location])) {
+        res.status(400).json({ error: "Shared discovery requires a search phrase, sector or region." }); return;
+      }
+      const pageSize = Math.max(1, Math.min(isMasterWorkspace(req) ? 200 : scope === "all" ? 25 : 50, Math.floor(Number(req.query.pageSize)) || 25));
       const scopePredicate = scope === "added"
         ? eq(mediaOutletsTable.accountId, workspaceId)
         : scope === "saved"
@@ -1966,7 +1998,7 @@ router.get(
         .orderBy(asc(mediaOutletsTable.name), asc(mediaOutletsTable.id))
         .limit(pageSize)
         .offset((page - 1) * pageSize);
-      const journalists = await eligibleLinkedJournalists(rows.map((outlet) => outlet.id), normUsername(req.account!.username), visible);
+      const journalists = await eligibleLinkedJournalists(rows.map((outlet) => outlet.id), normUsername(req.account!.username), isMasterWorkspace(req) ? null : visible, !isMasterWorkspace(req) && scope === "added");
       res.json({
         outlets: rows.map((outlet) => {
           const linked = journalists.get(outlet.id) ?? [];
@@ -2200,7 +2232,7 @@ const SEARCH_EXPANSIONS: Record<string, string[]> = {
 };
 
 function searchTokens(query: string): string[][] {
-  const tokens: string[] = query.match(/[a-z0-9-]+/g) ?? [];
+  const tokens: string[] = query.match(/[\p{L}\p{N}-]+/gu) ?? [];
   return tokens
     .filter((token) => token.length > 1 && !SEARCH_STOP_WORDS.has(token))
     .slice(0, 30)
@@ -2334,6 +2366,7 @@ async function eligibleLinkedJournalists(
   outletIds: number[],
   workspaceId: string,
   visible: string[] | null,
+  workspaceOnly = false,
 ): Promise<Map<number, Array<Record<string, unknown>>>> {
   const byOutlet = new Map<number, Array<Record<string, unknown>>>();
   if (!outletIds.length) return byOutlet;
@@ -2355,9 +2388,10 @@ async function eligibleLinkedJournalists(
         sql`NULLIF(BTRIM(${mediaContactsTable.lastName}), '') IS NOT NULL`,
       ),
       numericOnlyJournalistNameSql(),
+      workspaceOnly ? eq(mediaContactsTable.accountId, workspaceId) : undefined,
       visible === null ? undefined : or(isNull(mediaContactsTable.accountId), inArray(mediaContactsTable.accountId, visible)),
       testSuppressionFallback ? undefined : notSuppressedSql(workspaceId, mediaContactsTable.firstName, mediaContactsTable.lastName, mediaContactsTable.email, mediaContactsTable.linkedinUrl, mediaOutletsTable.name),
-    ));
+    )).orderBy(asc(mediaContactsTable.id)).limit(visible === null ? MEDIA_EXPORT_MAX_ROWS : 25);
   if (!rows.length) return byOutlet;
   const contactIds = rows.map(({ contact }) => contact.id);
   const [statuses, checks, corrections] = await Promise.all([
@@ -2424,7 +2458,10 @@ router.get(
         return;
       }
       const page = positivePage(req.query.page);
-      const pageSize = Math.max(1, Math.min(100, Number(req.query.pageSize) || 25));
+      if (!isMasterWorkspace(req) && scope === "all" && !meaningfulMediaCriteria([...searchTokens(interpretation.phrase.toLowerCase()).flat(), ...searchTokens(interpretation.topic.toLowerCase()).flat(), interpretation.category, interpretation.location])) {
+        res.status(400).json({ error: "Shared discovery requires a search phrase, topic, sector or region." }); return;
+      }
+      const pageSize = Math.max(1, Math.min(isMasterWorkspace(req) ? 100 : 25, Math.floor(Number(req.query.pageSize)) || 25));
       const testSuppressionFallback = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
       // Search predicates are pushed into SQL; enrichment below is intentionally
       // limited to the requested page rather than the complete visible corpus.
@@ -3084,8 +3121,13 @@ router.get(
       const category = typeof req.query.category === "string" ? req.query.category.trim().toLowerCase().slice(0, 200) : "";
       const country = typeof req.query.country === "string" ? req.query.country.trim().toLowerCase().slice(0, 100) : "";
       const outletId = typeof req.query.outletId === "string" && /^\d+$/.test(req.query.outletId) ? Number(req.query.outletId) : null;
+      const scope = req.query.scope ?? (isMasterWorkspace(req) ? "all" : "added");
+      if (!["all", "added", "saved"].includes(String(scope))) { res.status(400).json({ error: "Invalid media scope." }); return; }
+      if (!isMasterWorkspace(req) && scope === "all" && !meaningfulMediaCriteria([...searchTokens(query).flat(), category, country]) && !outletId) {
+        res.status(400).json({ error: "Shared discovery requires meaningful search criteria." }); return;
+      }
       const page = Math.max(1, Math.min(10_000, Number(req.query.page) || 1));
-      const pageSize = Math.max(1, Math.min(200, Number(req.query.pageSize) || 50));
+      const pageSize = Math.max(1, Math.min(isMasterWorkspace(req) ? 200 : scope === "all" ? 25 : 50, Math.floor(Number(req.query.pageSize)) || 50));
       const testSuppressionFallback = process.env.VITEST === "true" || process.env.NODE_ENV === "test";
       const terms = searchTokens(query).flat();
       const visibility = visible === null ? undefined : visible.length
@@ -3095,6 +3137,8 @@ router.get(
         isNull(mediaContactsTable.deletedAt),
         numericOnlyJournalistNameSql(),
         visibility,
+        scope === "added" ? eq(mediaContactsTable.accountId, normUsername(req.account!.username)) : undefined,
+        scope === "saved" ? sql`EXISTS (SELECT 1 FROM media_bookmarks saved WHERE saved.account_id = ${normUsername(req.account!.username)} AND saved.contact_id = ${mediaContactsTable.id})` : undefined,
         terms.length ? and(...terms.map((term) => or(
           ilike(mediaContactsTable.firstName, `%${term}%`), ilike(mediaContactsTable.lastName, `%${term}%`),
           ilike(mediaContactsTable.role, `%${term}%`), ilike(mediaContactsTable.email, `%${term}%`),
