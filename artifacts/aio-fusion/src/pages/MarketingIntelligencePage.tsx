@@ -16,6 +16,8 @@ import { getKeyMessages, getProjectMediaCategories, getActiveProjectId } from ".
 import { Labelled, CategoryPickerModal } from "./shared";
 import { getSession } from "../lib/auth";
 import { aiRunKey, startAiRun, useAiRun } from "../lib/aiRunLifecycle";
+import CountdownBanner from "../components/CountdownBanner";
+import { getAuditDurationSeconds, getAuditSampleCount, recordAuditDuration } from "../lib/auditTiming";
 type EventOpportunity = {
   type: "Conference entry" | "Award entry" | "Speaker" | "Sponsorship";
   cost: string;
@@ -94,9 +96,12 @@ function MarketingIntelligencePage() {
       scope,
       operation: "content-events-search",
       input,
-      estimateSeconds: EVENT_SEARCH_CLIENT_TIMEOUT_MS / 1000,
+      estimateSeconds: getAuditDurationSeconds("events-search"),
       timeoutMs: EVENT_SEARCH_CLIENT_TIMEOUT_MS,
       timeoutMessage: SEARCH_TIMEOUT_MESSAGE,
+      onSuccess: (_result, run) => {
+        recordAuditDuration("events-search", Date.now() - run.startedAt, run.estimateSeconds * 1000);
+      },
       execute: async () => {
         const controller = new AbortController();
         let timer: ReturnType<typeof setTimeout> | undefined;
@@ -313,10 +318,17 @@ function MarketingIntelligencePage() {
                 <><Search size={14} /> Search Events</>
               )}
             </button>
-            {searching && <p role="status" className="text-[13px] self-center" style={{ color: vars.g600 }}>
-              Researching event pages and checking published dates. Broader searches can take longer.
-            </p>}
           </div>
+          {searching && <div className="mb-3 space-y-2">
+            <CountdownBanner
+              active={searching}
+              durationSeconds={searchRun.estimateSeconds}
+              startedAt={searchRun.startedAt}
+              label="Researching event pages and checking published dates"
+              sampleCount={getAuditSampleCount("events-search")}
+            />
+            <p className="text-[12px]" style={{ color: vars.g600 }}>This countdown is an estimate. Broader searches can take longer.</p>
+          </div>}
           <p className="text-[14px] font-normal leading-relaxed" style={{ color: vars.navy }}>
             Searches current event pages for the chosen marketing types, categories, period and region. Results are retained only when the cited page contains the event identity and published date. Deadlines appear only when found near submission or entry language. The authority figure is an AI relevance estimate, not measured reach.
           </p>

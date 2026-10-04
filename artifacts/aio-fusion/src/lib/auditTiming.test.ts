@@ -13,6 +13,14 @@ describe("Media discovery timing", () => {
     expect(getAuditSampleCount("media-discover")).toBe(0);
   });
 
+  it("starts event research at one minute and learns only its own measurements", () => {
+    expect(getAuditDurationSeconds("events-search")).toBe(60);
+    recordAuditDuration("events-search", 45_000, 60_000);
+    expect(getAuditDurationSeconds("events-search")).toBe(45);
+    expect(getAuditSampleCount("events-search")).toBe(1);
+    expect(getAuditDurationSeconds("media-discover")).toBe(60);
+  });
+
   it("learns the rolling average of completed search durations", () => {
     recordAuditDuration("media-discover", 40_000);
     recordAuditDuration("media-discover", 60_000);

@@ -1760,8 +1760,7 @@ describe("MediaResearchPage live discovery", () => {
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
     const status = await screen.findByTestId("status-live-discovery");
-    expect(status.textContent).toContain("Estimated time remaining: 0m 00s");
-    expect(status.textContent).toContain("Taking longer than estimated");
+    expect(status.textContent).toContain("Still working - the estimate has passed");
     expect(getAuditSampleCount("media-discover")).toBe(0);
   });
 
@@ -1774,13 +1773,12 @@ describe("MediaResearchPage live discovery", () => {
       fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
       fireEvent.click(await screen.findByTestId("button-discover-live"));
       await waitFor(() => expect(delayedRequests.liveCalls).toHaveLength(1));
-      expect(screen.getByTestId("status-live-discovery").textContent).toContain("Estimated time remaining: 1m 00s");
+      expect(screen.getByTestId("status-live-discovery").textContent).toContain("1:00");
       expect(getAuditSampleCount("media-discover")).toBe(0);
       clock.mockReturnValue(started + 20_000);
-      await waitFor(() => expect(screen.getByTestId("status-live-discovery").textContent).toContain("0m 40s"), { timeout: 2000 });
+      await waitFor(() => expect(screen.getByTestId("status-live-discovery").textContent).toContain("0:40"), { timeout: 2000 });
       clock.mockReturnValue(started + 90_000);
-      await waitFor(() => expect(screen.getByTestId("status-live-discovery").textContent).toContain("0m 00s"), { timeout: 2000 });
-      expect(screen.getByTestId("status-live-discovery").textContent).toContain("Taking longer than estimated");
+      await waitFor(() => expect(screen.getByTestId("status-live-discovery").textContent).toContain("Still working - the estimate has passed"), { timeout: 2000 });
       expect(screen.getByTestId("button-discover-live")).toBeDisabled();
       expect(getAuditSampleCount("media-discover")).toBe(0);
       await act(async () => {
@@ -1802,7 +1800,7 @@ describe("MediaResearchPage live discovery", () => {
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
     fireEvent.click(await screen.findByTestId("button-discover-live"));
     await waitFor(() => expect(delayedRequests.liveCalls).toHaveLength(1));
-    expect(screen.getByTestId("status-live-discovery").textContent).toContain("Estimated time remaining: 0m 50s");
+    expect(screen.getByTestId("status-live-discovery").textContent).toContain("0:50");
   });
 
   it("keeps a delayed live run alive across navigation and ignores other-project results", async () => {
@@ -1814,7 +1812,7 @@ describe("MediaResearchPage live discovery", () => {
     fireEvent.click(await screen.findByTestId("button-discover-live"));
     await waitFor(() => expect(delayedRequests.liveCalls).toHaveLength(1));
     expect(screen.getByTestId("status-live-discovery").textContent).toContain("Finding sources");
-    expect(screen.getByTestId("status-live-discovery").textContent).toContain("Estimated time remaining:");
+    expect(screen.getByTestId("status-live-discovery").textContent).toContain("ready in approximately");
     await act(async () => { await new Promise(r => setTimeout(r, 0)); });
     fireEvent.change(selector, { target: { value: "story-2" } });
     await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).toBeTruthy());

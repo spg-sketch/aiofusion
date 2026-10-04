@@ -11,7 +11,8 @@ import { MediaOutreachPanel } from "./MediaOutreachPanel";
 import { aiRunKey, discardAiRun, startAiRun, useAiRun } from "../lib/aiRunLifecycle";
 import { getSession } from "../lib/auth";
 import { useDatabaseCategories } from "../lib/databaseCategories";
-import { getAuditDurationSeconds, recordAuditDuration } from "../lib/auditTiming";
+import { getAuditDurationSeconds, getAuditSampleCount, recordAuditDuration } from "../lib/auditTiming";
+import CountdownBanner from "../components/CountdownBanner";
 
 export type TargetingBrief = {
   topic: string;
@@ -373,7 +374,6 @@ function MediaResearchPage() {
   const discoveryStartedAt = discoveryRun?.input.serverStartedAt ?? discoveryRun?.startedAt;
   const liveElapsedSeconds = discoveryStartedAt ? Math.max(0, Math.floor((liveNow - discoveryStartedAt) / 1000)) : 0;
   const liveEstimatedSeconds = discoveryRun?.estimateSeconds ?? getAuditDurationSeconds("media-discover");
-  const liveRemainingSeconds = Math.max(0, liveEstimatedSeconds - liveElapsedSeconds);
   const verifiedLiveCount = liveItems.filter((item) => item.evidenceStatus === "verified" || !item.evidenceStatus).length;
   const pendingLiveCount = liveItems.filter((item) => item.evidenceStatus === "pending").length;
   const liveStage = pendingLiveCount > 0
@@ -1479,8 +1479,17 @@ function MediaResearchPage() {
        <div className="flex flex-wrap items-center justify-between gap-3">
          <div>
            <p className="text-[13px] font-semibold text-slate-800">{liveStage || "Live search"}</p>
-            {liveLoading && <p className="text-[12px] text-slate-600">Estimated time remaining: {Math.floor(liveRemainingSeconds / 60)}m {String(liveRemainingSeconds % 60).padStart(2, "0")}s{liveItems.length ? ` · ${verifiedLiveCount} verified, ${pendingLiveCount} pending` : ""}</p>}
-           {liveLoading && <p className="text-[12px] text-slate-600 mt-1">{liveRemainingSeconds === 0 ? "Taking longer than estimated. Checks are continuing; verified results appear as they are ready." : "This countdown is an estimate. Verified results appear as checks complete."}</p>}
+           {liveLoading && <div className="mt-2 space-y-2">
+             <CountdownBanner
+               active={liveLoading}
+               durationSeconds={liveEstimatedSeconds}
+               startedAt={discoveryStartedAt}
+               label="Finding journalists and checking evidence"
+               sampleCount={getAuditSampleCount("media-discover")}
+             />
+             {liveItems.length > 0 && <p className="text-[12px] text-slate-600">{verifiedLiveCount} verified, {pendingLiveCount} pending</p>}
+             <p className="text-[12px] text-slate-600">This countdown is an estimate. Verified results appear as checks complete.</p>
+           </div>}
            {liveLoading && liveElapsedSeconds >= 40 && <p className="text-[12px] text-slate-600 mt-1">You can leave and return to this article later to resume the account-bound search.</p>}
             {discoveryRun?.status === "failed" && <p className="text-[12px] text-rose-700 mt-1">The run stopped or timed out. Retry live search; any verified results remain available for review. Server-persisted runs are rehydrated when you return to this article, and a timeout does not delete them.</p>}
          </div>

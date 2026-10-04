@@ -1,4 +1,4 @@
-export type AuditOperationType = "visibility" | "website" | "draft" | "intake-auto-fill" | "content-draft" | "content-optimise" | "website-project" | "media-discover";
+export type AuditOperationType = "visibility" | "website" | "draft" | "intake-auto-fill" | "content-draft" | "content-optimise" | "website-project" | "media-discover" | "events-search";
 
 const DEFAULTS: Record<AuditOperationType, number> = {
   visibility: 300,
@@ -9,6 +9,7 @@ const DEFAULTS: Record<AuditOperationType, number> = {
   "content-optimise": 90,
   "website-project": 90,
   "media-discover": 60,
+  "events-search": 60,
 };
 
 const HISTORY_SIZE = 5;

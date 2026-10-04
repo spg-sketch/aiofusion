@@ -9,6 +9,12 @@ Use the countdown as the single numeric duration estimate for audit work. Confir
 
 **How to apply:** Check both confirmation and running states against the captured countdown estimate, including learned histories and overtime. Do not describe a source-only correction as published.
 
+Show a visible countdown for every long-running AI section, not just a spinner.
+
+**Why:** The user asked for countdown clocks across the sections so people can see that work is running.
+
+**How to apply:** Reuse the shared clock with the run's captured start time and operation-specific estimate. Event research starts with a 60-second estimate; do not replace longer audit estimates with a universal minute or treat zero as completion.
+
 Long-running AI work within an open tab belongs to an app-level lifecycle rather than a routed page. Bind every run to the authenticated session, workspace, project, operation and stable subject. Capture immutable inputs, the absolute start time and the starting estimate once. Treat a closed response stream as an uncertain transport outcome, not proof that server work failed.
 
 **Why:** Routed pages unmount during normal navigation. Page-owned promises lose progress and recovery state, while remounted interval counters restart estimates and background throttling distorts elapsed time. Identity changes can also let late results appear or write in the wrong workspace unless the lifecycle invalidates them. Staging requests can be aborted at the 300-second transport limit while the server still completes and persists the operation moments later.

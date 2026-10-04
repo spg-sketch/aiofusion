@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearAiRuns } from "../lib/aiRunLifecycle";
 
 vi.mock("../lib/auth", () => ({ getSession: () => null }));
@@ -22,6 +22,7 @@ vi.mock("../lib/contentAi", () => ({
 import { EVENT_SEARCH_CLIENT_TIMEOUT_MS, MarketingIntelligencePage } from "./MarketingIntelligencePage";
 
 describe("MarketingIntelligencePage", () => {
+  beforeEach(() => localStorage.clear());
   afterEach(() => {
     cleanup();
     clearAiRuns();
@@ -80,7 +81,11 @@ describe("MarketingIntelligencePage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next 12 months" }));
     fireEvent.click(screen.getByRole("button", { name: /search events/i }));
     expect(screen.getByRole("status").textContent).toContain("Researching event pages");
-    await act(async () => vi.advanceTimersByTimeAsync(EVENT_SEARCH_CLIENT_TIMEOUT_MS));
+    expect(screen.getAllByText("1:00").length).toBeGreaterThan(0);
+    await act(async () => vi.advanceTimersByTimeAsync(61_000));
+    expect(screen.getByText("Still working - the estimate has passed")).toBeTruthy();
+    expect((screen.getByRole("button", { name: /searching/i }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => vi.advanceTimersByTimeAsync(EVENT_SEARCH_CLIENT_TIMEOUT_MS - 61_000));
     expect(screen.getByText(/Event research took too long/)).toBeTruthy();
     expect((screen.getByRole("button", { name: /search events/i }) as HTMLButtonElement).disabled).toBe(false);
     const options = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
@@ -108,15 +113,19 @@ describe("MarketingIntelligencePage", () => {
   });
 
   it("retains research across navigation without sending another paid request", async () => {
+    vi.useFakeTimers();
     let resolve!: (response: Response) => void;
     const fetchMock = vi.fn((_url: string, _init: RequestInit) => new Promise<Response>((done) => { resolve = done; }));
     vi.stubGlobal("fetch", fetchMock);
     const page = render(<MarketingIntelligencePage />);
     fireEvent.click(screen.getByRole("button", { name: /search events/i }));
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
     page.unmount();
     expect(fetchMock.mock.calls[0][1].signal?.aborted).toBe(false);
+    await act(async () => vi.advanceTimersByTimeAsync(20_000));
     render(<MarketingIntelligencePage />);
     expect(screen.getByRole("status").textContent).toContain("Researching event pages");
+    expect(screen.getAllByText("0:20").length).toBeGreaterThan(0);
     await act(async () => resolve({ ok: true, json: async () => ({ events: [] }) } as Response));
     expect((screen.getByRole("button", { name: /search events/i }) as HTMLButtonElement).disabled).toBe(false);
     expect(fetchMock).toHaveBeenCalledOnce();

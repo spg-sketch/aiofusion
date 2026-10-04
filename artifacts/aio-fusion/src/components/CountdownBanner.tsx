@@ -22,8 +22,10 @@ export default function CountdownBanner({
   label = "Your report is being prepared",
   sampleCount,
 }: CountdownBannerProps) {
+  const fallbackStartedAt = useRef<number | null>(active ? Date.now() : null);
   const deriveTime = () => {
-    const elapsed = startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0;
+    const start = startedAt ?? fallbackStartedAt.current;
+    const elapsed = active && start !== null ? Math.max(0, Math.floor((Date.now() - start) / 1000)) : 0;
     return {
       remaining: Math.max(0, durationSeconds - elapsed),
       overtime: Math.max(0, elapsed - durationSeconds),
@@ -37,6 +39,7 @@ export default function CountdownBanner({
 
   useEffect(() => {
     if (!active) {
+      fallbackStartedAt.current = null;
       setRemaining(durationSeconds);
       setOvertime(0);
       setAnnouncement("");
@@ -44,8 +47,10 @@ export default function CountdownBanner({
       return;
     }
 
+    fallbackStartedAt.current ??= Date.now();
+    const start = startedAt ?? fallbackStartedAt.current;
     const update = () => {
-      const elapsed = Math.max(0, Math.floor((Date.now() - (startedAt || Date.now())) / 1000));
+      const elapsed = Math.max(0, Math.floor((Date.now() - start) / 1000));
       setRemaining(Math.max(0, durationSeconds - elapsed));
       setOvertime(Math.max(0, elapsed - durationSeconds));
     };
@@ -53,9 +58,13 @@ export default function CountdownBanner({
     setAnnouncement(`${label} started.`);
 
     intervalRef.current = setInterval(update, 1000);
+    window.addEventListener("focus", update);
+    document.addEventListener("visibilitychange", update);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      window.removeEventListener("focus", update);
+      document.removeEventListener("visibilitychange", update);
     };
   }, [active, durationSeconds, label, startedAt]);
 
