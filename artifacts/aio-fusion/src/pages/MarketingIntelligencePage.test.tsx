@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearAiRuns } from "../lib/aiRunLifecycle";
+
+vi.mock("../lib/auth", () => ({ getSession: () => null }));
 
 vi.mock("../IntakeForm", () => ({
   getActiveProjectId: () => "project-1",
@@ -16,12 +19,14 @@ vi.mock("../lib/contentAi", () => ({
   downloadWordDocument: vi.fn(),
 }));
 
-import { MarketingIntelligencePage } from "./MarketingIntelligencePage";
+import { EVENT_SEARCH_CLIENT_TIMEOUT_MS, MarketingIntelligencePage } from "./MarketingIntelligencePage";
 
 describe("MarketingIntelligencePage", () => {
   afterEach(() => {
     cleanup();
+    clearAiRuns();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it("sends the selected criteria and explains verified fields without exposing the prompt", async () => {
@@ -65,5 +70,55 @@ describe("MarketingIntelligencePage", () => {
       region: "UK",
       projectId: "project-1",
     });
+  });
+
+  it("ends a stalled search even when fetch ignores abort, preserving selected criteria", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MarketingIntelligencePage />);
+    fireEvent.click(screen.getByRole("button", { name: "Next 12 months" }));
+    fireEvent.click(screen.getByRole("button", { name: /search events/i }));
+    expect(screen.getByRole("status").textContent).toContain("Researching event pages");
+    await act(async () => vi.advanceTimersByTimeAsync(EVENT_SEARCH_CLIENT_TIMEOUT_MS));
+    expect(screen.getByText(/Event research took too long/)).toBeTruthy();
+    expect((screen.getByRole("button", { name: /search events/i }) as HTMLButtonElement).disabled).toBe(false);
+    const options = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(options[1].signal?.aborted).toBe(true);
+    expect(JSON.parse(String(options[1].body)).period).toBe("12m");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("shows server failures instead of leaving the search busy", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: false,
+      json: async () => ({ error: "Event research took too long. Please try fewer categories or marketing types." }),
+    })));
+    render(<MarketingIntelligencePage />);
+    fireEvent.click(screen.getByRole("button", { name: /search events/i }));
+    expect(await screen.findByText(/Event research took too long/)).toBeTruthy();
+    expect((screen.getByRole("button", { name: /search events/i }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("does not disguise malformed results as an empty successful search", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({}) })));
+    render(<MarketingIntelligencePage />);
+    fireEvent.click(screen.getByRole("button", { name: /search events/i }));
+    expect(await screen.findByText(/Event research returned an invalid response/)).toBeTruthy();
+  });
+
+  it("retains research across navigation without sending another paid request", async () => {
+    let resolve!: (response: Response) => void;
+    const fetchMock = vi.fn((_url: string, _init: RequestInit) => new Promise<Response>((done) => { resolve = done; }));
+    vi.stubGlobal("fetch", fetchMock);
+    const page = render(<MarketingIntelligencePage />);
+    fireEvent.click(screen.getByRole("button", { name: /search events/i }));
+    page.unmount();
+    expect(fetchMock.mock.calls[0][1].signal?.aborted).toBe(false);
+    render(<MarketingIntelligencePage />);
+    expect(screen.getByRole("status").textContent).toContain("Researching event pages");
+    await act(async () => resolve({ ok: true, json: async () => ({ events: [] }) } as Response));
+    expect((screen.getByRole("button", { name: /search events/i }) as HTMLButtonElement).disabled).toBe(false);
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });

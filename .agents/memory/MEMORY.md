@@ -70,7 +70,8 @@
 - [AIO Fusion beta and package capacity](aio-fusion-beta-trial.md) — empty Agency clients reserve one-project packages; Direct Clients add projects in one account; preserve historical excess.
 - [PostgreSQL pool disconnect resilience](postgres-pool-disconnect-resilience.md) — idle-client errors must be handled on the shared pool or a database-side recycle can terminate the API mid-request.
 - [SSO destructive-action confirmation](aio-fusion-sso-destructive-confirmation.md) — bind fresh SSO proof to a passwordless owner, provider identity, and one-time server token; recheck eligibility on use.
-- [Market Intelligence evidence labels](aio-fusion-market-intelligence-evidence.md) — distinguish page-verified event facts from AI summaries; relevance estimates are never measured authority.
+- [Market Intelligence](aio-fusion-market-intelligence-evidence.md) — provider-owned evidence; project-specific categories; distinguish verified facts from AI estimates.
+- [Deployment log fallback](deployment-log-fallback.md) — RefreshAllLogs exposes production runtime logs when the documented deployment-log callback is unavailable.
 - [Reusable staging signup accounts](aio-fusion-staging-signup-reset.md) — reset only dedicated password identities; keep cleanup atomic and refuse Stripe-linked or cross-workspace data.
 - [Back-office page transitions](aio-fusion-backoffice-navigation.md) — commit destination pages immediately; keep lazy loading inside the authenticated shell so the previous page never masquerades as the next.
 - [Settings and onboarding visual relationship](aio-fusion-settings-onboarding-visual-system.md) — onboarding stays focused and standalone while sharing the approved Account Settings visual language.

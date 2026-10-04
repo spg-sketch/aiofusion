@@ -14,6 +14,8 @@ import { buildProjectDataText, escapeHtml, safeHttpUrl, downloadWordDocument, ap
 import { TRADE_MEDIA_CATEGORIES } from "../tradeMediaCategories";
 import { getKeyMessages, getProjectMediaCategories, getActiveProjectId } from "../IntakeForm";
 import { Labelled, CategoryPickerModal } from "./shared";
+import { getSession } from "../lib/auth";
+import { aiRunKey, startAiRun, useAiRun } from "../lib/aiRunLifecycle";
 type EventOpportunity = {
   type: "Conference entry" | "Award entry" | "Speaker" | "Sponsorship";
   cost: string;
@@ -43,58 +45,94 @@ type SearchCriteria = {
   period: "6m" | "12m";
   region: "UK" | "NA";
 };
+export const EVENT_SEARCH_CLIENT_TIMEOUT_MS = 190_000;
+const SEARCH_TIMEOUT_MESSAGE = "Event research took too long. Please try fewer categories or marketing types.";
 
 function MarketingIntelligencePage() {
+  const session = getSession();
+  const projectId = getActiveProjectId() || "default";
+  const scope = {
+    sessionId: session?.userEmail || session?.userName || session?.username || "anonymous",
+    workspaceId: session?.username || "default",
+    projectId,
+  };
+  const runKey = aiRunKey(scope, "content-events-search");
+  const searchRun = useAiRun<{ criteria: SearchCriteria; request: Record<string, unknown> }, EventItem[]>(runKey);
   const projectCategories = getProjectMediaCategories();
-  const [marketingType, setMarketingType] = useState<string[]>(["Trade Conferences"]);
-  const [categories, setCategories] = useState<string[]>(projectCategories);
-  const [period, setPeriod] = useState<"6m" | "12m">("6m");
-  const [region, setRegion] = useState<"UK" | "NA">("UK");
+  const [marketingType, setMarketingType] = useState<string[]>(searchRun?.input.criteria.marketingTypes ?? ["Trade Conferences"]);
+  const [categories, setCategories] = useState<string[]>(searchRun?.input.criteria.categories ?? projectCategories);
+  const [period, setPeriod] = useState<"6m" | "12m">(searchRun?.input.criteria.period ?? "6m");
+  const [region, setRegion] = useState<"UK" | "NA">(searchRun?.input.criteria.region ?? "UK");
   const [showCatPicker, setShowCatPicker] = useState(false);
-  const [results, setResults] = useState<EventItem[] | null>(null);
-  const [resultCriteria, setResultCriteria] = useState<SearchCriteria | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState("");
+  const results = searchRun?.status === "succeeded" ? searchRun.result ?? null : null;
+  const resultCriteria = searchRun?.status === "succeeded" ? searchRun.input.criteria : null;
+  const searching = searchRun?.status === "running";
+  const searchError = searchRun?.status === "failed" ? searchRun.error ?? "Search could not complete." : "";
 
   const MARKETING_TYPES = ["Trade Conferences", "Conference Sponsorships", "Trade Speaker", "Trade Awards", "Networking"];
 
-  const search = async () => {
+  const search = () => {
     const requested: SearchCriteria = {
       marketingTypes: [...marketingType],
       categories: [...categories],
       period,
       region,
     };
-    setSearching(true);
-    setResults(null);
-    setSearchError("");
-    try {
-      const resp = await fetch(`${apiBase()}/api/content/events-search`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
+    const input = {
+      criteria: requested,
+      request: {
           marketingTypes: requested.marketingTypes,
           categories: requested.categories,
           period: requested.period,
           region: requested.region,
           projectData: buildProjectDataText(),
           projectId: getActiveProjectId(),
-        }),
-      });
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => null);
-        throw new Error((data as { error?: string } | null)?.error ?? "Search failed. Please try again.");
-      }
-      const data = await resp.json() as { events: EventItem[] };
-      setResults(Array.isArray(data.events) ? data.events : []);
-      setResultCriteria(requested);
-    } catch (err) {
-      setSearchError(err instanceof Error ? err.message : "Search could not complete. Please try again.");
-      setResults(null);
-    } finally {
-      setSearching(false);
-    }
+      },
+    };
+    startAiRun({
+      key: runKey,
+      scope,
+      operation: "content-events-search",
+      input,
+      estimateSeconds: EVENT_SEARCH_CLIENT_TIMEOUT_MS / 1000,
+      timeoutMs: EVENT_SEARCH_CLIENT_TIMEOUT_MS,
+      timeoutMessage: SEARCH_TIMEOUT_MESSAGE,
+      execute: async () => {
+        const controller = new AbortController();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          return await Promise.race([
+            (async () => {
+              const resp = await fetch(`${apiBase()}/api/content/events-search`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                signal: controller.signal,
+                body: JSON.stringify(input.request),
+              });
+              if (!resp.ok) {
+                const data = await resp.json().catch(() => null);
+                throw new Error((data as { error?: string } | null)?.error ?? "Search failed. Please try again.");
+              }
+              const data = await resp.json() as { events: EventItem[] };
+              if (!data || !Array.isArray(data.events)) {
+                throw new Error("Event research returned an invalid response. Please try again.");
+              }
+              return data.events;
+            })(),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(() => {
+                reject(new Error(SEARCH_TIMEOUT_MESSAGE));
+                controller.abort();
+              }, EVENT_SEARCH_CLIENT_TIMEOUT_MS);
+            }),
+          ]);
+        } finally {
+          clearTimeout(timer);
+          controller.abort();
+        }
+      },
+    });
   };
 
   const actionableOps = (results || []).flatMap((e) =>
@@ -275,6 +313,9 @@ function MarketingIntelligencePage() {
                 <><Search size={14} /> Search Events</>
               )}
             </button>
+            {searching && <p role="status" className="text-[13px] self-center" style={{ color: vars.g600 }}>
+              Researching event pages and checking published dates. Broader searches can take longer.
+            </p>}
           </div>
           <p className="text-[14px] font-normal leading-relaxed" style={{ color: vars.navy }}>
             Searches current event pages for the chosen marketing types, categories, period and region. Results are retained only when the cited page contains the event identity and published date. Deadlines appear only when found near submission or entry language. The authority figure is an AI relevance estimate, not measured reach.
