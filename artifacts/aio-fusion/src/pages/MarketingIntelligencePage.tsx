@@ -10,7 +10,11 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { buildProjectDataText, escapeHtml, safeHttpUrl, downloadWordDocument, apiBase } from "../lib/contentAi";
+import { buildProjectDataText, safeHttpUrl, apiBase } from "../lib/contentAi";
+import {
+  buildMarketingIntelligenceCsv, buildMarketingIntelligencePdf, downloadReportBlob,
+  type EventItem, type SearchCriteria,
+} from "../lib/marketingIntelligenceExport";
 import { TRADE_MEDIA_CATEGORIES } from "../tradeMediaCategories";
 import { getKeyMessages, getProjectMediaCategories, getActiveProjectId } from "../IntakeForm";
 import { Labelled, CategoryPickerModal } from "./shared";
@@ -18,35 +22,6 @@ import { getSession } from "../lib/auth";
 import { aiRunKey, startAiRun, useAiRun } from "../lib/aiRunLifecycle";
 import CountdownBanner from "../components/CountdownBanner";
 import { getAuditDurationSeconds, getAuditSampleCount, recordAuditDuration } from "../lib/auditTiming";
-type EventOpportunity = {
-  type: "Conference entry" | "Award entry" | "Speaker" | "Sponsorship";
-  cost: string;
-  deadline: string;
-  contactDetails?: string;
-  notes?: string;
-  actionable?: boolean;
-};
-type EventItem = {
-  rank: number;
-  name: string;
-  url: string;
-  category: string;
-  startDate: string;
-  endDate: string;
-  audience: string;
-  titleDescription: string;
-  location: string;
-  authority: number;
-  relevanceReason: string;
-  opportunities: EventOpportunity[];
-  sourceCheckedAt: string;
-};
-type SearchCriteria = {
-  marketingTypes: string[];
-  categories: string[];
-  period: "6m" | "12m";
-  region: "UK" | "NA";
-};
 export const EVENT_SEARCH_CLIENT_TIMEOUT_MS = 190_000;
 const SEARCH_TIMEOUT_MESSAGE = "Event research took too long. Please try fewer categories or marketing types.";
 
@@ -66,6 +41,8 @@ function MarketingIntelligencePage() {
   const [period, setPeriod] = useState<"6m" | "12m">(searchRun?.input.criteria.period ?? "6m");
   const [region, setRegion] = useState<"UK" | "NA">(searchRun?.input.criteria.region ?? "UK");
   const [showCatPicker, setShowCatPicker] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportError, setExportError] = useState("");
   const results = searchRun?.status === "succeeded" ? searchRun.result ?? null : null;
   const resultCriteria = searchRun?.status === "succeeded" ? searchRun.input.criteria : null;
   const searching = searchRun?.status === "running";
@@ -145,102 +122,32 @@ function MarketingIntelligencePage() {
   ).slice(0, 3);
   const exportCriteria = resultCriteria ?? { marketingTypes: marketingType, categories, period, region };
 
-  const downloadWordReport = () => {
-    if (!results) return;
-    const itemsHtml = results.map((e) => {
-      const opsHtml = e.opportunities.map((o) => `
-        <li><b>${escapeHtml(o.type)}</b> - <b>Cost:</b> ${escapeHtml(o.cost || "Not published")} &middot; <b>Deadline:</b> ${escapeHtml(o.deadline || "Not published")}
-          ${o.contactDetails ? `<br/><i style="color:#666;">Contact: ${escapeHtml(o.contactDetails)}</i>` : ""}
-          ${o.notes ? `<br/><i style="color:#666;">${escapeHtml(o.notes)}</i>` : ""}
-          ${o.actionable ? `<br/><span style="color:#C8497A;font-weight:bold;">Top 3 upcoming verified deadline</span>` : ""}
-        </li>
-      `).join("");
-      return `
-        <h2 style="font-family:Georgia,serif;color:#102B36;margin-bottom:4px;">${escapeHtml(String(e.rank))}. ${escapeHtml(e.name)}</h2>
-        <p style="margin:0 0 8px 0;color:#1f748f;"><a href="${escapeHtml(safeHttpUrl(e.url))}">${escapeHtml(e.url)}</a> &middot; ${escapeHtml(e.category)} &middot; <b>Authority ${escapeHtml(String(e.authority))}/100</b></p>
-        <p><b>Date:</b> ${escapeHtml(e.startDate)} to ${escapeHtml(e.endDate)}</p>
-        <p><b>Audience:</b> ${escapeHtml(e.audience)}</p>
-        <p><b>Title / owner:</b> ${escapeHtml(e.titleDescription)}</p>
-        <p><b>Location:</b> ${escapeHtml(e.location)}</p>
-        <p><b>Why it is relevant:</b> ${escapeHtml(e.relevanceReason)}</p>
-        <p><b>Source checked:</b> ${escapeHtml(e.sourceCheckedAt)}</p>
-        <p><b>Opportunities (${e.opportunities.length}):</b></p>
-        <ul>${opsHtml}</ul>
-        <hr/>
-      `;
-    }).join("");
-    const topActionHtml = actionableOps.length === 0 ? "<p><i>No upcoming verified deadlines found.</i></p>" :
-      `<ol>${actionableOps.map((a) => `<li><b>${escapeHtml(a.event.name)}</b> - ${escapeHtml(a.op.type)} - deadline: ${escapeHtml(a.op.deadline || "Not published")}</li>`).join("")}</ol>`;
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Event Opportunities Report</title></head><body style="font-family:Calibri,Arial,sans-serif;color:#102B36;">
-      <h1 style="font-family:Georgia,serif;">Event Opportunities Report</h1>
-      <p><b>Marketing types:</b> ${escapeHtml(exportCriteria.marketingTypes.join(", "))}</p>
-      <p><b>Business categories:</b> ${escapeHtml(exportCriteria.categories.join(", "))}</p>
-      <p><b>Period:</b> ${escapeHtml(exportCriteria.period === "6m" ? "Next 6 months" : "Next 12 months")} &middot; <b>Region:</b> ${escapeHtml(exportCriteria.region === "UK" ? "United Kingdom" : "North America")}</p>
-      <h2 style="font-family:Georgia,serif;color:#102B36;">Top 3 upcoming verified deadlines</h2>
-      ${topActionHtml}
-      <hr/>
-      ${itemsHtml}
-      <h2 style="font-family:Georgia,serif;color:#102B36;">Methodology &amp; source caveats</h2>
-      <p>Generated using the Project Data brief and current web search. Every result links to a cited event page where the event name and selected-period date were checked. A deadline is shown only when it appeared near submission or entry language on the same page. Authority scores (0-100) are an AI relevance estimate based on category fit, audience quality and potential third-party visibility, not measured reach.</p>
-    </body></html>`;
-    const blob = new Blob([html], { type: "application/msword" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `event-opportunities-report-${new Date().toISOString().slice(0, 10)}.doc`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const downloadPdfReport = async () => {
+    if (!results || exportingPdf) return;
+    setExportError("");
+    setExportingPdf(true);
+    const generatedAt = new Date().toISOString();
+    try {
+      const pdf = await buildMarketingIntelligencePdf({ events: results, criteria: exportCriteria, generatedAt });
+      downloadReportBlob(pdf.output("blob"), `event-opportunities-report-${generatedAt.slice(0, 10)}.pdf`);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "The PDF could not be generated. Please try again.");
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
-  const downloadExcelReport = () => {
+  const downloadCsvReport = () => {
     if (!results) return;
-    // One row per opportunity
-    const rows = results.flatMap((e) => {
-      return e.opportunities.map((o) => `
-        <tr>
-          <td>${escapeHtml(String(e.rank))}</td>
-          <td>${escapeHtml(e.name)}</td>
-          <td><a href="${escapeHtml(safeHttpUrl(e.url))}">${escapeHtml(e.url)}</a></td>
-          <td>${escapeHtml(e.category)}</td>
-          <td>${escapeHtml(e.startDate)}</td>
-          <td>${escapeHtml(e.endDate)}</td>
-          <td>${escapeHtml(e.location)}</td>
-          <td>${escapeHtml(e.audience)}</td>
-          <td>${escapeHtml(e.titleDescription)}</td>
-          <td>${escapeHtml(String(e.authority))}</td>
-          <td>${escapeHtml(o.type)}</td>
-          <td>${escapeHtml(o.cost || "Not published")}</td>
-          <td>${escapeHtml(o.deadline || "Not published")}</td>
-          <td>${escapeHtml(o.contactDetails || "")}</td>
-          <td>${escapeHtml(o.notes || "")}</td>
-          <td>${o.actionable ? "YES" : ""}</td>
-          <td>${escapeHtml(e.relevanceReason)}</td>
-          <td>${escapeHtml(e.sourceCheckedAt)}</td>
-        </tr>
-      `);
-    }).join("");
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Opportunities</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet><x:ExcelWorksheet><x:Name>Methodology</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
-<body>
-<h2>Event Opportunities - one row per opportunity</h2>
-<p><b>Marketing types:</b> ${escapeHtml(exportCriteria.marketingTypes.join(", "))} &middot; <b>Categories:</b> ${escapeHtml(exportCriteria.categories.join(", "))} &middot; <b>Period:</b> ${escapeHtml(exportCriteria.period === "6m" ? "Next 6 months" : "Next 12 months")} &middot; <b>Region:</b> ${escapeHtml(exportCriteria.region === "UK" ? "United Kingdom" : "North America")}</p>
-<table border="1">
-  <thead><tr style="background:#102B36;color:white;font-weight:bold;">
-    <th>Rank</th><th>Event name</th><th>URL</th><th>Category</th><th>Start Date</th><th>End Date</th><th>Location</th><th>Audience</th><th>Title / owner</th><th>AI relevance /100</th><th>Opportunity type</th><th>Cost</th><th>Deadline</th><th>Contact details</th><th>Notes</th><th>Top 3 upcoming verified deadlines</th><th>Why relevant</th><th>Source checked</th>
-  </tr></thead>
-  <tbody>${rows}</tbody>
-</table>
-<br/><br/>
-<h2>Methodology</h2>
-<p>Generated using the Project Data brief and current web search. Every result links to a cited event page where the event name and selected-period date were checked. A deadline is shown only when it appeared near submission or entry language on the same page. Authority scores (0-100) are an AI relevance estimate based on category fit, audience quality and potential third-party visibility, not measured reach.</p>
-</body></html>`;
-    const blob = new Blob([html], { type: "application/vnd.ms-excel" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `event-opportunities-report-${new Date().toISOString().slice(0, 10)}.xls`;
-    a.click();
-    URL.revokeObjectURL(url);
+    setExportError("");
+    const generatedAt = new Date().toISOString();
+    try {
+      const csv = buildMarketingIntelligenceCsv({ events: results, criteria: exportCriteria, generatedAt });
+      downloadReportBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }),
+        `event-opportunities-report-${generatedAt.slice(0, 10)}.csv`);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "The CSV could not be generated. Please try again.");
+    }
   };
 
   return (
@@ -431,16 +338,17 @@ function MarketingIntelligencePage() {
             {/* Download buttons */}
             <div className="px-5 py-4 border-t flex flex-wrap items-center gap-3" style={{ borderColor: vars.g100, background: vars.g50 }}>
               <p className="text-[12px] font-light flex-1 min-w-[200px]" style={{ color: vars.g600 }}>
-                Both formats include a methodology and source caveats. Excel exports one row per opportunity for sorting.
+              Both formats include methodology and source caveats. PDF is a formatted report; CSV has one row per opportunity for sorting.
               </p>
-              <button onClick={downloadWordReport} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
-                <FileText size={13} color="#2B579A" /> Download Report (Word)
+              <button onClick={downloadPdfReport} disabled={exportingPdf} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold border bg-white disabled:opacity-60" style={{ borderColor: vars.g200, color: vars.navy }}>
+                {exportingPdf ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} color="#B83E42" />} {exportingPdf ? "Preparing PDF..." : "Download Report (PDF)"}
               </button>
-              <button onClick={downloadExcelReport} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
-                <FileText size={13} color="#1F7244" /> Download Report (Excel)
+              <button onClick={downloadCsvReport} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+                <FileText size={13} color="#1F7244" /> Download Report (CSV)
               </button>
             </div>
           </div>
+          {exportError && <p role="alert" className="mt-2 text-[12px]" style={{ color: vars.coral }}>{exportError}</p>}
           </>
           )}
         </div>

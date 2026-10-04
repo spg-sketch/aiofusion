@@ -2,6 +2,12 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearAiRuns } from "../lib/aiRunLifecycle";
+import { buildMarketingIntelligencePdf, downloadReportBlob } from "../lib/marketingIntelligenceExport";
+
+vi.mock("../lib/marketingIntelligenceExport", async importOriginal => {
+  const actual = await importOriginal<typeof import("../lib/marketingIntelligenceExport")>();
+  return { ...actual, buildMarketingIntelligencePdf: vi.fn(), downloadReportBlob: vi.fn() };
+});
 
 vi.mock("../lib/auth", () => ({ getSession: () => null }));
 
@@ -22,7 +28,13 @@ vi.mock("../lib/contentAi", () => ({
 import { EVENT_SEARCH_CLIENT_TIMEOUT_MS, MarketingIntelligencePage } from "./MarketingIntelligencePage";
 
 describe("MarketingIntelligencePage", () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(downloadReportBlob).mockClear();
+    vi.mocked(buildMarketingIntelligencePdf).mockReset().mockResolvedValue({
+      output: () => new Blob(["%PDF-1.4"], { type: "application/pdf" }),
+    } as unknown as Awaited<ReturnType<typeof buildMarketingIntelligencePdf>>);
+  });
   afterEach(() => {
     cleanup();
     clearAiRuns();
@@ -73,6 +85,26 @@ describe("MarketingIntelligencePage", () => {
       region: "UK",
       projectId: "project-1",
     });
+    expect(screen.queryByRole("button", { name: /Word|Excel/i })).toBeNull();
+    // Changing selectors must not relabel the already completed research.
+    fireEvent.click(screen.getByRole("button", { name: "Next 12 months" }));
+    fireEvent.click(screen.getByRole("button", { name: "Download Report (PDF)" }));
+    await waitFor(() => expect(downloadReportBlob).toHaveBeenCalledTimes(1));
+    expect(buildMarketingIntelligencePdf).toHaveBeenCalledWith(expect.objectContaining({
+      criteria: expect.objectContaining({ period: "6m", region: "UK" }),
+      events: expect.arrayContaining([expect.objectContaining({ name: "Future Energy Forum" })]),
+    }));
+    expect(downloadReportBlob).toHaveBeenLastCalledWith(
+      expect.objectContaining({ type: "application/pdf" }), expect.stringMatching(/\.pdf$/),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Download Report (CSV)" }));
+    expect(downloadReportBlob).toHaveBeenLastCalledWith(
+      expect.objectContaining({ type: "text/csv;charset=utf-8" }), expect.stringMatching(/\.csv$/),
+    );
+    vi.mocked(buildMarketingIntelligencePdf).mockRejectedValueOnce(new Error("PDF fonts could not be loaded."));
+    fireEvent.click(screen.getByRole("button", { name: "Download Report (PDF)" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("PDF fonts could not be loaded.");
+    expect(downloadReportBlob).toHaveBeenCalledTimes(2);
   });
 
   it("ends a stalled search even when fetch ignores abort, preserving selected criteria", async () => {

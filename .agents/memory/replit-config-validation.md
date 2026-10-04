@@ -27,3 +27,15 @@ executing the redundant checks in parallel.
 configuration replacement to select the intended Run workflow and narrow the
 legacy aggregate. Preserve manual workflows, and regression-check both validation
 metadata and the Run entry point after further workflow changes.
+
+Package-installation helpers may alter project configuration and scaffold a new language even when the install reports failure.
+
+**Why:** A failed temporary PDF-validation tooling install introduced unrelated system dependencies and Python scaffolding into a frontend-only change.
+
+**How to apply:** Review changed configuration keys without printing values, remove only unintended installer changes through the validated configuration workflow, and keep transient verification tools outside the app.
+
+When copying configuration through the sandbox shell callback, normalise CRLF output before schema validation.
+
+**Why:** Terminal-style output converted a source-identical configuration copy into an all-lines-changed diff.
+
+**How to apply:** Preserve the repository's line endings and check that temporary tooling cleanup leaves no configuration change before committing.
