@@ -175,7 +175,7 @@ describe("public metadata, discovery copy and article identity", () => {
       "Our B2B platform enhances your team and service performance",
     );
     expect(agents.body.textContent).toContain(
-      "AIO Fusion is a GEO platform built for PR agencies and in-house communications teams.",
+      "product evaluation by PR agencies, in-house communications and marketing teams",
     );
     expect(agents.body.textContent).not.toContain(
       "AIO Fusion is a GEO platform built for PR agencies and B2B communications teams.",

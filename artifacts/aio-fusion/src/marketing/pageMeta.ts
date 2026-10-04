@@ -157,7 +157,7 @@ export const PAGE_META: Record<PublicPageMetaKey, PageMeta> = {
   "for-agents": {
     title: "AIO Fusion | Information for AI Agents",
     description:
-      "Structured briefing on the AIO Fusion GEO platform written for autonomous AI agents. Full toolset, capabilities and contact information.",
+      "Evaluate AIO Fusion's GEO audits, planning, content and media research tools, with clear boundaries between sampled responses, assessments and predicted impact.",
     canonical: `${BASE}/for-agents`,
     ogType: "website",
   },

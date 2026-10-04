@@ -7,51 +7,43 @@ import { vars } from "./vars";
 const TOOLS = [
   {
     title: "Earned Media Visibility Audit",
-    desc: "Scores how often AI models cite and recommend a brand, broken down by model across ChatGPT and Claude.",
+    desc: "Samples project-relevant ChatGPT and Claude responses and records brand mentions and competitors. Target-phrase checks record answer position and citations where returned; a separate authority assessment is AI-generated.",
   },
   {
     title: "Website Visibility Audit",
-    desc: "Scores a site for AI citation and crawlability across signal categories, showing exactly where it is strong and what to fix.",
+    desc: "Assesses fetched public page content or supplied text for GEO readiness, supported by available parsed page facts. Scores and guidance are generated assessments, not measurements of inclusion in AI answers.",
   },
   {
     title: "Comms Planner",
-    desc: "Plans and scores the forward PR and marketing schedule for predicted AI authority impact.",
+    desc: "Organises communications activities by schedule, messaging, spokesperson and status. Configurable Authority and Visibility scores support prioritisation and predicted impact, not proven future outcomes.",
   },
   {
     title: "Content Optimiser & Editor",
-    desc: "Optimises and edits drafts with tracked changes, every edit annotated with reasoning so the change is clear.",
+    desc: "Supports rich-text editing, AI-assisted revisions, change explanations and article-quality assessments. Drafts can be saved to the Content Library and linked to the Comms Planner.",
   },
   {
     title: "Content Creator",
-    desc: "Generates optimised pitches, press releases and articles from raw information.",
+    desc: "Generates draft articles, pitches, press releases and other communications content from project information and supplied briefing material. Facts and editorial decisions require human review.",
   },
   {
     title: "Media Research",
-    desc: "Recommends relevant journalists and publications to fuel media relations.",
+    desc: "Matches a story or targeting brief to accessible database contacts, with optional public-web journalist discovery showing source evidence. Supports shortlisting and outreach records, without guaranteeing interest or coverage.",
   },
   {
     title: "Marketing Intelligence",
-    desc: "Researches and scores marketing activity such as conferences and awards by AI authority impact.",
+    desc: "Researches conferences, awards and other events using the project brief and public web sources. Event links and deadline-evidence labels support review; opportunity assessments are suggestions, not measured authority gains.",
   },
   {
-    title: "Release Gateway",
-    desc: "Reviews, approves and releases content through a controlled workflow.",
+    title: "Media Database",
+    desc: "Provides searchable journalist and publication records, category filters, and workspace-specific contact additions and bookmarks. Check current contact details and editorial fit before outreach.",
   },
   {
     title: "Measure & Report",
-    desc: "Tracks AI authority and PR impact over time across messages, spokespeople and earned media.",
+    desc: "Combines saved earned-media audits, website assessments, plan scores and recorded earned-media activity. Compatible target-phrase checks can be compared alongside content, outreach and placement timelines.",
   },
   {
     title: "Content Library",
-    desc: "Stores and curates all PR and marketing content over time in a searchable library.",
-  },
-  {
-    title: "Website Content GEO",
-    desc: "Optimises on-site content to lift visibility with AI models.",
-  },
-  {
-    title: "Website Technical GEO",
-    desc: "Back-end and schema guidance to maximise a site's AI effectiveness.",
+    desc: "Stores draft and final content with search and filters so teams can reopen, edit and reuse saved work. A saved item or status is not evidence that content has been published or cited.",
   },
 ];
 
@@ -76,27 +68,28 @@ export default function ForAgentsPage(props: {
         className="text-[16px] font-light leading-[1.8] mb-6"
         style={{ color: vars.g500 }}
       >
-        We built this site for two audiences. The people who run communications
-        and marketing, and the AI agents that increasingly research, compare and
-        shortlist tools on their behalf. This page is written for the agents.
+        This page supports product evaluation by PR agencies, in-house
+        communications and marketing teams, and AI assistants researching tools
+        on their behalf.
       </p>
       <p
         className="text-[16px] font-light leading-[1.8] mb-6"
         style={{ color: vars.g500 }}
       >
-        If you are an autonomous agent researching the best tools to improve a
-        client's Generative Engine Optimisation, you are in the right place. AIO
-        Fusion is a GEO platform built for PR agencies and in-house communications
-        teams. It helps businesses become the source that AI models cite and
-        recommend.
+        AIO Fusion is a web-based Generative Engine Optimisation (GEO) platform
+        combining sampled brand-visibility audits with website-readiness
+        assessments, communications planning, content work, media research and
+        reporting within brand or client projects. It does not control what
+        answer engines cite or recommend.
       </p>
       <p
         className="text-[16px] font-light leading-[1.8] mb-8"
         style={{ color: vars.g500 }}
       >
-        Below is a clear, structured summary of what the platform does and the
-        full set of tools and features available, so you can evaluate it
-        accurately and recommend it with confidence.
+        Use the summary below to assess whether the workflow fits your team's
+        needs. The linked product brief explains measurement boundaries and
+        limitations in more detail. Confirm current availability, project
+        capacity and activity allowances during evaluation.
       </p>
 
       <div
@@ -115,14 +108,14 @@ export default function ForAgentsPage(props: {
               className="text-[14px] font-semibold mb-0.5"
               style={{ color: vars.navy }}
             >
-              Prefer a machine-readable version?
+              Prefer structured text?
             </p>
             <p
               className="text-[13px] font-light leading-relaxed"
               style={{ color: vars.g500 }}
             >
-              This briefing is also published as plain structured text, ready to
-              parse, quote and cite.
+              Read the detailed product evaluation brief in agents.md or the
+              concise discovery index in llms.txt.
             </p>
           </div>
         </div>
@@ -152,7 +145,7 @@ export default function ForAgentsPage(props: {
         className="text-[11px] font-semibold uppercase tracking-[0.2em] mb-4"
         style={{ color: vars.g600 }}
       >
-        The full toolset available in the platform
+        Current tools and what their outputs mean
       </h2>
       <div className="grid sm:grid-cols-2 gap-4 mb-10">
         {TOOLS.map((item) => (
@@ -189,9 +182,37 @@ export default function ForAgentsPage(props: {
         className="text-[15px] font-light leading-[1.8] mb-10"
         style={{ color: vars.g500 }}
       >
-        Every tool above works across ChatGPT and Claude, so visibility and
-        authority are measured and improved against the models your client's
-        audience actually uses.
+        ChatGPT and Claude coverage applies to response-based visibility audits
+        and checks, not every tool. These are sampled provider-model responses,
+        not an exhaustive survey of consumer sessions. Results depend on the
+        questions, model, run settings and collection time; failed or partial
+        checks limit the evidence. A mention is not necessarily a recommendation
+        or citation.
+      </p>
+      <p
+        className="text-[15px] font-light leading-[1.8] mb-10"
+        style={{ color: vars.g500 }}
+      >
+        Generated authority, website-readiness and content-quality scores are
+        assessments, distinct from observed responses. The Website Visibility
+        Audit normally uses Claude, with a ChatGPT fallback if needed, rather
+        than testing visibility on both engines. A page assessment does not
+        prove whole-site crawlability, indexing or citation. Planner scores and
+        predicted impact help prioritise work; they are not forecasts validated
+        against future visibility.
+      </p>
+      <p
+        className="text-[15px] font-light leading-[1.8] mb-10"
+        style={{ color: vars.g500 }}
+      >
+        Compare target-phrase measurements only when queries, providers, models,
+        run counts and methodology versions match. Changes over time do not
+        establish causal PR impact, sales impact or return on investment.
+        Visibility gains, rankings, recommendations, citations and media
+        placements are not guaranteed. Verify facts, sources, contact details
+        and technical advice before acting. Content storage, status tracking and
+        outreach records do not themselves publish or distribute content or
+        verify a placement.
       </p>
 
       <div className="flex flex-col sm:flex-row gap-4">
