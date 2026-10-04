@@ -298,7 +298,7 @@ function MarketingIntelligencePage() {
               ))}
             </div>
           </Labelled>
-          <Labelled label="Region" hint="UK or North America (more in V2).">
+          <Labelled label="Region" hint="UK or North America.">
             <div className="inline-flex rounded-lg border p-0.5" style={{ borderColor: vars.g200 }}>
               {(["UK", "NA"] as const).map((r) => (
                 <button key={r} onClick={() => setRegion(r)} className="px-4 py-1.5 rounded text-[12px] font-semibold" style={{ background: region === r ? vars.gold : "transparent", color: region === r ? "white" : vars.g500 }}>

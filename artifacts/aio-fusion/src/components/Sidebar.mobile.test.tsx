@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Sidebar } from "./Sidebar";
+import { Sidebar, navSections } from "./Sidebar";
 import type { Client } from "../types";
 
 vi.mock("../LlmCheckPage", () => ({
@@ -64,6 +64,19 @@ afterEach(() => {
 });
 
 describe("Content Management navigation", () => {
+  it("explains unavailable features without a release-version reference", () => {
+    const item = navSections[0].items[0];
+    const originalLocked = item.locked;
+    item.locked = true;
+    try {
+      const view = renderSidebar();
+      expect(screen.getByTitle(`${item.label} is not available yet`)).toBeDisabled();
+      expect(screen.getByText("Unavailable")).toBeTruthy();
+      expect(view.container.textContent).not.toMatch(/\bv2\b/i);
+    } finally {
+      item.locked = originalLocked;
+    }
+  });
   it.each(["desktop", "mobile"])("keeps the requested order and planner destination selected on %s", (layout) => {
     const onNavigate = vi.fn();
     function NavigationHarness() {

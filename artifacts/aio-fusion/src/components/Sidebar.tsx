@@ -355,7 +355,7 @@ function SidebarContent({
                     disabled={isLocked}
                      aria-current={isActive ? "page" : undefined}
                     aria-disabled={isLocked}
-                    title={isLocked ? `${item.label} is coming in V2` : undefined}
+                    title={isLocked ? `${item.label} is not available yet` : undefined}
                     className={`group flex items-start gap-3 w-full rounded-2xl px-2.5 py-3 text-left transition-all ${
                       isActive || isLocked ? "" : "hover:bg-white/25"
                     }`}
@@ -386,7 +386,7 @@ function SidebarContent({
                         <span className="text-[13px] font-semibold truncate" style={{ color: "#000000" }}>{item.label}</span>
                         {isLocked && (
                           <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.6)", color: "rgba(0,0,0,0.5)" }}>
-                            <Lock size={10} /> V2
+                            <Lock size={10} /> Unavailable
                           </span>
                         )}
                       </div>

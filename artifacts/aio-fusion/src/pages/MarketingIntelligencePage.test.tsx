@@ -56,6 +56,8 @@ describe("MarketingIntelligencePage", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<MarketingIntelligencePage />);
+    expect(screen.getByText(/UK or North America\./)).toBeTruthy();
+    expect(screen.queryByText(/more in V2/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /llm brief/i })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /search events/i }));
 

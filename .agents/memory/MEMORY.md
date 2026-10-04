@@ -71,6 +71,7 @@
 - [PostgreSQL pool disconnect resilience](postgres-pool-disconnect-resilience.md) — idle-client errors must be handled on the shared pool or a database-side recycle can terminate the API mid-request.
 - [SSO destructive-action confirmation](aio-fusion-sso-destructive-confirmation.md) — bind fresh SSO proof to a passwordless owner, provider identity, and one-time server token; recheck eligibility on use.
 - [Market Intelligence](aio-fusion-market-intelligence-evidence.md) — provider-owned evidence; project-specific categories; distinguish verified facts from AI estimates.
+- [Public website and platform copy](aio-fusion-public-copy.md) — no customer-facing V2 references; internal version identifiers stay unchanged.
 - [Deployment log fallback](deployment-log-fallback.md) — RefreshAllLogs exposes production runtime logs when the documented deployment-log callback is unavailable.
 - [Reusable staging signup accounts](aio-fusion-staging-signup-reset.md) — reset only dedicated password identities; keep cleanup atomic and refuse Stripe-linked or cross-workspace data.
 - [Back-office page transitions](aio-fusion-backoffice-navigation.md) — commit destination pages immediately; keep lazy loading inside the authenticated shell so the previous page never masquerades as the next.
