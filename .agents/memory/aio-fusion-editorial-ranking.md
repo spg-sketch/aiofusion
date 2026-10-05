@@ -33,6 +33,12 @@ Generic phrase/coverage overlap explanations must not be presented as tailored p
 
 **How to apply:** Prefer substantive recorded pitch suggestions. When none exists, state that no tailored angle is recorded rather than disguising a matching template as a personalised recommendation. Preserve matching provenance and historical outreach evidence.
 
+Explicitly generated pitch suggestions are article-specific proposals, not checked reporting evidence. They must not raise editorial fit or evidence confidence, update canonical contact records, or rewrite historical outreach.
+
+**Why:** Users need useful proposed framing even when recent reporting has not been verified. Providing that assistance must not disguise an AI inference as proof about the journalist.
+
+**How to apply:** Generate only on an explicit, bounded action; label the result as an AI suggestion, scope it to the article and project owner, reuse current saved suggestions, and invalidate them when the article, saved brief or editorial contact context changes.
+
 Enrichment must be explicit, bounded, owner/project/article-scoped and concurrency-safe.
 
 **Why:** Slow network work can finish after a newer brief or evidence check. Saving a new targeting brief must not discard prior source history, and a failed provider request must not masquerade as a completed check.

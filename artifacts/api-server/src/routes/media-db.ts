@@ -59,6 +59,8 @@ import {
 import { acquirePrivacyIdentityLock, createSuppressionMatcher, createSuppressionMatcherWithDb, filterSuppressedContacts, isContactSuppressed, isSuppressed, isSuppressedWithDb, privacyHash } from "../lib/journalist-privacy";
 import { logger } from "../lib/logger";
 import { mediaExportAllowance, settleMediaExport, MediaAllowanceError } from "../lib/media-export-allowance";
+import { registerMediaPitchRoutes } from "./media-pitch-suggestions";
+import { currentMediaPitch, type SavedMediaPitch } from "../lib/media-pitch-suggestions";
 
 const router: IRouter = Router();
 const recommendationEnrichmentCommitQueues = new Map<string, Promise<void>>();
@@ -3753,6 +3755,7 @@ type RecommendationCriteria = {
   rankingVersion?: string;
   enrichmentVersion?: number;
   rankingRevision?: number;
+  pitchSuggestions?: Record<string, SavedMediaPitch>;
 };
 
 const emptyTargetingBrief = (terms: string[], phrases: ExactTargetPhrase[]): TargetingBrief => ({
@@ -3918,6 +3921,7 @@ function pruneRecommendationCriteria(
     evidence: prune(criteria.evidence),
     warnings: prune(criteria.warnings),
     baseScores: prune(criteria.baseScores),
+    pitchSuggestions: prune(criteria.pitchSuggestions),
     totalMatches: eligible.size,
   };
 }
@@ -5097,6 +5101,10 @@ router.get("/store/media-db/recommendations", requirePlatformAuth, async (req: R
     restrictedContactIds(accountId, projectId, storyKey),
     departedContactIds(pageRowsSafe.map((row) => row.contact.id), accountId),
   ]);
+  const [pitchStory] = await db.select().from(archiveItemsTable).where(and(
+    eq(archiveItemsTable.id, storyKey), eq(archiveItemsTable.projectId, projectId), isNull(archiveItemsTable.deletedAt),
+  )).limit(1);
+  const pitchBrief = await savedRecommendationBrief(accountId, projectId, storyKey);
   const items = pageRowsSafe.map((row) => {
     const canSeeOutlet = !row.outletDeletedAt && outletVisible(row.outletAccountId, visible);
     const outletFields = canSeeOutlet
@@ -5119,6 +5127,10 @@ router.get("/store/media-db/recommendations", requirePlatformAuth, async (req: R
     return {
       rank: row.item.rank, contact: { ...row.contact, ...outletFields }, score: row.item.score, reasons: row.item.reasons,
       phraseAttributions: row.item.phraseAttributions, assessment,
+      pitchSuggestion: pitchStory && pitchBrief ? currentMediaPitch(criteria.pitchSuggestions?.[String(row.contact.id)], {
+        article: pitchStory, brief: pitchBrief, contact: row.contact,
+        outlet: canSeeOutlet ? { name: row.outletName, category: row.outletCategory, country: row.outletCountry } : null,
+      }) : undefined,
     };
   });
    const safeCriteria = pruneRecommendationCriteria(
@@ -5563,7 +5575,7 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
           eq(projectsTable.id, projectId),
           isNull(projectsTable.deletedAt),
         )).for("share").limit(1);
-      const [finalStory] = await tx.select({ id: archiveItemsTable.id })
+      const [finalStory] = await tx.select()
         .from(archiveItemsTable).where(and(
           eq(archiveItemsTable.id, storyKey),
           eq(archiveItemsTable.projectId, projectId),
@@ -5596,6 +5608,10 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
       }
       const finalOutletById = new Map(finalOutlets.map((outlet) => [outlet.id, outlet]));
       const finalSuppressionMatcher = await createSuppressionMatcherWithDb(tx, accountId);
+      const [finalPitchBriefRow] = await tx.select({ value: platformMetaTable.value }).from(platformMetaTable)
+        .where(eq(platformMetaTable.key, recommendationMetaKey("brief", accountId, projectId, storyKey))).limit(1);
+      const finalPitchBrief = finalPitchBriefRow ? normaliseBrief(JSON.parse(finalPitchBriefRow.value), emptyTargetingBrief([], [])) : null;
+      const finalPitchCriteria = committed.updated.criteria as RecommendationCriteria;
       const items = [];
       for (const contact of finalContacts) {
         const outlet = contact.outletId ? finalOutletById.get(contact.outletId) : undefined;
@@ -5612,6 +5628,9 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
         if (!committedItem) continue;
         items.push({
           ...committedItem,
+          pitchSuggestion: finalPitchBrief ? currentMediaPitch(finalPitchCriteria.pitchSuggestions?.[String(contact.id)], {
+            article: finalStory, brief: finalPitchBrief, contact, outlet: outlet ?? null,
+          }) : undefined,
           contact: {
             ...contact,
             outletName: outlet?.name ?? null,
@@ -5706,6 +5725,10 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
   const safeDecisions = decisions.filter((d) => visibleDecisionIds.has(d.contactId) && !suppressedDecisionIds.has(d.contactId));
   const safeFeedback = feedback.filter((f) => visibleDecisionIds.has(f.contactId) && !suppressedDecisionIds.has(f.contactId));
   const recommendationCriteria = (sets[0]?.criteria ?? {}) as RecommendationCriteria;
+  const [pitchStory] = await db.select().from(archiveItemsTable).where(and(
+    eq(archiveItemsTable.id, storyKey), eq(archiveItemsTable.projectId, projectId), isNull(archiveItemsTable.deletedAt),
+  )).limit(1);
+  const pitchBrief = await savedRecommendationBrief(accountId, projectId, storyKey);
   const candidateItems = sets.length && !shortlistOnly ? await db.select({ id: mediaRecommendationItemsTable.id, recommendationSetId: mediaRecommendationItemsTable.recommendationSetId, score: mediaRecommendationItemsTable.score, rank: mediaRecommendationItemsTable.rank, reasons: mediaRecommendationItemsTable.reasons, phraseAttributions: mediaRecommendationItemsTable.phraseAttributions, contact: mediaContactsTable, outletName: mediaOutletsTable.name, outletCategory: mediaOutletsTable.category, outletWebsite: mediaOutletsTable.website, outletCountry: mediaOutletsTable.country, outletReachBand: mediaOutletsTable.reachBand, outletAccountId: mediaOutletsTable.accountId, outletDeletedAt: mediaOutletsTable.deletedAt })
     .from(mediaRecommendationItemsTable)
     .innerJoin(mediaContactsTable, eq(mediaRecommendationItemsTable.contactId, mediaContactsTable.id))
@@ -5819,7 +5842,11 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
       departed: decisionDeparted.has(row.contact.id),
       doNotContact: decisionRestrictions.has(row.contact.id),
     });
-    return [{ contactId: row.contact.id, contact: { ...row.contact, ...outletFields }, assessment: {
+    return [{ contactId: row.contact.id, contact: { ...row.contact, ...outletFields },
+      pitchSuggestion: pitchStory && pitchBrief ? currentMediaPitch(recommendationCriteria.pitchSuggestions?.[String(row.contact.id)], {
+        article: pitchStory, brief: pitchBrief, contact: row.contact,
+        outlet: canSeeOutlet ? { name: row.outletName, category: row.outletCategory, country: row.outletCountry } : null,
+      }) : undefined, assessment: {
       ...baseAssessment,
       warnings: [...baseAssessment.warnings, ...(recommendationCriteria.warnings?.[String(row.contact.id)] ?? [])],
     } }];
@@ -6034,6 +6061,11 @@ router.put("/store/media-db/placements/:id/verification", requirePlatformAuth, a
     req.log.warn({ err: error }, "media placement page verification failed");
     res.status(422).json({ error: "The placement page could not be verified." });
   }
+});
+
+registerMediaPitchRoutes(router, {
+  assertCanonicalStoryVisible, visibleProjectOwner, visibleAccounts, visibleAccountsFromHierarchy,
+  savedRecommendationBrief, restrictedContactIds, departedContactIds, withCommitLock: withRecommendationEnrichmentCommitLock,
 });
 
 export default router;

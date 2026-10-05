@@ -124,6 +124,8 @@ export type RecommendationAssessment = {
 };
 
 export type Recommendation = {
+  pitchSuggestion?: { angle: string; kind: "ai-suggestion"; generatedAt?: string };
+  pitchError?: string;
   rank: number;
   contact: Contact;
   score: number;

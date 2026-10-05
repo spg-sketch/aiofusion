@@ -9,6 +9,43 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Generate or reuse AI pitch suggestions for one to five media matches
+ */
+export const generateMediaPitchSuggestionsBodyProjectIdMax = 200;
+
+export const generateMediaPitchSuggestionsBodyStoryKeyMax = 200;
+
+
+
+export const generateMediaPitchSuggestionsBodyContactIdsMax = 5;
+
+
+
+export const GenerateMediaPitchSuggestionsBody = zod.object({
+  "projectId": zod.string().min(1).max(generateMediaPitchSuggestionsBodyProjectIdMax),
+  "storyKey": zod.string().min(1).max(generateMediaPitchSuggestionsBodyStoryKeyMax),
+  "recommendationSetId": zod.number().int().min(1),
+  "contactIds": zod.array(zod.number().int().min(1)).min(1).max(generateMediaPitchSuggestionsBodyContactIdsMax)
+})
+
+export const generateMediaPitchSuggestionsResponseSuggestionsMax = 5;
+
+
+
+export const GenerateMediaPitchSuggestionsResponse = zod.object({
+  "suggestions": zod.array(zod.object({
+  "contactId": zod.number().int(),
+  "angle": zod.string(),
+  "kind": zod.enum(['ai-suggestion']),
+  "error": zod.string(),
+  "generatedAt": zod.string().optional()
+})).max(generateMediaPitchSuggestionsResponseSuggestionsMax),
+  "generated": zod.number().int(),
+  "reused": zod.number().int()
+})
+
+
+/**
  * @summary Submit a public demo request
  */
 export const submitDemoRequestBodyOneHeardAboutDetailMax = 300;

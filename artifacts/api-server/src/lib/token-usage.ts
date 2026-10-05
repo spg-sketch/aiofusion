@@ -109,6 +109,7 @@ export async function reserveJournalistCoverageUsageBatch(input: {
   projectId?: string | null;
   limitGbp: number | null;
   callCount: number;
+  operation?: "media-recommendations-enrich" | "content-media-pitch-suggestions";
 }): Promise<number[]> {
   if (!Number.isInteger(input.callCount) || input.callCount < 0 || input.callCount > 5) {
     throw new Error("Invalid journalist coverage reservation batch size.");
@@ -139,7 +140,7 @@ export async function reserveJournalistCoverageUsageBatch(input: {
     for (let index = 0; index < input.callCount; index += 1) {
       const [reservation] = await tx.insert(tokenUsageTable).values({
         accountId: input.accountId,
-        operation: "media-recommendations-enrich",
+        operation: input.operation ?? "media-recommendations-enrich",
         model: "gpt-5.4-mini",
         inputTokens: 0,
         outputTokens: 0,
@@ -159,12 +160,13 @@ export async function reserveJournalistCoverageUsageBatch(input: {
 export async function releaseJournalistCoverageUsage(input: {
   reservationId: number;
   accountId: string;
+  operation?: "media-recommendations-enrich" | "content-media-pitch-suggestions";
 }): Promise<void> {
   try {
   const [released] = await db.delete(tokenUsageTable).where(and(
     eq(tokenUsageTable.id, input.reservationId),
     eq(tokenUsageTable.accountId, input.accountId),
-    eq(tokenUsageTable.operation, "media-recommendations-enrich"),
+    eq(tokenUsageTable.operation, input.operation ?? "media-recommendations-enrich"),
   )).returning({ id: tokenUsageTable.id });
   if (!released) throw new Error("Could not release unused journalist coverage usage reservation.");
   } catch (cause) {
@@ -179,6 +181,7 @@ export async function settleJournalistCoverageUsage(input: {
   inputTokens: number;
   outputTokens: number;
   webSearchCalls: number;
+  operation?: "media-recommendations-enrich" | "content-media-pitch-suggestions";
 }): Promise<void> {
   try {
   const inputTokens = Math.max(0, Math.floor(input.inputTokens));
@@ -193,7 +196,7 @@ export async function settleJournalistCoverageUsage(input: {
   }).where(and(
     eq(tokenUsageTable.id, input.reservationId),
     eq(tokenUsageTable.accountId, input.accountId),
-    eq(tokenUsageTable.operation, "media-recommendations-enrich"),
+    eq(tokenUsageTable.operation, input.operation ?? "media-recommendations-enrich"),
   )).returning({ id: tokenUsageTable.id });
   if (!settled) throw new Error("Could not settle journalist coverage usage reservation.");
   if (costGbp > JOURNALIST_COVERAGE_CALL_RESERVE_GBP) {

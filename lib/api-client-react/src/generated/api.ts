@@ -48,6 +48,8 @@ import type {
   MediaDiscoveryInstructionsInput,
   MediaDiscoveryListEnvelope,
   MediaDiscoveryRejectInput,
+  MediaPitchInput,
+  MediaPitchOutput,
   MobileTokenExchangeRequest,
   MobileTokenExchangeSuccess,
   RecommendationBriefEnvelope,
@@ -86,6 +88,86 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGenerateMediaPitchSuggestionsUrl = () => {
+
+
+
+
+  return `/api/store/media-db/recommendations/pitch-suggestions`
+}
+
+/**
+ * @summary Generate or reuse AI pitch suggestions for one to five media matches
+ */
+export const generateMediaPitchSuggestions = async (mediaPitchInput: MediaPitchInput, options?: Parameters<typeof customFetch>[1]): Promise<MediaPitchOutput> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<MediaPitchOutput>(getGenerateMediaPitchSuggestionsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(mediaPitchInput)
+  }
+);}
+
+
+
+
+
+export const getGenerateMediaPitchSuggestionsMutationKey = () => ['generateMediaPitchSuggestions'] as const;
+
+export const getGenerateMediaPitchSuggestionsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateMediaPitchSuggestions>>, TError,GenerateMediaPitchSuggestionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateMediaPitchSuggestions>>, TError,GenerateMediaPitchSuggestionsMutationVariables, TContext> => {
+
+const mutationKey = getGenerateMediaPitchSuggestionsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateMediaPitchSuggestions>>, GenerateMediaPitchSuggestionsMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  generateMediaPitchSuggestions(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateMediaPitchSuggestionsMutationResult = NonNullable<Awaited<ReturnType<typeof generateMediaPitchSuggestions>>>
+    export type GenerateMediaPitchSuggestionsMutationBody = BodyType<MediaPitchInput>
+    export type GenerateMediaPitchSuggestionsMutationError = ErrorType<void>
+    export type GenerateMediaPitchSuggestionsMutationVariables = {data: BodyType<MediaPitchInput>}
+
+    /**
+ * @summary Generate or reuse AI pitch suggestions for one to five media matches
+ */
+export const useGenerateMediaPitchSuggestions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateMediaPitchSuggestions>>, TError,GenerateMediaPitchSuggestionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateMediaPitchSuggestions>>,
+        TError,
+        GenerateMediaPitchSuggestionsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getGenerateMediaPitchSuggestionsMutationOptions(options));
+    }
 
 export const getSubmitDemoRequestUrl = () => {
 

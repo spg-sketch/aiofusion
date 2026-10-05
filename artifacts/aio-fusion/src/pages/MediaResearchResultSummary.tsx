@@ -48,8 +48,9 @@ export function MediaResearchResultSummary({
           </dd></div>
         </dl>
         <p className="text-[12px] text-slate-700 mt-4">
-          <span className="font-semibold">Suggested pitch angle:</span> {suggestedAngle || "No tailored pitch angle is recorded for this contact yet."}
+          <span className="font-semibold">{item.pitchSuggestion?.angle ? "Suggested pitch angle (AI suggestion):" : "Suggested pitch angle:"}</span> {suggestedAngle || "No tailored pitch angle is recorded for this contact yet."}
         </p>
+        {item.pitchError && <p role="alert" className="mt-2 text-[12px] text-amber-800">Pitch suggestion: {item.pitchError}</p>}
         {item.restricted && (
           <p role="alert" data-testid={`contact-restricted-${contact.id}`} className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-semibold text-rose-800">
             Do not contact restriction is active. Outreach planning is blocked until the restriction is removed.

@@ -5,6 +5,49 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface MediaPitchInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  projectId: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  storyKey: string;
+  /** @minimum 1 */
+  recommendationSetId: number;
+  /**
+     * @minItems 1
+     * @maxItems 5
+     * @items.minimum 1
+     */
+  contactIds: number[];
+}
+
+export type MediaPitchRecordKind = typeof MediaPitchRecordKind[keyof typeof MediaPitchRecordKind];
+
+
+export const MediaPitchRecordKind = {
+  'ai-suggestion': 'ai-suggestion',
+} as const;
+
+export interface MediaPitchRecord {
+  contactId: number;
+  angle: string;
+  kind: MediaPitchRecordKind;
+  error: string;
+  generatedAt?: string;
+}
+
+export interface MediaPitchOutput {
+  /** @maxItems 5 */
+  suggestions: MediaPitchRecord[];
+  generated: number;
+  reused: number;
+}
+
 export type ContactHeardAboutSource = typeof ContactHeardAboutSource[keyof typeof ContactHeardAboutSource];
 
 

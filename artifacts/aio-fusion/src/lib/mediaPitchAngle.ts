@@ -9,6 +9,7 @@ export function isGenericPitchTemplate(angle: string): boolean {
 export function selectMediaPitchAngle(item: Recommendation): string | undefined {
   const contact = item.contact;
   const candidates = [
+    item.pitchSuggestion?.angle,
     item.assessment?.suggestedAngle,
     ...(contact.mediaOpportunities ?? []).map((opportunity) => opportunity.angle),
     ...(contact.provenance?.latestPublicDiscovery?.mediaOpportunities ?? []).map((opportunity) => opportunity.angle),

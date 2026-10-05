@@ -1,10 +1,11 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import express from "express";
-import { and, eq, getTableColumns, sql } from "drizzle-orm";
+import { and, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 
-const { collectJournalistCoverage, checkFairUsageMock, checkMonthlySpendLimitMock } = vi.hoisted(() => ({
+const { collectJournalistCoverage, checkFairUsageMock, checkMonthlySpendLimitMock, generatePitchMock } = vi.hoisted(() => ({
+  generatePitchMock: vi.fn(),
   collectJournalistCoverage: vi.fn(),
   checkFairUsageMock: vi.fn(() => Promise.resolve({ allowed: true, callCount: 0, limit: 50 })),
   checkMonthlySpendLimitMock: vi.fn<() => Promise<{
@@ -81,6 +82,11 @@ vi.mock("../lib/safe-fetch", () => ({
   fetchPlacementPageEvidence: async (url: string) => ({ canonicalUrl: url, headline: "Verified headline", publicationDate: "2026-09-03" }),
 }));
 vi.mock("../lib/journalist-coverage-evidence", () => ({ collectJournalistCoverage }));
+vi.mock("../lib/media-pitch-suggestions", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../lib/media-pitch-suggestions")>(),
+  generateMediaPitchSuggestions: generatePitchMock,
+  mediaPitchConfigured: () => true,
+}));
 vi.mock("../lib/fair-usage", () => ({
   checkFairUsage: checkFairUsageMock,
   checkMonthlySpendLimit: checkMonthlySpendLimitMock,
@@ -158,6 +164,10 @@ beforeAll(async () => {
 afterAll(() => new Promise<void>((resolve) => server ? server.close(() => resolve()) : resolve()));
 
 afterEach(async () => {
+  checkFairUsageMock.mockClear();
+  if (pitchFixtureContactIds.length) {
+    await db.update(mediaContactsTable).set({ deletedAt: new Date() }).where(inArray(mediaContactsTable.id, pitchFixtureContactIds.splice(0)));
+  }
   await db.delete(platformMetaTable)
     .where(eq(platformMetaTable.key, "spendLimit:monthly:gbp:workspace-a"));
   checkMonthlySpendLimitMock.mockReset();
@@ -167,6 +177,127 @@ afterEach(async () => {
 const request = (path: string, workspace = "workspace-a", init?: RequestInit) => fetch(`${baseUrl}${path}`, {
   ...init,
   headers: { "Content-Type": "application/json", "x-workspace": workspace, ...(init?.headers || {}) },
+});
+
+const pitchFixtureContactIds: number[] = [];
+
+async function pitchFixture(suffix: string) {
+  const storyKey = `pitch-${suffix}`;
+  const term = `zzpitch${suffix.replace(/[^a-z]/g, "")}`;
+  await db.insert(archiveItemsTable).values({
+    id: storyKey, projectId: "project-1", owner: "workspace-a", title: "Battery software for commercial energy teams",
+    bodyCopy: "A new battery scheduling platform reduces peak electricity demand in commercial buildings using real-time generation data.",
+  });
+  const contacts = await db.insert(mediaContactsTable).values([0, 1].map((index) => ({
+    firstName: "Synthetic", lastName: `${suffix}${index}`, role: "Energy editor", beats: [term], sectors: [], accountId: "workspace-a", email: `pitch-${suffix}-${index}@example.test`,
+  }))).returning({ id: mediaContactsTable.id });
+  pitchFixtureContactIds.push(...contacts.map((contact) => contact.id));
+  await request("/store/media-db/recommendations/brief", "workspace-a", {
+    method: "PUT", body: JSON.stringify({ projectId: "project-1", storyKey, brief: {
+      topic: term, angle: "battery scheduling", audience: "commercial energy teams", regions: ["UK"], publicationTypes: [], whyNow: "Product launch",
+    } }),
+  });
+  const response = await request("/store/media-db/recommendations", "workspace-a", {
+    method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey, terms: [term] }),
+  });
+  expect(response.status).toBe(200);
+  const body = await response.json() as { recommendationSet: { id: number }; items: Array<{ contact: { id: number } }> };
+  const input = { projectId: "project-1", storyKey, recommendationSetId: body.recommendationSet.id, contactIds: body.items.slice(0, 2).map((item) => item.contact.id) };
+  expect(input.contactIds).toEqual(expect.arrayContaining(contacts.map((contact) => contact.id)));
+  generatePitchMock.mockReset().mockImplementation(async (contacts: Array<{ contactId: number }>) => ({
+    suggestions: contacts.map(({ contactId }) => ({ contactId, angle: "Propose a practical energy-management briefing showing how battery scheduling can reduce peak demand in commercial buildings.", error: "" })),
+    usage: { inputTokens: 1000, outputTokens: 300 },
+  }));
+  return {
+    input,
+    generate: (data = input, workspace = "workspace-a") => request("/store/media-db/recommendations/pitch-suggestions", workspace, { method: "POST", body: JSON.stringify(data) }),
+    reload: () => request(`/store/media-db/recommendations?projectId=project-1&storyKey=${storyKey}`),
+  };
+}
+
+describe("explicit bounded media pitch generation", () => {
+  it("persists labelled suggestions, rehydrates the shortlist and reuses them without a second provider call", async () => {
+    const fixture = await pitchFixture("persist");
+    const response = await fixture.generate();
+    const generatedBody = await response.json();
+    expect(response.status, JSON.stringify(generatedBody)).toBe(200);
+    expect(generatedBody).toMatchObject({ generated: 2, reused: 0, suggestions: [
+      { contactId: fixture.input.contactIds[0], kind: "ai-suggestion" }, { contactId: fixture.input.contactIds[1], kind: "ai-suggestion" },
+    ] });
+    const reloaded = await (await fixture.reload()).json() as { items: Array<{ contact: { id: number }; pitchSuggestion?: { angle: string; kind: string } }> };
+    expect(reloaded.items.find((item) => item.contact.id === fixture.input.contactIds[0])?.pitchSuggestion).toMatchObject({ kind: "ai-suggestion" });
+    await request("/store/media-db/recommendations/decisions", "workspace-a", { method: "PUT", body: JSON.stringify({
+      projectId: "project-1", storyKey: fixture.input.storyKey, contactId: fixture.input.contactIds[0], decision: "shortlisted",
+    }) });
+    const shortlist = await (await request(`/store/media-db/recommendations/decisions?projectId=project-1&storyKey=${fixture.input.storyKey}&shortlistOnly=1`)).json() as { decisionContacts: Array<{ pitchSuggestion?: { kind: string } }> };
+    expect(shortlist.decisionContacts[0].pitchSuggestion?.kind).toBe("ai-suggestion");
+    expect(await (await fixture.generate()).json()).toMatchObject({ generated: 0, reused: 2 });
+    expect(generatePitchMock).toHaveBeenCalledTimes(1);
+    const usage = await db.select().from(tokenUsageTable).where(and(eq(tokenUsageTable.operation, "content-media-pitch-suggestions"), eq(tokenUsageTable.projectId, "project-1")));
+    expect(usage[0]).toMatchObject({ inputTokens: 1000, outputTokens: 300, model: "gpt-5.4-mini" });
+  });
+
+  it("rejects over-sized, duplicate and cross-workspace batches before calling a provider", async () => {
+    const fixture = await pitchFixture("bounded");
+    expect((await fixture.generate({ ...fixture.input, contactIds: [1, 2, 3, 4, 5, 6] })).status).toBe(400);
+    expect((await fixture.generate({ ...fixture.input, contactIds: [fixture.input.contactIds[0], fixture.input.contactIds[0]] })).status).toBe(400);
+    expect((await fixture.generate(fixture.input, "workspace-b")).status).toBe(404);
+    expect((await fixture.generate({ ...fixture.input, storyKey: "story-2" })).status).toBe(409);
+    expect(generatePitchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps existing suggestions on a provider failure and reports per-contact missing context", async () => {
+    const fixture = await pitchFixture("failure");
+    expect((await fixture.generate({ ...fixture.input, contactIds: [fixture.input.contactIds[0]] })).status).toBe(200);
+    generatePitchMock.mockRejectedValueOnce(new Error("Synthetic provider timeout"));
+    expect((await fixture.generate()).status).toBe(502);
+    const reloaded = await (await fixture.reload()).json() as { items: Array<{ contact: { id: number }; pitchSuggestion?: unknown }> };
+    expect(reloaded.items.find((item) => item.contact.id === fixture.input.contactIds[0])?.pitchSuggestion).toBeTruthy();
+    generatePitchMock.mockResolvedValueOnce({ suggestions: [{ contactId: fixture.input.contactIds[1], angle: "", error: "Not enough recorded context." }], usage: { inputTokens: 10, outputTokens: 10 } });
+    expect(await (await fixture.generate()).json()).toMatchObject({ generated: 0, reused: 1, suggestions: expect.arrayContaining([{ contactId: fixture.input.contactIds[1], angle: "", error: "Not enough recorded context.", kind: "ai-suggestion" }]) });
+  });
+
+  it("invalidates saved suggestions when the story or contact context changes", async () => {
+    const fixture = await pitchFixture("invalidate");
+    expect((await fixture.generate()).status).toBe(200);
+    await db.update(archiveItemsTable).set({ bodyCopy: "A different energy article about grid finance." }).where(eq(archiveItemsTable.id, fixture.input.storyKey));
+    const reloaded = await (await fixture.reload()).json() as { items: Array<{ pitchSuggestion?: unknown }> };
+    expect(reloaded.items.every((item) => !item.pitchSuggestion)).toBe(true);
+    expect((await fixture.generate()).status).toBe(200);
+    expect(generatePitchMock).toHaveBeenCalledTimes(2);
+    await db.update(mediaContactsTable).set({ role: "Energy correspondent with updated responsibilities" }).where(eq(mediaContactsTable.id, fixture.input.contactIds[0]));
+    const updated = await (await fixture.reload()).json() as { items: Array<{ contact: { id: number }; pitchSuggestion?: unknown }> };
+    expect(updated.items.find((item) => item.contact.id === fixture.input.contactIds[0])?.pitchSuggestion).toBeUndefined();
+  });
+
+  it.each(["article", "brief", "restriction", "suppression", "new-set"] as const)("rejects a slow result after %s changes", async (change) => {
+    const fixture = await pitchFixture(`race-${change}`);
+    generatePitchMock.mockImplementationOnce(async (contacts: Array<{ contactId: number }>) => {
+      if (change === "article") await db.update(archiveItemsTable).set({ bodyCopy: "Changed during provider work" }).where(eq(archiveItemsTable.id, fixture.input.storyKey));
+      if (change === "brief") await request("/store/media-db/recommendations/brief", "workspace-a", { method: "PUT", body: JSON.stringify({ projectId: "project-1", storyKey: fixture.input.storyKey, brief: { topic: "changed", angle: "changed", audience: "", regions: ["UK"], publicationTypes: [], whyNow: "" } }) });
+      if (change === "restriction") await db.insert(platformMetaTable).values({ key: `mediaRecommendation:restriction:workspace-a:project-1:${fixture.input.storyKey}:${contacts[0].contactId}`, value: "true" });
+      if (change === "suppression") {
+        const [contact] = await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, contacts[0].contactId));
+        await db.insert(mediaSuppressionsTable).values({ scope: "workspace", accountId: "workspace-a", emailHash: privacyHash(contact.email), reason: "request", active: 1 });
+      }
+      if (change === "new-set") await request("/store/media-db/recommendations", "workspace-a", { method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: fixture.input.storyKey, terms: ["energy"] }) });
+      return { suggestions: contacts.map(({ contactId }) => ({ contactId, angle: "Do not persist this stale result for any contact.", error: "" })), usage: { inputTokens: 10, outputTokens: 10 } };
+    });
+    const response = await fixture.generate();
+    expect(response.status).toBe(409);
+    const [set] = await db.select().from(mediaRecommendationSetsTable).where(eq(mediaRecommendationSetsTable.id, fixture.input.recommendationSetId));
+    expect(Object.keys((set.criteria as { pitchSuggestions?: object }).pitchSuggestions ?? {})).toHaveLength(0);
+    expect(JSON.stringify(await response.json())).not.toContain("stale result");
+  });
+
+  it("enforces usage limits before dispatch and never generates during reads", async () => {
+    const fixture = await pitchFixture("quota");
+    await fixture.reload();
+    expect(generatePitchMock).not.toHaveBeenCalled();
+    checkMonthlySpendLimitMock.mockResolvedValueOnce({ allowed: false, spentGbp: 50, limitGbp: 50 });
+    expect((await fixture.generate()).status).toBe(429);
+    expect(generatePitchMock).not.toHaveBeenCalled();
+  });
 });
 
 type MockCoverageUsage = {

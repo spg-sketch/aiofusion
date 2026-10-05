@@ -19,6 +19,37 @@ tags:
   - name: How-to
     description: Published How-to library and protected editorial management.
 paths:
+  /store/media-db/recommendations/pitch-suggestions:
+    post:
+      operationId: generateMediaPitchSuggestions
+      summary: Generate or reuse AI pitch suggestions for one to five media matches
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaPitchInput"
+      responses:
+        "200":
+          description: Generated, cached and per-contact unavailable suggestions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaPitchOutput"
+        "400":
+          description: Invalid batch
+        "403":
+          description: Membership does not permit media changes
+        "404":
+          description: Article or project unavailable
+        "409":
+          description: Recommendation or source context changed
+        "429":
+          description: AI allowance or spending limit reached
+        "502":
+          description: Provider failed without automatically retrying
+        "503":
+          description: Provider or safe accounting unavailable
   /contact/book-demo:
     post:
       operationId: submitDemoRequest
@@ -693,6 +724,58 @@ components:
       required: true
       schema: { type: string, minLength: 1, maxLength: 200 }
   schemas:
+    MediaPitchInput:
+      type: object
+      additionalProperties: false
+      required: [projectId, storyKey, recommendationSetId, contactIds]
+      properties:
+        projectId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        storyKey:
+          type: string
+          minLength: 1
+          maxLength: 200
+        recommendationSetId:
+          type: integer
+          minimum: 1
+        contactIds:
+          type: array
+          minItems: 1
+          maxItems: 5
+          uniqueItems: true
+          items:
+            type: integer
+            minimum: 1
+    MediaPitchRecord:
+      type: object
+      required: [contactId, angle, kind, error]
+      properties:
+        contactId:
+          type: integer
+        angle:
+          type: string
+        kind:
+          type: string
+          enum: [ai-suggestion]
+        error:
+          type: string
+        generatedAt:
+          type: string
+    MediaPitchOutput:
+      type: object
+      required: [suggestions, generated, reused]
+      properties:
+        suggestions:
+          type: array
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/MediaPitchRecord"
+        generated:
+          type: integer
+        reused:
+          type: integer
     ContactHeardAboutSource:
       type: string
       enum:

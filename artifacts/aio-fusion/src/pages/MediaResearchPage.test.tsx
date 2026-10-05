@@ -26,6 +26,7 @@ const recommendationState = vi.hoisted(() => ({
   visibilityStalePageOnce: false,
 }));
 const featureState = vi.hoisted(() => ({
+  pitchFailure: false,
   briefFailure: false,
   recommendationGetFailure: false,
   restricted: false,
@@ -129,7 +130,7 @@ const candidate = {
 function coverageSuccessResponse(): Response {
   return new Response(JSON.stringify({
     ok: true,
-    recommendationSet: { id: "saved-set-1" },
+    recommendationSet: { id: 88 },
     rankingRevision: "rank-v2",
     visibilityRevision: "visibility-v1",
     page: 1,
@@ -285,7 +286,7 @@ describe("MediaResearchPage live discovery", () => {
         const end = pageItems.length ? start + pageItems.length - 1 : 0;
         return new Response(JSON.stringify({
           ok: true,
-          recommendationSet: { id: "saved-set-1" },
+          recommendationSet: { id: 88 },
           rankingRevision: recommendationState.rankingRevision,
           visibilityRevision: recommendationState.visibilityRevision,
           page,
@@ -305,6 +306,12 @@ describe("MediaResearchPage live discovery", () => {
         featureState.restricted = Boolean((JSON.parse(String(init.body)) as Record<string, unknown>).doNotContact);
         return new Response(JSON.stringify({ ok: true, doNotContact: featureState.restricted }), { status: 200 });
       }
+      if (url.endsWith("/store/media-db/recommendations/pitch-suggestions")) {
+        if (featureState.pitchFailure) return new Response(JSON.stringify({ error: "Provider unavailable; existing suggestions are unchanged." }), { status: 502 });
+        return new Response(JSON.stringify({ generated: 1, reused: 0, suggestions: [{
+          contactId: 91, kind: "ai-suggestion", angle: "Propose a practical briefing on renewable-generation scheduling for commercial energy managers.", error: "",
+        }] }), { status: 200 });
+      }
       if (url.includes("/recommendations/enrich") && init?.method === "POST") {
         if (featureState.quotaFailure === "enrich") return new Response(JSON.stringify({ error: "provider quota" }), { status: 429 });
         if (delayedCoverage.active) {
@@ -315,7 +322,7 @@ describe("MediaResearchPage live discovery", () => {
         featureState.enrich = true;
         return new Response(JSON.stringify({
           ok: true,
-          recommendationSet: { id: "saved-set-1" },
+          recommendationSet: { id: 88 },
           rankingRevision: "rank-v1",
           visibilityRevision: "visibility-v1",
           page: 1,
@@ -352,7 +359,7 @@ describe("MediaResearchPage live discovery", () => {
           : "Decision";
         const recommendationResponse = new Response(JSON.stringify({
           ok: true,
-          recommendationSet: { id: "saved-set-1" },
+          recommendationSet: { id: 88 },
           rankingRevision: "rank-v1",
           visibilityRevision: "visibility-v1",
           page: 1,
@@ -470,6 +477,7 @@ describe("MediaResearchPage live discovery", () => {
     featureState.recommendationGetFailure = false;
     featureState.restricted = false;
     featureState.enrich = false;
+    featureState.pitchFailure = false;
     featureState.quotaFailure = "";
     delayedRequests.recommendations = false;
     delayedRequests.live = false;
@@ -596,7 +604,7 @@ describe("MediaResearchPage live discovery", () => {
     expect(screen.getByText(/Reporter 10/)).toBeTruthy();
     expect(screen.queryByText(/Reporter 5/)).toBeNull();
     const pageTwoRequest = requests.find((request) => request.url.includes("/store/media-db/recommendations?") && request.url.includes("storyKey=story-1") && request.url.includes("page=2"));
-    expect(new URL(pageTwoRequest?.url || "", "http://test.local").searchParams.get("setId")).toBe("saved-set-1");
+    expect(new URL(pageTwoRequest?.url || "", "http://test.local").searchParams.get("setId")).toBe("88");
     expect(new URL(pageTwoRequest?.url || "", "http://test.local").searchParams.get("revision")).toBe("rank-v1");
     expect(new URL(pageTwoRequest?.url || "", "http://test.local").searchParams.get("visibilityRevision")).toBe("visibility-v1");
 
@@ -1464,6 +1472,30 @@ describe("MediaResearchPage live discovery", () => {
     expect(await screen.findByText(kind === "network" ? "Decision service unavailable" : /Could not load saved shortlist: the server returned invalid data/i)).toBeTruthy();
     expect(requests.some((request) => request.url.includes("/recommendations/decisions?")
       && new URL(request.url, "http://localhost").searchParams.get("shortlistOnly") === "1")).toBe(true);
+  });
+
+  it("generates only on request for displayed contacts and labels the suggestion", async () => {
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    const button = await screen.findByTestId("button-generate-pitch-suggestions");
+    expect(requests.some((request) => request.url.endsWith("/pitch-suggestions"))).toBe(false);
+    fireEvent.click(button);
+    expect(await screen.findByText(/practical briefing on renewable-generation scheduling/i)).toBeTruthy();
+    expect(screen.getByText("Suggested pitch angle (AI suggestion):")).toBeTruthy();
+    expect(requests.find((request) => request.url.endsWith("/pitch-suggestions"))?.body).toMatchObject({
+      projectId: "project-1", storyKey: "story-1", recommendationSetId: 88, contactIds: [91],
+    });
+    expect(screen.getByRole("status").textContent).toContain("1 new suggestions saved");
+  });
+
+  it("keeps cards visible and reports a pitch failure without automatic retries", async () => {
+    featureState.pitchFailure = true;
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    fireEvent.click(await screen.findByTestId("button-generate-pitch-suggestions"));
+    expect(await screen.findByText(/Provider unavailable; existing suggestions are unchanged/i)).toBeTruthy();
+    expect(screen.getByText("Decision Contact")).toBeTruthy();
+    expect(requests.filter((request) => request.url.endsWith("/pitch-suggestions"))).toHaveLength(1);
   });
 
   it("blocks matching and does not invent a brief when scoped brief hydration fails", async () => {
