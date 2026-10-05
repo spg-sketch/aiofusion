@@ -20,3 +20,9 @@ Project-specific descriptive categories are valid Marketing Intelligence inputs 
 **Why:** Project defaults can describe services and customer segments. Silently substituting a general-business search fails to answer the selected brief.
 
 **How to apply:** Preserve bounded descriptive labels as untrusted reference data and retain exact category matching in the returned results.
+
+Award-entry deadlines and ceremony dates are separate evidence. Do not substitute a deadline for an event start date, or conclude that no award opportunities exist from a ceremony-only search.
+
+**Why:** An awards search could exclude a published October entry deadline because the programme's ceremony was the following May, outside a six-month event window. Provider suggestions can also violate the requested type, date and region, leaving validation with nothing to retain.
+
+**How to apply:** Clarify which date the awards time window should use before changing its contract. Verify official deadline and event evidence separately, preserve their labels in results and exports, and never weaken provenance checks merely to avoid empty results.

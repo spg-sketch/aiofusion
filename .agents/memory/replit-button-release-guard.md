@@ -27,6 +27,12 @@ Tracked generated files must be deterministic before a clean-tree release gate r
 
 **How to apply:** Keep discovery/output ordering stable and verify a clean checkout after preview workflows start. Regenerate passing release evidence for the current source revision before publishing; do not bypass the managed build guard.
 
+Finish tracked research and memory updates before the final release gate. They count as source changes even when no application code changes.
+
+**Why:** A research note added after successful release validation left the working tree dirty and would block a subsequent managed publication.
+
+**How to apply:** Commit all intended tracked notes before release validation, then avoid further tracked writes until publication. If investigation requires more notes, refresh approval for the resulting clean revision rather than bypassing the guard.
+
 Task-completion validation runs before the completion callback creates its commit.
 
 **Why:** A completion attempt with verified but uncommitted UI changes failed the clean-source release gate even though the full tests, type check and external code review passed.
