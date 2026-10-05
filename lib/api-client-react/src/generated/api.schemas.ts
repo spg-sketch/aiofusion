@@ -133,6 +133,49 @@ export interface RecommendationEnrichRequest {
   recommendationSetId: number;
 }
 
+export interface MediaPitchAnglesInput {
+  /** @minLength 1 */
+  projectId: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  storyKey: string;
+  /** @minimum 1 */
+  recommendationSetId: number;
+  /**
+     * @minItems 1
+     * @maxItems 5
+     * @items.minimum 1
+     */
+  contactIds: number[];
+  brief: TargetingBrief;
+}
+
+export type MediaPitchSuggestionSource = typeof MediaPitchSuggestionSource[keyof typeof MediaPitchSuggestionSource];
+
+
+export const MediaPitchSuggestionSource = {
+  ai_suggestion: 'ai_suggestion',
+} as const;
+
+export interface MediaPitchSuggestion {
+  angle: string;
+  source: MediaPitchSuggestionSource;
+  generatedAt: string;
+  contextHash: string;
+}
+
+export interface MediaPitchResult {
+  contactId: number;
+  suggestion?: MediaPitchSuggestion;
+  error?: string;
+}
+
+export interface MediaPitchResultEnvelope {
+  results: MediaPitchResult[];
+}
+
 export interface ContactRestrictionRequest {
   projectId: string;
   storyKey: string;

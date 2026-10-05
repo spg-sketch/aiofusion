@@ -647,6 +647,26 @@ paths:
             schema: { $ref: '#/components/schemas/RecommendationRequest' }
       responses:
         '200': { description: Recommendation envelope. }
+  /store/media-db/recommendations/pitch-angles:
+    post:
+      tags: [Media Database]
+      operationId: generateMediaPitchAngles
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MediaPitchAnglesInput' }
+      responses:
+        '200':
+          description: Per-contact AI suggestions or errors; failed contacts retain saved suggestions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaPitchResultEnvelope' }
+        '400': { description: Invalid or oversized batch. }
+        '404': { description: Project or article is not accessible. }
+        '409': { description: Saved targeting context changed. }
+        '429': { description: Monthly spending limit reached. }
+        '503': { description: Usage accounting unavailable. }
   /store/media-db/recommendations/enrich:
     post:
       tags: [Media Database]
@@ -872,6 +892,35 @@ components:
         projectId: { type: string }
         storyKey: { type: string }
         recommendationSetId: { type: integer, minimum: 1 }
+    MediaPitchAnglesInput:
+      type: object
+      required: [projectId, storyKey, recommendationSetId, contactIds, brief]
+      properties:
+        projectId: { type: string, minLength: 1 }
+        storyKey: { type: string, minLength: 1, maxLength: 200 }
+        recommendationSetId: { type: integer, minimum: 1 }
+        contactIds: { type: array, minItems: 1, maxItems: 5, uniqueItems: true, items: { type: integer, minimum: 1 } }
+        brief: { $ref: '#/components/schemas/TargetingBrief' }
+    MediaPitchSuggestion:
+      type: object
+      required: [angle, source, generatedAt, contextHash]
+      properties:
+        angle: { type: string }
+        source: { type: string, enum: [ai_suggestion] }
+        generatedAt: { type: string }
+        contextHash: { type: string }
+    MediaPitchResult:
+      type: object
+      required: [contactId]
+      properties:
+        contactId: { type: integer }
+        suggestion: { $ref: '#/components/schemas/MediaPitchSuggestion' }
+        error: { type: string }
+    MediaPitchResultEnvelope:
+      type: object
+      required: [results]
+      properties:
+        results: { type: array, items: { $ref: '#/components/schemas/MediaPitchResult' } }
     ContactRestrictionRequest:
       type: object
       required: [projectId, storyKey, contactId, doNotContact]

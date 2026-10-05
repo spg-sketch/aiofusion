@@ -7,7 +7,6 @@ import * as IntakeForm from "../IntakeForm";
 import { getExactTargetPhrases as getCanonicalExactTargetPhrases, normaliseExactTargetPhrases, type ExactTargetPhrase } from "../lib/exactTargetPhrases";
 import { SummaryRow } from "./shared";
 import { RecommendationCard, LiveDiscoveryCard, type Contact, type Recommendation, type Decision, type LiveDiscovery, type DiscoveryReviewStatus } from "./JournalistComponents";
-import type { MediaPitchOutput, MediaPitchRecord } from "@workspace/api-client-react";
 import { MediaOutreachPanel } from "./MediaOutreachPanel";
 import { aiRunKey, discardAiRun, startAiRun, useAiRun } from "../lib/aiRunLifecycle";
 import { getSession } from "../lib/auth";
@@ -221,10 +220,7 @@ function dedupeRecommendations(rawItems: unknown[]): Recommendation[] {
       contact,
       assessment,
       pitchSuggestion: raw.pitchSuggestion && typeof raw.pitchSuggestion === "object"
-        && (raw.pitchSuggestion as Record<string, unknown>).kind === "ai-suggestion"
-        && typeof (raw.pitchSuggestion as Record<string, unknown>).angle === "string"
-        ? raw.pitchSuggestion as Recommendation["pitchSuggestion"]
-        : undefined,
+        ? raw.pitchSuggestion as Recommendation["pitchSuggestion"] : undefined,
       pitchError: typeof raw.pitchError === "string" ? raw.pitchError : undefined,
       recommendationSetId: typeof raw.recommendationSetId === "string" || typeof raw.recommendationSetId === "number"
         ? raw.recommendationSetId
@@ -484,9 +480,9 @@ function MediaResearchPage() {
   const [recommendationHasRun, setRecommendationHasRun] = useState(false);
   const [evaluation, setEvaluation] = useState<RecommendationEvaluation | null>(null);
   const [enrichmentWarning, setEnrichmentWarning] = useState("");
-  const [generatingPitches, setGeneratingPitches] = useState(false);
-  const [pitchStatus, setPitchStatus] = useState("");
-  const pitchSequence = useRef(0);
+  const [pitchProgress, setPitchProgress] = useState<{ scope: string; completed: number; total: number } | null>(null);
+  const [pitchErrors, setPitchErrors] = useState<{ scope: string; errors: Record<number, string> } | null>(null);
+  const pitchBusyRef = useRef(false);
   const [coverageResult, setCoverageResult] = useState<{ key: string; text: string } | null>(null);
   type RequestHandle = { id: number; key: string; controller: AbortController };
   const requestSequence = useRef(0);
@@ -562,7 +558,8 @@ function MediaResearchPage() {
         .filter((entry: { contactId?: unknown; assessment?: unknown }) => Number(entry.contactId) > 0 && entry.assessment && typeof entry.assessment === "object")
         .map((entry: { contactId: number; assessment: Recommendation["assessment"] }) => [entry.contactId, entry.assessment])));
       setDecisionPitches(Object.fromEntries((Array.isArray(data.decisionContacts) ? data.decisionContacts : [])
-        .map((entry: { contactId: number; pitchSuggestion?: Recommendation["pitchSuggestion"] }) => [entry.contactId, entry.pitchSuggestion])));
+        .filter((entry: { contactId?: unknown }) => Number(entry.contactId) > 0)
+        .map((entry: { contactId: number; pitchSuggestion: Recommendation["pitchSuggestion"] }) => [entry.contactId, entry.pitchSuggestion])));
       // Recommendation records are loaded from GET /recommendations. The
       // decisions endpoint is only for durable decisions and shortlist
       // snapshots; allowing it to replace the recommendation list can restore
@@ -717,21 +714,11 @@ function MediaResearchPage() {
     if (coverageScopeRef.current === scopeKey) return;
     coverageScopeRef.current = scopeKey;
     coverageOperationSequence.current += 1;
-    pitchSequence.current += 1;
-    setGeneratingPitches(false);
-    setPitchStatus("");
-    setDecisionPitches({});
     setEnriching(false);
     setEnrichmentWarning("");
     setCoverageResult(null);
     setError("");
   }, [workspaceId, projectId, storyKey]);
-
-  useEffect(() => {
-    pitchSequence.current += 1;
-    setGeneratingPitches(false);
-    setPitchStatus("");
-  }, [recommendationPage, recommendationSetId]);
 
   const enrichRecommendations = async (recommendationSetId: number | string) => {
     if (!projectId || !storyKey) return;
@@ -794,41 +781,6 @@ function MediaResearchPage() {
       }
     } finally {
       if (coverageOwnerIsCurrent()) setEnriching(false);
-    }
-  };
-
-  const generatePitches = async () => {
-    if (!projectId || !storyKey || recommendationSetId === null || !items.length || generatingPitches || enriching || briefIsDirty) return;
-    const scopeKey = `${workspaceId}:${projectId}:${storyKey}`;
-    const operation = ++pitchSequence.current;
-    const loadId = recommendationLoadSequence.current;
-    const isCurrent = () => pitchSequence.current === operation && activeRecommendationScopeRef.current === scopeKey
-      && recommendationLoadSequence.current === loadId;
-    setGeneratingPitches(true);
-    setPitchStatus("Generating suggestions for the displayed contacts…");
-    setError("");
-    try {
-      const response = await fetch(`${apiBase()}/api/store/media-db/recommendations/pitch-suggestions`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, storyKey, recommendationSetId: Number(recommendationSetId), contactIds: items.slice(0, 5).map((item) => item.contact.id) }),
-      });
-      const data = await response.json() as MediaPitchOutput & { error?: string };
-      if (!response.ok) throw researchRequestError(response, { ...data }, "Could not generate pitch suggestions.");
-      if (!isCurrent()) return;
-      if (!Array.isArray(data.suggestions)) throw new Error("Pitch generation returned invalid data.");
-      const pitches = new Map<number, MediaPitchRecord>(
-        data.suggestions.map((pitch) => [pitch.contactId, pitch]),
-      );
-      setItems((current) => current.map((item) => {
-        const pitch = pitches.get(item.contact.id);
-        return pitch ? { ...item, pitchSuggestion: pitch.angle ? pitch : item.pitchSuggestion, pitchError: pitch.error || undefined } : item;
-      }));
-      setPitchStatus(`${Number(data.generated) || 0} new suggestions saved; ${Number(data.reused) || 0} saved suggestions reused. Review AI suggestions before pitching.`);
-      await loadDecisions();
-    } catch (reason) {
-      if (isCurrent()) setPitchStatus(reason instanceof Error ? reason.message : "Could not generate pitch suggestions.");
-    } finally {
-      if (pitchSequence.current === operation && activeRecommendationScopeRef.current === scopeKey) setGeneratingPitches(false);
     }
   };
 
@@ -980,6 +932,7 @@ function MediaResearchPage() {
       setDecisions({});
       setDecisionContacts({});
       setDecisionAssessments({});
+      setDecisionPitches({});
       setBriefReadyKey("");
       setBriefLoadError("");
       return;
@@ -1037,6 +990,7 @@ function MediaResearchPage() {
     setDecisions({});
     setDecisionContacts({});
     setDecisionAssessments({});
+    setDecisionPitches({});
     setError("");
     setLoading(false);
     setLiveLoading(false);
@@ -1349,8 +1303,50 @@ function MediaResearchPage() {
       setExportBusy(false);
     }
   };
+  const generateDisplayedPitches = async () => {
+    if (pitchBusyRef.current || !projectId || !storyKey || recommendationSetId === null || briefIsDirty) return;
+    const scope = `${workspaceId}:${projectId}:${storyKey}`;
+    const loadId = recommendationLoadSequence.current;
+    const editRevision = briefEditRevision.current;
+    const candidates = items.slice(0, 5);
+    const current = () => activeRecommendationScopeRef.current === scope
+      && recommendationLoadSequence.current === loadId && briefEditRevision.current === editRevision;
+    pitchBusyRef.current = true;
+    setPitchProgress({ scope, completed: 0, total: candidates.length });
+    setPitchErrors({ scope, errors: {} });
+    try {
+      // Sequential requests give actual per-contact progress and prevent one
+      // failed suggestion from discarding the rest of the displayed batch.
+      for (let index = 0; index < candidates.length; index += 1) {
+        if (!current()) break;
+        const contactId = candidates[index].contact.id;
+        try {
+          const response = await fetch(`${apiBase()}/api/store/media-db/recommendations/pitch-angles`, {
+            method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ projectId, storyKey, recommendationSetId: Number(recommendationSetId), contactIds: [contactId], brief }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Could not generate this pitch angle.");
+          const result = data.results?.find((entry: { contactId: number }) => entry.contactId === contactId);
+          if (!result?.suggestion) throw new Error(result?.error || "No tailored suggestion was generated.");
+          if (current()) {
+            setItems((rows) => rows.map((row) => row.contact.id === contactId ? { ...row, pitchSuggestion: result.suggestion } : row));
+            setDecisionPitches((rows) => ({ ...rows, [contactId]: result.suggestion }));
+          }
+        } catch (reason) {
+          if (current()) setPitchErrors((state) => ({ scope, errors: { ...(state?.scope === scope ? state.errors : {}), [contactId]: reason instanceof Error ? reason.message : "Could not generate this pitch angle." } }));
+        }
+        if (current()) setPitchProgress({ scope, completed: index + 1, total: candidates.length });
+      }
+    } finally {
+      pitchBusyRef.current = false;
+      setPitchProgress(null);
+    }
+  };
   const editBrief = (patch: Partial<TargetingBrief>) => {
     briefEditRevision.current += 1;
+    setItems((rows) => rows.map((row) => ({ ...row, pitchSuggestion: undefined })));
+    setDecisionPitches({});
     setBrief((current) => ({ ...current, ...patch }));
     setBriefIsDirty(true);
   };
@@ -1411,6 +1407,7 @@ function MediaResearchPage() {
     setDecisionSaving({});
     setDecisionContacts({});
     setDecisionAssessments({});
+    setDecisionPitches({});
     setLiveItems([]);
     setLiveLoading(false);
     setDiscoveryToken("");
@@ -1435,6 +1432,8 @@ function MediaResearchPage() {
   const contactCard = (item: Recommendation, shortlist = false) => {
     const sharedScoreCount = shortlist ? 1 : items.filter((candidate) => candidate.score === item.score).length;
     return (
+      <div key={item.contact.id}>
+      {pitchErrors?.scope === `${workspaceId}:${projectId}:${storyKey}` && pitchErrors.errors[item.contact.id] && <p role="alert" className="mx-5 mb-2 p-3 text-[12px] text-amber-800 bg-amber-50 rounded-lg">Pitch angle: {pitchErrors.errors[item.contact.id]}</p>}
       <RecommendationCard
         key={item.contact.id}
         item={item}
@@ -1450,6 +1449,7 @@ function MediaResearchPage() {
         onToggleRestriction={toggleRestriction}
         sharedScoreCount={sharedScoreCount}
       />
+      </div>
     );
   };
   const displayedStart = recommendationPagination?.start ?? (items.length ? ((recommendationPage - 1) * RECOMMENDATION_PAGE_SIZE) + 1 : 0);
@@ -1561,19 +1561,14 @@ function MediaResearchPage() {
        </p>
      )}
         {(loading || items.length > 0 || (recommendationHasRun && recommendationPage > 1)) && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b flex flex-wrap justify-between gap-3" style={{ background: vars.g50, borderColor: vars.g200 }}><div><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Recommended from your Media Database</h2><p data-testid="recommendation-pagination-summary" className="text-[13px] mt-1" style={{ color: vars.g500 }}>{loading || recommendationPageLoading ? "Loading ranked contacts..." : recommendationSummary}</p>{evaluation && <p className="text-[11px] mt-2 text-slate-500">Evaluation: {evaluation.evaluated} evaluated · {evaluation.shortlisted} shortlisted · {evaluation.contacted} contacted · {evaluation.responded} responded · {evaluation.placed} placed</p>}</div>
-       <div className="flex flex-wrap gap-2">
-         {items.length > 0 && recommendationSetId !== null && <div>
-           <button type="button" data-testid="button-generate-pitch-suggestions"
-             disabled={generatingPitches || enriching || loading || recommendationPageLoading || briefIsDirty || Boolean(briefLoadError)}
-             onClick={() => void generatePitches()} className="text-[12px] px-3 py-2 border rounded-lg bg-white disabled:opacity-50 hover:bg-slate-50 transition-colors shadow-sm" style={{ borderColor: vars.g200 }}>
-             {generatingPitches && <Loader2 size={14} className="inline mr-1 animate-spin" />}
-             {generatingPitches ? "Generating pitch suggestions…" : "Generate pitch suggestions"}
-           </button>
-           <p className="max-w-xs mt-1 text-[11px] text-slate-500">Up to five displayed contacts. Uses AI allowance and spend; saved suggestions are reused. {briefIsDirty && "Save your changed brief and match contacts first."}</p>
-           {pitchStatus && <p role="status" className="max-w-xs mt-2 text-[12px] text-slate-700">{pitchStatus}</p>}
-         </div>}
+       <div className="flex gap-2">
          {items.length > 0 && recommendationSetId !== null && (
-           <button disabled={enriching || generatingPitches} onClick={() => void enrichRecommendations(recommendationSetId)} className="self-start text-[12px] px-3 py-2 border rounded-lg bg-white disabled:opacity-50 hover:bg-slate-50 transition-colors shadow-sm" style={{ borderColor: vars.g200 }}>
+           <div className="max-w-sm"><button type="button" data-testid="button-generate-pitch-angles" disabled={Boolean(pitchProgress) || loading || enriching || recommendationPageLoading || briefIsDirty || briefLoading} onClick={() => void generateDisplayedPitches()} className="self-start text-[12px] px-3 py-2 border rounded-lg bg-white disabled:opacity-50 hover:bg-slate-50" style={{ borderColor: vars.g200 }}>
+            {pitchProgress?.scope === `${workspaceId}:${projectId}:${storyKey}` ? `Generating angles ${pitchProgress.completed}/${pitchProgress.total}...` : "Generate pitch angles for displayed contacts"}
+           </button><p className="text-[11px] text-slate-500 mt-1">Generates AI suggestions for up to five contacts on this page and counts toward your account’s AI spend limit. Loading or changing pages never generates pitches. {briefIsDirty && "Save your brief and match contacts again first."}</p></div>
+         )}
+         {items.length > 0 && recommendationSetId !== null && (
+           <button disabled={enriching} onClick={() => void enrichRecommendations(recommendationSetId)} className="self-start text-[12px] px-3 py-2 border rounded-lg bg-white disabled:opacity-50 hover:bg-slate-50 transition-colors shadow-sm" style={{ borderColor: vars.g200 }}>
             <FileText size={14} className={`inline mr-1 ${enriching ? "animate-pulse" : ""}`} />
             {enriching ? "Checking top 5..." : "Check top 5 recent coverage"}
           </button>

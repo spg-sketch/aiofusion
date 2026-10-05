@@ -124,7 +124,8 @@ export type RecommendationAssessment = {
 };
 
 export type Recommendation = {
-  pitchSuggestion?: { angle: string; kind: "ai-suggestion"; generatedAt?: string };
+  pitchSuggestion?: { angle: string; kind: "ai-suggestion"; generatedAt?: string }
+    | { angle: string; source: "ai_suggestion"; generatedAt: string; contextHash: string };
   pitchError?: string;
   rank: number;
   contact: Contact;

@@ -26,7 +26,6 @@ const recommendationState = vi.hoisted(() => ({
   visibilityStalePageOnce: false,
 }));
 const featureState = vi.hoisted(() => ({
-  pitchFailure: false,
   briefFailure: false,
   recommendationGetFailure: false,
   restricted: false,
@@ -42,6 +41,11 @@ const delayedRequests = vi.hoisted(() => ({
 const delayedCoverage = vi.hoisted(() => ({
   active: false,
   calls: [] as { storyKey: string; resolve: (response: Response) => void }[],
+}));
+const pitchTestState = vi.hoisted(() => ({
+  failureIds: [] as number[],
+  delay: false,
+  pending: [] as Array<{ contactId: number; resolve: (response: Response) => void }>,
 }));
 const serverDiscoveryHistory = vi.hoisted(() => ({
   latest: null as Record<string, unknown> | null,
@@ -130,7 +134,7 @@ const candidate = {
 function coverageSuccessResponse(): Response {
   return new Response(JSON.stringify({
     ok: true,
-    recommendationSet: { id: 88 },
+    recommendationSet: { id: "saved-set-1" },
     rankingRevision: "rank-v2",
     visibilityRevision: "visibility-v1",
     page: 1,
@@ -194,6 +198,15 @@ describe("MediaResearchPage live discovery", () => {
       const url = String(input);
       const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
       requests.push({ url, method: init?.method, body });
+      if (url.endsWith("/recommendations/pitch-angles") && init?.method === "POST") {
+        const contactId = (body?.contactIds as number[])[0];
+        if (pitchTestState.delay) return new Promise<Response>((resolve) => pitchTestState.pending.push({ contactId, resolve }));
+        const suggestion = { angle: `Offer a battery-cost comparison for contact ${contactId}, with a grid-storage sidebar tailored to this publication's operators.`, source: "ai_suggestion", generatedAt: "2026-10-05", contextHash: "test" };
+        if (!pitchTestState.failureIds.includes(contactId)) {
+          recommendationState.pagedItems = recommendationState.pagedItems?.map((item) => (item.contact as { id: number }).id === contactId ? { ...item, pitchSuggestion: suggestion } : item) ?? null;
+        }
+        return new Response(JSON.stringify({ results: [{ contactId, ...(pitchTestState.failureIds.includes(contactId) ? { error: "Provider failed. Saved suggestion unchanged." } : { suggestion }) }] }), { status: 200 });
+      }
       if (url.split("?")[0].endsWith("/store/media-db/bookmarks") && !init?.method) {
         return new Response(JSON.stringify({ bookmarks: [] }), { status: 200 });
       }
@@ -286,7 +299,7 @@ describe("MediaResearchPage live discovery", () => {
         const end = pageItems.length ? start + pageItems.length - 1 : 0;
         return new Response(JSON.stringify({
           ok: true,
-          recommendationSet: { id: 88 },
+          recommendationSet: { id: "saved-set-1" },
           rankingRevision: recommendationState.rankingRevision,
           visibilityRevision: recommendationState.visibilityRevision,
           page,
@@ -306,12 +319,6 @@ describe("MediaResearchPage live discovery", () => {
         featureState.restricted = Boolean((JSON.parse(String(init.body)) as Record<string, unknown>).doNotContact);
         return new Response(JSON.stringify({ ok: true, doNotContact: featureState.restricted }), { status: 200 });
       }
-      if (url.endsWith("/store/media-db/recommendations/pitch-suggestions")) {
-        if (featureState.pitchFailure) return new Response(JSON.stringify({ error: "Provider unavailable; existing suggestions are unchanged." }), { status: 502 });
-        return new Response(JSON.stringify({ generated: 1, reused: 0, suggestions: [{
-          contactId: 91, kind: "ai-suggestion", angle: "Propose a practical briefing on renewable-generation scheduling for commercial energy managers.", error: "",
-        }] }), { status: 200 });
-      }
       if (url.includes("/recommendations/enrich") && init?.method === "POST") {
         if (featureState.quotaFailure === "enrich") return new Response(JSON.stringify({ error: "provider quota" }), { status: 429 });
         if (delayedCoverage.active) {
@@ -322,7 +329,7 @@ describe("MediaResearchPage live discovery", () => {
         featureState.enrich = true;
         return new Response(JSON.stringify({
           ok: true,
-          recommendationSet: { id: 88 },
+          recommendationSet: { id: "saved-set-1" },
           rankingRevision: "rank-v1",
           visibilityRevision: "visibility-v1",
           page: 1,
@@ -359,7 +366,7 @@ describe("MediaResearchPage live discovery", () => {
           : "Decision";
         const recommendationResponse = new Response(JSON.stringify({
           ok: true,
-          recommendationSet: { id: 88 },
+          recommendationSet: { id: "saved-set-1" },
           rankingRevision: "rank-v1",
           visibilityRevision: "visibility-v1",
           page: 1,
@@ -458,6 +465,9 @@ describe("MediaResearchPage live discovery", () => {
   });
 
   afterEach(() => {
+    pitchTestState.failureIds = [];
+    pitchTestState.delay = false;
+    pitchTestState.pending = [];
     intakeState.data = {
       formData: { "4.4": "Clean energy" },
       duals: {},
@@ -477,7 +487,6 @@ describe("MediaResearchPage live discovery", () => {
     featureState.recommendationGetFailure = false;
     featureState.restricted = false;
     featureState.enrich = false;
-    featureState.pitchFailure = false;
     featureState.quotaFailure = "";
     delayedRequests.recommendations = false;
     delayedRequests.live = false;
@@ -498,8 +507,8 @@ describe("MediaResearchPage live discovery", () => {
     vi.unstubAllGlobals();
   });
 
-  it("rehydrates saved AI pitch angles in recommendation cards and the story shortlist without generation", async () => {
-    const contact = { id: 91, firstName: "Persisted", lastName: "Reporter", role: "Energy editor", email: "", phone: "", notes: "", beats: ["energy"], sectors: ["Energy"] };
+  it("rehydrates existing AI pitch angles in cards and the story shortlist without generation", async () => {
+    const contact = { id: 10, outletId: 1, firstName: "Jane", lastName: "Reporter", role: "Energy correspondent", email: "", phone: "", notes: "", accountId: null, beats: ["energy"], sectors: ["technology"] };
     const pitchSuggestion = { angle: "Propose a practical briefing on the synthetic battery pilot and its reduced peak building demand.", kind: "ai-suggestion", contextHash: "server-validated", generatedAt: "2026-10-05T00:00:00Z" };
     recommendationState.pagedItems = [{ contact, rank: 1, score: 80, pitchSuggestion }];
     decisionState.payload = {
@@ -510,7 +519,7 @@ describe("MediaResearchPage live discovery", () => {
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
     await waitFor(() => expect(screen.getAllByText(pitchSuggestion.angle, { exact: false })).toHaveLength(2));
     expect(screen.getAllByText("Suggested pitch angle (AI suggestion):")).toHaveLength(2);
-    expect(requests.filter((request) => request.url.includes("/pitch-suggestions"))).toHaveLength(0);
+    expect(requests.filter((request) => request.url.includes("/pitch-suggestions") || request.url.includes("/pitch-angles"))).toHaveLength(0);
   });
 
   it("shows grounded live results and saves a selected contact to the Media Database", async () => {
@@ -582,6 +591,83 @@ describe("MediaResearchPage live discovery", () => {
     expect(requests.filter((request) => request.url.endsWith("/bookmarks/contact/91")).map((request) => request.method)).toEqual(["PUT", "DELETE"]);
   });
 
+  function pitchPageFixtures() {
+    recommendationState.brief = { topic: "energy", angle: "Battery costs", audience: "", regions: [], publicationTypes: [], whyNow: "" };
+    recommendationState.pagedItems = Array.from({ length: 12 }, (_, index) => ({
+      rank: index + 1, score: 80, reasons: [],
+      contact: { id: 200 + index, firstName: `Pitch Reporter ${index + 1}`, lastName: "Contact", role: "Editor", email: "", phone: "", notes: "", outletName: "Energy Daily" },
+    }));
+  }
+
+  it("generates a bounded batch on the current page only on an explicit click and reuses saved suggestions", async () => {
+    pitchPageFixtures();
+    const view = render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    await screen.findByText("Pitch Reporter 1 Contact");
+    expect(requests.filter((request) => request.url.endsWith("/pitch-angles"))).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "See next five" }));
+    await screen.findByText("Pitch Reporter 6 Contact");
+    expect(requests.filter((request) => request.url.endsWith("/pitch-angles"))).toHaveLength(0);
+    fireEvent.click(screen.getByTestId("button-generate-pitch-angles"));
+    await waitFor(() => expect(requests.filter((request) => request.url.endsWith("/pitch-angles"))).toHaveLength(5));
+    await waitFor(() => expect(screen.getAllByText(/AI suggestion based on/)).toHaveLength(5));
+    const pitchRequests = requests.filter((request) => request.url.endsWith("/pitch-angles"));
+    expect(pitchRequests.map((request) => request.body?.contactIds)).toEqual([[205], [206], [207], [208], [209]]);
+    expect(pitchRequests.every((request) => request.body?.projectId === "project-1" && request.body?.storyKey === "story-1" && request.body?.brief)).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Previous five" }));
+    await screen.findByText("Pitch Reporter 1 Contact");
+    fireEvent.click(screen.getByRole("button", { name: "See next five" }));
+    await waitFor(() => expect(screen.getAllByText(/AI suggestion based on/)).toHaveLength(5));
+    view.unmount();
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    await screen.findByText("Pitch Reporter 1 Contact");
+    fireEvent.click(screen.getByRole("button", { name: "See next five" }));
+    await waitFor(() => expect(screen.getAllByText(/AI suggestion based on/)).toHaveLength(5));
+    expect(requests.filter((request) => request.url.endsWith("/pitch-angles"))).toHaveLength(5);
+  });
+
+  it("shows per-contact failures while retaining existing substantive angles and completing other contacts", async () => {
+    pitchPageFixtures();
+    recommendationState.pagedItems![0].pitchSuggestion = { angle: "Keep this substantive saved battery-cost pitch tailored to Energy Daily's grid operators.", source: "ai_suggestion", generatedAt: "2026-10-05", contextHash: "test" };
+    pitchTestState.failureIds = [200];
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    await screen.findByText(/Keep this substantive saved battery-cost pitch/);
+    fireEvent.click(screen.getByTestId("button-generate-pitch-angles"));
+    await screen.findByText(/Provider failed. Saved suggestion unchanged/);
+    await waitFor(() => expect(screen.getAllByText(/AI suggestion based on/)).toHaveLength(5));
+    expect(screen.getByText(/Keep this substantive saved battery-cost pitch/)).toBeTruthy();
+  });
+
+  it("shows real per-contact progress and discards late results after article or workspace changes", async () => {
+    pitchPageFixtures();
+    pitchTestState.delay = true;
+    const view = render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    await screen.findByText("Pitch Reporter 1 Contact");
+    fireEvent.click(screen.getByTestId("button-generate-pitch-angles"));
+    await waitFor(() => expect(pitchTestState.pending).toHaveLength(1));
+    expect(screen.getByTestId("button-generate-pitch-angles")).toHaveTextContent("Generating angles 0/5");
+    await act(async () => pitchTestState.pending[0].resolve(new Response(JSON.stringify({ results: [{ contactId: 200, suggestion: { angle: "The first tailored pitch about battery costs and grid operators.", source: "ai_suggestion" } }] }), { status: 200 })));
+    await waitFor(() => expect(pitchTestState.pending).toHaveLength(2));
+    expect(screen.getByTestId("button-generate-pitch-angles")).toHaveTextContent("Generating angles 1/5");
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-2" } });
+    await act(async () => pitchTestState.pending[1].resolve(new Response(JSON.stringify({ results: [{ contactId: 201, suggestion: { angle: "A late angle that must never appear in another article.", source: "ai_suggestion" } }] }), { status: 200 })));
+    expect(screen.queryByText(/A late angle/)).toBeNull();
+    expect(pitchTestState.pending).toHaveLength(2);
+    // The same IDs in a different workspace must not receive an old response.
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    await screen.findByText("Pitch Reporter 1 Contact");
+    fireEvent.click(screen.getByTestId("button-generate-pitch-angles"));
+    await waitFor(() => expect(pitchTestState.pending).toHaveLength(3));
+    localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "other-workspace", role: "agency" }));
+    view.rerender(<MediaResearchPage />);
+    await act(async () => pitchTestState.pending[2].resolve(new Response(JSON.stringify({ results: [{ contactId: 200, suggestion: { angle: "A late workspace angle that must not be visible.", source: "ai_suggestion" } }] }), { status: 200 })));
+    expect(screen.queryByText(/A late workspace angle/)).toBeNull();
+    localStorage.removeItem("aio.auth.session.v3");
+  });
+
   it("loads server-ranked recommendations five at a time with separate collection and match totals", async () => {
     recommendationState.pagedItems = Array.from({ length: 12 }, (_, index) => ({
       rank: index + 1,
@@ -619,7 +705,7 @@ describe("MediaResearchPage live discovery", () => {
     expect(screen.getByText(/Reporter 10/)).toBeTruthy();
     expect(screen.queryByText(/Reporter 5/)).toBeNull();
     const pageTwoRequest = requests.find((request) => request.url.includes("/store/media-db/recommendations?") && request.url.includes("storyKey=story-1") && request.url.includes("page=2"));
-    expect(new URL(pageTwoRequest?.url || "", "http://test.local").searchParams.get("setId")).toBe("88");
+    expect(new URL(pageTwoRequest?.url || "", "http://test.local").searchParams.get("setId")).toBe("saved-set-1");
     expect(new URL(pageTwoRequest?.url || "", "http://test.local").searchParams.get("revision")).toBe("rank-v1");
     expect(new URL(pageTwoRequest?.url || "", "http://test.local").searchParams.get("visibilityRevision")).toBe("visibility-v1");
 
@@ -1487,30 +1573,6 @@ describe("MediaResearchPage live discovery", () => {
     expect(await screen.findByText(kind === "network" ? "Decision service unavailable" : /Could not load saved shortlist: the server returned invalid data/i)).toBeTruthy();
     expect(requests.some((request) => request.url.includes("/recommendations/decisions?")
       && new URL(request.url, "http://localhost").searchParams.get("shortlistOnly") === "1")).toBe(true);
-  });
-
-  it("generates only on request for displayed contacts and labels the suggestion", async () => {
-    render(<MediaResearchPage />);
-    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
-    const button = await screen.findByTestId("button-generate-pitch-suggestions");
-    expect(requests.some((request) => request.url.endsWith("/pitch-suggestions"))).toBe(false);
-    fireEvent.click(button);
-    expect(await screen.findByText(/practical briefing on renewable-generation scheduling/i)).toBeTruthy();
-    expect(screen.getByText("Suggested pitch angle (AI suggestion):")).toBeTruthy();
-    expect(requests.find((request) => request.url.endsWith("/pitch-suggestions"))?.body).toMatchObject({
-      projectId: "project-1", storyKey: "story-1", recommendationSetId: 88, contactIds: [91],
-    });
-    expect(screen.getByRole("status").textContent).toContain("1 new suggestions saved");
-  });
-
-  it("keeps cards visible and reports a pitch failure without automatic retries", async () => {
-    featureState.pitchFailure = true;
-    render(<MediaResearchPage />);
-    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
-    fireEvent.click(await screen.findByTestId("button-generate-pitch-suggestions"));
-    expect(await screen.findByText(/Provider unavailable; existing suggestions are unchanged/i)).toBeTruthy();
-    expect(screen.getByText("Decision Contact")).toBeTruthy();
-    expect(requests.filter((request) => request.url.endsWith("/pitch-suggestions"))).toHaveLength(1);
   });
 
   it("blocks matching and does not invent a brief when scoped brief hydration fails", async () => {

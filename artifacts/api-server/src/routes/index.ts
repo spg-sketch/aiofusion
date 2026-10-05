@@ -47,7 +47,7 @@ router.use(
 // usage, so protect this exact media route before mounting the rest of the
 // media database (which also contains non-AI reads and mutations).
 router.use(
-  ["/store/media-db/recommendations/enrich", "/store/media-db/recommendations/pitch-suggestions"],
+  ["/store/media-db/recommendations/enrich", "/store/media-db/recommendations/pitch-suggestions", "/store/media-db/recommendations/pitch-angles"],
   blockReadOnlyMembers,
   requirePaidOrTrial,
 );

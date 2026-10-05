@@ -4,8 +4,9 @@ import { and, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 
-const { collectJournalistCoverage, checkFairUsageMock, checkMonthlySpendLimitMock, generatePitchMock } = vi.hoisted(() => ({
+const { collectJournalistCoverage, checkFairUsageMock, checkMonthlySpendLimitMock, generatePitchMock, generateMediaPitchAngleMock } = vi.hoisted(() => ({
   generatePitchMock: vi.fn(),
+  generateMediaPitchAngleMock: vi.fn(),
   collectJournalistCoverage: vi.fn(),
   checkFairUsageMock: vi.fn(() => Promise.resolve({ allowed: true, callCount: 0, limit: 50 })),
   checkMonthlySpendLimitMock: vi.fn<() => Promise<{
@@ -86,6 +87,10 @@ vi.mock("../lib/media-pitch-suggestions", async (importOriginal) => ({
   ...await importOriginal<typeof import("../lib/media-pitch-suggestions")>(),
   generateMediaPitchSuggestions: generatePitchMock,
   mediaPitchConfigured: () => true,
+}));
+vi.mock("../lib/media-pitch-generation", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../lib/media-pitch-generation")>(),
+  generateMediaPitchAngle: generateMediaPitchAngleMock,
 }));
 vi.mock("../lib/fair-usage", () => ({
   checkFairUsage: checkFairUsageMock,
@@ -400,6 +405,147 @@ async function expectDatabaseColumnsToMatchSchema(
 
   expect(mismatches, `Media Research schema drift:\n${mismatches.join("\n")}`).toEqual([]);
 }
+
+describe("tailored pitch angles API", () => {
+  type PitchResponse = { results: Array<{ contactId: number; error?: string; suggestion?: { source: string; angle: string } }> };
+  type PitchPage = { items: Array<{ contact: { id: number }; pitchSuggestion?: { angle: string } }> };
+  const brief = { topic: "energy", angle: "Grid storage costs", audience: "", regions: [], publicationTypes: [], whyNow: "Battery cost comparison" };
+  let sequence = 0;
+  const fixtureIds: number[] = [];
+  afterEach(async () => {
+    for (const id of fixtureIds.splice(0)) {
+      await db.delete(mediaRecommendationItemsTable).where(eq(mediaRecommendationItemsTable.contactId, id));
+      await db.delete(mediaRecommendationDecisionsTable).where(eq(mediaRecommendationDecisionsTable.contactId, id));
+      await db.delete(mediaContactStatusEventsTable).where(eq(mediaContactStatusEventsTable.contactId, id));
+      await db.delete(mediaContactsTable).where(eq(mediaContactsTable.id, id));
+    }
+  });
+  async function setupPitchStory() {
+    const storyKey = `pitch-story-${++sequence}`;
+    await db.insert(archiveItemsTable).values({ id: storyKey, projectId: "project-1", owner: "workspace-a",
+      title: "Battery cost comparison", bodyCopy: "Compare battery storage costs for power-grid operators." });
+    await request("/store/media-db/recommendations/brief", "workspace-a", {
+      method: "PUT", body: JSON.stringify({ projectId: "project-1", storyKey, brief }),
+    });
+    const [outlet] = await db.select().from(mediaOutletsTable).where(eq(mediaOutletsTable.name, "Energy Daily")).limit(1);
+    const contacts = await db.insert(mediaContactsTable).values([
+      { firstName: "Pitch", lastName: `Editor ${sequence}`, outletId: outlet.id, beats: ["pitchstorage"], email: `pitch-${sequence}@example.test` },
+      { firstName: "Angle", lastName: `Editor ${sequence}`, outletId: outlet.id, beats: ["pitchstorage"] },
+    ]).returning();
+    fixtureIds.push(...contacts.map((row) => row.id));
+    const [set] = await db.insert(mediaRecommendationSetsTable).values({
+      accountId: "workspace-a", projectId: "project-1", storyKey, criteria: { brief, terms: ["pitchstorage"] },
+    }).returning();
+    await db.insert(mediaRecommendationItemsTable).values(contacts.map((contact, index) => ({
+      recommendationSetId: set.id, contactId: contact.id, rank: index + 1, score: 80 - index, reasons: [],
+    })));
+    generateMediaPitchAngleMock.mockReset();
+    generateMediaPitchAngleMock.mockImplementation(async (_context, settle) => {
+      await settle(100, 80);
+      return "Offer Energy Daily a battery-cost comparison from the article, with a practical grid-storage explainer tailored to its energy operators.";
+    });
+    return { projectId: "project-1", storyKey, recommendationSetId: set.id,
+      contactIds: contacts.map((item) => item.id), brief };
+  }
+  const generate = (input: unknown, workspace = "workspace-a") => request("/store/media-db/recommendations/pitch-angles", workspace, { method: "POST", body: JSON.stringify(input) });
+  const reload = (storyKey: string) => request(`/store/media-db/recommendations?projectId=project-1&storyKey=${storyKey}`);
+
+  it("generates only requested contacts, persists labelled suggestions, and retains them on partial failure", async () => {
+    const input = await setupPitchStory();
+    expect(generateMediaPitchAngleMock).not.toHaveBeenCalled();
+    const first = await generate(input);
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({ results: input.contactIds.map((contactId) => ({ contactId, suggestion: { source: "ai_suggestion" } })) });
+    expect(generateMediaPitchAngleMock).toHaveBeenCalledTimes(input.contactIds.length);
+    expect(generateMediaPitchAngleMock.mock.calls[0][0]).toMatchObject({ article: { title: "Battery cost comparison" }, brief, publication: { name: "Energy Daily" } });
+    const loaded = await (await reload(input.storyKey)).json() as PitchPage;
+    expect(loaded.items.filter((item: { pitchSuggestion?: unknown }) => item.pitchSuggestion)).toHaveLength(input.contactIds.length);
+    await db.insert(mediaRecommendationDecisionsTable).values({
+      accountId: "workspace-a", projectId: "project-1", storyKey: input.storyKey,
+      contactId: input.contactIds[0], decision: "shortlisted",
+    });
+    const shortlist = await (await request(`/store/media-db/recommendations/decisions?projectId=project-1&storyKey=${input.storyKey}&shortlistOnly=1`)).json() as { decisionContacts: Array<{ pitchSuggestion?: { source: string } }> };
+    expect(shortlist.decisionContacts[0].pitchSuggestion?.source).toBe("ai_suggestion");
+    generateMediaPitchAngleMock.mockRejectedValueOnce(new Error("provider unavailable"));
+    const failure = await generate(input);
+    expect(failure.status).toBe(200);
+    const errors = await failure.json() as PitchResponse;
+    expect(errors.results[0].error).toMatch(/unchanged/);
+    expect(errors.results[1].suggestion?.source).toBe("ai_suggestion");
+    const retained = await (await reload(input.storyKey)).json() as PitchPage;
+    expect(retained.items.find((item) => item.contact.id === input.contactIds[0])?.pitchSuggestion?.angle).toContain("battery-cost");
+    const usage = await db.select().from(tokenUsageTable).where(eq(tokenUsageTable.operation, "media-pitch-angles"));
+    expect(usage.length).toBeGreaterThanOrEqual(4);
+    expect(usage.some((row) => row.inputTokens === 100 && row.outputTokens === 80)).toBe(true);
+  });
+
+  it("rejects oversized, inaccessible, wrong-article, stale-set and spend-limited requests before provider work", async () => {
+    const input = await setupPitchStory();
+    expect((await generate({ ...input, contactIds: [1, 2, 3, 4, 5, 6] })).status).toBe(400);
+    expect((await generate(input, "workspace-b")).status).toBe(404);
+    expect((await generate({ ...input, storyKey: "story-2" })).status).toBe(409);
+    expect((await generate({ ...input, recommendationSetId: input.recommendationSetId - 1 })).status).toBe(409);
+    checkMonthlySpendLimitMock.mockResolvedValueOnce({ allowed: false, spentGbp: 50, limitGbp: 50 });
+    expect((await generate(input)).status).toBe(429);
+    expect(generateMediaPitchAngleMock).not.toHaveBeenCalled();
+  });
+
+  it("invalidates article and brief changes, and refuses slow results from an obsolete context", async () => {
+    const input = await setupPitchStory();
+    await generate(input);
+    await db.update(archiveItemsTable).set({ bodyCopy: "Changed story content about energy." }).where(eq(archiveItemsTable.id, input.storyKey));
+    const stale = await (await reload(input.storyKey)).json() as PitchPage;
+    expect(stale.items.every((item: { pitchSuggestion?: unknown }) => !item.pitchSuggestion)).toBe(true);
+    generateMediaPitchAngleMock.mockImplementationOnce(async (_context, settle) => {
+      await settle(100, 80);
+      await db.update(archiveItemsTable).set({ headline: "Changed during generation" }).where(eq(archiveItemsTable.id, input.storyKey));
+      return "Offer a new grid-storage comparison from this article, tailored to Energy Daily's power-market editors.";
+    });
+    const race = await (await generate({ ...input, contactIds: input.contactIds.slice(0, 1) })).json() as PitchResponse;
+    expect(race.results[0].error).toMatch(/changed/);
+    await request("/store/media-db/recommendations/brief", "workspace-a", {
+      method: "PUT", body: JSON.stringify({ ...input, brief: { ...brief, angle: "Changed angle" } }),
+    });
+    const changed = await (await reload(input.storyKey)).json() as PitchPage;
+    expect(changed.items.every((item: { pitchSuggestion?: unknown }) => !item.pitchSuggestion)).toBe(true);
+    const calls = generateMediaPitchAngleMock.mock.calls.length;
+    expect((await generate(input)).status).toBe(409);
+    expect(generateMediaPitchAngleMock).toHaveBeenCalledTimes(calls);
+  });
+
+  it("rechecks hidden contacts, do-not-contact restrictions and suppression after slow provider work", async () => {
+    const input = await setupPitchStory();
+    const contactId = input.contactIds[0];
+    generateMediaPitchAngleMock.mockImplementationOnce(async (_context, settle) => {
+      await settle(100, 80);
+      await db.update(mediaContactsTable).set({ accountId: "workspace-b" }).where(eq(mediaContactsTable.id, contactId));
+      return "Offer Energy Daily a battery-cost comparison from the article with a grid-storage sidebar for energy operators.";
+    });
+    const hidden = await (await generate({ ...input, contactIds: [contactId] })).json() as PitchResponse;
+    expect(hidden.results[0].error).toMatch(/eligible/);
+    await db.update(mediaContactsTable).set({ accountId: null }).where(eq(mediaContactsTable.id, contactId));
+    await request("/store/media-db/recommendations/contact-restriction", "workspace-a", { method: "POST",
+      body: JSON.stringify({ ...input, contactId, doNotContact: true }) });
+    generateMediaPitchAngleMock.mockClear();
+    const restricted = await (await generate({ ...input, contactIds: [contactId] })).json() as PitchResponse;
+    expect(restricted.results[0].error).toMatch(/eligible/);
+    expect(generateMediaPitchAngleMock).not.toHaveBeenCalled();
+    await request("/store/media-db/recommendations/contact-restriction", "workspace-a", { method: "POST",
+      body: JSON.stringify({ ...input, contactId, doNotContact: false }) });
+    const [contact] = await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, contactId));
+    generateMediaPitchAngleMock.mockImplementationOnce(async (_context, settle) => {
+      await settle(100, 80);
+      await db.insert(mediaSuppressionsTable).values({
+        accountId: "workspace-a", scope: "workspace", reason: "objection", emailHash: privacyHash(contact.email),
+        nameHash: privacyHash(`${contact.firstName} ${contact.lastName}`), outletHash: privacyHash("Energy Daily"),
+      }).returning();
+      return "Offer Energy Daily a battery-cost comparison from the article with a grid-storage sidebar for energy operators.";
+    });
+    const suppressed = await (await generate({ ...input, contactIds: [contactId] })).json() as PitchResponse;
+    expect(suppressed.results[0].error).toMatch(/eligible/);
+    await db.delete(mediaSuppressionsTable).where(eq(mediaSuppressionsTable.nameHash, privacyHash(`${contact.firstName} ${contact.lastName}`)!));
+  });
+});
 
 describe("media recommendation refinement API", () => {
   it("excludes contacts attached to private or deleted outlets without failing valid recommendations", async () => {

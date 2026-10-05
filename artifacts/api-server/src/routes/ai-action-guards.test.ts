@@ -753,6 +753,7 @@ const PAID_AI_PREFIXES = [
   "/content",
   "/store/media-db/recommendations/enrich",
   "/store/media-db/recommendations/pitch-suggestions",
+  "/store/media-db/recommendations/pitch-angles",
   "/store/projects/:id/audits/:auditId/retry-assessment",
 ] as const;
 

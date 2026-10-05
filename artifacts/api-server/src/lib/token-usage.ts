@@ -109,7 +109,7 @@ export async function reserveJournalistCoverageUsageBatch(input: {
   projectId?: string | null;
   limitGbp: number | null;
   callCount: number;
-  operation?: "media-recommendations-enrich" | "content-media-pitch-suggestions";
+  operation?: "media-recommendations-enrich" | "content-media-pitch-suggestions" | "media-pitch-angles";
 }): Promise<number[]> {
   if (!Number.isInteger(input.callCount) || input.callCount < 0 || input.callCount > 5) {
     throw new Error("Invalid journalist coverage reservation batch size.");
@@ -160,7 +160,7 @@ export async function reserveJournalistCoverageUsageBatch(input: {
 export async function releaseJournalistCoverageUsage(input: {
   reservationId: number;
   accountId: string;
-  operation?: "media-recommendations-enrich" | "content-media-pitch-suggestions";
+  operation?: "media-recommendations-enrich" | "content-media-pitch-suggestions" | "media-pitch-angles";
 }): Promise<void> {
   try {
   const [released] = await db.delete(tokenUsageTable).where(and(
@@ -181,7 +181,7 @@ export async function settleJournalistCoverageUsage(input: {
   inputTokens: number;
   outputTokens: number;
   webSearchCalls: number;
-  operation?: "media-recommendations-enrich" | "content-media-pitch-suggestions";
+  operation?: "media-recommendations-enrich" | "content-media-pitch-suggestions" | "media-pitch-angles";
 }): Promise<void> {
   try {
   const inputTokens = Math.max(0, Math.floor(input.inputTokens));

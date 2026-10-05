@@ -48,8 +48,10 @@ import type {
   MediaDiscoveryInstructionsInput,
   MediaDiscoveryListEnvelope,
   MediaDiscoveryRejectInput,
+  MediaPitchAnglesInput,
   MediaPitchInput,
   MediaPitchOutput,
+  MediaPitchResultEnvelope,
   MobileTokenExchangeRequest,
   MobileTokenExchangeSuccess,
   RecommendationBriefEnvelope,
@@ -2945,6 +2947,80 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getCreateMediaRecommendationsMutationOptions(options));
+    }
+
+export const getGenerateMediaPitchAnglesUrl = () => {
+
+
+
+
+  return `/api/store/media-db/recommendations/pitch-angles`
+}
+
+export const generateMediaPitchAngles = async (mediaPitchAnglesInput: MediaPitchAnglesInput, options?: Parameters<typeof customFetch>[1]): Promise<MediaPitchResultEnvelope> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<MediaPitchResultEnvelope>(getGenerateMediaPitchAnglesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(mediaPitchAnglesInput)
+  }
+);}
+
+
+
+
+
+export const getGenerateMediaPitchAnglesMutationKey = () => ['generateMediaPitchAngles'] as const;
+
+export const getGenerateMediaPitchAnglesMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateMediaPitchAngles>>, TError,GenerateMediaPitchAnglesMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateMediaPitchAngles>>, TError,GenerateMediaPitchAnglesMutationVariables, TContext> => {
+
+const mutationKey = getGenerateMediaPitchAnglesMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateMediaPitchAngles>>, GenerateMediaPitchAnglesMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  generateMediaPitchAngles(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateMediaPitchAnglesMutationResult = NonNullable<Awaited<ReturnType<typeof generateMediaPitchAngles>>>
+    export type GenerateMediaPitchAnglesMutationBody = BodyType<MediaPitchAnglesInput>
+    export type GenerateMediaPitchAnglesMutationError = ErrorType<void>
+    export type GenerateMediaPitchAnglesMutationVariables = {data: BodyType<MediaPitchAnglesInput>}
+
+    export const useGenerateMediaPitchAngles = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateMediaPitchAngles>>, TError,GenerateMediaPitchAnglesMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateMediaPitchAngles>>,
+        TError,
+        GenerateMediaPitchAnglesMutationVariables,
+        TContext
+      > => {
+      return useMutation(getGenerateMediaPitchAnglesMutationOptions(options));
     }
 
 export const getEnrichMediaRecommendationsUrl = () => {

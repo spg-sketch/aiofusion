@@ -1408,6 +1408,44 @@ export const CreateMediaRecommendationsResponse = zod.unknown()
 
 
 
+export const generateMediaPitchAnglesBodyStoryKeyMax = 200;
+
+
+
+export const generateMediaPitchAnglesBodyContactIdsMax = 5;
+
+
+
+export const GenerateMediaPitchAnglesBody = zod.object({
+  "projectId": zod.string().min(1),
+  "storyKey": zod.string().min(1).max(generateMediaPitchAnglesBodyStoryKeyMax),
+  "recommendationSetId": zod.number().int().min(1),
+  "contactIds": zod.array(zod.number().int().min(1)).min(1).max(generateMediaPitchAnglesBodyContactIdsMax),
+  "brief": zod.object({
+  "topic": zod.string(),
+  "angle": zod.string(),
+  "audience": zod.string(),
+  "regions": zod.array(zod.string()),
+  "publicationTypes": zod.array(zod.string()),
+  "whyNow": zod.string()
+})
+})
+
+export const GenerateMediaPitchAnglesResponse = zod.object({
+  "results": zod.array(zod.object({
+  "contactId": zod.number().int(),
+  "suggestion": zod.object({
+  "angle": zod.string(),
+  "source": zod.enum(['ai_suggestion']),
+  "generatedAt": zod.string(),
+  "contextHash": zod.string()
+}).optional(),
+  "error": zod.string().optional()
+}))
+})
+
+
+
 
 
 export const EnrichMediaRecommendationsBody = zod.object({

@@ -45,6 +45,12 @@ Enrichment must be explicit, bounded, owner/project/article-scoped and concurren
 
 **How to apply:** Reassess retained evidence against the latest brief, preserve historical outreach snapshots, and commit slow enrichment only when its source state is still current.
 
+Paid pitch-angle generation must be user-triggered for at most five displayed contacts, never run automatically on load or pagination.
+
+**Why:** Media match sets can exceed 12,000 contacts. The user requires a small, intentional paid batch, not generation across every match.
+
+**How to apply:** Keep pitch suggestions distinct from verified reporting and source checks. Reuse saved suggestions only while article, targeting brief, contact and publication context remain current; preserve substantive saved angles on provider failure.
+
 Recommendation ranking writes must be exact-set and atomic with their criteria snapshot. Re-read current, non-deleted contact and outlet identities after slow provider work; validate suppression, update enrichment base scores, apply current feedback, and persist contiguous ranks under one shared lock.
 
 **Why:** Criteria-only compare-and-swap does not detect feedback-only rank changes, and reranking "the latest set" can update a different set when generation overlaps enrichment. Pre-provider contact snapshots can also become deleted or suppressed before commit.

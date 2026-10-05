@@ -61,6 +61,8 @@ import { logger } from "../lib/logger";
 import { mediaExportAllowance, settleMediaExport, MediaAllowanceError } from "../lib/media-export-allowance";
 import { registerMediaPitchRoutes } from "./media-pitch-suggestions";
 import { currentMediaPitch, type SavedMediaPitch } from "../lib/media-pitch-suggestions";
+import { generateMediaPitchAngle, pitchContextHash, PitchContextChangedError, type SavedPitchAngle } from "../lib/media-pitch-generation";
+import { GenerateMediaPitchAnglesBody, GenerateMediaPitchAnglesResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 const recommendationEnrichmentCommitQueues = new Map<string, Promise<void>>();
@@ -3827,6 +3829,58 @@ function recommendationMetaKey(kind: "brief" | "restriction", owner: string, pro
   return `mediaRecommendation:${kind}:${owner}:${projectId}:${storyKey}${contactId === undefined ? "" : `:${contactId}`}`;
 }
 
+function pitchMetaKey(owner: string, projectId: string, storyKey: string, contactId: number): string {
+  return `mediaPitch:${owner}:${projectId}:${storyKey}:${contactId}`;
+}
+
+function pitchContext(
+  setId: number, article: typeof archiveItemsTable.$inferSelect, brief: TargetingBrief,
+  contact: typeof mediaContactsTable.$inferSelect, outlet: Partial<typeof mediaOutletsTable.$inferSelect> | null,
+) {
+  return {
+    setId,
+    article: { title: article.title, headline: article.headline, standfirst: article.standfirst,
+      body: (article.bodyCopy || article.body || "").slice(0, 12000),
+      contentHash: pitchContextHash([article.bodyCopy, article.body]),
+      selectedMessages: article.selectedMessages, targetPhrases: article.targetPhrases, mediaCats: article.mediaCats },
+    brief,
+    contact: { name: `${contact.firstName} ${contact.lastName}`, role: contact.role,
+      beats: contact.beats, sectors: contact.sectors, geography: contact.geography, updatedAt: contact.updatedAt },
+    publication: outlet ? { name: outlet.name ?? "", category: outlet.category ?? "", country: outlet.country ?? "", website: safePublicationWebsite(outlet.website) } : null,
+  };
+}
+
+async function hydratePitchSuggestions<T extends {
+  contact: typeof mediaContactsTable.$inferSelect & { outletName?: string | null; outletCategory?: string | null; outletCountry?: string | null; outletWebsite?: string | null };
+  assessment?: EditorialAssessment | null;
+}>(owner: string, projectId: string, storyKey: string, setId: number, items: T[]) {
+  if (!items.length) return items;
+  const [article] = await db.select().from(archiveItemsTable).where(and(
+    eq(archiveItemsTable.id, storyKey), eq(archiveItemsTable.projectId, projectId), isNull(archiveItemsTable.deletedAt),
+  )).limit(1);
+  const brief = await savedRecommendationBrief(owner, projectId, storyKey);
+  if (!article || !brief) return items;
+  const pitches = new Map<string, string>();
+  for (let offset = 0; offset < items.length; offset += RECOMMENDATION_DB_BATCH_SIZE) {
+    const rows = await db.select().from(platformMetaTable).where(inArray(platformMetaTable.key,
+      items.slice(offset, offset + RECOMMENDATION_DB_BATCH_SIZE).map((item) => pitchMetaKey(owner, projectId, storyKey, item.contact.id))));
+    for (const row of rows) pitches.set(row.key, row.value);
+  }
+  return items.map((item) => {
+    const raw = pitches.get(pitchMetaKey(owner, projectId, storyKey, item.contact.id));
+    if (!raw || item.assessment?.readiness.status === "blocked") return item;
+    try {
+      const saved = JSON.parse(raw) as SavedPitchAngle;
+      const c = item.contact;
+      const hash = pitchContextHash(pitchContext(setId, article, brief, c, c.outletId ? {
+        name: c.outletName ?? "", category: c.outletCategory ?? "", country: c.outletCountry ?? "", website: c.outletWebsite ?? "",
+      } : null));
+      if (saved.source === "ai_suggestion" && saved.contextHash === hash) return { ...item, pitchSuggestion: saved };
+    } catch { /* Invalid old metadata must not masquerade as a suggestion. */ }
+    return item;
+  });
+}
+
 async function savedRecommendationBrief(owner: string, projectId: string, storyKey: string): Promise<TargetingBrief | null> {
   const [row] = await db.select({ value: platformMetaTable.value }).from(platformMetaTable)
     .where(eq(platformMetaTable.key, recommendationMetaKey("brief", owner, projectId, storyKey))).limit(1);
@@ -4168,8 +4222,12 @@ router.post("/store/media-db/recommendations/contact-restriction", requirePlatfo
     res.status(403).json({ error: "Contact is not available to this account" }); return;
   }
   const key = recommendationMetaKey("restriction", owner, projectId, storyKey, contactId);
-  if (req.body.doNotContact) await saveRecommendationMeta(key, "true");
-  else await deleteRecommendationMeta(key);
+  await db.transaction(async (tx) => {
+    await acquirePrivacyIdentityLock(tx, "recommendations");
+    if (req.body.doNotContact) await tx.insert(platformMetaTable).values({ key, value: "true" })
+      .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: "true" } });
+    else await tx.delete(platformMetaTable).where(eq(platformMetaTable.key, key));
+  });
   res.json({ doNotContact: req.body.doNotContact });
 });
 
@@ -5105,7 +5163,7 @@ router.get("/store/media-db/recommendations", requirePlatformAuth, async (req: R
     eq(archiveItemsTable.id, storyKey), eq(archiveItemsTable.projectId, projectId), isNull(archiveItemsTable.deletedAt),
   )).limit(1);
   const pitchBrief = await savedRecommendationBrief(accountId, projectId, storyKey);
-  const items = pageRowsSafe.map((row) => {
+  const assessedItems = pageRowsSafe.map((row) => {
     const canSeeOutlet = !row.outletDeletedAt && outletVisible(row.outletAccountId, visible);
     const outletFields = canSeeOutlet
       ? { outletName: row.outletName, outletCategory: row.outletCategory, outletWebsite: safePublicationWebsite(row.outletWebsite), outletCountry: row.outletCountry, outletReachBand: row.outletReachBand }
@@ -5133,6 +5191,7 @@ router.get("/store/media-db/recommendations", requirePlatformAuth, async (req: R
       }) : undefined,
     };
   });
+  const items = await hydratePitchSuggestions(accountId, projectId, storyKey, set.id, assessedItems);
    const safeCriteria = pruneRecommendationCriteria(
      criteria,
      items.map((item) => item.contact.id),
@@ -5158,6 +5217,140 @@ router.get("/store/media-db/recommendations", requirePlatformAuth, async (req: R
      visibilityRevision,
       evaluation: await evaluationSummary(accountId, projectId, storyKey, visibleContactIds.length, visibleContactIds.length),
   });
+});
+
+router.post("/store/media-db/recommendations/pitch-angles", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  const parsed = GenerateMediaPitchAnglesBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Select one to five displayed contacts and a saved targeting brief." }); return;
+  }
+  const { projectId, storyKey, recommendationSetId, contactIds, brief: expectedBrief } = parsed.data;
+  if (new Set(contactIds).size !== contactIds.length || !Number.isSafeInteger(recommendationSetId)
+    || contactIds.some((id) => !Number.isSafeInteger(id))) {
+    res.status(400).json({ error: "Select one to five distinct displayed contacts." }); return;
+  }
+  const owner = await visibleProjectOwner(req, projectId);
+  if (!owner || !(await assertCanonicalStoryVisible(req, projectId, storyKey))) {
+    res.status(404).json({ error: "Article or project not found." }); return;
+  }
+  const workspace = normUsername(req.account!.username);
+  // Snapshot and commit use the same checks, including active-workspace media
+  // scope (not the broader project hierarchy). Only five IDs are ever queried.
+  const snapshot = async (executor: any, locked = false) => {
+    let hierarchyQuery = executor.select({ username: platformAccountsTable.username, parent: platformAccountsTable.parent }).from(platformAccountsTable);
+    if (locked) hierarchyQuery = hierarchyQuery.for("share");
+    const hierarchy = await hierarchyQuery;
+    const projectVisible = visibleAccountsFromHierarchy(req, hierarchy);
+    let projectQuery = executor.select().from(projectsTable).where(and(eq(projectsTable.id, projectId), isNull(projectsTable.deletedAt)));
+    let articleQuery = executor.select().from(archiveItemsTable).where(and(eq(archiveItemsTable.id, storyKey), eq(archiveItemsTable.projectId, projectId), isNull(archiveItemsTable.deletedAt)));
+    if (locked) { projectQuery = projectQuery.for("share"); articleQuery = articleQuery.for("share"); }
+    const [project] = await projectQuery.limit(1);
+    const [article] = await articleQuery.limit(1);
+    if (!project || !article || project.owner !== owner || !inAssignedScope(req, projectId)
+      || (projectVisible !== null && !projectVisible.includes(owner))) throw new PitchContextChangedError("Pitch context changed. Reload this article.");
+    let setQuery = executor.select().from(mediaRecommendationSetsTable).where(and(
+      eq(mediaRecommendationSetsTable.accountId, owner), eq(mediaRecommendationSetsTable.projectId, projectId),
+      eq(mediaRecommendationSetsTable.storyKey, storyKey),
+    )).orderBy(desc(mediaRecommendationSetsTable.id));
+    if (locked) setQuery = setQuery.for("update");
+    const [set] = await setQuery.limit(1);
+    let briefQuery = executor.select().from(platformMetaTable).where(eq(platformMetaTable.key, recommendationMetaKey("brief", owner, projectId, storyKey)));
+    if (locked) briefQuery = briefQuery.for("share");
+    const [briefRow] = await briefQuery.limit(1);
+    const brief = briefRow ? normaliseBrief(JSON.parse(briefRow.value), emptyTargetingBrief([], [])) : null;
+    if (!set || set.id !== recommendationSetId || !brief
+      || !briefsEqual(brief, normaliseBrief(expectedBrief, emptyTargetingBrief([], [])))
+      || !(set.criteria as RecommendationCriteria)?.brief
+      || !briefsEqual(brief, (set.criteria as RecommendationCriteria).brief!)) {
+      throw new PitchContextChangedError("The recommendation set or targeting brief changed. Match contacts again.");
+    }
+    if (locked) {
+      const contacts = await executor.select({ id: mediaContactsTable.id, outletId: mediaContactsTable.outletId }).from(mediaContactsTable)
+        .where(inArray(mediaContactsTable.id, contactIds)).for("share");
+      const outletIds = contacts.flatMap((row: { outletId: number | null }) => row.outletId ? [row.outletId] : []);
+      if (outletIds.length) await executor.select({ id: mediaOutletsTable.id }).from(mediaOutletsTable)
+        .where(inArray(mediaOutletsTable.id, outletIds)).for("share");
+    }
+    const rows: Array<{ contact: typeof mediaContactsTable.$inferSelect; outlet: typeof mediaOutletsTable.$inferSelect | null }> = await executor.select({ contact: mediaContactsTable, outlet: mediaOutletsTable })
+      .from(mediaRecommendationItemsTable)
+      .innerJoin(mediaContactsTable, eq(mediaContactsTable.id, mediaRecommendationItemsTable.contactId))
+      .leftJoin(mediaOutletsTable, eq(mediaOutletsTable.id, mediaContactsTable.outletId))
+      .where(and(eq(mediaRecommendationItemsTable.recommendationSetId, set.id),
+        inArray(mediaContactsTable.id, contactIds), isNull(mediaContactsTable.deletedAt)));
+    const suppress = await createSuppressionMatcherWithDb(executor, owner);
+    const restricted = await executor.select().from(platformMetaTable).where(sql`${platformMetaTable.key} LIKE ${`mediaRecommendation:restriction:${owner}:${projectId}:${storyKey}:%`}`);
+    const restrictedIds = new Set(restricted.filter((row: { value: string }) => row.value === "true").map((row: { key: string }) => Number(row.key.split(":").pop())));
+    const departed = await executor.select().from(mediaContactStatusEventsTable).where(and(
+      eq(mediaContactStatusEventsTable.accountId, owner), inArray(mediaContactStatusEventsTable.contactId, contactIds),
+    )).orderBy(desc(mediaContactStatusEventsTable.id));
+    const status = new Map<number, string>();
+    for (const event of departed) if (!status.has(event.contactId)) status.set(event.contactId, event.status);
+    return rows.filter(({ contact, outlet }) => (
+      (contact.accountId === null || contact.accountId === workspace)
+      && (!contact.outletId || (!!outlet && !outlet.deletedAt && (outlet.accountId === null || outlet.accountId === workspace)))
+      && !restrictedIds.has(contact.id) && status.get(contact.id) !== "departed"
+      && !suppress({ ...contact, name: `${contact.firstName} ${contact.lastName}`, outlet: outlet?.name, accountId: owner })
+    )).map((row) => ({ id: row.contact.id, context: pitchContext(set.id, article, brief, row.contact, row.outlet) }));
+  };
+  try {
+    const initial = await snapshot(db);
+    const spend = await checkMonthlySpendLimit(owner);
+    if (!spend.allowed) { res.status(429).json({ error: "Monthly spending limit reached." }); return; }
+    const reservations = await reserveJournalistCoverageUsageBatch({
+      accountId: owner, projectId, limitGbp: spend.monitoringOnly ? null : spend.limitGbp,
+      callCount: initial.length, operation: "media-pitch-angles",
+    });
+    let dispatch: typeof initial;
+    try {
+      const fresh = new Map((await snapshot(db)).map((row) => [row.id, pitchContextHash(row.context)]));
+      dispatch = initial.filter((row) => fresh.get(row.id) === pitchContextHash(row.context));
+    } catch (error) {
+      await Promise.all(reservations.map((reservationId) => releaseJournalistCoverageUsage({ reservationId, accountId: owner, operation: "media-pitch-angles" })));
+      throw error;
+    }
+    await Promise.all(initial.flatMap((row, index) => dispatch.some((candidate) => candidate.id === row.id) ? [] : [
+      releaseJournalistCoverageUsage({ reservationId: reservations[index]!, accountId: owner, operation: "media-pitch-angles" }),
+    ]));
+    const generated = await Promise.all(dispatch.map(async (row) => {
+      const index = initial.findIndex((candidate) => candidate.id === row.id);
+      try {
+        const angle = await generateMediaPitchAngle(row.context, (inputTokens, outputTokens) => settleJournalistCoverageUsage({
+          reservationId: reservations[index]!, accountId: owner, projectId, inputTokens, outputTokens,
+          webSearchCalls: 0, operation: "media-pitch-angles",
+        }));
+        return { contactId: row.id, suggestion: { angle, contextHash: pitchContextHash(row.context), generatedAt: new Date().toISOString(), source: "ai_suggestion" as const } };
+      } catch (error) {
+        req.log.warn({ err: error, contactId: row.id }, "Pitch generation failed");
+        return { contactId: row.id, error: "Could not generate a tailored angle. Any saved suggestion is unchanged." };
+      }
+    }));
+    const results = await withRecommendationEnrichmentCommitLock(`${owner}:${projectId}:${storyKey}:${recommendationSetId}`, () => db.transaction(async (tx) => {
+      await acquirePrivacyIdentityLock(tx, "recommendations");
+      const current = await snapshot(tx, true);
+      const hashes = new Map(current.map((row) => [row.id, pitchContextHash(row.context)]));
+      const results: Array<{ contactId: number; suggestion?: SavedPitchAngle; error?: string }> = [];
+      for (const contactId of contactIds) {
+        const result = generated.find((row) => row.contactId === contactId);
+        if (!hashes.has(contactId)) { results.push({ contactId, error: "This contact is no longer eligible for pitch generation." }); continue; }
+        if (result?.suggestion && result.suggestion.contextHash !== hashes.get(contactId)) {
+          results.push({ contactId, error: "The article or contact changed. Reload before generating again." }); continue;
+        }
+        if (result?.suggestion) {
+          await tx.insert(platformMetaTable).values({ key: pitchMetaKey(owner, projectId, storyKey, contactId), value: JSON.stringify(result.suggestion) })
+            .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: JSON.stringify(result.suggestion) } });
+        }
+        results.push(result ?? { contactId, error: "This contact is not eligible for pitch generation." });
+      }
+      return results;
+    }));
+    res.json(GenerateMediaPitchAnglesResponse.parse({ results }));
+  } catch (error) {
+    if (error instanceof MonthlySpendCapReservationError) { res.status(429).json({ error: "Monthly spending limit reached." }); return; }
+    if (error instanceof CoverageAccountingError) { res.status(503).json({ error: "Pitch generation is unavailable because usage accounting could not be confirmed." }); return; }
+    req.log.warn({ err: error }, "Pitch context rejected");
+    if (error instanceof PitchContextChangedError) { res.status(409).json({ error: error.message }); return; }
+    res.status(503).json({ error: "Pitch generation is temporarily unavailable. Saved suggestions are unchanged." });
+  }
 });
 
 router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
@@ -5668,7 +5861,7 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
       rankingRevision,
       finalised.items.map((item) => item.contact.id),
     );
-    const pageItems = finalised.items.slice(0, RECOMMENDATION_PAGE_SIZE);
+    const pageItems = await hydratePitchSuggestions(accountId, projectId, storyKey, set.id, finalised.items.slice(0, RECOMMENDATION_PAGE_SIZE));
     res.json({
       ok: true,
       recommendationSet: { ...committed.updated, criteria: finalCriteria },
@@ -5851,7 +6044,11 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
       warnings: [...baseAssessment.warnings, ...(recommendationCriteria.warnings?.[String(row.contact.id)] ?? [])],
     } }];
   });
-  res.json({ decisions: safeDecisions, items, decisionContacts: decisionContacts.filter((item) => !suppressedDecisionIds.has(item.contactId)), feedback: safeFeedback });
+  const visibleDecisionContacts = decisionContacts.filter((item) => !suppressedDecisionIds.has(item.contactId));
+  const hydratedDecisionContacts = sets[0]
+    ? await hydratePitchSuggestions(accountId, projectId, storyKey, sets[0].id, visibleDecisionContacts)
+    : visibleDecisionContacts;
+  res.json({ decisions: safeDecisions, items, decisionContacts: hydratedDecisionContacts, feedback: safeFeedback });
   } catch (error) {
     req.log.error({ err: error }, "media shortlist load failed");
     res.status(500).json({ error: "Could not load saved shortlist. Please try again." });
