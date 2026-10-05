@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { vars } from "../marketing/vars";
 import { apiBase } from "../lib/apiHelpers";
 import { CheckoutReturnLoading } from "./CheckoutReturnLoading";
@@ -1204,6 +1204,8 @@ function RestartChooser({
   onStart: () => void;
   error: string | null;
 }) {
+  const companyDetailsHelpId = useId();
+  const companyDetailsRequired = info.checkoutAvailable && !info.companyRecordComplete;
   const options: { key: "annual" | "quarterly"; label: string; monthly: string; detail: string }[] = [
     {
       key: "annual",
@@ -1244,9 +1246,6 @@ function RestartChooser({
           Online checkout isn't available right now - contact info@aiofusion.ai to subscribe.
         </p>
       )}
-      {info.checkoutAvailable && !info.companyRecordComplete && (
-        <BillingInformationPrompt />
-      )}
       {info.trial?.status === "active" && (
         <div className="aio-type-supporting mb-3 px-3 py-3 rounded-lg" data-testid="beta-payment-timing" style={{ color: ink, background: vars.g50, border: `1px solid ${vars.g200}` }}>
           <p className="font-semibold">Completing checkout starts your paid subscription immediately.</p>
@@ -1254,11 +1253,16 @@ function RestartChooser({
           <p className="mt-1">Saving your company address alone does not start a subscription or end your trial. You can keep using your remaining beta days without entering card details.</p>
         </div>
       )}
+      {companyDetailsRequired && (
+        <BillingInformationPrompt id={companyDetailsHelpId} />
+      )}
       <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={onStart}
           disabled={starting || !info.checkoutAvailable || !info.companyRecordComplete}
+          aria-describedby={companyDetailsRequired ? companyDetailsHelpId : undefined}
+          title={companyDetailsRequired ? "Complete and save your company details to enable payment." : undefined}
           className="aio-button aio-button--primary rounded-full uppercase tracking-[0.12em]"
           style={{ background: accent }}
         >

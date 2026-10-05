@@ -11,19 +11,21 @@ export function focusBillingSection(id: string) {
   (missingField ?? section).focus({ preventScroll: true });
 }
 
-export function BillingInformationPrompt() {
+export function BillingInformationPrompt({ id }: { id?: string } = {}) {
   return (
-    <div className="aio-type-supporting my-3 px-3 py-3 rounded-lg" style={{ color: "#92400E", background: "#FEF3C7" }}>
+    <div id={id} role="status" className="aio-type-supporting my-3 px-4 py-4 rounded-lg border" style={{ color: "#92400E", background: "#FEF3C7", borderColor: "#FCD34D" }}>
+      <p className="font-semibold mb-1">Company details required before payment</p>
       <p>
-        Complete and save your company address in <strong>Company and billing information</strong> to enable payment.
-        {" "}Check that any other required fields marked * are filled in too.
+        Payment is disabled until your company details have been completed and saved.
+        {" "}Fill in all required fields marked * in <strong>Company and billing information</strong>,
+        then select <strong>Save company information</strong>. You can then return here to continue to Stripe.
       </p>
       <button
         type="button"
         className="aio-button aio-button--outline aio-button--compact mt-2"
         onClick={() => focusBillingSection("company-billing-information")}
       >
-        Complete company address
+        Update company details
       </button>
     </div>
   );

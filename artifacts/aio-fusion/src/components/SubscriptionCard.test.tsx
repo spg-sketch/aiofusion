@@ -63,11 +63,14 @@ describe("payment address guidance", () => {
     expect(timing).toHaveTextContent("Saving your company address alone does not start a subscription or end your trial.");
     expect(within(subscription).queryByText(/ready to continue after the trial/i)).toBeNull();
     expect(payment).toBeDisabled();
+    expect(payment).toHaveAccessibleDescription(/Company details required before payment.*Payment is disabled until your company details have been completed and saved/);
+    expect(within(subscription).getByText("Company details required before payment")).toBeVisible();
+    expect(payment.closest("div")?.previousElementSibling).toHaveTextContent("Company details required before payment");
     expect(within(addProject).getByText(/Additional workspaces require a paid subscription/)).toBeTruthy();
 
     const addressSection = document.getElementById("company-billing-information")!;
     addressSection.scrollIntoView = vi.fn();
-    fireEvent.click(within(subscription).getByRole("button", { name: "Complete company address" }));
+    fireEvent.click(within(subscription).getByRole("button", { name: "Update company details" }));
     expect(addressSection.scrollIntoView).toHaveBeenCalled();
     expect(screen.getByLabelText(/Address line 1/)).toHaveFocus();
 
@@ -78,11 +81,12 @@ describe("payment address guidance", () => {
 
     if (saveSucceeds) {
       await waitFor(() => expect(payment).toBeEnabled());
-      expect(within(subscription).queryByRole("button", { name: "Complete company address" })).toBeNull();
+      expect(within(subscription).queryByRole("button", { name: "Update company details" })).toBeNull();
+      expect(payment).not.toHaveAttribute("aria-describedby");
     } else {
       await screen.findByText("The address could not be saved.");
       expect(payment).toBeDisabled();
-      expect(within(subscription).getByRole("button", { name: "Complete company address" })).toBeTruthy();
+      expect(within(subscription).getByRole("button", { name: "Update company details" })).toBeTruthy();
     }
     // Saving an address is not a subscription purchase and must not unlock
     // extra-workspace checkout while the account is still trial-only.
