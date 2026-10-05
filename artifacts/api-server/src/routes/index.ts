@@ -43,11 +43,11 @@ router.use(
   blockReadOnlyMembers,
   requirePaidOrTrial,
 );
-// Recommendation enrichment performs a paid provider lookup and records AI
+// Recommendation enrichment and pitch generation perform paid provider calls and record AI
 // usage, so protect this exact media route before mounting the rest of the
 // media database (which also contains non-AI reads and mutations).
 router.use(
-  "/store/media-db/recommendations/enrich",
+  ["/store/media-db/recommendations/enrich", "/store/media-db/recommendations/pitch-suggestions"],
   blockReadOnlyMembers,
   requirePaidOrTrial,
 );

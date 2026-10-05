@@ -220,6 +220,12 @@ function dedupeRecommendations(rawItems: unknown[]): Recommendation[] {
       phraseAttributions: Array.isArray(raw.phraseAttributions) ? raw.phraseAttributions : [],
       contact,
       assessment,
+      pitchSuggestion: raw.pitchSuggestion && typeof raw.pitchSuggestion === "object"
+        && (raw.pitchSuggestion as Record<string, unknown>).kind === "ai-suggestion"
+        && typeof (raw.pitchSuggestion as Record<string, unknown>).angle === "string"
+        ? raw.pitchSuggestion as Recommendation["pitchSuggestion"]
+        : undefined,
+      pitchError: typeof raw.pitchError === "string" ? raw.pitchError : undefined,
       recommendationSetId: typeof raw.recommendationSetId === "string" || typeof raw.recommendationSetId === "number"
         ? raw.recommendationSetId
         : undefined,

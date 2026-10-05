@@ -498,6 +498,21 @@ describe("MediaResearchPage live discovery", () => {
     vi.unstubAllGlobals();
   });
 
+  it("rehydrates saved AI pitch angles in recommendation cards and the story shortlist without generation", async () => {
+    const contact = { id: 91, firstName: "Persisted", lastName: "Reporter", role: "Energy editor", email: "", phone: "", notes: "", beats: ["energy"], sectors: ["Energy"] };
+    const pitchSuggestion = { angle: "Propose a practical briefing on the synthetic battery pilot and its reduced peak building demand.", kind: "ai-suggestion", contextHash: "server-validated", generatedAt: "2026-10-05T00:00:00Z" };
+    recommendationState.pagedItems = [{ contact, rank: 1, score: 80, pitchSuggestion }];
+    decisionState.payload = {
+      decisions: [{ contactId: 91, decision: "shortlisted" }], items: [],
+      decisionContacts: [{ contactId: 91, contact, pitchSuggestion }],
+    };
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    await waitFor(() => expect(screen.getAllByText(pitchSuggestion.angle, { exact: false })).toHaveLength(2));
+    expect(screen.getAllByText("Suggested pitch angle (AI suggestion):")).toHaveLength(2);
+    expect(requests.filter((request) => request.url.includes("/pitch-suggestions"))).toHaveLength(0);
+  });
+
   it("shows grounded live results and saves a selected contact to the Media Database", async () => {
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
