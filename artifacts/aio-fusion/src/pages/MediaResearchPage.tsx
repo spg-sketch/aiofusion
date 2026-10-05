@@ -533,7 +533,7 @@ function MediaResearchPage() {
     const loadKey = `${projectId}:${storyKey}`;
     const isCurrent = () => decisionLoadSequence.current === loadId && activeStoryRef.current === loadKey;
     try {
-      const response = await fetch(`${apiBase()}/api/store/media-db/recommendations/decisions?projectId=${encodeURIComponent(projectId)}&storyKey=${encodeURIComponent(storyKey)}`, { credentials: "include" });
+      const response = await fetch(`${apiBase()}/api/store/media-db/recommendations/decisions?projectId=${encodeURIComponent(projectId)}&storyKey=${encodeURIComponent(storyKey)}&shortlistOnly=1`, { credentials: "include" });
       let data: Record<string, unknown> = {};
       try {
         data = await response.json() as Record<string, unknown>;

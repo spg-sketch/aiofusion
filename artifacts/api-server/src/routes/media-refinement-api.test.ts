@@ -672,6 +672,20 @@ describe("media recommendation refinement API", () => {
     expect(compatibilityColumn.rows).toHaveLength(1);
   });
 
+  it("returns a readable JSON error when shortlist storage cannot be read", async () => {
+    const select = vi.spyOn(db, "select").mockImplementationOnce(() => {
+      throw new Error("Synthetic database read failure");
+    });
+    try {
+      const response = await request("/store/media-db/recommendations/decisions?projectId=project-1&storyKey=story-1&shortlistOnly=1");
+      expect(response.status).toBe(500);
+      expect(response.headers.get("content-type")).toContain("application/json");
+      expect(await response.json()).toEqual({ error: "Could not load saved shortlist. Please try again." });
+    } finally {
+      select.mockRestore();
+    }
+  });
+
   it("persists feedback only for its workspace, project and article, while preserving decisions", async () => {
     const generated = await request("/store/media-db/recommendations", "workspace-a", {
       method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "story-1", terms: ["energy", "technology"] }),
@@ -689,6 +703,17 @@ describe("media recommendation refinement API", () => {
     expect(own.feedback).toMatchObject([{ contactId, signal: "more" }]);
     expect(own.decisions).toMatchObject([{ contactId, decision: "shortlisted", note: "Keep this" }]);
     expect(own.items.some((item: { reasons: string[] }) => item.reasons.includes("Marked More like this"))).toBe(true);
+
+    const shortlistResponse = await request("/store/media-db/recommendations/decisions?projectId=project-1&storyKey=story-1&shortlistOnly=1");
+    expect(shortlistResponse.status).toBe(200);
+    const shortlist = await shortlistResponse.json() as {
+      decisions: unknown[]; feedback: unknown[]; items: unknown[]; decisionContacts: Array<{ contactId: number }>;
+    };
+    expect(shortlist.decisions).toEqual(own.decisions);
+    expect(shortlist.feedback).toEqual(own.feedback);
+    expect(shortlist.items).toEqual([]);
+    expect(shortlist.decisionContacts.some((contact) => contact.contactId === contactId)).toBe(true);
+    expect((await request("/store/media-db/recommendations/decisions?projectId=project-1&storyKey=story-1&shortlistOnly=1", "workspace-b")).status).toBe(404);
 
     const otherArticle = await (await request("/store/media-db/recommendations/decisions?projectId=project-1&storyKey=story-2")).json() as { feedback: unknown[] };
     expect(otherArticle.feedback).toEqual([]);

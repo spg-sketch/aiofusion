@@ -1462,6 +1462,8 @@ describe("MediaResearchPage live discovery", () => {
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
     expect(await screen.findByText(kind === "network" ? "Decision service unavailable" : /Could not load saved shortlist: the server returned invalid data/i)).toBeTruthy();
+    expect(requests.some((request) => request.url.includes("/recommendations/decisions?")
+      && new URL(request.url, "http://localhost").searchParams.get("shortlistOnly") === "1")).toBe(true);
   });
 
   it("blocks matching and does not invent a brief when scoped brief hydration fails", async () => {

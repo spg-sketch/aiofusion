@@ -5674,8 +5674,12 @@ router.post("/store/media-db/recommendations/enrich", requirePlatformAuth, async
 });
 
 router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
   const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "";
   const storyKey = typeof req.query.storyKey === "string" ? req.query.storyKey : "";
+  // Media Research loads recommendations through the paginated endpoint.
+  // Hydrating its shortlist must not reassess every match in a large set.
+  const shortlistOnly = req.query.shortlistOnly === "1";
   if (!projectId || !storyKey || !(await assertProjectVisible(req, projectId))) { res.status(404).json({ error: "Project not found" }); return; }
   const accountId = await visibleProjectOwner(req, projectId);
   if (!accountId) { res.status(404).json({ error: "Project not found" }); return; }
@@ -5692,7 +5696,9 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
   const feedback = await db.select().from(mediaRecommendationFeedbackTable).where(and(eq(mediaRecommendationFeedbackTable.accountId, accountId), eq(mediaRecommendationFeedbackTable.projectId, projectId), eq(mediaRecommendationFeedbackTable.storyKey, storyKey)));
   const decisionContactIds = [...new Set([...decisions.map((d) => d.contactId), ...feedback.map((f) => f.contactId)])];
   const suppressedDecisionContacts = decisionContactIds.length ? await db.select().from(mediaContactsTable).where(inArray(mediaContactsTable.id, decisionContactIds)) : [];
-  const decisionOutletNames = new Map((await db.select({ id: mediaOutletsTable.id, name: mediaOutletsTable.name }).from(mediaOutletsTable)).map((o) => [o.id, o.name]));
+  const decisionOutletIds = [...new Set(suppressedDecisionContacts.flatMap((contact) => contact.outletId ? [contact.outletId] : []))];
+  const decisionOutletNames = new Map((decisionOutletIds.length ? await db.select({ id: mediaOutletsTable.id, name: mediaOutletsTable.name }).from(mediaOutletsTable)
+    .where(inArray(mediaOutletsTable.id, decisionOutletIds)) : []).map((o) => [o.id, o.name]));
   const suppressedDecisionIds = new Set((await Promise.all(suppressedDecisionContacts.map(async (c) => await isContactSuppressed({ ...c, outlet: c.outletId ? decisionOutletNames.get(c.outletId) : "", accountId }) ? c.id : null))).filter((id): id is number => id !== null));
   const visibleDecisionIds = new Set(suppressedDecisionContacts
     .filter((contact) => contact.accountId === null || visible !== null && visible.includes(contact.accountId))
@@ -5700,14 +5706,14 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
   const safeDecisions = decisions.filter((d) => visibleDecisionIds.has(d.contactId) && !suppressedDecisionIds.has(d.contactId));
   const safeFeedback = feedback.filter((f) => visibleDecisionIds.has(f.contactId) && !suppressedDecisionIds.has(f.contactId));
   const recommendationCriteria = (sets[0]?.criteria ?? {}) as RecommendationCriteria;
-  const candidateItems = sets.length ? await db.select({ id: mediaRecommendationItemsTable.id, recommendationSetId: mediaRecommendationItemsTable.recommendationSetId, score: mediaRecommendationItemsTable.score, rank: mediaRecommendationItemsTable.rank, reasons: mediaRecommendationItemsTable.reasons, phraseAttributions: mediaRecommendationItemsTable.phraseAttributions, contact: mediaContactsTable, outletName: mediaOutletsTable.name, outletCategory: mediaOutletsTable.category, outletWebsite: mediaOutletsTable.website, outletCountry: mediaOutletsTable.country, outletReachBand: mediaOutletsTable.reachBand, outletAccountId: mediaOutletsTable.accountId, outletDeletedAt: mediaOutletsTable.deletedAt })
+  const candidateItems = sets.length && !shortlistOnly ? await db.select({ id: mediaRecommendationItemsTable.id, recommendationSetId: mediaRecommendationItemsTable.recommendationSetId, score: mediaRecommendationItemsTable.score, rank: mediaRecommendationItemsTable.rank, reasons: mediaRecommendationItemsTable.reasons, phraseAttributions: mediaRecommendationItemsTable.phraseAttributions, contact: mediaContactsTable, outletName: mediaOutletsTable.name, outletCategory: mediaOutletsTable.category, outletWebsite: mediaOutletsTable.website, outletCountry: mediaOutletsTable.country, outletReachBand: mediaOutletsTable.reachBand, outletAccountId: mediaOutletsTable.accountId, outletDeletedAt: mediaOutletsTable.deletedAt })
     .from(mediaRecommendationItemsTable)
     .innerJoin(mediaContactsTable, eq(mediaRecommendationItemsTable.contactId, mediaContactsTable.id))
     .leftJoin(mediaOutletsTable, eq(mediaContactsTable.outletId, mediaOutletsTable.id))
     .where(and(eq(mediaRecommendationItemsTable.recommendationSetId, sets[0].id), isNull(mediaContactsTable.deletedAt))) : [];
   const [decisionRestrictions, decisionDeparted] = await Promise.all([
     restrictedContactIds(accountId, projectId, storyKey),
-    departedContactIds(candidateItems.map((item) => item.contact.id), accountId),
+    departedContactIds([...new Set([...decisionContactIds, ...candidateItems.map((item) => item.contact.id)])], accountId),
   ]);
   const safeCandidateItems = candidateItems.filter((item) => !suppressedDecisionIds.has(item.contact.id));
   const seenContacts = new Set<number>();
@@ -5819,6 +5825,10 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
     } }];
   });
   res.json({ decisions: safeDecisions, items, decisionContacts: decisionContacts.filter((item) => !suppressedDecisionIds.has(item.contactId)), feedback: safeFeedback });
+  } catch (error) {
+    req.log.error({ err: error }, "media shortlist load failed");
+    res.status(500).json({ error: "Could not load saved shortlist. Please try again." });
+  }
 });
 
 router.get("/store/media-db/outreach", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
