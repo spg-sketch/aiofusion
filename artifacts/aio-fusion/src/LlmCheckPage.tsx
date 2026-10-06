@@ -1570,7 +1570,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       </div>
       <div style="margin-top:14px;font-size:11px;color:#6B7280;">ChatGPT: ${result.byModel.chatgpt.rate}% &middot; Claude: ${result.byModel.claude.rate}% &middot; Cycle ${cycleData.cycle}</div>
       <p style="margin-top:10px;font-size:10px;color:#9CA3AF;">${assess
-        ? "Methodology: the Authority Index applies intent-tier weighting - buyer-intent queries (1.5&times;) carry more signal than sector queries (1.0&times;) or the direct identity probe (0.5&times;)."
+        ? "The Authority Index compares ChatGPT and Claude responses to blind questions about the brand, including buyer-intent, sector and identity questions. Buyer-intent results carry more weight. This is a snapshot of model responses, which can vary over time."
         : "Methodology: this visibility score is based on the valid blind-probe evidence only. The structured AI Authority assessment was not completed."}</p>
     </div>
     <div class="card">
@@ -2453,7 +2453,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         <p className="text-[10px] mt-2 flex items-start gap-1" style={{ color: vars.g400 }}>
           <Info size={10} className="flex-shrink-0 mt-0.5" />
           {rd.assess
-            ? 'Methodology: the Authority Index applies intent-tier weighting - buyer-intent queries (1.5x) carry more signal than sector queries (1.0x) or the direct identity probe (0.5x), so a brand cited on high-intent buyer questions scores meaningfully higher than one cited only on generic "who are the leaders in X" probes.'
+            ? "The Authority Index compares ChatGPT and Claude responses to blind questions about the brand, including buyer-intent, sector and identity questions. Buyer-intent results carry more weight. This is a snapshot of model responses, which can vary over time."
             : "Methodology: this visibility score is based on the valid blind-probe evidence only. The structured AI Authority assessment was not completed."}
         </p>
       </div>

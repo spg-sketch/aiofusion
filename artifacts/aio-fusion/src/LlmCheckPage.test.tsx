@@ -426,6 +426,7 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
 
   it("openReport includes the assessment sections for a modern audit", () => {
     seedSavedAudit(MODERN_RESULT);
+    const authorityMethodology = "The Authority Index compares ChatGPT and Claude responses to blind questions about the brand, including buyer-intent, sector and identity questions. Buyer-intent results carry more weight. This is a snapshot of model responses, which can vary over time.";
 
     let written = "";
     const fakeWindow = {
@@ -444,11 +445,15 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
       <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
     );
 
+    expect(screen.getByText(authorityMethodology)).toBeInTheDocument();
     screen.getByText(/Open report \/ Save as PDF/i).click();
 
     expect(written).toContain("AI Authority scorecard");
     expect(written).toContain("Prioritised actions");
     expect(written).toContain("Acme appears in some answers but trails Globex.");
+    expect(written).toContain(authorityMethodology);
+    expect(written).not.toContain("1.5x");
+    expect(written).not.toContain("0.5x");
   });
 
   it("renders the entity-clarity section in-page when the name is ambiguous", () => {
