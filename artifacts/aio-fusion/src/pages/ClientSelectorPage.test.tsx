@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, within, fireEvent } from "@testing-library/react";
 const { loadServerAuditsForProjectMock } = vi.hoisted(() => ({
   loadServerAuditsForProjectMock: vi.fn(),
 }));
@@ -68,6 +68,20 @@ const project = {
 } as any;
 
 describe("ClientSelectorPage project-only hub", () => {
+  it("keeps workspace switching and Platform home without a static admin identity badge", () => {
+    const onBackToPlatformHome = vi.fn();
+    render(<ClientSelectorPage {...baseProps} projects={[]} session={{ username: "admin", role: "admin" }}
+      onBackToPlatformHome={onBackToPlatformHome}
+      workspaceSwitcher={<label>Workspace<select aria-label="Switch workspace"><option>Master workspace</option><option>Second workspace</option></select></label>}
+    />);
+    const header = screen.getByRole("banner");
+    expect(within(header).queryByText("AD")).toBeNull();
+    expect(within(header).queryByText("Admin")).toBeNull();
+    expect(within(header).getByRole("combobox", { name: "Switch workspace" })).toBeTruthy();
+    fireEvent.click(within(header).getByRole("button", { name: /Platform home/i }));
+    expect(onBackToPlatformHome).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("heading", { name: "Master Project Hub" })).toBeTruthy();
+  });
   it("uses the server allowance for a client beta: the first project is available and the second is not", async () => {
     vi.mocked(global.fetch).mockImplementation(async () =>
       new Response(JSON.stringify({

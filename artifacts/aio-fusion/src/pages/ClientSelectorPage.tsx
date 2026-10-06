@@ -193,32 +193,17 @@ export default function ClientSelectorPage({
   return (
     <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: teal }}>
       <header
-        className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between"
+        className="px-4 sm:px-10 py-4 sm:py-6 flex flex-wrap items-center justify-between gap-4"
         style={{ background: teal, borderBottom: "1px solid rgba(255,255,255,0.15)" }}
       >
         <button onClick={onBackToPlatformHome} className="flex items-center gap-3.5">
           <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="h-20 sm:h-30" />
         </button>
-        <div className="flex items-center gap-4">
-          {workspaceSwitcher && (
-            <div className="bg-white/10 rounded-xl px-3 py-2">
-              {workspaceSwitcher}
-            </div>
-          )}
+        <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-3 sm:gap-4">
+          {workspaceSwitcher}
           <button onClick={onBackToPlatformHome} className="aio-button aio-button--primary sm:px-7 uppercase tracking-[0.14em] transition-all hover:brightness-110" style={{ background: accent, color: "white" }}>
             <ArrowLeft size={16} /> Platform home
           </button>
-          <div
-            className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold"
-            style={{ background: accent, color: "white" }}
-          >
-            {session?.username?.slice(0, 2).toUpperCase() ?? "SP"}
-          </div>
-          <div className="flex flex-col">
-            <span className="aio-type-label text-white">
-              {isAdmin ? "Admin" : isClient ? "Client" : "Agency"}
-            </span>
-          </div>
         </div>
       </header>
 
