@@ -1,10 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
+import { dismissHomepagePrompts } from "../helpers/homepage-prompts";
 
 async function login(page: Page, email = "release@example.invalid") {
   await page.goto("/");
-  const demo = page.getByRole("dialog", { name: /see your ai visibility/i });
-  await expect(demo).toBeVisible({ timeout: 25_000 });
-  await page.keyboard.press("Escape");
+  await dismissHomepagePrompts(page);
   await page.getByRole("button", { name: "Platform Login" }).click();
   await page.getByPlaceholder("Email or username").fill(email);
   await page.getByPlaceholder("Password").fill("release-harness-password");

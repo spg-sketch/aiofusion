@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { dismissHomepagePrompts } from "../helpers/homepage-prompts";
 import { SQL_DATA_PROBES } from "../../artifacts/api-server/src/lib/security-audit-probes";
 
 test("built app sign-in, SQL form families and tenant integrity in disposable PostgreSQL", async ({ page, request }) => {
@@ -7,9 +8,7 @@ test("built app sign-in, SQL form families and tenant integrity in disposable Po
     return ["127.0.0.1", "localhost"].includes(url.hostname) ? route.continue() : route.abort();
   });
   await page.goto("/");
-  const dialog = page.getByRole("dialog", { name: /see your ai visibility/i });
-  await expect(dialog).toBeVisible({ timeout: 30_000 });
-  await page.keyboard.press("Escape");
+  await dismissHomepagePrompts(page);
   await page.getByRole("button", { name: "Platform Login" }).click();
   await page.getByPlaceholder("Email or username").fill("' OR TRUE --");
   await page.getByPlaceholder("Password").fill("' OR TRUE --");

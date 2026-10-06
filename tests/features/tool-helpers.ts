@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { dismissHomepagePrompts } from "../helpers/homepage-prompts";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
@@ -54,10 +55,7 @@ export async function authenticatedFetch<T = Record<string, unknown>>(
 
 export async function loginAndEnterReleaseProject(page: Page) {
   await page.goto("/");
-  const demoDialog = page.getByRole("dialog", { name: /see your ai visibility/i });
-  await expect(demoDialog).toBeVisible({ timeout: 25_000 });
-  await page.keyboard.press("Escape");
-  await expect(demoDialog).toBeHidden();
+  await dismissHomepagePrompts(page);
   await page.getByRole("button", { name: /Platform Login/i }).click();
   await page.getByPlaceholder("Email or username").fill("release@example.invalid");
   await page.getByPlaceholder("Password", { exact: true }).fill("release-harness-password");

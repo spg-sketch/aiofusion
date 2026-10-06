@@ -1,12 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
+import { dismissHomepagePrompts } from "../helpers/homepage-prompts";
 
 const STORY_ID = "media-research-pagination-story";
 
 async function dismissAutoDemo(page: Page) {
-  const dialog = page.getByRole("dialog", { name: /see your ai visibility/i });
-  await expect(dialog).toBeVisible({ timeout: 25_000 });
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
+  await dismissHomepagePrompts(page);
 }
 
 async function dismissAutoDemoIfPresent(page: Page) {

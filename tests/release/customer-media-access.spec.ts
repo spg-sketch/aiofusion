@@ -1,12 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { syntheticTotp } from "./synthetic-totp";
+import { dismissHomepagePrompts } from "../helpers/homepage-prompts";
 
 async function login(page: Page, email: string, password = "release-harness-password") {
   await page.goto("/");
-  const demo = page.getByRole("dialog", { name: /see your ai visibility/i });
-  await expect(demo).toBeVisible({ timeout: 25_000 });
-  await page.keyboard.press("Escape");
+  await dismissHomepagePrompts(page);
   await page.getByRole("button", { name: "Platform Login" }).click();
   await page.getByPlaceholder("Email or username").fill(email);
   await page.getByPlaceholder("Password").fill(password);
