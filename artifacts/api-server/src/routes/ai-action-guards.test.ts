@@ -1026,6 +1026,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
    "GET /store/media-db/outreach",
    "POST /store/media-db/outreach",
    "PUT /store/media-db/outreach/:id",
+   "DELETE /store/media-db/outreach/:id",
    "POST /store/media-db/outreach/:id/placements",
    "PUT /store/media-db/placements/:id/verification",
 

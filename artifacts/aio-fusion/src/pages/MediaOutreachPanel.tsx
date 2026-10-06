@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ExternalLink, Loader2, Plus } from "lucide-react";
+import { CheckCircle2, ExternalLink, Loader2, Plus, Trash2 } from "lucide-react";
 import { apiBase } from "../lib/contentAi";
 import type { ExactTargetPhrase } from "../lib/exactTargetPhrases";
 import { vars } from "../marketing/vars";
@@ -31,6 +31,7 @@ export function MediaOutreachPanel({ projectId, storyKey, articleTitle, recommen
   const [busy, setBusy] = useState<number | "load" | "create" | null>("load");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [removeFor, setRemoveFor] = useState<number | null>(null);
   const loadSequence = useRef(0);
   const scopeRef = useRef(`${projectId}\u0000${storyKey}`);
   const dateInputRefs = useRef<Record<number, { pitchDate: HTMLInputElement | null; responseDate: HTMLInputElement | null }>>({});
@@ -73,6 +74,7 @@ export function MediaOutreachPanel({ projectId, storyKey, articleTitle, recommen
   useEffect(() => {
     scopeRef.current = `${projectId}\u0000${storyKey}`;
     setPlacementFor(null);
+    setRemoveFor(null);
     setPlacement({ canonicalUrl: "", publicationDate: "", headline: "", supportingEvidence: "", legacySourceRef: "" });
     setRows([]);
     dateInputRefs.current = {};
@@ -122,6 +124,30 @@ export function MediaOutreachPanel({ projectId, storyKey, articleTitle, recommen
         await load();
       }
     } catch (reason) { if (scopeRef.current === scope) { setError(reason instanceof Error ? reason.message : "Could not update outreach."); setBusy(null); } }
+  };
+
+  const remove = async (row: Outreach) => {
+    const scope = `${projectId}\u0000${storyKey}`;
+    setBusy(row.id); setError(""); setSuccess("");
+    try {
+      const response = await fetch(`${apiBase()}/api/store/media-db/outreach/${row.id}`, {
+        method: "DELETE", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, storyKey }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not remove this journalist.");
+      if (scopeRef.current === scope) {
+        setRows((current) => current.filter((item) => item.id !== row.id));
+        delete dateInputRefs.current[row.id];
+        setRemoveFor(null);
+        setPlacementFor((current) => current === row.id ? null : current);
+        setSuccess(`${row.contactSnapshot.name || "Journalist"} removed from this story's outreach list. Saved history and placement evidence are retained.`);
+      }
+    } catch (reason) {
+      if (scopeRef.current === scope) setError(reason instanceof Error ? reason.message : "Could not remove this journalist.");
+    } finally {
+      if (scopeRef.current === scope) setBusy(null);
+    }
   };
 
   const changeStatus = (row: Outreach, nextStatus: Status) => {
@@ -196,8 +222,18 @@ export function MediaOutreachPanel({ projectId, storyKey, articleTitle, recommen
       <div className="divide-y">{rows.map((row) => <div key={row.id} className="p-5">
         <div className="flex flex-wrap justify-between gap-3">
           <div><h3 className="font-semibold text-slate-900">{row.contactSnapshot.name || "Historical contact"}{row.outletSnapshot.name ? `, ${row.outletSnapshot.name}` : ""}</h3><p className="text-[12px] text-slate-500">{row.contactSnapshot.role} {row.contactSnapshot.email}</p></div>
-           <select aria-label="Outreach status" value={row.status} disabled={busy === row.id || row.status === "placed"} onChange={(event) => changeStatus(row, event.target.value as Status)} className="rounded-lg border px-3 py-2 text-[12px] font-semibold capitalize">{statuses.filter((status) => status === row.status || transitions[row.status].includes(status)).map((status) => <option key={status} value={status}>{status}</option>)}</select>
+          <div className="flex flex-wrap items-center gap-2">
+           <select aria-label="Outreach status" value={row.status} disabled={busy !== null || row.status === "placed"} onChange={(event) => changeStatus(row, event.target.value as Status)} className="rounded-lg border px-3 py-2 text-[12px] font-semibold capitalize">{statuses.filter((status) => status === row.status || transitions[row.status].includes(status)).map((status) => <option key={status} value={status}>{status}</option>)}</select>
+           <button type="button" disabled={busy !== null} aria-label={`Remove ${row.contactSnapshot.name || "journalist"} from outreach and placements`} onClick={() => setRemoveFor(row.id)} className="rounded-lg border border-rose-200 px-3 py-2 text-[12px] font-semibold text-rose-700 disabled:opacity-50"><Trash2 size={13} className="inline mr-1" />Remove</button>
+          </div>
         </div>
+        {removeFor === row.id && <div role="alertdialog" aria-label="Remove journalist from outreach" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-[12px]">
+          <p>Remove {row.contactSnapshot.name || "this journalist"} from this story's outreach list? Their Media Database record, saved notes and placement evidence will be retained. You can add them back using Plan outreach.</p>
+          <div className="mt-2 flex gap-2">
+            <button type="button" disabled={busy !== null} onClick={() => void remove(row)} className="rounded-lg bg-rose-700 px-3 py-2 font-semibold text-white disabled:opacity-50">{busy === row.id ? "Removing..." : "Confirm removal"}</button>
+            <button type="button" disabled={busy !== null} onClick={() => setRemoveFor(null)} className="rounded-lg border px-3 py-2">Cancel</button>
+          </div>
+        </div>}
         <div className="grid md:grid-cols-2 gap-3 mt-4">
            <label className="text-[11px] font-semibold text-slate-600">Pitch date<input type="date" required={row.status === "pitched"} ref={(element) => { dateInputRefs.current[row.id] = { ...dateInputRefs.current[row.id], pitchDate: element, responseDate: dateInputRefs.current[row.id]?.responseDate || null }; }} defaultValue={row.pitchDate?.slice(0, 10) || ""} onBlur={(event) => void update(row, { pitchDate: event.target.value })} className={`${inputClass} mt-1`} aria-describedby={`outreach-date-help-${row.id}`} /></label>
            <label className="text-[11px] font-semibold text-slate-600">Response date<input type="date" required={row.status === "responded"} ref={(element) => { dateInputRefs.current[row.id] = { ...dateInputRefs.current[row.id], responseDate: element, pitchDate: dateInputRefs.current[row.id]?.pitchDate || null }; }} defaultValue={row.responseDate?.slice(0, 10) || ""} onBlur={(event) => void update(row, { responseDate: event.target.value })} className={`${inputClass} mt-1`} aria-describedby={`outreach-date-help-${row.id}`} /></label>

@@ -19,6 +19,42 @@ tags:
   - name: How-to
     description: Published How-to library and protected editorial management.
 paths:
+  /store/media-db/outreach/{id}:
+    delete:
+      operationId: removeMediaOutreach
+      summary: Remove a journalist from a story outreach list while retaining historical evidence
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaOutreachRemovalInput"
+      responses:
+        "200":
+          description: Entry removed from the story list; contact and evidence retained
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+        "400":
+          description: Invalid record identifier or story scope
+        "401":
+          description: Authentication required
+        "403":
+          description: Membership does not permit media changes
+        "404":
+          description: Outreach record unavailable in the specified project and story
   /store/media-db/recommendations/pitch-suggestions:
     post:
       operationId: generateMediaPitchSuggestions
@@ -744,6 +780,16 @@ components:
       required: true
       schema: { type: string, minLength: 1, maxLength: 200 }
   schemas:
+    MediaOutreachRemovalInput:
+      type: object
+      required: [projectId, storyKey]
+      properties:
+        projectId:
+          type: string
+          minLength: 1
+        storyKey:
+          type: string
+          minLength: 1
     MediaPitchInput:
       type: object
       additionalProperties: false

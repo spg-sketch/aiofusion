@@ -48,6 +48,7 @@ import type {
   MediaDiscoveryInstructionsInput,
   MediaDiscoveryListEnvelope,
   MediaDiscoveryRejectInput,
+  MediaOutreachRemovalInput,
   MediaPitchAnglesInput,
   MediaPitchInput,
   MediaPitchOutput,
@@ -58,6 +59,7 @@ import type {
   RecommendationBriefRequest,
   RecommendationEnrichRequest,
   RecommendationRequest,
+  RemoveMediaOutreach200,
   SearchGeorgeSupport200,
   SearchGeorgeSupportParams,
   UploadUrlRequest,
@@ -90,6 +92,87 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getRemoveMediaOutreachUrl = (id: number,) => {
+
+
+
+
+  return `/api/store/media-db/outreach/${id}`
+}
+
+/**
+ * @summary Remove a journalist from a story outreach list while retaining historical evidence
+ */
+export const removeMediaOutreach = async (id: number,
+    mediaOutreachRemovalInput: MediaOutreachRemovalInput, options?: Parameters<typeof customFetch>[1]): Promise<RemoveMediaOutreach200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<RemoveMediaOutreach200>(getRemoveMediaOutreachUrl(id),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(mediaOutreachRemovalInput)
+  }
+);}
+
+
+
+
+
+export const getRemoveMediaOutreachMutationKey = () => ['removeMediaOutreach'] as const;
+
+export const getRemoveMediaOutreachMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeMediaOutreach>>, TError,RemoveMediaOutreachMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeMediaOutreach>>, TError,RemoveMediaOutreachMutationVariables, TContext> => {
+
+const mutationKey = getRemoveMediaOutreachMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeMediaOutreach>>, RemoveMediaOutreachMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  removeMediaOutreach(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveMediaOutreachMutationResult = NonNullable<Awaited<ReturnType<typeof removeMediaOutreach>>>
+    export type RemoveMediaOutreachMutationBody = BodyType<MediaOutreachRemovalInput>
+    export type RemoveMediaOutreachMutationError = ErrorType<void>
+    export type RemoveMediaOutreachMutationVariables = {id: number;data: BodyType<MediaOutreachRemovalInput>}
+
+    /**
+ * @summary Remove a journalist from a story outreach list while retaining historical evidence
+ */
+export const useRemoveMediaOutreach = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeMediaOutreach>>, TError,RemoveMediaOutreachMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeMediaOutreach>>,
+        TError,
+        RemoveMediaOutreachMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRemoveMediaOutreachMutationOptions(options));
+    }
 
 export const getGenerateMediaPitchSuggestionsUrl = () => {
 

@@ -62,7 +62,7 @@ import { mediaExportAllowance, settleMediaExport, MediaAllowanceError } from "..
 import { registerMediaPitchRoutes } from "./media-pitch-suggestions";
 import { currentMediaPitch, type SavedMediaPitch } from "../lib/media-pitch-suggestions";
 import { generateMediaPitchAngle, pitchContextHash, PitchContextChangedError, type SavedPitchAngle } from "../lib/media-pitch-generation";
-import { GenerateMediaPitchAnglesBody, GenerateMediaPitchAnglesResponse } from "@workspace/api-zod";
+import { GenerateMediaPitchAnglesBody, GenerateMediaPitchAnglesResponse, RemoveMediaOutreachParams, RemoveMediaOutreachBody, RemoveMediaOutreachResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 const recommendationEnrichmentCommitQueues = new Map<string, Promise<void>>();
@@ -6055,6 +6055,30 @@ router.get("/store/media-db/recommendations/decisions", requirePlatformAuth, asy
   }
 });
 
+const outreachRemovalKey = (id: number) => `mediaOutreach:removed:${id}`;
+
+router.delete("/store/media-db/outreach/:id", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
+  const params = RemoveMediaOutreachParams.safeParse(req.params);
+  const body = RemoveMediaOutreachBody.safeParse(req.body);
+  if (!params.success || !body.success) { res.status(400).json({ error: "Invalid outreach record or story scope" }); return; }
+  const { id } = params.data;
+  const [candidate] = await db.select().from(mediaOutreachTable).where(eq(mediaOutreachTable.id, id)).limit(1);
+  const accountId = candidate ? await visibleProjectOwner(req, candidate.projectId) : null;
+  if (!candidate || !accountId || accountId !== candidate.accountId ||
+    candidate.projectId !== body.data.projectId || candidate.storyKey !== body.data.storyKey) {
+    res.status(404).json({ error: "Outreach record not found" }); return;
+  }
+  // Archive the list entry, never cascade-delete its immutable outreach or placement evidence.
+  await db.transaction(async (tx) => {
+    if (process.env.NODE_ENV !== "test") await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`media-outreach:${id}`}))`);
+    await tx.insert(platformMetaTable).values({
+      key: outreachRemovalKey(id),
+      value: JSON.stringify({ accountId, projectId: candidate.projectId, storyKey: candidate.storyKey, removedBy: req.account!.username, removedAt: new Date().toISOString() }),
+    }).onConflictDoNothing();
+  });
+  res.json(RemoveMediaOutreachResponse.parse({ ok: true }));
+});
+
 router.get("/store/media-db/outreach", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
   const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "";
   const storyKey = typeof req.query.storyKey === "string" ? req.query.storyKey : "";
@@ -6068,7 +6092,11 @@ router.get("/store/media-db/outreach", requirePlatformAuth, async (req: Request,
   const outreachContacts = outreachContactIds.length ? await db.select().from(mediaContactsTable).where(inArray(mediaContactsTable.id, outreachContactIds)) : [];
   const outreachOutlets = new Map((await db.select({ id: mediaOutletsTable.id, name: mediaOutletsTable.name }).from(mediaOutletsTable)).map((o) => [o.id, o.name]));
   const blockedOutreach = new Set((await Promise.all(outreachContacts.map(async (c) => (await isContactSuppressed({ ...c, outlet: c.outletId ? outreachOutlets.get(c.outletId) : "", accountId }) ? c.id : null)))).filter((id): id is number => id !== null));
-  const filteredOutreach = outreach.filter((row) => !row.contactId || !blockedOutreach.has(row.contactId));
+  // Story lists hide archived entries; project-wide reporting retains historical evidence.
+  const removals = storyKey && outreach.length ? await db.select({ key: platformMetaTable.key }).from(platformMetaTable)
+    .where(inArray(platformMetaTable.key, outreach.map((row) => outreachRemovalKey(row.id)))) : [];
+  const removedKeys = new Set(removals.map((row) => row.key));
+  const filteredOutreach = outreach.filter((row) => !removedKeys.has(outreachRemovalKey(row.id)) && (!row.contactId || !blockedOutreach.has(row.contactId)));
   const ids = filteredOutreach.map((row) => row.id);
   let activities: Array<typeof mediaOutreachActivitiesTable.$inferSelect> = [];
   let placements: Array<typeof mediaPlacementsTable.$inferSelect> = [];
@@ -6093,7 +6121,9 @@ router.post("/store/media-db/outreach", requirePlatformAuth, async (req: Request
     if (!contact || (contact.contact.accountId !== null && contact.contact.accountId !== accountId && contact.contact.accountId !== actorAccountId)) { res.status(403).json({ error: "Contact is not available to this project's workspace" }); return; }
     if (!contact || await isContactSuppressed({ ...contact.contact, outlet: contact.outlet?.name, accountId: accountId })) { res.status(409).json({ error: "This contact is unavailable for processing." }); return; }
     const existing = await db.select().from(mediaOutreachTable).where(and(eq(mediaOutreachTable.accountId, accountId), eq(mediaOutreachTable.projectId, projectId), eq(mediaOutreachTable.storyKey, storyKey), eq(mediaOutreachTable.contactId, contactId))).limit(1);
-    if (existing[0]) { res.status(200).json({ ok: true, outreach: existing[0], existing: true }); return; }
+    const [removed] = existing[0] ? await db.select({ key: platformMetaTable.key }).from(platformMetaTable)
+      .where(eq(platformMetaTable.key, outreachRemovalKey(existing[0].id))).limit(1) : [];
+    if (existing[0] && !removed) { res.status(200).json({ ok: true, outreach: existing[0], existing: true }); return; }
     const [blockedByStatus, restrictions] = await Promise.all([
       departedContactIds([contactId], accountId),
       restrictedContactIds(accountId, projectId, storyKey),
@@ -6101,6 +6131,18 @@ router.post("/store/media-db/outreach", requirePlatformAuth, async (req: Request
     if (blockedByStatus.has(contactId) || restrictions.has(contactId)) {
       res.status(409).json({ error: "This contact is not eligible for new outreach." });
       return;
+    }
+    if (existing[0]) {
+      const id = existing[0].id;
+      await db.transaction(async (tx) => {
+        await acquirePrivacyIdentityLock(tx, "outreach");
+        if (process.env.NODE_ENV !== "test") await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`media-outreach:${id}`}))`);
+        const [currentContact] = await tx.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, contactId)).limit(1);
+        const [currentOutlet] = currentContact?.outletId ? await tx.select({ name: mediaOutletsTable.name }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, currentContact.outletId)).limit(1) : [];
+        if (!currentContact || await isSuppressedWithDb(tx, { ...currentContact, outlet: currentOutlet?.name, accountId })) throw new Error("SUPPRESSED_OUTREACH");
+        await tx.delete(platformMetaTable).where(eq(platformMetaTable.key, outreachRemovalKey(id)));
+      });
+      res.status(200).json({ ok: true, outreach: existing[0], existing: true }); return;
     }
     const status: MediaOutreachStatus = "planned";
     const actor = req.account!.username;

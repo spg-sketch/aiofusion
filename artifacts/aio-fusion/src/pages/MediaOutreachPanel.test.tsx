@@ -46,6 +46,11 @@ describe("MediaOutreachPanel", () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.includes("/store/media-db/outreach?")) return response({ outreach: rows });
+      if (url.endsWith("/store/media-db/outreach/7") && init?.method === "DELETE") {
+        if (mutationFailure) return response({ error: mutationFailure }, 500);
+        rows = rows.filter((row) => row.id !== 7);
+        return response({ ok: true });
+      }
       if (url.endsWith("/store/media-db/outreach") && init?.method === "POST") {
         if (mutationFailure) return response({ error: mutationFailure }, 500);
         rows = [{ ...plannedRow }];
@@ -85,6 +90,42 @@ describe("MediaOutreachPanel", () => {
     const call = vi.mocked(fetch).mock.calls.find(([input, init]) => String(input).includes("/outreach/7") && init?.method === "PUT");
     expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ status: "pitched", pitchDate: "2026-09-01" });
     expect(await screen.findByRole("status")).toHaveTextContent("Outreach status saved as pitched.");
+  });
+
+  it("confirms removal of only the selected journalist and persists it after reopening", async () => {
+    rows.push({ ...plannedRow, id: 8, contactId: 42, contactSnapshot: { ...plannedRow.contactSnapshot, name: "Other Reporter" } });
+    const view = render(<MediaOutreachPanel projectId="project-1" storyKey="story-1" articleTitle="Story" contacts={[contact]} targetPhrases={[]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Remove Jane Reporter from outreach and placements" }));
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("saved notes and placement evidence will be retained");
+    expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remove Jane Reporter from outreach and placements" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm removal" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Remove Jane Reporter from outreach and placements" })).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Remove Other Reporter from outreach and placements" })).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith("/api/store/media-db/outreach/7", expect.objectContaining({
+      method: "DELETE", credentials: "include", body: JSON.stringify({ projectId: "project-1", storyKey: "story-1" }),
+    }));
+    expect(screen.getByRole("button", { name: "Plan outreach to Jane Reporter" })).toBeEnabled();
+    view.unmount();
+    render(<MediaOutreachPanel projectId="project-1" storyKey="story-1" articleTitle="Story" contacts={[contact]} targetPhrases={[]} />);
+    await screen.findByRole("button", { name: "Remove Other Reporter from outreach and placements" });
+    expect(screen.queryByRole("button", { name: "Remove Jane Reporter from outreach and placements" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the journalist and permits retry when removal fails", async () => {
+    mutationFailure = "Could not remove this journalist.";
+    render(<MediaOutreachPanel projectId="project-1" storyKey="story-1" articleTitle="Story" contacts={[contact]} targetPhrases={[]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Remove Jane Reporter from outreach and placements" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm removal" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(mutationFailure);
+    expect(screen.getByRole("button", { name: "Remove Jane Reporter from outreach and placements" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Confirm removal" })).toBeEnabled();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    mutationFailure = "";
+    fireEvent.click(screen.getByRole("button", { name: "Confirm removal" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Jane Reporter removed");
   });
 
   it("explains that planning is optional, does not send a pitch, and saves the plan only on success", async () => {

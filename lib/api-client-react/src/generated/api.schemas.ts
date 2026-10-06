@@ -5,6 +5,13 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface MediaOutreachRemovalInput {
+  /** @minLength 1 */
+  projectId: string;
+  /** @minLength 1 */
+  storyKey: string;
+}
+
 export interface MediaPitchInput {
   /**
      * @minLength 1
@@ -668,6 +675,10 @@ export type ProjectIdParameter = string;
 export type ProjectIdOptionalParameter = string;
 
 export type StoryKeyParameter = string;
+
+export type RemoveMediaOutreach200 = {
+  ok: boolean;
+};
 
 export type SearchGeorgeSupportParams = {
 /**

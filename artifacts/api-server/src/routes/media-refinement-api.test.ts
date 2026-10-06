@@ -1942,6 +1942,25 @@ describe("media recommendation refinement API", () => {
     });
     expect(await revision.json()).toMatchObject({ placement: { verification: "user_claimed", verifiedFacts: {}, verificationHistory: expect.arrayContaining([expect.objectContaining({ kind: "claim_revised", priorVerification: "page_verified" })]) } });
     expect((await request(`/store/media-db/placements/${firstPlacementBody.placement.id}/verification`, "workspace-a", { method: "PUT" })).status).toBe(200);
+    const removal = { method: "DELETE", body: JSON.stringify({ projectId: "project-1", storyKey: "placement-story" }) };
+    expect((await request(`/store/media-db/outreach/${outreachId}`, "workspace-b", removal)).status).toBe(404);
+    expect((await request(`/store/media-db/outreach/${outreachId}`, "workspace-a", { ...removal, body: JSON.stringify({ projectId: "project-1", storyKey: "other-story" }) })).status).toBe(404);
+    expect((await request("/store/media-db/outreach/not-an-id", "workspace-a", removal)).status).toBe(400);
+    expect((await request(`/store/media-db/outreach/${outreachId}`, "workspace-a", removal)).status).toBe(200);
+    expect((await request(`/store/media-db/outreach/${outreachId}`, "workspace-a", removal)).status).toBe(200);
+    const remaining = await (await request("/store/media-db/outreach?projectId=project-1&storyKey=placement-story", "workspace-a")).json() as { outreach: Array<{ id: number }> };
+    expect(remaining.outreach.map((row) => row.id)).not.toContain(outreachId);
+    expect(remaining.outreach.map((row) => row.id)).toContain(secondId);
+    expect((await db.select().from(mediaOutreachTable).where(eq(mediaOutreachTable.id, outreachId)))[0].notes).toBe("Pitch sent");
+    expect((await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, contacts[0].id)))[0].deletedAt).toBeNull();
+    expect((await db.select().from(mediaPlacementsTable).where(eq(mediaPlacementsTable.outreachId, outreachId)))[0].verification).toBe("page_verified");
+    const historical = await (await request("/store/media-db/outreach?projectId=project-1", "workspace-a")).json() as { outreach: Array<{ id: number }> };
+    expect(historical.outreach.map((row) => row.id)).toContain(outreachId);
+    const restored = await request("/store/media-db/outreach", "workspace-a", {
+      method: "POST", body: JSON.stringify({ projectId: "project-1", storyKey: "placement-story", contactId: contacts[0].id }),
+    });
+    expect(restored.status).toBe(200);
+    expect(await restored.json()).toMatchObject({ outreach: { id: outreachId, status: "placed", notes: "Pitch sent" } });
     await db.update(mediaContactsTable).set({ role: "Departed", deletedAt: new Date() }).where(sql`${mediaContactsTable.id} = ${contacts[0].id}`);
     const loaded = await (await request("/store/media-db/outreach?projectId=project-1&storyKey=placement-story", "workspace-a")).json() as { outreach: Array<{ contactSnapshot: { role: string }; activities: unknown[]; placements: Array<{ verification: string }> }> };
     const preserved = loaded.outreach.find((row) => row.contactSnapshot.role === "Energy correspondent");

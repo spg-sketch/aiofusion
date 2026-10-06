@@ -9,6 +9,30 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Remove a journalist from a story outreach list while retaining historical evidence
+ */
+
+
+
+export const RemoveMediaOutreachParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+
+
+
+
+export const RemoveMediaOutreachBody = zod.object({
+  "projectId": zod.string().min(1),
+  "storyKey": zod.string().min(1)
+})
+
+export const RemoveMediaOutreachResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
  * @summary Generate or reuse AI pitch suggestions for one to five media matches
  */
 export const generateMediaPitchSuggestionsBodyProjectIdMax = 200;
