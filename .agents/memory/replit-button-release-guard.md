@@ -3,6 +3,12 @@ name: Replit button release guard
 description: Why shell release guards do not protect button-based Replit publishing.
 ---
 
+Registering downloadable assets can create tracked workspace changes, even after the application code is committed.
+
+**Why:** Presenting review documents to the Library changed the tracked asset metadata and made the clean-source release gate reject an otherwise committed revision.
+
+**How to apply:** Present deliverables before the final clean-source commit, include intended generated asset metadata in that commit, and then run release approval. Do not register additional assets after approval without checking for tracked changes.
+
 The Replit Publish button is a separate managed publication path and cannot be wrapped by a repository shell command. Do not treat a passing shell publisher verification as proof that button-based publishing enforces the same evidence.
 
 **Why:** The staging workflow uses Replit's Publish button and has no non-interactive publisher command. The live staging deployment remained on the older build even after the guarded command and release gate passed locally.

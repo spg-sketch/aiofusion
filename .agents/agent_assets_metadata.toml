@@ -492,3 +492,31 @@ mtime_ms = 1791029602214
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/cd58a89a-01a6-4bf3-9ee2-5343ae0540d8/d7d5e628-26a0-4995-b40f-5b51a4031d93"
 storage_version_token = "1791029610403121"
 content_type = "text/html"
+
+[[outputs]]
+id = "EzAOf_VYri8dS5Hg7T0fH"
+uri = "file://deliverables/aio-fusion-legal-review-pack.html"
+type = "html"
+title = "AIO Fusion legal review pack"
+description = "Website terms, expanded privacy policy, cookie policy and comparison notes in one printable document. Awaiting qualified legal and business review."
+logical_id = "f706a7b0-fe1d-4586-aab2-9882748423a7"
+content_hash = "sha256:7b4e4ba66dc7f97444319be604f606ca15b5d1d5ec3e91c413b054dbeb525c46"
+size = 38436
+mtime_ms = 1791277405643
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/f706a7b0-fe1d-4586-aab2-9882748423a7/75bb11d3-8002-496e-87a9-f222ccf4bdc4"
+storage_version_token = "1791278551774692"
+content_type = "text/html"
+
+[[outputs]]
+id = "tN85UfSfKk1t_siW1L0rR"
+uri = "file://deliverables/legal-review-email.txt"
+type = "text"
+title = "Draft email to Patch and Natalie"
+description = "Review summary and verified-domain links. Send after the website update has been published and the links checked; no email has been sent."
+logical_id = "cbfad828-d3c3-4428-9a29-3ae0ee0314f1"
+content_hash = "sha256:540fcfa94160f029bf69c10fdcddc5f018c54ed4e9bf8cb540229ce260e819b2"
+size = 2126
+mtime_ms = 1791277256394
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/cbfad828-d3c3-4428-9a29-3ae0ee0314f1/bce339d2-b8b2-483f-a8a3-b698a657d3f2"
+storage_version_token = "1791278552421571"
+content_type = "text/plain"
