@@ -14,8 +14,10 @@ export async function dismissHomepagePrompts(page: Page) {
     } catch { return { hasPreference: false, demoOptOut: false }; }
   });
   const choices = page.getByRole("region", { name: "Cookie choices" });
+  const demo = page.getByRole("dialog", { name: /see your ai visibility/i });
   if (!arrival.hasPreference) {
     await expect(choices).toBeVisible({ timeout: 25_000 });
+    await expect(demo).toBeHidden();
     await choices.getByRole("button", { name: "Essential only" }).click();
     await expect(choices).toBeHidden();
     expect(await page.evaluate(() =>
@@ -23,8 +25,9 @@ export async function dismissHomepagePrompts(page: Page) {
     )).toBe(false);
     await expect(page.locator("#aio-analytics-loader")).toHaveCount(0);
   }
-  const demo = page.getByRole("dialog", { name: /see your ai visibility/i });
-  if (arrival.hasPreference && !arrival.demoOptOut) {
+  // New visitors now receive the introduction as soon as their choice closes
+  // the notice; returning visitors receive it on arrival.
+  if (!arrival.demoOptOut) {
     await expect(demo).toBeVisible({ timeout: 25_000 });
     await page.keyboard.press("Escape");
   }
