@@ -1,6 +1,6 @@
 import { CookiePreferencesButton } from "../components/CookieConsent";
-import { hasCookiePreferenceOnArrival } from "../lib/cookieConsent";
-import { useEffect, useState } from "react";
+import { CONSENT_EVENT, readCookiePreference } from "../lib/cookieConsent";
+import { useEffect, useRef, useState } from "react";
 import {
   Sparkles,
   LogIn,
@@ -89,16 +89,29 @@ export default function LandingPageC({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [demoOpen, setDemoOpen] = useState(false);
+  const demoIntroduced = useRef(false);
   useEffect(() => {
-    // Avoid an automatic demo modal competing with a first-visit cookie choice.
-    if (!hasCookiePreferenceOnArrival()) return;
-    try {
-      if (window.localStorage.getItem(DEMO_OPT_OUT_KEY) === "1") return;
-    } catch {
-      // No saved preference is available when browser storage is blocked.
+    function introduceDemo() {
+      // Use the current choice, including one saved while the app was loading.
+      // Both essential-only and analytics choices close the initial notice.
+      if (demoIntroduced.current || !readCookiePreference()) return;
+      demoIntroduced.current = true;
+      try {
+        if (window.localStorage.getItem(DEMO_OPT_OUT_KEY) === "1") return;
+      } catch {
+        // No saved preference is available when browser storage is blocked.
+      }
+      setDemoOpen(true);
     }
-    setDemoOpen(true);
+    window.addEventListener(CONSENT_EVENT, introduceDemo);
+    introduceDemo();
+    return () => window.removeEventListener(CONSENT_EVENT, introduceDemo);
   }, []);
+  function openDemo() {
+    // A manual opening also counts: consent changes must not reopen it later.
+    demoIntroduced.current = true;
+    setDemoOpen(true);
+  }
   const { articles, loading: articlesLoading, error: articlesError } = useLatestInsights();
   const paper = "#F5F8F8";
   const ink = "#102B36";
@@ -121,7 +134,7 @@ export default function LandingPageC({
             <span className="block">Ready to win AI authority?</span>
             <span className="block mt-1 text-base sm:text-lg font-normal">Get in touch to book a platform demo and see how AIO Fusion measures and improves your AI visibility</span>
           </p>
-          <button type="button" onClick={() => setDemoOpen(true)} className="aio-button aio-button--primary marketing-emphasis !rounded-full !px-8 !py-4 text-sm uppercase tracking-wider shrink-0">
+          <button type="button" onClick={openDemo} className="aio-button aio-button--primary marketing-emphasis !rounded-full !px-8 !py-4 text-sm uppercase tracking-wider shrink-0">
             <Calendar size={18} /> Book a Demo <ArrowRight size={16} />
           </button>
         </div>
@@ -403,7 +416,7 @@ export default function LandingPageC({
             </div>
             <div className="md:col-span-5 flex flex-col gap-3">
               <button type="button"
-                onClick={() => setDemoOpen(true)}
+                onClick={openDemo}
                 className="flex items-center justify-between gap-2.5 px-6 py-4 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-90"
                 style={{ background: "white", color: accent }}
               >

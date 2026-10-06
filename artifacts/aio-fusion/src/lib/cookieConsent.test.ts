@@ -66,4 +66,11 @@ describe("analytics consent", () => {
     expect(consent.readCookiePreference()?.analytics).toBe(false);
     expect(document.getElementById("aio-analytics-loader")).toBeNull();
   });
+  it("honours an in-tab choice when storage can be read but not written", async () => {
+    const consent = await import("./cookieConsent");
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("read-only"); });
+    expect(consent.saveCookiePreference(false)).toBe(false);
+    expect(consent.readCookiePreference()?.analytics).toBe(false);
+    expect(document.getElementById("aio-analytics-loader")).toBeNull();
+  });
 });

@@ -5,6 +5,7 @@ export const ANALYTICS_ID = "G-DTSDJVJN0Q";
 const CONSENT_LIFETIME = 180 * 24 * 60 * 60 * 1000;
 type Preference = { version: 1; analytics: boolean; savedAt: number };
 let memoryPreference: Preference | null = null;
+let memoryOnly = false;
 let initialised = false;
 let preferenceOnArrival: boolean | null = null;
 
@@ -19,6 +20,7 @@ function validPreference(raw: string | null): Preference | null {
 
 export function readCookiePreference(): Preference | null {
   if (typeof window === "undefined") return null;
+  if (memoryOnly) return validPreference(JSON.stringify(memoryPreference));
   try {
     const saved = validPreference(localStorage.getItem(CONSENT_KEY));
     return saved;
@@ -76,6 +78,7 @@ export function saveCookiePreference(analytics: boolean): boolean {
   let persisted = true;
   try { localStorage.setItem(CONSENT_KEY, JSON.stringify(memoryPreference)); }
   catch { persisted = false; }
+  memoryOnly = !persisted;
   applyAnalytics(analytics);
   window.dispatchEvent(new Event(CONSENT_EVENT));
   return persisted;
@@ -89,6 +92,7 @@ export function initialiseCookieConsent() {
   window.addEventListener("storage", (event) => {
     if (event.key !== CONSENT_KEY && event.key !== null) return;
     memoryPreference = null;
+    memoryOnly = false;
     applyAnalytics(readCookiePreference()?.analytics === true);
     window.dispatchEvent(new Event(CONSENT_EVENT));
   });

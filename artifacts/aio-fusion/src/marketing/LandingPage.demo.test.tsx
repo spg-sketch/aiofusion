@@ -5,6 +5,7 @@ import LandingPage from "./LandingPage";
 import DemoDialog from "./DemoDialog";
 import { CONSENT_KEY } from "../lib/cookieConsent";
 import * as cookieConsent from "../lib/cookieConsent";
+import { CookieConsent } from "../components/CookieConsent";
 
 describe("homepage demo enquiry", () => {
   beforeEach(() => {
@@ -40,10 +41,74 @@ describe("homepage demo enquiry", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /book a demo/i })[0]!);
     expect(screen.getByRole("dialog", { name: /see your ai visibility/i })).toBeTruthy();
   });
-  it("does not mistake a choice made during app loading for a returning visitor", () => {
+  it("opens after a cookie choice made during app loading, without waiting for another event", () => {
     vi.spyOn(cookieConsent, "hasCookiePreferenceOnArrival").mockReturnValue(false);
     render(<LandingPage onLogin={vi.fn()} onNavigate={vi.fn()} />);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it.each(["Essential only", "Allow analytics", "Continue with essential cookies only"])(
+    "opens once after %s closes the first-visit notice, without a refresh",
+    (choice) => {
+      localStorage.removeItem(CONSENT_KEY);
+      render(<><LandingPage onLogin={vi.fn()} onNavigate={vi.fn()} /><CookieConsent /></>);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(screen.getByRole("region", { name: "Cookie choices" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: choice }));
+      expect(screen.queryByRole("region", { name: "Cookie choices" })).toBeNull();
+      expect(screen.getByRole("dialog")).toBeTruthy();
+      if (choice !== "Allow analytics") expect(document.getElementById("aio-analytics-loader")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: /close demo enquiry/i }));
+      act(() => cookieConsent.saveCookiePreference(false));
+      expect(screen.queryByRole("dialog")).toBeNull();
+    },
+  );
+
+  it("waits for a renewed choice when the saved preference has expired", () => {
+    localStorage.setItem(CONSENT_KEY, JSON.stringify({ version: 1, analytics: false, savedAt: Date.now() - 181 * 86400000 }));
+    render(<><LandingPage onLogin={vi.fn()} onNavigate={vi.fn()} /><CookieConsent /></>);
     expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Essential only" }));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("preserves opt-out after a first-visit choice and still allows manual opening", () => {
+    localStorage.removeItem(CONSENT_KEY);
+    localStorage.setItem("aio-demo-opt-out", "1");
+    render(<><LandingPage onLogin={vi.fn()} onNavigate={vi.fn()} /><CookieConsent /></>);
+    fireEvent.click(screen.getByRole("button", { name: "Essential only" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: /book a demo/i })[0]!);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("does not reopen a manually dismissed demo after the first cookie choice", () => {
+    localStorage.removeItem(CONSENT_KEY);
+    render(<LandingPage onLogin={vi.fn()} onNavigate={vi.fn()} />);
+    fireEvent.click(screen.getAllByRole("button", { name: /book a demo/i })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: /close demo enquiry/i }));
+    act(() => cookieConsent.saveCookiePreference(false));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("removes its consent listener when leaving the homepage", () => {
+    localStorage.removeItem(CONSENT_KEY);
+    const page = render(<LandingPage onLogin={vi.fn()} onNavigate={vi.fn()} />);
+    const remove = vi.spyOn(window, "removeEventListener");
+    page.unmount();
+    expect(remove).toHaveBeenCalledWith(cookieConsent.CONSENT_EVENT, expect.any(Function));
+    render(<CookieConsent />);
+    fireEvent.click(screen.getByRole("button", { name: "Essential only" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("opens after an in-tab essential choice when browser storage cannot be written", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockReturnValue(null);
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
+    render(<><LandingPage onLogin={vi.fn()} onNavigate={vi.fn()} /><CookieConsent /></>);
+    fireEvent.click(screen.getByRole("button", { name: "Essential only" }));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Cookie choices" })).toBeNull();
   });
 
   it("opens even if an earlier visit left the old storage flag", () => {

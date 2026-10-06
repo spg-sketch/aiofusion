@@ -9,6 +9,12 @@ On a visit eligible for automatic opening, the home page's demo dialog can appea
 
 **How to apply:** Keep first-visit cookie-choice checks separate from returning-visitor automatic-demo checks. On eligible visits, wait for the hydrated dialog before dismissing it; wait for navigation completion before asserting the destination of a CTA. Tailwind's independent `translate` and `scale` properties are better signals for the card hover than the legacy `transform` property.
 
+The intended introduction sequence is cookie choice first, then automatic demo on that same homepage visit, including essential-only choices. A saved choice made during app loading must also complete that handoff; ordinary demo dismissal must not be undone by later consent updates.
+
+**Why:** Multiple iPhone visitors reported no automatic demo. Mobile Chromium reproduced a consent handoff requiring a refresh; analytics acceptance must not be a condition for seeing the demo.
+
+**How to apply:** Verify the before-choice and after-choice states separately, plus returning visits, opt-out and manual opening. Chromium iPhone profiles are not native Safari verification; disclose unavailable WebKit or physical-device coverage.
+
 Under heavy release-suite load, hydration can exceed the default short visibility wait, while clicking the close button can stall waiting for element stability. For a visit eligible for automatic opening, use an explicit bounded visibility wait, dismiss with Escape (the dialog's supported keyboard action), then confirm it closed before continuing into sign-in and workspace isolation.
 
 **Why:** One gate failed before testing authentication despite the dialog eventually appearing in the captured page; a focused run passed with a bounded hydration wait and keyboard dismissal. However, an unconditional fresh-visitor dialog expectation became stale when cookie-choice gating was introduced.
