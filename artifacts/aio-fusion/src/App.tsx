@@ -37,6 +37,8 @@ import { PendingInvitesBanner } from "./components/PendingInvitesBanner";
 import type { AcceptedInvitation } from "./components/InvitationResult";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { BackToAgencyLink } from "./components/BackToAgencyLink";
+import { MobileDestinationScroll, MobileWorkspaceNavigation, isMobileWorkspace } from "./components/MobileWorkspaceNavigation";
+import { navItems } from "./components/Sidebar";
 import { isHowtoAdminPath, isInsightsAdminPath } from "./lib/adminRoute";
 import { guidanceRouteFromLocation, guidanceUrl, type GuidanceRoute } from "./lib/guidanceRoute";
 import { vars } from "./marketing/vars";
@@ -1586,6 +1588,64 @@ function App() {
   const guidanceRouteRef = useRef(guidanceRoute);
   guidanceRouteRef.current = guidanceRoute;
   const mainRef = useRef<HTMLElement>(null);
+  const mobileEntries = useRef(new Map<number, { identity: string; view: string; projectId: string | null; top: number }>());
+  const [mobileCanGoBack, setMobileCanGoBack] = useState(false);
+  const mobileRestoreTop = useRef(0);
+  const mobileIdentity = session && !authLoading ? session.username : null;
+  const mobileIdentityRef = useRef(mobileIdentity);
+  mobileIdentityRef.current = mobileIdentity;
+  const mobileProjectsRef = useRef(visibleProjects);
+  mobileProjectsRef.current = visibleProjects;
+  const readWorkspaceScrollElement = useCallback(() => mainRef.current, []);
+  const recordMobileEntry = useCallback((index: number, destination: string) => {
+    if (!isMobileWorkspace()) return;
+    const identity = mobileIdentityRef.current;
+    if (!identity) {
+      mobileEntries.current.clear();
+      setMobileCanGoBack(false);
+      return;
+    }
+    if (!(destination in VIEW_TO_SLUG)) {
+      const existing = mobileEntries.current.get(index);
+      mobileEntries.current.set(index, { identity, view: destination,
+        projectId: window.history.state?.mobileProjectId ?? null,
+        top: existing?.identity === identity ? existing.top : 0 });
+    }
+    const previous = mobileEntries.current.get(index - 1);
+    setMobileCanGoBack(previous?.identity === identity);
+  }, []);
+
+  useEffect(() => {
+    mobileEntries.current.clear();
+    mobileRestoreTop.current = 0;
+    recordMobileEntry(committedHistoryIndexRef.current, view);
+    // Reset the trail at an authority boundary, not on ordinary route changes.
+  }, [mobileIdentity, recordMobileEntry]);
+
+  useEffect(() => {
+    const rememberScroll = () => {
+      if (!isMobileWorkspace()) return;
+      const entry = mobileEntries.current.get(committedHistoryIndexRef.current);
+      if (entry?.identity === mobileIdentityRef.current) {
+        entry.top = mainRef.current?.scrollTop ?? window.scrollY;
+      }
+    };
+    document.addEventListener("scroll", rememberScroll, true);
+    return () => document.removeEventListener("scroll", rememberScroll, true);
+  }, []);
+
+  const mobileBack = () => {
+    // Never use history.length: its previous entry can be login or another site.
+    const previous = mobileEntries.current.get(committedHistoryIndexRef.current - 1);
+    if (previous?.identity === mobileIdentityRef.current) window.history.back();
+  };
+  const mobileHub = () => requestDeparture(() => {
+    mobileRestoreTop.current = [...mobileEntries.current.values()].reverse()
+      .find((entry) => entry.identity === mobileIdentityRef.current && entry.view === "platform" && !entry.projectId)?.top ?? 0;
+    setActiveClient(null);
+    setActiveProjectId(null);
+    setView("platform");
+  });
 
   useEffect(() => { mainRef.current?.scrollTo({ top: 0 }); }, [currentPage]);
 
@@ -1613,8 +1673,15 @@ function App() {
     void fetchAccountProfile().then((ap) => setAccountProfile(ap));
   }, [currentPage, session]);
 
+  const historyRouteKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    const currentHistoryState = window.history.state as { __aioIndex?: number; view?: string; guidanceRoute?: GuidanceRoute; guidanceFromLibrary?: boolean } | null;
+    const currentHistoryState = window.history.state as { __aioIndex?: number; view?: string; currentPage?: string; mobileProjectId?: string | null; guidanceRoute?: GuidanceRoute; guidanceFromLibrary?: boolean } | null;
+    const mobileState = isMobileWorkspace() ? { mobileProjectId: view === "platform" ? activeClient?.id ?? null : null } : {};
+    // Project entry/exit adds mobile history, but must not change desktop history.
+    const routeKey = JSON.stringify([view, currentPage, insightsArticleId, accountSection, guidanceRoute]);
+    const projectOnlyChange = historyRouteKeyRef.current === routeKey;
+    historyRouteKeyRef.current = routeKey;
+    if (navInitDone.current && !isMobileWorkspace() && projectOnlyChange) return;
     // Reflect the active settings section in the URL so a refresh restores it
     // (matches the email deep-link format /?account_section=security).
     const url = view === "guidance" ? guidanceUrl(guidanceRoute) : (view === "sub-accounts" || view === "users-admin") && accountSection
@@ -1623,18 +1690,21 @@ function App() {
     if (!navInitDone.current) {
       navInitDone.current = true;
       committedHistoryIndexRef.current = currentHistoryState?.__aioIndex ?? 0;
-      const navState = { __aioNav: true, __aioIndex: committedHistoryIndexRef.current, view, currentPage, insightsArticleId, accountSection, guidanceRoute, guidanceFromLibrary: currentHistoryState?.guidanceFromLibrary ?? false };
+      const navState = { __aioNav: true, __aioIndex: committedHistoryIndexRef.current, view, currentPage, insightsArticleId, accountSection, guidanceRoute, ...mobileState, guidanceFromLibrary: currentHistoryState?.guidanceFromLibrary ?? false };
       window.history.replaceState(navState, "", url);
+      recordMobileEntry(committedHistoryIndexRef.current, view);
       return;
     }
     if (skipHistoryPush.current) {
       skipHistoryPush.current = false;
+      recordMobileEntry(committedHistoryIndexRef.current, view);
       return;
     }
     if (replaceNextNav.current) {
       replaceNextNav.current = false;
-      const navState = { __aioNav: true, __aioIndex: committedHistoryIndexRef.current, view, currentPage, insightsArticleId, accountSection, guidanceRoute };
+      const navState = { __aioNav: true, __aioIndex: committedHistoryIndexRef.current, view, currentPage, insightsArticleId, accountSection, guidanceRoute, ...mobileState };
       window.history.replaceState(navState, "", url);
+      recordMobileEntry(committedHistoryIndexRef.current, view);
       return;
     }
     // Filters update the current library entry; opening a reader adds an entry.
@@ -1644,14 +1714,19 @@ function App() {
       return;
     }
     committedHistoryIndexRef.current += 1;
-    const navState = { __aioNav: true, __aioIndex: committedHistoryIndexRef.current, view, currentPage, insightsArticleId, accountSection, guidanceRoute,
+    // A fresh branch must not retain destinations from the old Forward branch.
+    for (const index of mobileEntries.current.keys()) {
+      if (index >= committedHistoryIndexRef.current) mobileEntries.current.delete(index);
+    }
+    const navState = { __aioNav: true, __aioIndex: committedHistoryIndexRef.current, view, currentPage, insightsArticleId, accountSection, guidanceRoute, ...mobileState,
       guidanceFromLibrary: view === "guidance" && !!guidanceRoute.id && currentHistoryState?.view === "guidance" && !currentHistoryState.guidanceRoute?.id };
     window.history.pushState(navState, "", url);
-  }, [view, currentPage, insightsArticleId, accountSection, guidanceRoute]);
+    recordMobileEntry(committedHistoryIndexRef.current, view);
+  }, [view, currentPage, insightsArticleId, accountSection, guidanceRoute, activeClient?.id, recordMobileEntry]);
 
   useEffect(() => {
     const onPop = (e: PopStateEvent) => {
-      const s = e.state as { __aioNav?: boolean; __aioIndex?: number; view?: string; currentPage?: string; insightsArticleId?: string | null; accountSection?: string | null } | null;
+      const s = e.state as { __aioNav?: boolean; __aioIndex?: number; view?: string; currentPage?: string; mobileProjectId?: string | null; insightsArticleId?: string | null; accountSection?: string | null } | null;
       const targetIndex = typeof s?.__aioIndex === "number" ? s.__aioIndex : null;
       const traversal = historyTraversalRef.current;
       if (traversal && targetIndex === traversal.expectedIndex) {
@@ -1695,9 +1770,18 @@ function App() {
       const targetGuidanceRoute = guidanceRouteFromLocation();
       const guidanceChanged = resolvedTargetView === "guidance" &&
         (targetGuidanceRoute.id !== guidanceRouteRef.current.id || targetGuidanceRoute.filter !== guidanceRouteRef.current.filter);
-      if (resolvedTargetView !== viewRef.current || targetPage !== pageRef.current || targetArticleId !== insightsArticleIdRef.current || targetAccountSection !== accountSectionRef.current || guidanceChanged) {
+      const restoreMobileProject = isMobileWorkspace() && resolvedTargetView === "platform" && s && "mobileProjectId" in s;
+      if (resolvedTargetView !== viewRef.current || targetPage !== pageRef.current || targetArticleId !== insightsArticleIdRef.current || targetAccountSection !== accountSectionRef.current || guidanceChanged || restoreMobileProject) {
         const applyPopNavigation = () => {
           if (targetIndex !== null) committedHistoryIndexRef.current = targetIndex;
+          mobileRestoreTop.current = targetIndex === null ? 0 : mobileEntries.current.get(targetIndex)?.top ?? 0;
+          if (restoreMobileProject) {
+            const project = mobileProjectsRef.current.find((project) => project.id === s.mobileProjectId);
+            setActiveClient(project ?? null);
+            setActiveProjectId(project?.id ?? null);
+            if (project) void syncIntakeForProject(project.id);
+          }
+          recordMobileEntry(committedHistoryIndexRef.current, resolvedTargetView);
           skipHistoryPush.current = true;
           setView(resolvedTargetView);
           setCurrentPage(targetPage);
@@ -2032,6 +2116,7 @@ function App() {
       <Suspense fallback={<AuthPageLoading />}>
         {inviteBannerNode}
         <div data-testid="platform-home-banner-offset" className="min-w-0 max-w-full overflow-x-hidden" style={{ marginTop: "var(--banner-h, 0px)" }}>
+          <MobileDestinationScroll routeKey={`platform-home:${mobileIdentity ?? "signed-out"}`} />
           <PlatformHomePage
             backToAgency={agencyImpersonatedBy ? <BackToAgencyLink agencyName={agencyImpersonatedBy} light /> : undefined}
             // During a successful credential hand-off the local session is
@@ -2219,6 +2304,8 @@ function App() {
     return (
       <>
        {inviteBannerNode}
+      <MobileDestinationScroll routeKey={`hub:${mobileIdentity ?? ""}`} top={mobileRestoreTop.current} />
+      <MobileWorkspaceNavigation title="Project Hub" canGoBack={mobileCanGoBack} onBack={mobileBack} onHub={mobileHub} atHub />
       <ClientSelectorPage
         projects={visibleProjects}
         projectSyncStatus={projectSyncStatus}
@@ -2240,6 +2327,7 @@ function App() {
             return;
           }
           setActiveProjectId(client.id);
+          mobileRestoreTop.current = 0;
           // Pull this project's latest Set-Up from the shared store before
           // opening it, so a colleague's saved work shows here too.
           await syncIntakeForProject(client.id);
@@ -2317,7 +2405,11 @@ function App() {
         onClose={() => setGeorgeOpen(false)}
         userName={session?.username}
       />
-      <main ref={mainRef} aria-label="AIO Fusion workspace" className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: "#1A647B" }}>
+      <main ref={mainRef} aria-label="AIO Fusion workspace" className="flex-1 overflow-y-auto pt-28 md:pt-0" style={{ background: "#1A647B" }}>
+        <MobileDestinationScroll routeKey={`${activeClient.id}:${currentPage}:${mobileIdentity ?? ""}`}
+          scrollElement={readWorkspaceScrollElement} />
+        <MobileWorkspaceNavigation title={currentPage === "dashboard" ? activeClient.name : navItems.find((item) => item.id === currentPage)?.label ?? "Project"}
+          canGoBack={mobileCanGoBack} onBack={mobileBack} onHub={mobileHub} fixedHeader />
         <Suspense fallback={<RouteLoading />}>
           {currentPage === "dashboard" && (
             <DashboardPage onNavigate={transitionToPage} activeClient={activeClient} />

@@ -31,3 +31,11 @@ Treat client-account creation, entering the client workspace, and saving its fir
 **Why:** Creating only the client account and opening its empty Hub made customers think their newly named project had disappeared. Reloading through the public root also briefly showed the marketing website.
 
 **How to apply:** Keep one project identity across interrupted-save retries, bind recovery to the intended client and operator, and cancel recovery explicitly when dismissed. Confirm persistence under the intended authority before showing the project. Use a protected reload destination with pre-JavaScript loading content and land creation actions in Project Hub; reserve direct project opening for explicit project links.
+
+## Mobile Project Hub navigation boundary
+
+Keep the Project Hub Back / Hub controls and sign-in scroll correction mobile-only; do not change larger-screen layout or navigation as part of this improvement.
+
+**Why:** The user explicitly approved Back / Project Hub controls but clarified, “just need to fix the mobile the main site is fine”.
+
+**How to apply:** Preserve the existing desktop sidebar and history behaviour. Mobile Back must stay within verified in-app history, preserve editor departure warnings, and distinguish opening a project from returning to its Hub. Reset scroll after the signed-in destination has actually mounted, not merely when a page identifier changes.

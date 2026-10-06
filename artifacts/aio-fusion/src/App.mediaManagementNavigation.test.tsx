@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, configure, act } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, configure, act, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
 import type { Client } from "./types";
@@ -197,6 +197,74 @@ afterEach(() => {
 });
 
 describe("Media Management sidebar navigation", () => {
+  it("records mobile project entry and supports Back to the Hub without leaving the app", async () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(max-width: 767px)", media: query, onchange: null,
+      addListener: () => {}, removeListener: () => {}, addEventListener: () => {},
+      removeEventListener: () => {}, dispatchEvent: () => false,
+    }));
+    window.history.replaceState({}, "", "/platform");
+    const { default: App } = await import("./App");
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue to projects" }));
+    await screen.findByRole("button", { name: "Open test project" });
+    const hubState = window.history.state;
+    expect(hubState.mobileProjectId).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Open test project" }));
+    await screen.findByTestId("dashboard-page");
+    await waitFor(() => expect(window.history.state.mobileProjectId).toBe("project-1"));
+    expect(window.history.state.__aioIndex).toBe(hubState.__aioIndex + 1);
+    const back = within(screen.getByRole("navigation", { name: "Mobile workspace navigation" })).getByRole("button", { name: "Back" });
+    expect(back).not.toBeDisabled();
+    fireEvent.click(back);
+    await screen.findByRole("button", { name: "Open test project" });
+    expect(screen.queryByTestId("dashboard-page")).toBeNull();
+    expect(window.location.pathname).toBe("/project-hub");
+  });
+
+  it("guards the mobile Project Hub button when the editor has unsaved work", async () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(max-width: 767px)", media: query, onchange: null,
+      addListener: () => {}, removeListener: () => {}, addEventListener: () => {},
+      removeEventListener: () => {}, dispatchEvent: () => false,
+    }));
+    window.history.replaceState({}, "", "/platform");
+    const { default: App } = await import("./App");
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue to projects" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open test project" }));
+    await screen.findByTestId("dashboard-page");
+    fireEvent.click(screen.getByRole("button", { name: /Content Creator.*Generate pitches and articles/i }));
+    await screen.findByTestId("dirty-creator");
+    const navigation = screen.getByRole("navigation", { name: "Mobile workspace navigation" });
+    fireEvent.click(within(navigation).getByRole("button", { name: "Project Hub" }));
+    await screen.findByRole("alertdialog", { name: /Save your changes before leaving/i });
+    fireEvent.click(screen.getByRole("button", { name: /Stay on this page/i }));
+    expect(screen.getByTestId("dirty-creator")).toBeInTheDocument();
+    fireEvent.click(within(navigation).getByRole("button", { name: "Project Hub" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Leave without saving/i }));
+    await screen.findByRole("button", { name: "Open test project" });
+    expect(window.history.state.mobileProjectId).toBeNull();
+  });
+
+  it("does not add project-entry history to desktop", async () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: false, media: query, onchange: null,
+      addListener: () => {}, removeListener: () => {}, addEventListener: () => {},
+      removeEventListener: () => {}, dispatchEvent: () => false,
+    }));
+    window.history.replaceState({}, "", "/platform");
+    const { default: App } = await import("./App");
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue to projects" }));
+    await screen.findByRole("button", { name: "Open test project" });
+    const hubState = window.history.state;
+    fireEvent.click(screen.getByRole("button", { name: "Open test project" }));
+    await screen.findByTestId("dashboard-page");
+    expect(window.history.state.__aioIndex).toBe(hubState.__aioIndex);
+    expect(window.history.state).not.toHaveProperty("mobileProjectId");
+  });
+
   it("opens the real Guidance library from both platform entry points, direct URLs and Back", async () => {
     window.history.replaceState({}, "", "/platform");
     const { default: App } = await import("./App");
@@ -243,7 +311,8 @@ describe("Media Management sidebar navigation", () => {
     });
 
     fireEvent.click(researchCard);
-    expect(screen.queryByTestId("dashboard-page")).toBeNull();
+    // Suspense may retain an already-mounted chunk as a hidden DOM subtree.
+    expect(screen.queryByTestId("dashboard-page")).not.toBeVisible();
     expect(screen.getByRole("status", { name: /loading page/i })).toBeInTheDocument();
     expect(screen.getByRole("button", {
       name: /Media Research.*Recommend journalists and publications/i,
