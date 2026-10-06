@@ -3,6 +3,7 @@ import { URL } from "url";
 import * as dns from "dns/promises";
 import * as net from "net";
 import { Agent, buildConnector, fetch as undiciFetch, type Response as UndiciResponse } from "undici";
+import { assertAuditPageUsable, auditVisibleText, collectJsonLdTypes } from "./audit-page-evidence";
 
 const FETCH_TIMEOUT = 15000;
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024;
@@ -116,7 +117,7 @@ async function fetchHtml(url: string): Promise<string> {
   return (await fetchHtmlWithFinalUrl(url)).html;
 }
 
-async function fetchHtmlWithFinalUrl(url: string): Promise<{ html: string; finalUrl: string }> {
+async function fetchHtmlWithFinalUrl(url: string): Promise<{ html: string; finalUrl: string; contentType: string | null }> {
   const { res, agent, finalUrl } = await fetchWithSsrfSafeRedirects(
     url,
     { "User-Agent": "AIOFusion-Assist/1.0 (compatible; bot)", Accept: "text/html,application/xhtml+xml" },
@@ -126,7 +127,7 @@ async function fetchHtmlWithFinalUrl(url: string): Promise<{ html: string; final
     if (!res.ok) throw new Error(`Site returned HTTP ${res.status}`);
     const contentLength = res.headers.get("content-length");
     if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) throw new Error("Response too large");
-    if (!res.body) return { html: "", finalUrl };
+    if (!res.body) return { html: "", finalUrl, contentType: res.headers.get("content-type") };
     const reader = res.body.getReader();
     const chunks: Uint8Array[] = [];
     let received = 0;
@@ -153,7 +154,7 @@ async function fetchHtmlWithFinalUrl(url: string): Promise<{ html: string; final
       buffer.set(chunk, offset);
       offset += chunk.byteLength;
     }
-    return { html: new TextDecoder().decode(buffer), finalUrl };
+    return { html: new TextDecoder().decode(buffer), finalUrl, contentType: res.headers.get("content-type") };
   } finally {
     await agent.close().catch(() => {});
   }
@@ -490,8 +491,32 @@ async function fetchTextResource(url: string, timeoutMs = 8000, maxChars = 10000
     );
     try {
       if (!res.ok) return null;
-      const text = await res.text();
-      return text.slice(0, maxChars);
+      if (!res.body) return null;
+      const reader = res.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      const deadline = Date.now() + timeoutMs;
+      try {
+        while (true) {
+          const remaining = deadline - Date.now();
+          if (remaining <= 0) return null;
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const next = await Promise.race([
+            reader.read(),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(() => reject(new Error("Resource request timed out")), remaining);
+            }),
+          ]).finally(() => { if (timer) clearTimeout(timer); });
+          if (next.done) break;
+          received += next.value.byteLength;
+          if (received > Math.min(MAX_RESPONSE_SIZE, maxChars * 4)) return null;
+          chunks.push(next.value);
+        }
+      } finally { await reader.cancel().catch(() => {}); }
+      const bytes = new Uint8Array(received);
+      let offset = 0;
+      for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+      return new TextDecoder().decode(bytes).slice(0, maxChars);
     } finally {
       await agent.close().catch(() => {});
     }
@@ -518,6 +543,7 @@ export interface GeoAuditFacts {
   tableCount: number;
   hasRobotsTxt: boolean;
   sitemapUrlCount: number | null;
+  sitemapIndexCount?: number;
 }
 
 export interface GeoAuditContext {
@@ -525,33 +551,22 @@ export interface GeoAuditContext {
   text: string;
   pagesFetched: string[];
   facts: GeoAuditFacts;
+  warnings?: string[];
 }
 
 // Fetches a site's homepage plus its robots.txt and sitemap, then assembles a
 // single text block of real, observed signals for the GEO diagnostic to analyse.
 export async function fetchGeoAuditContext(rawUrl: string, maxChars = 45000): Promise<GeoAuditContext> {
   const normalized = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
-  const html = await fetchHtml(normalized);
-  const origin = new URL(normalized).origin;
+  const { html, finalUrl, contentType } = await fetchHtmlWithFinalUrl(normalized);
+  assertAuditPageUsable(html, finalUrl, contentType);
+  const origin = new URL(finalUrl).origin;
 
   const $ = cheerio.load(html);
 
-  const jsonLdTypes: string[] = [];
-  $('script[type="application/ld+json"]').each((_, el) => {
-    try {
-      const data = JSON.parse($(el).html() || "");
-      const arr = Array.isArray(data) ? data : [data];
-      for (const d of arr) {
-        if (d && d["@type"]) {
-          jsonLdTypes.push(Array.isArray(d["@type"]) ? d["@type"].join("/") : String(d["@type"]));
-        }
-      }
-    } catch {
-      // ignore malformed JSON-LD blocks
-    }
-  });
-
-  const jsonLdBlockCount = $('script[type="application/ld+json"]').length;
+  const schema = collectJsonLdTypes(html);
+  const jsonLdTypes = schema.types;
+  const jsonLdBlockCount = schema.blockCount;
   const microdata = $("[itemscope]").length;
   const canonical = $('link[rel="canonical"]').attr("href") || "";
   const ogTags = ["og:title", "og:description", "og:image", "og:type"].filter(
@@ -567,11 +582,16 @@ export async function fetchGeoAuditContext(rawUrl: string, maxChars = 45000): Pr
   const lists = $("ul, ol").length;
   const tables = $("table").length;
 
-  const { text: bodyText } = htmlToText(html);
+  const bodyText = auditVisibleText(html);
 
-  const pagesFetched = [normalized];
+  const pagesFetched = [finalUrl];
+  const warnings: string[] = [];
 
-  const robots = await fetchTextResource(`${origin}/robots.txt`);
+  const robotsResponse = await fetchTextResource(`${origin}/robots.txt`);
+  const robots = robotsResponse && !/<(?:!doctype|html|head|body|script|meta)\b/i.test(robotsResponse)
+    && /^\s*(?:user-agent|sitemap|allow|disallow)\s*:/im.test(robotsResponse)
+    ? robotsResponse : null;
+  if (!robots) warnings.push("robots.txt could not be verified. Crawler permissions are unknown, not evidence of blocked access.");
   if (robots) pagesFetched.push(`${origin}/robots.txt`);
 
   let sitemapUrl = `${origin}/sitemap.xml`;
@@ -585,23 +605,36 @@ export async function fetchGeoAuditContext(rawUrl: string, maxChars = 45000): Pr
       }
     }
   }
-  let sitemapSummary = "Not found or not accessible.";
+  let sitemapSummary = "Not verified. This does not establish that a sitemap is absent.";
   let sitemapUrlCount: number | null = null;
+  let sitemapIndexCount: number | undefined;
   const sitemapXml = await fetchTextResource(sitemapUrl, 8000, 300000);
   if (sitemapXml) {
-    pagesFetched.push(sitemapUrl);
-    const locs = [...sitemapXml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((mm) => mm[1]);
-    sitemapUrlCount = locs.length;
-    sitemapSummary = `${locs.length} URL(s) listed. Sample: ${locs.slice(0, 15).join(", ") || "none"}`;
+    const xml = cheerio.load(sitemapXml, { xmlMode: true });
+    const index = xml("sitemapindex").first();
+    const urls = xml("urlset").first();
+    if (index.length || urls.length) {
+      pagesFetched.push(sitemapUrl);
+      const locs = (index.length ? index.find("sitemap > loc") : urls.find("url > loc"))
+        .map((_, el) => xml(el).text().trim()).get().filter(Boolean);
+      if (index.length) {
+        sitemapIndexCount = locs.length;
+        sitemapSummary = `Sitemap index listing ${locs.length} child sitemap file(s), not ${locs.length} website pages. Child sitemaps were not crawled.`;
+      } else {
+        sitemapUrlCount = locs.length;
+        sitemapSummary = `${locs.length} page URL(s) listed. Sample: ${locs.slice(0, 15).join(", ") || "none"}`;
+      }
+    }
   }
+  if (sitemapUrlCount === null && sitemapIndexCount === undefined) warnings.push("The sitemap could not be verified. Its presence and page count are unknown.");
 
   const parts: string[] = [
-    `HOMEPAGE: ${normalized}`,
+    `SUPPLIED PAGE: ${finalUrl}`,
     `Page title: ${metaTitle || "(none)"}`,
     `Meta description: ${metaDesc || "(none)"}`,
     `Canonical URL: ${canonical || "(none)"}`,
     `Open Graph tags present: ${ogTags.length ? ogTags.join(", ") : "none"}`,
-    `JSON-LD structured data: ${jsonLdTypes.length ? `${jsonLdTypes.length} block(s), types: ${jsonLdTypes.join(", ")}` : "none detected"}`,
+    `JSON-LD structured data: ${jsonLdBlockCount} block(s); types (including nested graphs): ${jsonLdTypes.join(", ") || "none detected"}`,
     `Microdata (itemscope) elements: ${microdata}`,
     `Headings: ${h1.length} H1, ${h2.length} H2, ${h3.length} H3`,
   ];
@@ -610,7 +643,7 @@ export async function fetchGeoAuditContext(rawUrl: string, maxChars = 45000): Pr
   parts.push(`Images: ${imgTotal} total, ${imgWithAlt} with non-empty alt text`);
   parts.push(`Structured lists: ${lists}, data tables: ${tables}`);
   parts.push("");
-  parts.push(`ROBOTS.TXT:\n${robots ? robots.slice(0, 4000) : "Not found or not accessible."}`);
+  parts.push(`ROBOTS.TXT:\n${robots ? robots.slice(0, 4000) : "Not verified. Crawler access rules are unknown."}`);
   parts.push("");
   parts.push(`SITEMAP (${sitemapUrl}):\n${sitemapSummary}`);
   parts.push("");
@@ -637,7 +670,8 @@ export async function fetchGeoAuditContext(rawUrl: string, maxChars = 45000): Pr
     tableCount: tables,
     hasRobotsTxt: Boolean(robots),
     sitemapUrlCount,
+    ...(sitemapIndexCount === undefined ? {} : { sitemapIndexCount }),
   };
 
-  return { url: normalized, text: assembled, pagesFetched, facts };
+  return { url: finalUrl, text: assembled, pagesFetched, facts, warnings };
 }

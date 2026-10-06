@@ -5,6 +5,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db, auditLocksTable, savedDiagnosticsTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { fetchGeoAuditContext, type GeoAuditFacts } from "../lib/safe-fetch";
+import { AuditPageUnavailableError } from "../lib/audit-page-evidence";
 import { deepStripEmDashes } from "../lib/text-sanitise";
 import { diagnosticLimiter } from "../middleware/rate-limit";
 import { diagnosticConcurrencyGuard } from "../middleware/concurrency-guard";
@@ -45,7 +46,7 @@ const CATEGORY_MAXES: Record<string, number> = {
 
 export const GEO_SYSTEM_PROMPT = `You are an expert in Generative Engine Optimisation (GEO) and AI Engine Optimisation (AEO). You analyse web page content for its readiness to be cited, referenced, and recommended by AI-powered search and answer engines (ChatGPT, Claude).
 
-Score each of the following 6 categories from 0 to the maximum shown. Be rigorous - most pages score poorly. Provide specific, actionable recommendations for each category.
+Score each of the following 6 categories from 0 to the maximum shown using observed evidence, without a presumption that pages should score poorly. Provide specific, actionable recommendations for each category.
 
 Categories (score / max):
 1. Schema & Structured Data (0-15): Does the content have Organization schema, FAQ schema, Article schema, author markup? Look for JSON-LD, microdata, or RDFa signals.
@@ -58,6 +59,10 @@ Categories (score / max):
 Grounding rules (important):
 - A MEASURED FACTS block may be supplied. Those figures were counted directly from the page by a deterministic parser. Treat them as ground truth: quote them exactly (for example image counts, alt-text coverage, schema types found) and never contradict or re-estimate them.
 - Do NOT invent or guess statistics, revenue figures, client numbers, dates, or named entities. Only state numbers that appear in the supplied content or the measured facts. If a figure is not present, do not produce one.
+- This is a supplied-page GEO readiness assessment, not a whole-site crawl, backlink analysis, speed test, or direct test of actual visibility in AI answers. Describe these limits explicitly.
+- Distinguish "not observed on the supplied page" from "does not exist on the website". Unverified robots/sitemap resources are unknown, not proof of absence or blocked crawlers. A sitemap index lists child sitemap files, not website page URLs.
+- Schema types include nested JSON-LD graphs. A measured Organization or Person type must not be described as absent.
+- overallScore must equal the sum of the six category scores. Never claim a percentage probability of AI recommendation or citation.
 
 Return your analysis as valid JSON only (no markdown, no code fences) in exactly this format:
 {
@@ -108,7 +113,7 @@ export function normaliseResult(raw: any): any {
   const categories = CATEGORY_NAMES.map((name) => {
     const cat: any = catMap.get(name) || {};
     const max = CATEGORY_MAXES[name];
-    const score = typeof cat.score === "number" ? Math.min(Math.max(0, Math.round(cat.score)), max) : 0;
+    const score = typeof cat.score === "number" && Number.isFinite(cat.score) ? Math.min(Math.max(0, Math.round(cat.score)), max) : 0;
     return {
       name,
       score,
@@ -119,9 +124,7 @@ export function normaliseResult(raw: any): any {
     };
   });
 
-  const overallScore = typeof raw.overallScore === "number"
-    ? Math.min(100, Math.max(0, Math.round(raw.overallScore)))
-    : categories.reduce((s, c) => s + c.score, 0);
+  const overallScore = categories.reduce((s, c) => s + c.score, 0);
 
   return {
     overallScore,
@@ -139,6 +142,14 @@ export function extractJSON(text: string): any {
   const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenceMatch) cleaned = fenceMatch[1].trim();
   return JSON.parse(cleaned);
+}
+
+export function normaliseModelResult(raw: any): any {
+  if (!Array.isArray(raw?.categories) || !CATEGORY_NAMES.every((name) =>
+    raw.categories.some((category: any) => category?.name === name && typeof category.score === "number" && Number.isFinite(category.score)))) {
+    throw new Error("The AI returned an incomplete assessment. No website score was created.");
+  }
+  return normaliseResult(raw);
 }
 
 // Fixed seed so deterministic-capable engines return repeatable output for the
@@ -159,8 +170,10 @@ export function formatFacts(facts?: GeoAuditFacts | null): string {
     `- Headings: ${facts.h1Count} H1, ${facts.h2Count} H2, ${facts.h3Count} H3`,
     `- Images: ${facts.imagesTotal} total, ${facts.imagesWithAlt} with alt text, ${facts.imagesWithoutAlt} missing alt text (${altPct}% coverage)`,
     `- Structured lists: ${facts.listCount}, data tables: ${facts.tableCount}`,
-    `- robots.txt found: ${facts.hasRobotsTxt ? "yes" : "no"}`,
-    `- Sitemap URLs listed: ${facts.sitemapUrlCount === null ? "no sitemap found" : facts.sitemapUrlCount}`,
+    `- robots.txt verified: ${facts.hasRobotsTxt ? "yes" : "not verified; crawler permissions unknown"}`,
+    facts.sitemapIndexCount !== undefined
+      ? `- Sitemap index: ${facts.sitemapIndexCount} child sitemap files; website page URLs not counted`
+      : `- Sitemap page URLs listed: ${facts.sitemapUrlCount === null ? "not verified; unknown" : facts.sitemapUrlCount}`,
   ];
   return lines.join("\n");
 }
@@ -227,7 +240,7 @@ export async function analyseWithClaude(content: string, facts?: GeoAuditFacts |
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") throw new Error("No text response from Claude");
 
-  const analysisResult = normaliseResult(extractJSON(textBlock.text));
+  const analysisResult = normaliseModelResult(extractJSON(textBlock.text));
   return { ...analysisResult, _tokenUsage: { inputTokens, outputTokens } };
 }
 
@@ -262,7 +275,7 @@ async function analyseWithOpenAI(content: string, facts?: GeoAuditFacts | null, 
   const text = response.choices[0]?.message?.content;
   if (!text) throw new Error("No response from OpenAI");
 
-  const analysisResult = normaliseResult(extractJSON(text));
+  const analysisResult = normaliseModelResult(extractJSON(text));
   return { ...analysisResult, _tokenUsage: { inputTokens, outputTokens } };
 }
 
@@ -273,6 +286,7 @@ type WebsiteAuditPayload = {
   pagesFetched: string[];
   pageFacts?: GeoAuditFacts;
   confirmedEntity?: ConfirmedEntity;
+  retrievalWarnings?: string[];
 };
 
 function isWebsiteAuditPayload(value: unknown): value is WebsiteAuditPayload {
@@ -284,6 +298,7 @@ function isWebsiteAuditPayload(value: unknown): value is WebsiteAuditPayload {
     && payload.pagesFetched.every((page) => typeof page === "string")
     && (payload.fetchedUrl === undefined || typeof payload.fetchedUrl === "string")
     && (payload.pageFacts === undefined || (payload.pageFacts !== null && typeof payload.pageFacts === "object"))
+    && (payload.retrievalWarnings === undefined || (Array.isArray(payload.retrievalWarnings) && payload.retrievalWarnings.every((warning) => typeof warning === "string")))
     && (payload.confirmedEntity === undefined || sanitizeConfirmedEntity(payload.confirmedEntity) !== null);
 }
 
@@ -302,6 +317,13 @@ async function handleDiagnostic(req: Request, res: Response, recoveredRun?: Reco
     return;
   }
   const resumePayload = recoveredRun ? recoveredPayload as WebsiteAuditPayload : undefined;
+  if (recoveredRun && resumePayload?.pageFacts
+      && !resumePayload.pageFacts.metaTitle && resumePayload.pageFacts.h1Count === 0
+      && resumePayload.pageFacts.h2Count === 0 && resumePayload.pageFacts.imagesTotal === 0
+      && /(?:sgcaptcha|challenge-platform)/i.test(resumePayload.textToAnalyse)) {
+    await retryAuditRunAfterFailure(recoveredRun.runId, "The captured page was a security challenge. No website score was created; obtain fresh page content.");
+    return;
+  }
   const projectId = recoveredRun
     ? recoveredRun.projectId
     : typeof req.body.projectId === "string" ? req.body.projectId.trim() : "";
@@ -363,6 +385,7 @@ async function handleDiagnostic(req: Request, res: Response, recoveredRun?: Reco
   let fetchedUrl: string | undefined = resumePayload?.fetchedUrl;
   let pagesFetched: string[] = resumePayload?.pagesFetched ?? [];
   let pageFacts: GeoAuditFacts | undefined = resumePayload?.pageFacts;
+  let retrievalWarnings = resumePayload?.retrievalWarnings ?? [];
 
   if (!recoveredRun && typeof url === "string" && url.trim()) {
     try {
@@ -370,13 +393,18 @@ async function handleDiagnostic(req: Request, res: Response, recoveredRun?: Reco
       fetchedUrl = ctx.url;
       pagesFetched = ctx.pagesFetched;
       pageFacts = ctx.facts;
+      retrievalWarnings = ctx.warnings ?? [];
       textToAnalyse += ctx.text;
     } catch (err: any) {
       logger.warn({ err: err?.message, url: url.trim() }, "Diagnostic URL fetch failed");
       if (!(typeof content === "string" && content.trim())) {
-        res.status(400).json({ error: "Could not fetch that URL. Check the address is correct and publicly reachable, or paste the page content instead." });
+        res.status(err instanceof AuditPageUnavailableError ? 422 : 400).json({
+          error: err instanceof AuditPageUnavailableError ? err.message
+            : "Could not fetch that URL. Check the address is correct and publicly reachable, or paste the page content instead. No website score was created.",
+        });
         return;
       }
+      retrievalWarnings.push("The live page could not be assessed. This report uses only user-supplied content; live technical checks were not verified.");
     }
   }
 
@@ -401,6 +429,7 @@ async function handleDiagnostic(req: Request, res: Response, recoveredRun?: Reco
       pagesFetched,
       pageFacts,
       confirmedEntity: confirmedEntity ?? undefined,
+      retrievalWarnings,
     };
     auditRunId = await claimAuditRun(projectId, "website", req.account.username, payload);
     if (auditRunId === null) {
@@ -450,6 +479,7 @@ async function handleDiagnostic(req: Request, res: Response, recoveredRun?: Reco
     if (fetchedUrl) result.fetchedUrl = fetchedUrl;
     if (pagesFetched.length) result.pagesFetched = pagesFetched;
     if (pageFacts) result.pageFacts = pageFacts;
+    result.warnings = [...retrievalWarnings, ...result.warnings];
 
     const savedAt = new Date().toISOString();
     const savedId = auditRunId ?? randomUUID();

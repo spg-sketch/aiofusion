@@ -356,7 +356,7 @@ Engine used:
             <Globe size={20} color="#ffffff" />
             <h1 className="text-3xl sm:text-4xl tracking-tight flex items-center" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
               Website Visibility Audit
-              <InfoTip text="Runs an AI-powered audit of your website (URL or pasted text) against GEO readiness criteria - content structure, entity clarity, schema markup, and authority signals. Returns scored findings with prioritised recommendations." width={260} />
+              <InfoTip text="Assesses the supplied page or pasted text for GEO readiness, supported by measured page signals. This is not a whole-site crawl or a direct test of visibility in AI answers." width={260} />
             </h1>
           </div>
           <p className="text-[13px] sm:text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>
@@ -389,7 +389,7 @@ Engine used:
               </div>
               <p className="text-[12px] mt-2 flex items-start gap-1.5" style={{ color: vars.g400 }}>
                 <Info size={12} className="flex-shrink-0 mt-0.5" />
-                <span>We fetch your homepage automatically, along with its robots.txt and sitemap, and analyse them for AI visibility.</span>
+                <span>We assess the supplied page, supported by verified robots.txt and sitemap resources. This is a page-level GEO readiness assessment, not a whole-site crawl or a direct AI visibility test.</span>
               </p>
             </div>
 
@@ -495,6 +495,11 @@ Engine used:
   }
 
   const statusColor = (s: string) => s === "pass" ? vars.green : s === "warn" ? vars.amber : vars.red;
+  const incompleteCapture = Boolean(result.fetchedUrl && result.pageFacts
+    && !result.pageFacts.metaTitle && !result.pageFacts.hasMetaDescription
+    && result.pageFacts.h1Count === 0 && result.pageFacts.h2Count === 0
+    && result.pageFacts.h3Count === 0 && result.pageFacts.imagesTotal === 0
+    && result.pageFacts.jsonLdBlockCount === 0);
   const statusLabel = (s: string) => s === "pass" ? "Strong" : s === "warn" ? "Needs Work" : "Critical";
   const statusIcon = (s: string) => s === "pass" ? CheckCircle2 : s === "warn" ? AlertTriangle : XCircle;
 
@@ -531,12 +536,14 @@ Engine used:
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-light leading-relaxed" style={{ color: vars.g500 }}>
-                {result.summary}
+                {incompleteCapture
+                  ? "Archived audit with an incomplete page capture. Its score and recommendations are unreliable: the site may have returned a security challenge or an empty response. Re-run with verified page content; the original record has been preserved."
+                  : result.summary}
               </p>
               {result.pagesFetched && result.pagesFetched.length > 0 && (
                 <p className="text-[11px] mt-2 flex items-start gap-1" style={{ color: vars.g400 }}>
                   <Globe size={11} className="flex-shrink-0 mt-0.5" />
-                  <span>Analysed {result.pagesFetched.length} live source{result.pagesFetched.length === 1 ? "" : "s"} from your site: {result.pagesFetched.map((p) => { try { return new URL(p).pathname === "/" ? "homepage" : new URL(p).pathname.replace(/^\//, ""); } catch { return p; } }).join(", ")}.</span>
+                  <span>Page-level assessment using {result.pagesFetched.length} retrieved resource{result.pagesFetched.length === 1 ? "" : "s"}: {result.pagesFetched.map((p) => { try { return new URL(p).pathname === "/" ? "homepage" : new URL(p).pathname.replace(/^\//, ""); } catch { return p; } }).join(", ")}. Other website pages and actual visibility in AI answers were not tested.</span>
                 </p>
               )}
             </div>
@@ -574,20 +581,20 @@ Engine used:
               <svg width={160} height={160}>
                 <circle cx={80} cy={80} r={70} fill="none" stroke={vars.g200} strokeWidth={12} />
                 <circle cx={80} cy={80} r={70} fill="none"
-                  stroke={result.overallScore >= 70 ? vars.green : result.overallScore >= 40 ? vars.amber : vars.red}
-                  strokeWidth={12} strokeDasharray={`${(result.overallScore / 100) * 440} 440`}
+                  stroke={incompleteCapture ? vars.g200 : result.overallScore >= 70 ? vars.green : result.overallScore >= 40 ? vars.amber : vars.red}
+                  strokeWidth={12} strokeDasharray={`${(incompleteCapture ? 0 : result.overallScore / 100) * 440} 440`}
                   strokeLinecap="round" transform="rotate(-90 80 80)" />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-5xl font-bold" style={{ color: vars.navy }}>{result.overallScore}</span>
-                <span className="text-[14px] uppercase tracking-wider mt-1" style={{ color: vars.g400 }}>/100</span>
+                <span className="text-5xl font-bold" style={{ color: vars.navy }}>{incompleteCapture ? "—" : result.overallScore}</span>
+                <span className="text-[14px] uppercase tracking-wider mt-1" style={{ color: vars.g400 }}>{incompleteCapture ? "Not assessable" : "/100"}</span>
               </div>
             </div>
-            <span className="text-[14px] font-semibold mt-2" style={{ color: vars.navy }}>Authority Score</span>
+            <span className="text-[14px] font-semibold mt-2" style={{ color: vars.navy }}>Page GEO Readiness</span>
           </div>
           <div className="flex-1 w-full">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {(result.categories || []).map((cat) => {
+              {(incompleteCapture ? [] : result.categories || []).map((cat) => {
                 const Icon = statusIcon(cat.status);
                 return (
                   <div key={cat.name} className="p-4 rounded-xl border hover:shadow-md transition-shadow cursor-pointer hover:bg-slate-50" style={{ borderColor: vars.g200 }}>
@@ -619,8 +626,8 @@ Engine used:
           { label: "Headings (H1 / H2 / H3)", value: `${f.h1Count} / ${f.h2Count} / ${f.h3Count}` },
           { label: "Images with alt text", value: `${f.imagesWithAlt} of ${f.imagesTotal} (${altPct}%)` },
           { label: "Lists / tables", value: `${f.listCount} / ${f.tableCount}` },
-          { label: "robots.txt", value: yesNo(f.hasRobotsTxt) },
-          { label: "Sitemap URLs", value: f.sitemapUrlCount === null ? "No sitemap found" : String(f.sitemapUrlCount) },
+          { label: "robots.txt", value: f.hasRobotsTxt ? "Verified" : "Not verified" },
+          { label: f.sitemapIndexCount !== undefined ? "Child sitemap files" : "Sitemap page URLs", value: f.sitemapIndexCount !== undefined ? `${f.sitemapIndexCount} (pages not counted)` : f.sitemapUrlCount === null ? "Not verified" : String(f.sitemapUrlCount) },
         ];
         return (
           <div className="rounded-2xl border p-4 sm:p-6 mb-6 hover:shadow-sm transition-shadow" style={{ background: "white", borderColor: vars.g200 }}>

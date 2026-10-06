@@ -6,6 +6,9 @@ import type { Server } from "node:http";
 // Mock the Anthropic SDK so the analysis call never hits the network.
 // `messagesCreate` is hoisted so the mock factory can reference it.
 const { messagesCreate } = vi.hoisted(() => ({ messagesCreate: vi.fn() }));
+const { geoContext } = vi.hoisted(() => ({ geoContext: vi.fn() }));
+vi.mock("../lib/safe-fetch", () => ({ fetchGeoAuditContext: geoContext }));
+import { AuditPageUnavailableError } from "../lib/audit-page-evidence";
 vi.mock("@anthropic-ai/sdk", () => ({
   default: class MockAnthropic {
     messages = { create: messagesCreate };
@@ -83,7 +86,7 @@ vi.mock("@workspace/db", () => {
   return { db, auditLocksTable, savedDiagnosticsTable, tokenUsageTable: {}, adminEventsTable: {} };
 });
 
-import diagnosticRouter, { normaliseResult, extractJSON, sanitizeConfirmedEntity, buildIdentityAnchor } from "./diagnostic";
+import diagnosticRouter, { normaliseResult, normaliseModelResult, extractJSON, sanitizeConfirmedEntity, buildIdentityAnchor } from "./diagnostic";
 
 const CATEGORY_NAMES = [
   "Schema & Structured Data",
@@ -106,7 +109,7 @@ const CATEGORY_MAXES: Record<string, number> = {
 // A well-formed result the model is supposed to return.
 function validRaw() {
   return {
-    overallScore: 64,
+    overallScore: 60,
     categories: CATEGORY_NAMES.map((name) => ({
       name,
       score: 10,
@@ -154,6 +157,10 @@ describe("extractJSON", () => {
 });
 
 describe("normaliseResult", () => {
+  it("rejects incomplete model assessments rather than filling missing categories with zero scores", () => {
+    expect(() => normaliseModelResult({ categories: [] })).toThrow("No website score");
+    expect(() => normaliseModelResult(validRaw())).not.toThrow();
+  });
   it("always returns the canonical six categories in order", () => {
     const result = normaliseResult({});
     expect(result.categories.map((c: any) => c.name)).toEqual(CATEGORY_NAMES);
@@ -224,10 +231,10 @@ describe("normaliseResult", () => {
     expect(status["LLM Visibility"]).toBe("warn");
   });
 
-  it("clamps overallScore to [0, 100] and rounds it", () => {
-    expect(normaliseResult({ overallScore: 250 }).overallScore).toBe(100);
+  it("uses the category total rather than an inconsistent model-supplied overall score", () => {
+    expect(normaliseResult({ overallScore: 250 }).overallScore).toBe(0);
     expect(normaliseResult({ overallScore: -10 }).overallScore).toBe(0);
-    expect(normaliseResult({ overallScore: 63.4 }).overallScore).toBe(63);
+    expect(normaliseResult({ ...validRaw(), overallScore: 63.4 }).overallScore).toBe(60);
   });
 
   it("derives overallScore from category scores when absent or non-numeric", () => {
@@ -300,7 +307,7 @@ describe("normaliseResult", () => {
 
   it("normalises a full, well-formed payload faithfully", () => {
     const result = normaliseResult(validRaw());
-    expect(result.overallScore).toBe(64);
+    expect(result.overallScore).toBe(60);
     expect(result.summary).toBe("An executive summary.");
     expect(result.categories).toHaveLength(6);
     expect(result.strengths).toEqual(["s1", "s2"]);
@@ -403,6 +410,17 @@ describe("POST /api/diagnostic", () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
+  it("rejects a CAPTCHA capture before calling AI or consuming an audit lock", async () => {
+    geoContext.mockRejectedValueOnce(new AuditPageUnavailableError());
+    const before = auditLocks.length;
+    const { status, json } = await post({ url: "https://public.example", projectId: "blocked-fixture" });
+    expect(status).toBe(422);
+    expect(json.error).toContain("No website score");
+    expect(messagesCreate).not.toHaveBeenCalled();
+    expect(chatCompletionsCreate).not.toHaveBeenCalled();
+    expect(auditLocks).toHaveLength(before);
+  });
+
   it("returns 400 when neither content nor url is supplied", async () => {
     const { status, json } = await post({});
     expect(status).toBe(400);
@@ -428,9 +446,9 @@ describe("POST /api/diagnostic", () => {
     const { status, json } = await post({ content: "Some page content to analyse." });
     expect(status).toBe(200);
     expect(json.provider).toBe("claude");
-    expect(json.overallScore).toBe(64);
+    expect(json.overallScore).toBe(60);
     expect(json.categories).toHaveLength(6);
-    expect(json.sources.claude.score).toBe(64);
+    expect(json.sources.claude.score).toBe(60);
     expect(messagesCreate).toHaveBeenCalledTimes(1);
   });
 
@@ -460,7 +478,7 @@ describe("POST /api/diagnostic", () => {
     messagesCreate.mockResolvedValue(modelReply("```json\n" + JSON.stringify(validRaw()) + "\n```"));
     const { status, json } = await post({ content: "Page content." });
     expect(status).toBe(200);
-    expect(json.overallScore).toBe(64);
+    expect(json.overallScore).toBe(60);
   });
 
   it("clamps garbage scores from the model before returning them", async () => {
@@ -470,7 +488,7 @@ describe("POST /api/diagnostic", () => {
     messagesCreate.mockResolvedValue(modelReply(JSON.stringify(raw)));
     const { status, json } = await post({ content: "Page content." });
     expect(status).toBe(200);
-    expect(json.overallScore).toBe(100);
+    expect(json.overallScore).toBe(65);
     expect(json.categories[0].score).toBe(15);
   });
 
@@ -484,7 +502,7 @@ describe("POST /api/diagnostic", () => {
     const { status, json } = await post({ content: "Page content." });
     expect(status).toBe(200);
     expect(json.provider).toBe("openai");
-    expect(json.sources.openai.score).toBe(64);
+    expect(json.sources.openai.score).toBe(60);
   });
 
   it("returns 500 when both providers are unavailable", async () => {

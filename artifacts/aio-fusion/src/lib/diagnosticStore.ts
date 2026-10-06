@@ -62,6 +62,7 @@ export type DiagnosticResult = {
     tableCount: number;
     hasRobotsTxt: boolean;
     sitemapUrlCount: number | null;
+    sitemapIndexCount?: number;
   };
   sources?: {
     claude?: { score: number; summary: string };

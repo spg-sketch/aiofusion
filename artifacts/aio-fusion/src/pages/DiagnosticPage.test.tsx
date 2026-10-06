@@ -66,6 +66,41 @@ describe("DiagnosticPage run lifecycle", () => {
     expect(vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes("/api/diagnostic"))).toHaveLength(0);
   });
 
+  const captureFacts = {
+    metaTitle: "", hasMetaDescription: false, hasCanonical: false,
+    openGraphTagCount: 0, jsonLdBlockCount: 0, jsonLdTypes: [],
+    microdataCount: 0, h1Count: 0, h2Count: 0, h3Count: 0,
+    imagesTotal: 0, imagesWithAlt: 0, imagesWithoutAlt: 0,
+    listCount: 0, tableCount: 0, hasRobotsTxt: true, sitemapUrlCount: 0,
+  };
+  function savedCapture(facts: Omit<typeof captureFacts, "sitemapUrlCount"> & { sitemapUrlCount: number | null; sitemapIndexCount?: number }) {
+    return {
+      id: "capture-fixture", savedAt: "2026-10-06T12:30:00.000Z",
+      result: {
+        overallScore: 2, categories: [], strengths: [], warnings: [],
+        criticalGaps: [], priorityActions: [], summary: "Original saved summary",
+        fetchedUrl: "https://public.example", pagesFetched: ["https://public.example"],
+        pageFacts: facts,
+      },
+    };
+  }
+  it("marks historic empty captures as unassessable without rewriting their stored score", async () => {
+    localStorage.setItem(savedDiagnosticsKey(client.id), JSON.stringify([savedCapture(captureFacts)]));
+    render(<DiagnosticPage activeClient={client} pendingDiagnosticId="capture-fixture" sessionId="person-a" workspaceId="workspace-a" />);
+    expect(await screen.findByText("Not assessable")).toBeInTheDocument();
+    expect(screen.getByText(/Archived audit with an incomplete page capture/)).toBeInTheDocument();
+    expect(screen.queryByText("Original saved summary")).not.toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(savedDiagnosticsKey(client.id))!)[0].result.overallScore).toBe(2);
+  });
+  it("labels sitemap index entries as child files, not website page counts", async () => {
+    const facts = { ...captureFacts, metaTitle: "Genuine page", h2Count: 16, sitemapUrlCount: null, sitemapIndexCount: 4 };
+    localStorage.setItem(savedDiagnosticsKey(client.id), JSON.stringify([savedCapture(facts)]));
+    render(<DiagnosticPage activeClient={client} pendingDiagnosticId="capture-fixture" sessionId="person-a" workspaceId="workspace-a" />);
+    expect(await screen.findByText("Child sitemap files")).toBeInTheDocument();
+    expect(screen.getByText("4 (pages not counted)")).toBeInTheDocument();
+    expect(screen.getByText(/actual visibility in AI answers were not tested/)).toBeInTheDocument();
+  });
+
   it("pairs the running explanation with the measured estimate and still-working overtime state", async () => {
     recordAuditDuration("visibility", 150_000);
     recordAuditDuration("visibility", 168_000);

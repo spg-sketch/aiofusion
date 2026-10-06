@@ -54,14 +54,14 @@ describe("security audit network boundaries (no outbound requests)", () => {
     expect(state.fetch).toHaveBeenCalledOnce();
   });
 
-  it("records robots/sitemap read-all behaviour, distinct from bounded HTML streaming", async () => {
+  it("streams robots/sitemap resources without using unbounded Response.text()", async () => {
     state.ipv4 = ["93.184.216.34"];
-    const text = vi.fn(async () => "Sitemap: https://probe.invalid/sitemap.xml");
-    state.fetch.mockImplementationOnce(async () => new Response("<html><body>fixture</body></html>"))
-      .mockImplementationOnce(async () => ({ ok: true, text }))
+    const robots = new Response("Sitemap: https://probe.invalid/sitemap.xml");
+    const text = vi.spyOn(robots, "text");
+    state.fetch.mockImplementationOnce(async () => new Response("<html><body>A readable public homepage fixture for audit testing.</body></html>", { headers: { "content-type": "text/html" } }))
+      .mockImplementationOnce(async () => robots)
       .mockImplementationOnce(async () => new Response("<urlset></urlset>"));
     await fetchGeoAuditContext("https://probe.invalid");
-    expect(text).toHaveBeenCalledOnce();
-    // Response.text() is consumed before slicing, with no streaming byte cap.
+    expect(text).not.toHaveBeenCalled();
   });
 });

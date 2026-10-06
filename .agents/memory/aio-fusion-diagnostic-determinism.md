@@ -17,3 +17,11 @@ Design decisions to stay consistent with:
 
 ## Testing gotcha: api-server needs a workflow restart
 The `artifacts/api-server` dev workflow runs `pnpm run build && pnpm run start` (esbuild bundle, then node). It does NOT hot-reload. After editing any api-server source, **restart the workflow** before curling `localhost:8080`, or you will test stale code (symptom: e.g. `provider: "merged"` or missing `pageFacts` even though the source no longer produces them).
+
+## Score validity and comparisons with other tools
+
+Treat the Website Audit as a supplied-page readiness assessment, not a whole-site diagnostic, a direct AI visibility measurement, or a score guaranteed to match another vendor's methodology. Do not increase scores merely to match external diagnostics.
+
+**Why:** Industry beta feedback exposed a misleading 2/100 result produced from an empty capture and a CAPTCHA response, not the genuine website. The same site had readable content and nested structured data on a later retrieval. Transport success alone did not establish usable evidence.
+
+**How to apply:** An inaccessible capture must remain an access/verification problem, not a low-quality-site verdict. Preserve historical evidence rather than silently rewriting it; clearly distinguish unknown observations from verified absence. Retests must identify whether they used current code in isolation or the published user journey.
