@@ -520,3 +520,17 @@ mtime_ms = 1791277256394
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/cbfad828-d3c3-4428-9a29-3ae0ee0314f1/bce339d2-b8b2-483f-a8a3-b698a657d3f2"
 storage_version_token = "1791278552421571"
 content_type = "text/plain"
+
+[[outputs]]
+id = "NjIkHS3OqCHWajKa1gPDe"
+uri = "file://tmp/website-audit-retest/purposefulrelations.html"
+type = "html"
+title = "Purposeful Relations — Website Audit Retest"
+description = "52/100 from the corrected audit code. Includes measured evidence, findings and scope limitations; clearly labelled as a pre-publication retest."
+logical_id = "31a55881-d88c-48ac-9f9d-48bd7076593e"
+content_hash = "sha256:dbc1b8291428a0adb3c478449e4b4c9cdeb1a0233dd6725e70b31970992225b4"
+size = 10595
+mtime_ms = 1791301023425
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:980839d0-3e5e-48b6-81c5-2904335bf934/31a55881-d88c-48ac-9f9d-48bd7076593e/ab3e9b08-f90f-44e1-bbdb-6afae413cb7a"
+storage_version_token = "1791301269200708"
+content_type = "text/html"
