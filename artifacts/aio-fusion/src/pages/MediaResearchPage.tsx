@@ -479,11 +479,9 @@ function MediaResearchPage() {
   const [recommendationSetId, setRecommendationSetId] = useState<number | string | null>(null);
   const [recommendationHasRun, setRecommendationHasRun] = useState(false);
   const [evaluation, setEvaluation] = useState<RecommendationEvaluation | null>(null);
-  const [enrichmentWarning, setEnrichmentWarning] = useState("");
   const [pitchProgress, setPitchProgress] = useState<{ scope: string; completed: number; total: number } | null>(null);
   const [pitchErrors, setPitchErrors] = useState<{ scope: string; errors: Record<number, string> } | null>(null);
   const pitchBusyRef = useRef(false);
-  const [coverageResult, setCoverageResult] = useState<{ key: string; text: string; verified: boolean } | null>(null);
   type RequestHandle = { id: number; key: string; controller: AbortController };
   const requestSequence = useRef(0);
   const recommendationRequest = useRef<RequestHandle | null>(null);
@@ -492,7 +490,6 @@ function MediaResearchPage() {
   const recommendationLoadSequence = useRef(0);
   const recommendationResultsRef = useRef<HTMLElement | null>(null);
   const [recommendationScrollRequest, setRecommendationScrollRequest] = useState<{ loadId: number; scope: string } | null>(null);
-  const coverageOperationSequence = useRef(0);
   const briefEditRevision = useRef(0);
   const activeStoryRef = useRef(`${projectId || ""}:${storyKey}`);
   activeStoryRef.current = `${projectId || ""}:${storyKey}`;
@@ -722,86 +719,6 @@ function MediaResearchPage() {
     }
   }, [recommendationScrollRequest]);
 
-  const [enriching, setEnriching] = useState<boolean>(false);
-  const coverageScopeRef = useRef(`${workspaceId}:${projectId || ""}:${storyKey}`);
-  useEffect(() => {
-    const scopeKey = `${workspaceId}:${projectId || ""}:${storyKey}`;
-    if (coverageScopeRef.current === scopeKey) return;
-    coverageScopeRef.current = scopeKey;
-    coverageOperationSequence.current += 1;
-    setEnriching(false);
-    setEnrichmentWarning("");
-    setCoverageResult(null);
-    setError("");
-  }, [workspaceId, projectId, storyKey]);
-
-  const enrichRecommendations = async (recommendationSetId: number | string) => {
-    if (!projectId || !storyKey) return;
-    const requestKey = `${projectId}:${storyKey}`;
-    const scopeKey = `${workspaceId}:${requestKey}`;
-    const coverageId = ++coverageOperationSequence.current;
-    const loadId = ++recommendationLoadSequence.current;
-    const coverageOwnerIsCurrent = () => coverageOperationSequence.current === coverageId
-      && coverageScopeRef.current === scopeKey
-      && activeRecommendationScopeRef.current === scopeKey;
-    const isCurrent = () => coverageOwnerIsCurrent()
-      && activeStoryRef.current === requestKey
-      && activeRecommendationScopeRef.current === scopeKey
-      && recommendationLoadSequence.current === loadId;
-    setEnriching(true);
-    setError("");
-    setEnrichmentWarning("");
-    setCoverageResult(null);
-    try {
-      const response = await fetch(`${apiBase()}/api/store/media-db/recommendations/enrich`, {
-        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, storyKey, recommendationSetId }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw researchRequestError(response, data, "Could not enrich recommendations.");
-      if (!isCurrent()) return;
-      const set = data.recommendationSet && typeof data.recommendationSet === "object"
-        ? data.recommendationSet as Record<string, unknown>
-        : null;
-      setRecommendationSetId(typeof set?.id === "number" || typeof set?.id === "string" ? set.id : recommendationSetId);
-      setRankingRevision(typeof data.rankingRevision === "string" || typeof data.rankingRevision === "number" ? data.rankingRevision : null);
-      setVisibilityRevision(typeof data.visibilityRevision === "string" || typeof data.visibilityRevision === "number" ? data.visibilityRevision : null);
-      setEvaluation(data.evaluation && typeof data.evaluation === "object" ? data.evaluation as RecommendationEvaluation : null);
-      const nextItems = dedupeRecommendations(Array.isArray(data.items) ? data.items : []);
-      setItems(nextItems);
-      setRecommendationPage(1);
-      setRecommendationPageLoading(false);
-      const pagination = data.pagination && typeof data.pagination === "object" ? data.pagination as Record<string, unknown> : {};
-      setRecommendationPagination({
-        start: typeof data.start === "number" ? data.start : nextItems.length ? 1 : 0,
-        end: typeof data.end === "number" ? data.end : nextItems.length,
-        hasPrevious: typeof data.hasPrevious === "boolean" ? data.hasPrevious : false,
-        hasNext: typeof data.hasNext === "boolean" ? data.hasNext : (typeof data.totalMatches === "number" ? data.totalMatches : totalMatches ?? nextItems.length) > RECOMMENDATION_PAGE_SIZE,
-      });
-      setTotalMatches(typeof data.totalMatches === "number" ? data.totalMatches : typeof pagination.totalMatches === "number" ? pagination.totalMatches : totalMatches);
-      setCollectionTotal(typeof data.collectionTotal === "number" ? data.collectionTotal : typeof pagination.collectionTotal === "number" ? pagination.collectionTotal : collectionTotal);
-      const warnings = nextItems.flatMap((item) => item.assessment?.warnings || []);
-      setEnrichmentWarning(Array.from(new Set(warnings)).join(" "));
-      const checkedCount = nextItems.slice(0, RECOMMENDATION_PAGE_SIZE).filter((item) =>
-        item.assessment?.evidence.some((source) => source.attribution === "page_checked" && source.authorMatched)
-      ).length;
-      setCoverageResult({
-        key: requestKey,
-        verified: checkedCount > 0,
-        text: checkedCount === 0
-          ? "No coverage verified. This check could not confirm article bylines for the top five contacts. This does not mean they have no recent coverage. Previous verified evidence is retained; current contact details have not been verified."
-          : `Coverage check finished. ${checkedCount} of up to ${Math.min(RECOMMENDATION_PAGE_SIZE, totalMatches ?? nextItems.length)} contacts in the global top five have a page-checked byline. This check is independent of the page you were viewing. A verified byline without a publication date does not establish recency; this does not verify current contact details.`,
-      });
-      await loadDecisions();
-    } catch (reason) {
-      if (isCurrent()) {
-        setError(reason instanceof Error ? reason.message : "Could not enrich recommendations.");
-      }
-    } finally {
-      if (coverageOwnerIsCurrent()) setEnriching(false);
-    }
-  };
-
   const saveAndRecommend = async () => {
     if (!selected || !projectId) { setError("Choose a saved article and active project before matching contacts."); return; }
     const generation = researchGeneration.current;
@@ -856,7 +773,6 @@ function MediaResearchPage() {
     recommendationRequest.current?.controller.abort();
     const request: RequestHandle = { id: ++requestSequence.current, key: requestKey, controller: new AbortController() };
     recommendationRequest.current = request;
-    setEnrichmentWarning("");
     recommendationLoadSequence.current += 1;
     setRecommendationPageLoading(false);
     setRecommendationPage(1);
@@ -1012,7 +928,6 @@ function MediaResearchPage() {
     setError("");
     setLoading(false);
     setLiveLoading(false);
-    setEnrichmentWarning("");
     
     // Article/project identity is deliberate: edits to generated fields are
     // user-owned and must not be replaced by unrelated store updates.
@@ -1431,8 +1346,6 @@ function MediaResearchPage() {
     setDiscoveryToken("");
     setSavedDiscoveries({});
     setLoading(false);
-    setEnriching(false);
-    setEnrichmentWarning("");
     setError("");
     try {
       if (selectionStorageKey) sessionStorage.removeItem(selectionStorageKey);
@@ -1574,25 +1487,14 @@ function MediaResearchPage() {
          {discoveryRun?.status === "failed" && <button type="button" data-testid="button-retry-live-search" onClick={() => void discoverLive()} className="px-3 py-2 rounded-lg border text-[12px] font-semibold" style={{ borderColor: vars.g200, color: vars.navy }}>Retry live search</button>}
        </div>
      </section>}
-     {coverageResult?.key === `${projectId}:${storyKey}` && (
-       <p role="status" className={`mb-3 rounded-lg border p-3 text-[12px] ${coverageResult.verified ? "border-sky-100 bg-sky-50 text-sky-900" : "border-amber-100 bg-amber-50 text-amber-900"}`}>
-         {coverageResult.text}
-       </p>
-     )}
         {(loading || items.length > 0 || (recommendationHasRun && recommendationPage > 1)) && <section ref={recommendationResultsRef} className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b flex flex-wrap justify-between gap-3" style={{ background: vars.g50, borderColor: vars.g200 }}><div><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Recommended from your Media Database</h2><p data-testid="recommendation-pagination-summary" className="text-[13px] mt-1" style={{ color: vars.g500 }}>{loading || recommendationPageLoading ? "Loading ranked contacts..." : recommendationSummary}</p>{evaluation && <p className="text-[11px] mt-2 text-slate-500">Evaluation: {evaluation.evaluated} evaluated · {evaluation.shortlisted} shortlisted · {evaluation.contacted} contacted · {evaluation.responded} responded · {evaluation.placed} placed</p>}</div>
        <div className="flex gap-2">
          {items.length > 0 && recommendationSetId !== null && (
-           <div className="max-w-sm"><button type="button" data-testid="button-generate-pitch-angles" disabled={Boolean(pitchProgress) || loading || enriching || recommendationPageLoading || briefIsDirty || briefLoading} onClick={() => void generateDisplayedPitches()} className="self-start text-[12px] px-3 py-2 border rounded-lg bg-white disabled:opacity-50 hover:bg-slate-50" style={{ borderColor: vars.g200 }}>
+           <div className="max-w-sm"><button type="button" data-testid="button-generate-pitch-angles" disabled={Boolean(pitchProgress) || loading || recommendationPageLoading || briefIsDirty || briefLoading} onClick={() => void generateDisplayedPitches()} className="self-start text-[12px] px-3 py-2 border rounded-lg bg-white disabled:opacity-50 hover:bg-slate-50" style={{ borderColor: vars.g200 }}>
             {pitchProgress?.scope === `${workspaceId}:${projectId}:${storyKey}` ? `Generating angles ${pitchProgress.completed}/${pitchProgress.total}...` : "Generate pitch angles for displayed contacts"}
            </button><p className="text-[11px] text-slate-500 mt-1">Generates AI suggestions for up to five contacts on this page and counts toward your account’s AI spend limit. Loading or changing pages never generates pitches. {briefIsDirty && "Save your brief and match contacts again first."}</p></div>
          )}
-         {items.length > 0 && recommendationSetId !== null && (
-           <button disabled={enriching} onClick={() => void enrichRecommendations(recommendationSetId)} className="self-start text-[12px] px-3 py-2 border rounded-lg bg-white disabled:opacity-50 hover:bg-slate-50 transition-colors shadow-sm" style={{ borderColor: vars.g200 }}>
-            <FileText size={14} className={`inline mr-1 ${enriching ? "animate-pulse" : ""}`} />
-            {enriching ? "Checking top 5..." : "Check top 5 recent coverage"}
-          </button>
-        )}
-        </div></div><p className="mx-5 mb-3 text-[11px] text-slate-500">The explicit coverage action checks up to five contacts from the global top five, regardless of the page you are viewing, and counts toward your account’s AI spend limit. Pagination does not run a coverage check.</p>{enrichmentWarning && <details className="mx-5 mb-3 rounded-lg bg-amber-50 border border-amber-100 p-3 text-[12px] text-amber-800"><summary className="cursor-pointer font-semibold">Coverage evidence is limited - view details</summary><p className="mt-2">Only source-backed links with a checked byline count as verified coverage. Missing evidence is not proof that a journalist has no relevant articles.</p><p className="mt-2">{enrichmentWarning}</p></details>}{items.map((item) => contactCard(item))}{!items.length && recommendationPage > 1 && !recommendationPageLoading && <p className="p-5 text-center text-[13px] text-slate-500">There are no eligible contacts on this page. Use Previous five to return to earlier matches.</p>}{(hasPreviousRecommendationPage || hasNextRecommendationPage) && <div className="p-5 border-t flex justify-center gap-3" style={{ borderColor: vars.g200 }}>{hasPreviousRecommendationPage && <button type="button" data-testid="button-previous-recommendations" disabled={recommendationPageLoading} onClick={() => goToRecommendationPage(recommendationPage - 1)} className="px-5 py-2.5 rounded-lg border bg-white text-[13px] font-semibold hover:bg-slate-50 disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>Previous five</button>}{hasNextRecommendationPage && <button type="button" data-testid="button-next-recommendations" disabled={recommendationPageLoading} onClick={() => goToRecommendationPage(recommendationPage + 1)} className="px-5 py-2.5 rounded-lg border bg-white text-[13px] font-semibold hover:bg-slate-50 disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>See next five</button>}</div>}</section>}
+        </div></div>{items.map((item) => contactCard(item))}{!items.length && recommendationPage > 1 && !recommendationPageLoading && <p className="p-5 text-center text-[13px] text-slate-500">There are no eligible contacts on this page. Use Previous five to return to earlier matches.</p>}{(hasPreviousRecommendationPage || hasNextRecommendationPage) && <div className="p-5 border-t flex justify-center gap-3" style={{ borderColor: vars.g200 }}>{hasPreviousRecommendationPage && <button type="button" data-testid="button-previous-recommendations" disabled={recommendationPageLoading} onClick={() => goToRecommendationPage(recommendationPage - 1)} className="px-5 py-2.5 rounded-lg border bg-white text-[13px] font-semibold hover:bg-slate-50 disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>Previous five</button>}{hasNextRecommendationPage && <button type="button" data-testid="button-next-recommendations" disabled={recommendationPageLoading} onClick={() => goToRecommendationPage(recommendationPage + 1)} className="px-5 py-2.5 rounded-lg border bg-white text-[13px] font-semibold hover:bg-slate-50 disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>See next five</button>}</div>}</section>}
         {liveItems.length > 0 && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Public web discoveries</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{liveItems.length} journalists across {livePublicationCount} publications. {liveLoading ? "Evidence checks are continuing. Verified cards are ready to review now; pending candidates are identified." : "Evidence checks are complete."}</p><p className="text-[12px] mt-2" style={{ color: vars.g500 }}>These are additional online candidates, not saved database contacts. Use “Send for review” on a verified result; a steward must approve it before it becomes a contact.</p></div>
       {liveGroups.filter((group) => group.items.length > 0).map((group) => <div key={group.label}>
         <div className="px-5 py-2.5 border-b text-[12px] font-bold uppercase tracking-wide" style={{ color: vars.navy, background: "rgba(31,116,143,0.07)", borderColor: vars.g200 }}>{group.label} · {group.items.length}</div>

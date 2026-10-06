@@ -68,3 +68,9 @@ Media Research recommendations and story shortlist use a short contact summary. 
 **Why:** The user requested simpler Media Research results with only contact/publication fields, reach, Editorial fit and a suggested pitch angle. Imported source reach is not a measured AI Authority score, and the reference circular indicator was a match-score indicator.
 
 **How to apply:** Keep the summary scoped to Media Research. A circular Editorial fit indicator must use the actual assessment fit, never the legacy ranking score or imported reach. Missing values stay explicit; do not invent angles, links or authority scores. Explain optional public-web discovery separately from database matches and retain human review before saving a new contact.
+
+Do not expose the “Check top 5 recent coverage” action in Media Research.
+
+**Why:** The user explicitly approved removing this button after beta feedback showed it was still present in the published app. This is a UI simplification, not permission to delete saved coverage evidence.
+
+**How to apply:** Preserve existing recommendations, coverage assessments, source history, contact matching, pagination and explicit pitch generation. Do not replace the removed action with automatic paid coverage checks or a renamed equivalent without a new request.

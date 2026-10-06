@@ -854,8 +854,7 @@ describe("MediaResearchPage live discovery", () => {
     expect(screen.queryByText("Result 1 Contact")).toBeNull();
   });
 
-  it("clears the coverage spinner when page navigation supersedes its result", async () => {
-    delayedCoverage.active = true;
+  it("keeps the coverage button absent and never runs coverage checks during pagination", async () => {
     recommendationState.pagedItems = Array.from({ length: 12 }, (_, index) => ({
       rank: index + 1,
       score: 100 - index,
@@ -869,49 +868,36 @@ describe("MediaResearchPage live discovery", () => {
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
     expect(await screen.findByText("Reporter 1 Contact")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Check top 5 recent coverage" }));
-    await waitFor(() => expect(delayedCoverage.calls).toHaveLength(1));
+    expect(screen.queryByRole("button", { name: "Check top 5 recent coverage" })).toBeNull();
+    expect(screen.queryByText(/The explicit coverage action/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "See next five" }));
     expect(await screen.findByText("Reporter 6 Contact")).toBeTruthy();
 
-    await act(async () => delayedCoverage.calls[0].resolve(coverageSuccessResponse()));
-
-    await waitFor(() => expect(screen.getByRole("button", { name: "Check top 5 recent coverage" })).not.toBeDisabled());
+    expect(screen.queryByRole("button", { name: "Check top 5 recent coverage" })).toBeNull();
     expect(screen.getByText("Reporter 6 Contact")).toBeTruthy();
-    expect(screen.queryByText("Coverage Updated")).toBeNull();
+    expect(requests.some((request) => request.url.includes("/recommendations/enrich"))).toBe(false);
   });
 
-  it("keeps a newer coverage spinner owned by its story/workspace after an older run settles", async () => {
-    delayedCoverage.active = true;
+  it("does not restore the removed coverage action after story or workspace changes", async () => {
     localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "workspace-a", role: "agency" }));
     const view = render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
     expect(await screen.findByText("Decision Contact")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Check top 5 recent coverage" }));
-    await waitFor(() => expect(delayedCoverage.calls).toHaveLength(1));
+    expect(screen.queryByRole("button", { name: "Check top 5 recent coverage" })).toBeNull();
 
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-2" } });
     await waitFor(() => expect((screen.getByTestId("select-research-article") as HTMLSelectElement).value).toBe("story-2"));
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
     expect(await screen.findByText("Decision Contact")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Check top 5 recent coverage" }));
-    await waitFor(() => expect(delayedCoverage.calls).toHaveLength(2));
-    await act(async () => delayedCoverage.calls[0].resolve(coverageSuccessResponse()));
-    expect(screen.getByRole("button", { name: "Checking top 5..." })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Check top 5 recent coverage" })).toBeNull();
 
     const priorScopedLoads = requests.filter((request) => request.url.includes("/store/media-db/recommendations?") && request.url.includes("storyKey=story-1")).length;
     localStorage.setItem("aio.auth.session.v3", JSON.stringify({ username: "workspace-b", role: "agency" }));
     view.rerender(<MediaResearchPage />);
     await waitFor(() => expect(requests.filter((request) => request.url.includes("/store/media-db/recommendations?") && request.url.includes("storyKey=story-1")).length).toBeGreaterThan(priorScopedLoads));
     expect(await screen.findByText("Decision Contact")).toBeTruthy();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Check top 5 recent coverage" })).not.toBeDisabled());
-    fireEvent.click(screen.getByRole("button", { name: "Check top 5 recent coverage" }));
-    await waitFor(() => expect(delayedCoverage.calls).toHaveLength(3));
-
-    await act(async () => delayedCoverage.calls[1].resolve(coverageSuccessResponse()));
-    expect(screen.getByRole("button", { name: "Checking top 5..." })).toBeDisabled();
-    await act(async () => delayedCoverage.calls[2].resolve(coverageSuccessResponse()));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Check top 5 recent coverage" })).not.toBeDisabled());
+    expect(screen.queryByRole("button", { name: "Check top 5 recent coverage" })).toBeNull();
+    expect(requests.some((request) => request.url.includes("/recommendations/enrich"))).toBe(false);
   });
 
   it("resets transient research and scoped selection without deleting persisted records", async () => {
@@ -1679,14 +1665,14 @@ describe("MediaResearchPage live discovery", () => {
     expect(requests.some((request) => request.url.endsWith("/store/media-db/recommendations"))).toBe(false);
   });
 
-  it("explains coverage scope and presents a readable account spend-limit error for HTTP 429", async () => {
+  it("still presents a readable account spend-limit error when contact matching returns HTTP 429", async () => {
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
     expect(await screen.findByText("Decision Contact")).toBeTruthy();
-    expect(screen.getByText(/global top five.*regardless of the page you are viewing.*account’s AI spend limit.*pagination does not run a coverage check/i)).toBeTruthy();
-    featureState.quotaFailure = "enrich";
-    fireEvent.click(screen.getByRole("button", { name: "Check top 5 recent coverage" }));
-    await waitFor(() => expect(requests.some((request) => request.url.includes("/recommendations/enrich") && request.method === "POST")).toBe(true));
+    featureState.quotaFailure = "recommendations";
+    await waitFor(() => expect(screen.getByTestId("button-recommend-contacts")).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId("button-recommend-contacts"));
+    await waitFor(() => expect(requests.some((request) => request.url.endsWith("/store/media-db/recommendations") && request.method === "POST")).toBe(true));
     expect((await screen.findByTestId("status-research-error")).textContent).toMatch(/account's AI spend limit or request quota/i);
     expect(screen.queryByText("provider quota")).toBeNull();
   });
@@ -1700,15 +1686,24 @@ describe("MediaResearchPage live discovery", () => {
     await waitFor(() => expect(requests.some((request) => request.url.includes("/recommendations/brief?") && request.url.includes("projectId=project-1") && request.url.includes("storyKey=story-2"))).toBe(true));
   });
 
-  it("updates the research result without publishing its retained coverage evidence", async () => {
+  it("keeps saved coverage assessments intact without exposing the removed coverage action", async () => {
+    recommendationState.pagedItems = [{
+      rank: 1, score: 84, reasons: ["Coverage profile matches energy"],
+      contact: { id: 91, firstName: "Enriched", lastName: "Contact", role: "Energy editor", email: "", phone: "", notes: "", beats: ["energy"], sectors: ["Energy"], outletName: "Current Energy Daily", outletCategory: "Energy" },
+      assessment: {
+        version: "editorial-v1", fitScore: 84, confidence: "high", evidenceCoverage: 100,
+        factors: [], readiness: { status: "ready", reasons: [] },
+        evidence: [{ title: "Recent energy coverage", url: "https://energy.example/recent", publishedAt: "2026-08-01", checkedAt: "2026-09-01", excerpt: "Energy transition", attribution: "page_checked", authorMatched: true }],
+        warnings: [], suggestedAngle: null,
+      },
+    }];
+    const savedRecommendations = JSON.stringify(recommendationState.pagedItems);
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
-    expect(await screen.findByText("Decision Contact")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Check top 5 recent coverage" }));
     expect(await screen.findByText("Enriched Contact")).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toMatch(/1 of up to 1 contacts in the global top five have a page-checked byline/i);
-    expect(screen.getByRole("status").textContent).toMatch(/does not verify current contact details/i);
-    expect(screen.getByRole("status").textContent).toMatch(/without a publication date does not establish recency/i);
+    expect(screen.queryByRole("button", { name: "Check top 5 recent coverage" })).toBeNull();
+    expect(JSON.stringify(recommendationState.pagedItems)).toBe(savedRecommendations);
+    expect(requests.some((request) => request.url.includes("/recommendations/enrich"))).toBe(false);
     const summary = screen.getByTestId("research-result-summary-91");
     expect(within(summary).getByText("84%")).toBeTruthy();
     expect(within(summary).getByText("Energy editor")).toBeTruthy();
@@ -1719,22 +1714,15 @@ describe("MediaResearchPage live discovery", () => {
     expect(screen.queryByText(/Energy transition/)).toBeNull();
   });
 
-  it("clearly reports zero verified coverage and keeps technical warnings collapsed", async () => {
-    featureState.noCoverage = true;
+  it("keeps ordinary saved recommendations and pitch generation available without a coverage action", async () => {
     render(<MediaResearchPage />);
     fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
     expect(await screen.findByText("Decision Contact")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Check top 5 recent coverage" }));
-    expect(await screen.findByText("Enriched Contact")).toBeTruthy();
-    const status = screen.getByRole("status");
-    expect(status.textContent).toMatch(/No coverage verified/);
-    expect(status.textContent).toMatch(/does not mean they have no recent coverage/i);
-    expect(status.textContent).toMatch(/Previous verified evidence is retained/i);
-    expect(status.className).toContain("bg-amber-50");
-    const summary = screen.getByText("Coverage evidence is limited - view details");
-    const details = summary.closest("details");
-    expect(details).not.toHaveAttribute("open");
-    expect(details?.textContent).toMatch(/no citation-backed/);
+    expect(screen.queryByRole("button", { name: "Check top 5 recent coverage" })).toBeNull();
+    expect(screen.queryByText(/The explicit coverage action/)).toBeNull();
+    expect(screen.getByTestId("button-generate-pitch-angles")).toBeTruthy();
+    expect(screen.getByTestId("research-result-summary-91")).toBeTruthy();
+    expect(requests.some((request) => request.url.includes("/recommendations/enrich"))).toBe(false);
   });
 
   it("restores recommendation readiness after removing a contact restriction", async () => {
