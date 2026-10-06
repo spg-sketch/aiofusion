@@ -5,6 +5,12 @@ description: Vitest testing gotchas and keeping release validation reliable unde
 
 # Testing and release checks
 
+Run the complete release check as a background process rather than through a foreground shell with a five-minute limit.
+
+**Why:** The full gate can legitimately take longer than five minutes. A shell timeout kills it before approval and leaves an interrupted-run lock, even when the completed test stage passed.
+
+**How to apply:** Monitor the background result. After interruption, confirm the gate and its workers have stopped before clearing its stale lock and rerunning; never manufacture approval from partial results.
+
 Concurrency-test barriers must fail promptly when the HTTP request finishes before reaching the expected transaction boundary.
 
 **Why:** An invalid synthetic request can be rejected before the transaction starts, leaving the test waiting indefinitely and obscuring the actual validation error.
