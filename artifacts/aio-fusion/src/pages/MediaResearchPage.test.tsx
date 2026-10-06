@@ -28,6 +28,7 @@ const recommendationState = vi.hoisted(() => ({
 const featureState = vi.hoisted(() => ({
   briefFailure: false,
   recommendationGetFailure: false,
+  decisionSaveFailure: false,
   restricted: false,
   enrich: false,
   quotaFailure: "" as "" | "recommendations" | "enrich" | "live",
@@ -221,22 +222,23 @@ describe("MediaResearchPage live discovery", () => {
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }
       if (url.includes("/recommendations/decisions") && init?.method === "PUT") {
+        if (featureState.decisionSaveFailure) return new Response(JSON.stringify({ error: "Story selection could not be updated" }), { status: 503 });
         const savedDecision = {
           contactId: Number(body?.contactId),
           decision: body?.decision,
           note: typeof body?.note === "string" ? body.note : "",
         };
         decisionState.payload = {
-          decisions: [savedDecision],
+          decisions: [...decisionState.payload.decisions.filter((entry) => entry.contactId !== savedDecision.contactId), savedDecision],
           items: [],
-          decisionContacts: [{
+          decisionContacts: [...decisionState.payload.decisionContacts.filter((entry) => entry.contactId !== savedDecision.contactId), ...(savedDecision.decision === "shortlisted" ? [{
             contactId: savedDecision.contactId,
             contact: {
               id: savedDecision.contactId, firstName: "Decision", lastName: "Contact", role: "Energy editor",
               email: "", phone: "", notes: "", beats: ["energy"], sectors: ["Energy"],
               outletName: "Current Energy Daily", outletCategory: "Energy",
             },
-          }],
+          }] : [])],
         };
         return new Response(JSON.stringify({ ok: true, decision: savedDecision }), { status: 200 });
       }
@@ -491,6 +493,7 @@ describe("MediaResearchPage live discovery", () => {
     recommendationState.visibilityStalePageOnce = false;
     featureState.briefFailure = false;
     featureState.recommendationGetFailure = false;
+    featureState.decisionSaveFailure = false;
     featureState.restricted = false;
     featureState.enrich = false;
     featureState.quotaFailure = "";
@@ -950,6 +953,58 @@ describe("MediaResearchPage live discovery", () => {
     expect(await screen.findByRole("button", { name: "Plan outreach to Decision Contact" })).toBeTruthy();
     expect(requests.some((request) => request.url.endsWith("/store/media-db/outreach") && request.method === "POST")).toBe(false);
     expect(screen.queryByRole("button", { name: /decline|more like this|less like this/i })).toBeNull();
+  });
+
+  it("removes only the selected story journalist, persists removal, updates CSV selection and allows re-adding", async () => {
+    const contact = { id: 91, firstName: "Decision", lastName: "Contact", role: "Editor", email: "", phone: "", notes: "", beats: [], sectors: [] };
+    decisionState.payload = {
+      decisions: [{ contactId: 91, decision: "shortlisted", note: "Retain editorial context" }, { contactId: 92, decision: "shortlisted" }],
+      items: [],
+      decisionContacts: [{ contactId: 91, contact }, { contactId: 92, contact: { ...contact, id: 92, firstName: "Other", lastName: "Reporter" } }],
+    };
+    const view = render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    const remove = await screen.findByRole("button", { name: "Remove Decision Contact from story outreach planning" });
+    expect(screen.getByTestId("button-export-shortlist-csv")).toHaveTextContent("(2)");
+    fireEvent.click(remove);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Remove Decision Contact from story outreach planning" })).toBeNull());
+    expect(screen.getByRole("button", { name: "Remove Other Reporter from story outreach planning" })).toBeTruthy();
+    expect(screen.getByTestId("button-export-shortlist-csv")).toHaveTextContent("(1)");
+    expect(screen.getByTestId("button-plan-story-outreach-91")).toHaveTextContent("Plan outreach for this story");
+    expect(requests.find((request) => request.body?.decision === "rejected")?.body).toEqual({
+      projectId: "project-1", storyKey: "story-1", contactId: 91, decision: "rejected", note: "Retain editorial context",
+    });
+    expect(requests.some((request) => request.method === "DELETE"
+      || (request.url.endsWith("/store/media-db/outreach") && request.method === "POST")
+      || (request.url.includes("/bookmarks/") && request.method === "PUT"))).toBe(false);
+
+    view.unmount();
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByRole("button", { name: "Remove Other Reporter from story outreach planning" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Remove Decision Contact from story outreach planning" })).toBeNull();
+    fireEvent.click(await screen.findByTestId("button-plan-story-outreach-91"));
+    expect(await screen.findByRole("button", { name: "Remove Decision Contact from story outreach planning" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove Other Reporter from story outreach planning" })).toBeTruthy();
+    expect(screen.getByTestId("button-export-shortlist-csv")).toHaveTextContent("(2)");
+  });
+
+  it("keeps the journalist selected and shows an error if removal cannot be saved", async () => {
+    decisionState.payload = {
+      decisions: [{ contactId: 91, decision: "shortlisted" }], items: [],
+      decisionContacts: [{ contactId: 91, contact: { id: 91, firstName: "Decision", lastName: "Contact", role: "Editor", email: "", phone: "", notes: "" } }],
+    };
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    const remove = await screen.findByRole("button", { name: "Remove Decision Contact from story outreach planning" });
+    featureState.decisionSaveFailure = true;
+    fireEvent.click(remove);
+    expect(await screen.findByText("Story selection could not be updated")).toBeTruthy();
+    expect(remove).not.toBeDisabled();
+    expect(screen.getByTestId("button-export-shortlist-csv")).toHaveTextContent("(1)");
+    featureState.decisionSaveFailure = false;
+    fireEvent.click(remove);
+    await waitFor(() => expect(screen.queryByTestId("button-remove-story-contact-91")).toBeNull());
   });
 
   it("explains that live email addresses must come from the cited public source", () => {

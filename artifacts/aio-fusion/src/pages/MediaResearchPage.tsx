@@ -574,11 +574,15 @@ function MediaResearchPage() {
     }
   };
 
-  const saveStoryShortlist = async (contactId: number) => {
+  const saveStoryShortlist = async (contactId: number, decision: "shortlisted" | "rejected" = "shortlisted") => {
     if (!projectId || !storyKey) return;
     const generation = researchGeneration.current;
     const requestKey = `${projectId}:${storyKey}`;
     const savingKey = `${requestKey}:${contactId}`;
+    if (decisionSaving[savingKey]) return;
+    const failureMessage = decision === "rejected"
+      ? "Could not remove contact from this story."
+      : "Could not add contact to this story shortlist.";
     setDecisionSaving((current) => ({ ...current, [savingKey]: true }));
     setError("");
     try {
@@ -586,29 +590,30 @@ function MediaResearchPage() {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, storyKey, contactId, decision: "shortlisted", note: "" }),
+        body: JSON.stringify({ projectId, storyKey, contactId, decision, note: decisions[contactId]?.note || "" }),
       });
       let data: Record<string, unknown> = {};
       try {
         data = await response.json() as Record<string, unknown>;
       } catch {
-        if (!response.ok) throw new Error(`Could not add contact to this story shortlist (HTTP ${response.status}).`);
-        throw new Error("Could not add contact to this story shortlist: the server returned invalid data.");
+        if (!response.ok) throw new Error(`${failureMessage} (HTTP ${response.status}).`);
+        throw new Error(`${failureMessage} The server returned invalid data.`);
       }
-      if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Could not add contact to this story shortlist.");
+      if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : failureMessage);
       if (researchGeneration.current !== generation || activeStoryRef.current !== requestKey) return;
       const saved = data.decision && typeof data.decision === "object" ? data.decision as Partial<Decision> : {};
       setDecisions((current) => ({
         ...current,
         [contactId]: {
           contactId,
-          decision: saved.decision === "shortlisted" ? saved.decision : "shortlisted",
+          decision,
           note: typeof saved.note === "string" ? saved.note : "",
         },
       }));
-      await loadDecisions();
+      if (decision === "rejected") setExportSelection((current) => current?.filter((id) => id !== contactId) ?? null);
+      await Promise.all([loadDecisions(), loadRecommendations()]);
     } catch (reason) {
-      if (researchGeneration.current === generation && activeStoryRef.current === requestKey) setError(reason instanceof Error ? reason.message : "Could not add contact to this story shortlist.");
+      if (researchGeneration.current === generation && activeStoryRef.current === requestKey) setError(reason instanceof Error ? reason.message : failureMessage);
     } finally {
       if (researchGeneration.current === generation) setDecisionSaving((current) => ({ ...current, [savingKey]: false }));
     }
@@ -1452,6 +1457,7 @@ function MediaResearchPage() {
         compact={!shortlist}
         decision={decisions[item.contact.id]}
         onAccept={!shortlist ? () => void saveStoryShortlist(item.contact.id) : undefined}
+        onRemoveFromStory={shortlist ? () => void saveStoryShortlist(item.contact.id, "rejected") : undefined}
         actionLoading={Boolean(decisionSaving[`${projectId}:${storyKey}:${item.contact.id}`])}
         savedToDatabase={!shortlist && bookmarkedContacts.has(item.contact.id)}
         onSaveToDatabase={!shortlist ? () => void saveContactBookmark(item.contact.id) : undefined}

@@ -1,6 +1,6 @@
 import React from "react";
 import { vars } from "../marketing/vars";
-import { Mail, Phone, MapPin, Globe, ExternalLink, Linkedin, Twitter, Clock, Edit, Check, Bookmark, Database, Target, Award, Shield, FileText, ChevronDown, ChevronRight, AlertCircle, Ban, Loader2 } from "lucide-react";
+import { Mail, Phone, MapPin, Globe, ExternalLink, Linkedin, Twitter, Clock, Edit, Check, Bookmark, Database, Target, Award, Shield, FileText, ChevronDown, ChevronRight, AlertCircle, Ban, Loader2, Trash2 } from "lucide-react";
 import { MiniDonut } from "./shared";
 import { MediaResearchResultSummary } from "./MediaResearchResultSummary";
 import { selectMediaPitchAngle } from "../lib/mediaPitchAngle";
@@ -454,6 +454,7 @@ export function RecommendationCard({
   item,
   decision,
   onAccept,
+  onRemoveFromStory,
   onReject,
   noteFor,
   setNoteFor,
@@ -474,6 +475,7 @@ export function RecommendationCard({
   item: Recommendation;
   decision?: Decision;
   onAccept?: () => void;
+  onRemoveFromStory?: () => void;
   onDecline?: () => void;
   onReject?: (note: string) => void;
   noteFor?: number | null;
@@ -726,9 +728,23 @@ export function RecommendationCard({
         </div>
       </div>}
 
-      {(!isShortlist && onAccept) || onToggleRestriction || onSaveToDatabase ? (
+      {(!isShortlist && onAccept) || onRemoveFromStory || onToggleRestriction || onSaveToDatabase ? (
         <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-4 border-t" style={{ borderColor: vars.g100 }}>
           <div className="flex flex-wrap items-center gap-3">
+            {isShortlist && onRemoveFromStory && (
+              <button
+                type="button"
+                data-testid={`button-remove-story-contact-${c.id}`}
+                aria-label={`Remove ${contactName || "contact"} from story outreach planning`}
+                title="Remove from this story only. The Media Database record and outreach history are kept."
+                disabled={actionLoading}
+                onClick={onRemoveFromStory}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold border border-red-200 text-red-700 bg-white hover:bg-red-50 transition-colors disabled:opacity-50"
+              >
+                {actionLoading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                {actionLoading ? "Removing..." : "Remove from story"}
+              </button>
+            )}
             {onSaveToDatabase && (
               <button
                 type="button"
