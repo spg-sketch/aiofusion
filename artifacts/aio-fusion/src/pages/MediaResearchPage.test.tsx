@@ -191,7 +191,11 @@ describe("MediaResearchPage live discovery", () => {
   });
 
   let requests: { url: string; method?: string; body?: Record<string, unknown> }[] = [];
+  const originalScrollIntoView = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
+  const scrollIntoView = vi.fn();
   beforeEach(() => {
+    scrollIntoView.mockReset();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scrollIntoView });
     requests = [];
     localStorage.removeItem("aio.auditTiming.media-discover");
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -465,6 +469,8 @@ describe("MediaResearchPage live discovery", () => {
   });
 
   afterEach(() => {
+    if (originalScrollIntoView) Object.defineProperty(HTMLElement.prototype, "scrollIntoView", originalScrollIntoView);
+    else Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
     pitchTestState.failureIds = [];
     pitchTestState.delay = false;
     pitchTestState.pending = [];
@@ -698,12 +704,23 @@ describe("MediaResearchPage live discovery", () => {
     const firstPageRequest = requests.find((request) => request.url.includes("/store/media-db/recommendations?") && request.url.includes("storyKey=story-1"));
     expect(firstPageRequest?.url).toContain("page=1");
     expect(firstPageRequest?.url).not.toContain("pageSize");
+    const resultsSection = screen.getByRole("heading", { name: "Recommended from your Media Database" }).closest("section");
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    const scrolledResults: string[] = [];
+    scrollIntoView.mockImplementation(function (this: HTMLElement) {
+      scrolledResults.push(this.textContent || "");
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "See next five" }));
     expect(await screen.findByText(/Reporter 6/)).toBeTruthy();
     expect(screen.getByTestId("recommendation-pagination-summary")).toHaveTextContent("Showing 6–10 of 1,234 records");
     expect(screen.getByText(/Reporter 10/)).toBeTruthy();
     expect(screen.queryByText(/Reporter 5/)).toBeNull();
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).toHaveBeenLastCalledWith({ behavior: "auto", block: "start", inline: "nearest" });
+    expect(scrollIntoView.mock.instances[0]).toBe(resultsSection);
+    expect(scrolledResults[0]).toContain("Reporter 6");
+    expect(scrolledResults[0]).not.toContain("Reporter 5 Contact");
     const pageTwoRequest = requests.find((request) => request.url.includes("/store/media-db/recommendations?") && request.url.includes("storyKey=story-1") && request.url.includes("page=2"));
     expect(new URL(pageTwoRequest?.url || "", "http://test.local").searchParams.get("setId")).toBe("saved-set-1");
     expect(new URL(pageTwoRequest?.url || "", "http://test.local").searchParams.get("revision")).toBe("rank-v1");
@@ -713,10 +730,29 @@ describe("MediaResearchPage live discovery", () => {
     expect(await screen.findByText(/Reporter 11/)).toBeTruthy();
     expect(screen.getByTestId("recommendation-pagination-summary")).toHaveTextContent("Showing 11–12 of 1,234 records");
     expect(screen.getByText(/Reporter 12/)).toBeTruthy();
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    expect(scrolledResults[1]).toContain("Reporter 11");
     expect(screen.queryByRole("button", { name: "See next five" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Previous five" }));
     expect(await screen.findByText(/Reporter 6/)).toBeTruthy();
     expect(screen.getByTestId("recommendation-pagination-summary")).toHaveTextContent("Showing 6–10 of 1,234 records");
+    expect(scrollIntoView).toHaveBeenCalledTimes(3);
+    expect(scrolledResults[2]).toContain("Reporter 6");
+  });
+
+  it("keeps the current results and scroll position when pagination fails", async () => {
+    recommendationState.pagedItems = Array.from({ length: 6 }, (_, index) => ({
+      rank: index + 1, score: 80, reasons: [],
+      contact: { id: 900 + index, firstName: `Paging ${index + 1}`, lastName: "Reporter", role: "Editor", email: "", phone: "", notes: "", beats: [], sectors: [] },
+    }));
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByText("Paging 1 Reporter")).toBeTruthy();
+    featureState.recommendationGetFailure = true;
+    fireEvent.click(screen.getByRole("button", { name: "See next five" }));
+    expect(await screen.findByText("Saved set unavailable")).toBeTruthy();
+    expect(screen.getByText("Paging 1 Reporter")).toBeTruthy();
+    expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
   it("resets to a fresh first page when a page request reports a stale ranking revision", async () => {

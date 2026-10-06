@@ -490,6 +490,8 @@ function MediaResearchPage() {
   const discoveryRequests = useRef<Record<string, { id: number; key: string }>>({});
   const decisionLoadSequence = useRef(0);
   const recommendationLoadSequence = useRef(0);
+  const recommendationResultsRef = useRef<HTMLElement | null>(null);
+  const [recommendationScrollRequest, setRecommendationScrollRequest] = useState<{ loadId: number; scope: string } | null>(null);
   const coverageOperationSequence = useRef(0);
   const briefEditRevision = useRef(0);
   const activeStoryRef = useRef(`${projectId || ""}:${storyKey}`);
@@ -613,7 +615,7 @@ function MediaResearchPage() {
   };
   useEffect(() => { void loadDecisions(); }, [projectId, storyKey]);
 
-  const loadRecommendations = async (page = recommendationPage, allowStaleReset = true) => {
+  const loadRecommendations = async (page = recommendationPage, allowStaleReset = true, scrollToResults = false) => {
     if (!projectId || !storyKey) return;
     if (page > 1 && (recommendationSetId === null || rankingRevision === null || visibilityRevision === null)) {
       setItems([]);
@@ -624,7 +626,7 @@ function MediaResearchPage() {
       setRecommendationSetId(null);
       setCollectionTotal(null);
       setTotalMatches(null);
-      void loadRecommendations(1, false);
+      void loadRecommendations(1, false, scrollToResults);
       return;
     }
     const loadId = ++recommendationLoadSequence.current;
@@ -662,7 +664,7 @@ function MediaResearchPage() {
           setCollectionTotal(null);
           setTotalMatches(null);
           setError("");
-          void loadRecommendations(1, false);
+          void loadRecommendations(1, false, scrollToResults);
         } else if (isCurrent()) {
           setError(typeof data.error === "string" ? data.error : "Recommendations changed while loading. Return to page one and retry.");
         }
@@ -696,6 +698,7 @@ function MediaResearchPage() {
         hasPrevious: typeof data.hasPrevious === "boolean" ? data.hasPrevious : page > 1,
         hasNext: typeof data.hasNext === "boolean" ? data.hasNext : (typeof data.totalMatches === "number" && page * RECOMMENDATION_PAGE_SIZE < data.totalMatches),
       });
+      if (scrollToResults) setRecommendationScrollRequest({ loadId, scope: scopeKey });
     } catch (reason) {
       // A failed refresh must not erase a previously visible, auditable set.
       // Keep the failure visible instead of silently falling back to generated
@@ -706,6 +709,13 @@ function MediaResearchPage() {
     }
   };
   useEffect(() => { void loadRecommendations(1); }, [projectId, storyKey, workspaceId]);
+  useEffect(() => {
+    // Scroll after the new cards render, not while the previous five are loading.
+    if (recommendationScrollRequest?.scope === activeRecommendationScopeRef.current
+      && recommendationScrollRequest.loadId === recommendationLoadSequence.current) {
+      recommendationResultsRef.current?.scrollIntoView({ behavior: "auto", block: "start", inline: "nearest" });
+    }
+  }, [recommendationScrollRequest]);
 
   const [enriching, setEnriching] = useState<boolean>(false);
   const coverageScopeRef = useRef(`${workspaceId}:${projectId || ""}:${storyKey}`);
@@ -1362,10 +1372,10 @@ function MediaResearchPage() {
       setRecommendationSetId(null);
       setCollectionTotal(null);
       setTotalMatches(null);
-      void loadRecommendations(1, false);
+      void loadRecommendations(1, false, true);
       return;
     }
-    void loadRecommendations(page);
+    void loadRecommendations(page, true, true);
   };
   const toggleBriefRegion = (region: string) => {
     const regions = brief.regions.includes(region)
@@ -1560,7 +1570,7 @@ function MediaResearchPage() {
          {coverageResult.text}
        </p>
      )}
-        {(loading || items.length > 0 || (recommendationHasRun && recommendationPage > 1)) && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b flex flex-wrap justify-between gap-3" style={{ background: vars.g50, borderColor: vars.g200 }}><div><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Recommended from your Media Database</h2><p data-testid="recommendation-pagination-summary" className="text-[13px] mt-1" style={{ color: vars.g500 }}>{loading || recommendationPageLoading ? "Loading ranked contacts..." : recommendationSummary}</p>{evaluation && <p className="text-[11px] mt-2 text-slate-500">Evaluation: {evaluation.evaluated} evaluated · {evaluation.shortlisted} shortlisted · {evaluation.contacted} contacted · {evaluation.responded} responded · {evaluation.placed} placed</p>}</div>
+        {(loading || items.length > 0 || (recommendationHasRun && recommendationPage > 1)) && <section ref={recommendationResultsRef} className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b flex flex-wrap justify-between gap-3" style={{ background: vars.g50, borderColor: vars.g200 }}><div><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Recommended from your Media Database</h2><p data-testid="recommendation-pagination-summary" className="text-[13px] mt-1" style={{ color: vars.g500 }}>{loading || recommendationPageLoading ? "Loading ranked contacts..." : recommendationSummary}</p>{evaluation && <p className="text-[11px] mt-2 text-slate-500">Evaluation: {evaluation.evaluated} evaluated · {evaluation.shortlisted} shortlisted · {evaluation.contacted} contacted · {evaluation.responded} responded · {evaluation.placed} placed</p>}</div>
        <div className="flex gap-2">
          {items.length > 0 && recommendationSetId !== null && (
            <div className="max-w-sm"><button type="button" data-testid="button-generate-pitch-angles" disabled={Boolean(pitchProgress) || loading || enriching || recommendationPageLoading || briefIsDirty || briefLoading} onClick={() => void generateDisplayedPitches()} className="self-start text-[12px] px-3 py-2 border rounded-lg bg-white disabled:opacity-50 hover:bg-slate-50" style={{ borderColor: vars.g200 }}>
