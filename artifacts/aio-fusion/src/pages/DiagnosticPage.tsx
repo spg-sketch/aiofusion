@@ -586,7 +586,7 @@ Engine used:
                   strokeLinecap="round" transform="rotate(-90 80 80)" />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-5xl font-bold" style={{ color: vars.navy }}>{incompleteCapture ? "—" : result.overallScore}</span>
+                <span className="text-5xl font-bold" style={{ color: vars.navy }}>{incompleteCapture ? "N/A" : result.overallScore}</span>
                 <span className="text-[14px] uppercase tracking-wider mt-1" style={{ color: vars.g400 }}>{incompleteCapture ? "Not assessable" : "/100"}</span>
               </div>
             </div>
