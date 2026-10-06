@@ -483,7 +483,7 @@ function MediaResearchPage() {
   const [pitchProgress, setPitchProgress] = useState<{ scope: string; completed: number; total: number } | null>(null);
   const [pitchErrors, setPitchErrors] = useState<{ scope: string; errors: Record<number, string> } | null>(null);
   const pitchBusyRef = useRef(false);
-  const [coverageResult, setCoverageResult] = useState<{ key: string; text: string } | null>(null);
+  const [coverageResult, setCoverageResult] = useState<{ key: string; text: string; verified: boolean } | null>(null);
   type RequestHandle = { id: number; key: string; controller: AbortController };
   const requestSequence = useRef(0);
   const recommendationRequest = useRef<RequestHandle | null>(null);
@@ -787,7 +787,10 @@ function MediaResearchPage() {
       ).length;
       setCoverageResult({
         key: requestKey,
-        text: `Coverage check finished. ${checkedCount} of up to ${Math.min(RECOMMENDATION_PAGE_SIZE, totalMatches ?? nextItems.length)} contacts in the global top five have a page-checked byline. This check is independent of the page you were viewing. The research assessment has been updated; this does not verify current contact details.`,
+        verified: checkedCount > 0,
+        text: checkedCount === 0
+          ? "No coverage verified. This check could not confirm article bylines for the top five contacts. This does not mean they have no recent coverage. Previous verified evidence is retained; current contact details have not been verified."
+          : `Coverage check finished. ${checkedCount} of up to ${Math.min(RECOMMENDATION_PAGE_SIZE, totalMatches ?? nextItems.length)} contacts in the global top five have a page-checked byline. This check is independent of the page you were viewing. A verified byline without a publication date does not establish recency; this does not verify current contact details.`,
       });
       await loadDecisions();
     } catch (reason) {
@@ -1572,7 +1575,7 @@ function MediaResearchPage() {
        </div>
      </section>}
      {coverageResult?.key === `${projectId}:${storyKey}` && (
-       <p role="status" className="mb-3 rounded-lg border border-sky-100 bg-sky-50 p-3 text-[12px] text-sky-900">
+       <p role="status" className={`mb-3 rounded-lg border p-3 text-[12px] ${coverageResult.verified ? "border-sky-100 bg-sky-50 text-sky-900" : "border-amber-100 bg-amber-50 text-amber-900"}`}>
          {coverageResult.text}
        </p>
      )}
@@ -1589,7 +1592,7 @@ function MediaResearchPage() {
             {enriching ? "Checking top 5..." : "Check top 5 recent coverage"}
           </button>
         )}
-        </div></div><p className="mx-5 mb-3 text-[11px] text-slate-500">The explicit coverage action checks up to five contacts from the global top five, regardless of the page you are viewing, and counts toward your account’s AI spend limit. Pagination does not run a coverage check.</p>{enrichmentWarning && <p className="mx-5 mb-3 rounded-lg bg-amber-50 border border-amber-100 p-3 text-[12px] text-amber-800">Coverage check warning: {enrichmentWarning}</p>}{items.map((item) => contactCard(item))}{!items.length && recommendationPage > 1 && !recommendationPageLoading && <p className="p-5 text-center text-[13px] text-slate-500">There are no eligible contacts on this page. Use Previous five to return to earlier matches.</p>}{(hasPreviousRecommendationPage || hasNextRecommendationPage) && <div className="p-5 border-t flex justify-center gap-3" style={{ borderColor: vars.g200 }}>{hasPreviousRecommendationPage && <button type="button" data-testid="button-previous-recommendations" disabled={recommendationPageLoading} onClick={() => goToRecommendationPage(recommendationPage - 1)} className="px-5 py-2.5 rounded-lg border bg-white text-[13px] font-semibold hover:bg-slate-50 disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>Previous five</button>}{hasNextRecommendationPage && <button type="button" data-testid="button-next-recommendations" disabled={recommendationPageLoading} onClick={() => goToRecommendationPage(recommendationPage + 1)} className="px-5 py-2.5 rounded-lg border bg-white text-[13px] font-semibold hover:bg-slate-50 disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>See next five</button>}</div>}</section>}
+        </div></div><p className="mx-5 mb-3 text-[11px] text-slate-500">The explicit coverage action checks up to five contacts from the global top five, regardless of the page you are viewing, and counts toward your account’s AI spend limit. Pagination does not run a coverage check.</p>{enrichmentWarning && <details className="mx-5 mb-3 rounded-lg bg-amber-50 border border-amber-100 p-3 text-[12px] text-amber-800"><summary className="cursor-pointer font-semibold">Coverage evidence is limited — view details</summary><p className="mt-2">Only source-backed links with a checked byline count as verified coverage. Missing evidence is not proof that a journalist has no relevant articles.</p><p className="mt-2">{enrichmentWarning}</p></details>}{items.map((item) => contactCard(item))}{!items.length && recommendationPage > 1 && !recommendationPageLoading && <p className="p-5 text-center text-[13px] text-slate-500">There are no eligible contacts on this page. Use Previous five to return to earlier matches.</p>}{(hasPreviousRecommendationPage || hasNextRecommendationPage) && <div className="p-5 border-t flex justify-center gap-3" style={{ borderColor: vars.g200 }}>{hasPreviousRecommendationPage && <button type="button" data-testid="button-previous-recommendations" disabled={recommendationPageLoading} onClick={() => goToRecommendationPage(recommendationPage - 1)} className="px-5 py-2.5 rounded-lg border bg-white text-[13px] font-semibold hover:bg-slate-50 disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>Previous five</button>}{hasNextRecommendationPage && <button type="button" data-testid="button-next-recommendations" disabled={recommendationPageLoading} onClick={() => goToRecommendationPage(recommendationPage + 1)} className="px-5 py-2.5 rounded-lg border bg-white text-[13px] font-semibold hover:bg-slate-50 disabled:opacity-50" style={{ borderColor: vars.g200, color: vars.navy }}>See next five</button>}</div>}</section>}
         {liveItems.length > 0 && <section className="bg-white rounded-2xl border overflow-hidden mb-5 shadow-sm" style={{ borderColor: vars.g200 }}><div className="p-5 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}><h2 className="font-semibold text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Public web discoveries</h2><p className="text-[13px] mt-1" style={{ color: vars.g500 }}>{liveItems.length} journalists across {livePublicationCount} publications. {liveLoading ? "Evidence checks are continuing. Verified cards are ready to review now; pending candidates are identified." : "Evidence checks are complete."}</p><p className="text-[12px] mt-2" style={{ color: vars.g500 }}>These are additional online candidates, not saved database contacts. Use “Send for review” on a verified result; a steward must approve it before it becomes a contact.</p></div>
       {liveGroups.filter((group) => group.items.length > 0).map((group) => <div key={group.label}>
         <div className="px-5 py-2.5 border-b text-[12px] font-bold uppercase tracking-wide" style={{ color: vars.navy, background: "rgba(31,116,143,0.07)", borderColor: vars.g200 }}>{group.label} · {group.items.length}</div>

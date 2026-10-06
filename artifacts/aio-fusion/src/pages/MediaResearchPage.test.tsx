@@ -31,6 +31,7 @@ const featureState = vi.hoisted(() => ({
   decisionSaveFailure: false,
   restricted: false,
   enrich: false,
+  noCoverage: false,
   quotaFailure: "" as "" | "recommendations" | "enrich" | "live",
 }));
 const delayedRequests = vi.hoisted(() => ({
@@ -355,8 +356,8 @@ describe("MediaResearchPage live discovery", () => {
             assessment: {
               version: "editorial-v1", fitScore: 84, confidence: "high", evidenceCoverage: 100,
               factors: [], readiness: { status: "ready", reasons: [] },
-              evidence: [{ title: "Recent energy coverage", url: "https://energy.example/recent", publishedAt: "2026-08-01", checkedAt: "2026-09-01", excerpt: "Energy transition", attribution: "page_checked", authorMatched: true }],
-              warnings: [], suggestedAngle: null,
+              evidence: featureState.noCoverage ? [] : [{ title: "Recent energy coverage", url: "https://energy.example/recent", publishedAt: "2026-08-01", checkedAt: "2026-09-01", excerpt: "Energy transition", attribution: "page_checked", authorMatched: true }],
+              warnings: featureState.noCoverage ? ["The public search returned no citation-backed journalist coverage candidates."] : [], suggestedAngle: null,
             },
           }],
           brief: recommendationState.brief,
@@ -471,6 +472,7 @@ describe("MediaResearchPage live discovery", () => {
   });
 
   afterEach(() => {
+    cleanup();
     if (originalScrollIntoView) Object.defineProperty(HTMLElement.prototype, "scrollIntoView", originalScrollIntoView);
     else Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
     pitchTestState.failureIds = [];
@@ -496,6 +498,7 @@ describe("MediaResearchPage live discovery", () => {
     featureState.decisionSaveFailure = false;
     featureState.restricted = false;
     featureState.enrich = false;
+    featureState.noCoverage = false;
     featureState.quotaFailure = "";
     delayedRequests.recommendations = false;
     delayedRequests.live = false;
@@ -512,7 +515,6 @@ describe("MediaResearchPage live discovery", () => {
     localStorage.removeItem("aio.research.preload");
     localStorage.removeItem("aio.auth.session.v3");
     clearAiRuns();
-    cleanup();
     vi.unstubAllGlobals();
   });
 
@@ -1706,6 +1708,7 @@ describe("MediaResearchPage live discovery", () => {
     expect(await screen.findByText("Enriched Contact")).toBeTruthy();
     expect(screen.getByRole("status").textContent).toMatch(/1 of up to 1 contacts in the global top five have a page-checked byline/i);
     expect(screen.getByRole("status").textContent).toMatch(/does not verify current contact details/i);
+    expect(screen.getByRole("status").textContent).toMatch(/without a publication date does not establish recency/i);
     const summary = screen.getByTestId("research-result-summary-91");
     expect(within(summary).getByText("84%")).toBeTruthy();
     expect(within(summary).getByText("Energy editor")).toBeTruthy();
@@ -1714,6 +1717,24 @@ describe("MediaResearchPage live discovery", () => {
     expect(screen.queryByText("Author matched")).toBeNull();
     expect(screen.queryByText("Page checked")).toBeNull();
     expect(screen.queryByText(/Energy transition/)).toBeNull();
+  });
+
+  it("clearly reports zero verified coverage and keeps technical warnings collapsed", async () => {
+    featureState.noCoverage = true;
+    render(<MediaResearchPage />);
+    fireEvent.change(screen.getByTestId("select-research-article"), { target: { value: "story-1" } });
+    expect(await screen.findByText("Decision Contact")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Check top 5 recent coverage" }));
+    expect(await screen.findByText("Enriched Contact")).toBeTruthy();
+    const status = screen.getByRole("status");
+    expect(status.textContent).toMatch(/No coverage verified/);
+    expect(status.textContent).toMatch(/does not mean they have no recent coverage/i);
+    expect(status.textContent).toMatch(/Previous verified evidence is retained/i);
+    expect(status.className).toContain("bg-amber-50");
+    const summary = screen.getByText("Coverage evidence is limited — view details");
+    const details = summary.closest("details");
+    expect(details).not.toHaveAttribute("open");
+    expect(details?.textContent).toMatch(/no citation-backed/);
   });
 
   it("restores recommendation readiness after removing a contact restriction", async () => {

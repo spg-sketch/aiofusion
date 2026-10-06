@@ -86,6 +86,19 @@ function normaliseUrl(value: string): string | null {
 
 function citationUrls(value: unknown): string[] {
   const found: string[] = [];
+  const addUrl = (value: unknown): void => {
+    if (typeof value !== "string" || !/^https?:\/\//i.test(value)) return;
+    found.push(value);
+    try {
+      const url = new URL(value);
+      if (url.hostname === "please.untaint.us") {
+        const target = url.searchParams.get("url");
+        if (target) found.push(target);
+      }
+    } catch {
+      // A malformed annotation is not a usable source.
+    }
+  };
   const visit = (node: unknown): void => {
     if (!node || typeof node !== "object") return;
     if (Array.isArray(node)) {
@@ -93,18 +106,13 @@ function citationUrls(value: unknown): string[] {
       return;
     }
     const item = node as Record<string, unknown>;
-    if (typeof item.url === "string" && /^https?:\/\//i.test(item.url)) found.push(item.url);
-    // Some versions of the web-search tool put the real URL inside a
-    // please.untaint.us citation wrapper.
-    if (typeof item.url === "string") {
-      try {
-        const url = new URL(item.url);
-        if (url.hostname === "please.untaint.us") {
-          const target = url.searchParams.get("url");
-          if (target) found.push(target);
+    if (item.type === "url_citation") addUrl(item.url);
+    if (item.type === "web_search_call" && item.action && typeof item.action === "object") {
+      const sources = (item.action as Record<string, unknown>).sources;
+      if (Array.isArray(sources)) {
+        for (const source of sources) {
+          if (source && typeof source === "object") addUrl((source as Record<string, unknown>).url);
         }
-      } catch {
-        // A malformed annotation is not a usable source.
       }
     }
     for (const child of Object.values(item)) visit(child);
@@ -264,6 +272,8 @@ ${queryParts.join(" | ")}`;
       client.responses.create({
         model: "gpt-5.4-mini",
         tools: [{ type: "web_search" }],
+        tool_choice: "required",
+        include: ["web_search_call.action.sources"],
         max_output_tokens: 3_000,
         instructions: "You are a careful public-source researcher. Model output is never proof; retain only URLs that appear in the web-search citations/sources.",
         input: prompt,

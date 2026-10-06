@@ -27,6 +27,12 @@ Public search suggestions are not checked reporting evidence. A recency claim re
 
 **How to apply:** Test HTML extraction through the real evidence shape. Keep inferred angles labelled as suggestions, not facts or proof of AI visibility gains. Source failures must not erase previous checked evidence or refresh its successful-check timestamp.
 
+Structured JSON search results may omit inline citations even when web search found genuine sources. Request the provider's full search-source list and require search; accept only provider citation annotations or search-action sources before fetching candidates.
+
+**Why:** Missing source metadata can reject genuine candidates and display zero verified coverage. Accepting arbitrary output URLs instead would weaken provenance.
+
+**How to apply:** Keep source-backed JSON/no-inline-citation regression coverage alongside rejection of unsupported URLs. Distinguish no verified bylines from no existing coverage, and never imply a verified undated byline establishes recency.
+
 Generic phrase/coverage overlap explanations must not be presented as tailored pitch angles or take priority over substantive recorded suggestions.
 
 **Why:** The user reported that the pitch field merely repeated their targeting question and a broad coverage category, obscuring more specific saved opportunities.

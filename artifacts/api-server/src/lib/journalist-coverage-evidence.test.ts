@@ -112,6 +112,42 @@ describe("collectJournalistCoverage", () => {
     expect(result.warnings.join(" ")).toContain("not verified");
   });
 
+  it("requests full web-search sources and checks source-backed JSON candidates without inline citations", async () => {
+    const response = requestResponse([
+      { title: "Grid changes", url: URL, excerpt: "Search snippet" },
+      { title: "Unbacked", url: "https://example.com/unbacked", excerpt: "Not a source" },
+    ], []);
+    response.output.push({
+      type: "web_search_call",
+      action: { type: "search", sources: [{ type: "url", url: URL }] },
+    } as unknown as typeof response.output[number]);
+    responsesCreate.mockResolvedValue(response);
+    fetchMediaSourceEvidence.mockResolvedValue(extractMediaSourceEvidence(`
+      <html><head><title>Grid changes</title><meta property="og:site_name" content="Example Daily"></head>
+      <body><h1>Grid changes</h1><p class="byline">By Jane Doe</p><p>Example Daily</p></body></html>
+    `, URL));
+
+    const result = await collectJournalistCoverage(input());
+    expect(responsesCreate).toHaveBeenCalledWith(expect.objectContaining({
+      include: ["web_search_call.action.sources"],
+      tool_choice: "required",
+    }), expect.anything());
+    expect(fetchMediaSourceEvidence).toHaveBeenCalledTimes(1);
+    expect(fetchMediaSourceEvidence).toHaveBeenCalledWith(URL);
+    expect(result.evidence[0]).toMatchObject({ attribution: "page_checked", authorMatched: true, publishedAt: null });
+    expect(result.warnings.join(" ")).toContain("discarded");
+  });
+
+  it("does not accept arbitrary output URLs or JSON-only suggestions as provider sources", async () => {
+    const response = requestResponse([{ title: "Grid changes", url: URL, excerpt: "Search snippet" }], []);
+    Object.assign(response.output[0], { url: URL });
+    responsesCreate.mockResolvedValue(response);
+    const result = await collectJournalistCoverage(input());
+    expect(fetchMediaSourceEvidence).not.toHaveBeenCalled();
+    expect(result.evidence).toEqual([]);
+    expect(result.warnings.join(" ")).toContain("no citation-backed");
+  });
+
   it("does not accept a modified timestamp or a near-match author name", async () => {
     responsesCreate.mockResolvedValue(requestResponse([
       { title: "Grid changes", url: URL, excerpt: "Search snippet" },
