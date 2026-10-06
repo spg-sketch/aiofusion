@@ -12,6 +12,12 @@ Generation limits must include headroom for the full JSON wrapper, not just the 
 
 **How to apply:** When raising word targets or adding content types, allow wrapper overhead above the body estimate. Log safe metadata such as stop reason and output length, never source notes or model text. Keep transport and model deadlines bounded so errors appear while the user can still retry.
 
+Full-draft generation needs a separate time budget from small field edits. Coordinate the server deadline, browser transport deadline and app-owned run deadline in that order, with room to deliver the server's terminal response.
+
+**Why:** A reported Creator timeout exposed a shared short model cutoff followed by two independent browser cutoffs. Extending only the model deadline would still discard a completed slow draft in the browser.
+
+**How to apply:** Change all three boundaries together for full drafts, retain shorter edit budgets, and verify both slow success and bounded failure without automatic retries or loss of the original editor content.
+
 # Intake data in scripts
 
 Outside the request lifecycle, do not assume a top-level company name or sector from a raw intake blob. Read its structured form data or use the server's DB-backed helpers where appropriate.

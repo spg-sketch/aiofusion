@@ -338,6 +338,9 @@ const BRITISH_RULE =
 // Hard cap on how long we let a single model call run before aborting it and
 // sending a friendly timeout to the client.
 const STREAM_TIMEOUT_MS = 90_000;
+// Full drafts can be much longer than single-field edits. Keep this below the
+// browser transport and lifecycle deadlines, without retrying the generation.
+export const CONTENT_DRAFT_TIMEOUT_MS = 180_000;
 
 // ── Server-Sent Events helpers ───────────────────────────────────────────
 // Each content endpoint streams its result so the client can show real,
@@ -375,6 +378,7 @@ export async function streamModelText(
   client: Anthropic,
   prompt: string,
   maxTokens = 8192,
+  timeoutMs = STREAM_TIMEOUT_MS,
 ): Promise<{ text: string; inputTokens: number; outputTokens: number; stopReason: string }> {
   let acc = "";
   let lastSent = 0;
@@ -383,8 +387,12 @@ export async function streamModelText(
     max_tokens: maxTokens,
     temperature: 0,
     messages: [{ role: "user", content: prompt }],
-  });
+  }, { timeout: timeoutMs, maxRetries: 0 });
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // Keep the connection active even while waiting for the first model token.
+  const heartbeat = setInterval(() => {
+    if (!res.destroyed && !res.writableEnded) res.write(": keep-alive\n\n");
+  }, 15_000);
   let timedOut = false;
   let onClose: (() => void) | undefined;
   stream.on("text", (delta: string) => {
@@ -406,7 +414,7 @@ export async function streamModelText(
           error.outputLength = acc.length;
           reject(error);
           try { stream.abort(); } catch { /* The deadline has already settled. */ }
-        }, STREAM_TIMEOUT_MS);
+        }, timeoutMs);
       }),
       new Promise<never>((_, reject) => {
         onClose = () => {
@@ -424,11 +432,13 @@ export async function streamModelText(
     if (timedOut) {
       const e: TimeoutError = new Error("model stream timed out");
       e.isTimeout = true;
+      e.outputLength = acc.length;
       throw e;
     }
     throw err;
   } finally {
     if (timer) clearTimeout(timer);
+    clearInterval(heartbeat);
     if (onClose) res.off("close", onClose);
   }
   return {
@@ -441,12 +451,12 @@ export async function streamModelText(
 
 // Sends a friendly `error` event and ends the stream. Distinguishes timeouts so
 // the user gets a clear "taking too long" message.
-function sseFail(res: Response, err: unknown, fallback: string): void {
+function sseFail(res: Response, err: unknown, fallback: string, timeoutMessage?: string): void {
   if (res.destroyed || res.writableEnded) return;
   const timedOut = err instanceof Error && (err as TimeoutError).isTimeout === true;
   sse(res, "error", {
     error: timedOut
-      ? "The AI is taking longer than usual and the request timed out. Please try again in a moment."
+      ? timeoutMessage || "The AI is taking longer than usual and the request timed out. Please try again in a moment."
       : fallback,
   });
   res.end();
@@ -903,7 +913,7 @@ contentAiRouter.post(
     res.setHeader("X-Content-Request-Id", requestId);
     initSse(res);
     try {
-      const completion = await streamModelText(res, client, prompt, maxTokens);
+      const completion = await streamModelText(res, client, prompt, maxTokens, CONTENT_DRAFT_TIMEOUT_MS);
       const { text: raw, inputTokens, outputTokens } = completion;
       outputLength = raw.length;
       stopReason = completion.stopReason;
@@ -951,7 +961,9 @@ contentAiRouter.post(
       const reason = err as TimeoutError;
       outputLength = typeof reason?.outputLength === "number" ? reason.outputLength : outputLength;
       stopReason = reason?.isTimeout ? "timeout" : reason?.isDisconnect ? "disconnect" : "error";
-      sseFail(res, err, "The draft could not be generated right now. Please try again.");
+      sseFail(res, err,
+        `The draft could not be generated right now. Your original copy is unchanged. Please try again. If this repeats, contact support with reference ${requestId}.`,
+        `The draft took too long to finish. Your original copy is unchanged. Please try again. If this repeats, contact support with reference ${requestId}.`);
     } finally {
       logger.info({ requestId, durationMs: Date.now() - startedAt, stopReason, outputLength, tokenLimit }, "content-ai: generate finished");
     }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CONTENT_AI_TIMEOUT_MS, streamContent } from "./contentAi";
+import { CONTENT_AI_TIMEOUT_MS, CONTENT_DRAFT_TIMEOUT_MS, streamContent } from "./contentAi";
 
 const event = (kind: string, value: unknown) => `event: ${kind}\ndata: ${JSON.stringify(value)}\n\n`;
 const response = (body: ReadableStream<Uint8Array>) => new Response(body, {
@@ -82,6 +82,30 @@ describe("content stream", () => {
     const failure = expect(request).rejects.toThrow(/timed out/);
     vi.setSystemTime(Date.now() + CONTENT_AI_TIMEOUT_MS + 1);
     window.dispatchEvent(new Event("focus"));
+    await failure;
+  });
+
+  it("allows a slow full draft beyond the default deadline and ignores heartbeat comments", async () => {
+    vi.useFakeTimers();
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    vi.stubGlobal("fetch", vi.fn(async () => response(new ReadableStream({
+      start(value) { controller = value; },
+    }))));
+    const progress = vi.fn();
+    const pending = streamContent("/api/content/generate", {}, progress, { timeoutMs: CONTENT_DRAFT_TIMEOUT_MS });
+    await vi.advanceTimersByTimeAsync(CONTENT_AI_TIMEOUT_MS + 20_000);
+    controller.enqueue(encoded(": keep-alive\n\n" + event("result", { bodyCopy: "Complete slow draft" })));
+    await expect(pending).resolves.toMatchObject({ bodyCopy: "Complete slow draft" });
+    expect(progress).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("still bounds a full draft when the transport ignores abort", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    const pending = streamContent("/api/content/generate", {}, undefined, { timeoutMs: CONTENT_DRAFT_TIMEOUT_MS });
+    const failure = expect(pending).rejects.toThrow(/original copy is unchanged/);
+    await vi.advanceTimersByTimeAsync(CONTENT_DRAFT_TIMEOUT_MS);
     await failure;
   });
 });

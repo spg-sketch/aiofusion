@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
-import { extractJson, GEN_MAX_TOKENS, streamModelText } from "./content-ai";
+import { CONTENT_DRAFT_TIMEOUT_MS, extractJson, GEN_MAX_TOKENS, streamModelText } from "./content-ai";
 
 describe("content generation output", () => {
   it("reads a complete pitch, including literal line breaks in body copy", () => {
@@ -62,5 +62,41 @@ describe("content generation output", () => {
     finish({ stop_reason: "end_turn", usage: {} });
     expect(stream.abort).toHaveBeenCalledOnce();
     expect(res.write).not.toHaveBeenCalled();
+  });
+
+  it("allows a slow full draft beyond the field-edit deadline and keeps its connection alive", async () => {
+    vi.useFakeTimers();
+    try {
+      let finish!: (value: unknown) => void;
+      const stream = { on: vi.fn(), finalMessage: () => new Promise((resolve) => { finish = resolve; }), abort: vi.fn() };
+      const start = vi.fn(() => stream);
+      const res = Object.assign(new EventEmitter(), { destroyed: false, writableEnded: false, write: vi.fn() });
+      const pending = streamModelText(res as never, { messages: { stream: start } } as never, "synthetic", 8192, CONTENT_DRAFT_TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(stream.abort).not.toHaveBeenCalled();
+      expect(res.write).toHaveBeenCalledWith(": keep-alive\n\n");
+      expect(start).toHaveBeenCalledWith(expect.any(Object), { timeout: CONTENT_DRAFT_TIMEOUT_MS, maxRetries: 0 });
+      finish({ stop_reason: "end_turn", usage: {} });
+      await expect(pending).resolves.toMatchObject({ stopReason: "end_turn" });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("still aborts an overdue full draft and preserves safe partial-output diagnostics", async () => {
+    vi.useFakeTimers();
+    try {
+      const stream = {
+        on: vi.fn((_event: string, handler: (text: string) => void) => handler("partial")),
+        finalMessage: () => new Promise(() => {}),
+        abort: vi.fn(),
+      };
+      const res = Object.assign(new EventEmitter(), { destroyed: false, writableEnded: false, write: vi.fn() });
+      const pending = streamModelText(res as never, { messages: { stream: () => stream } } as never, "synthetic", 8192, CONTENT_DRAFT_TIMEOUT_MS);
+      const failure = expect(pending).rejects.toMatchObject({ isTimeout: true, outputLength: 7 });
+      await vi.advanceTimersByTimeAsync(CONTENT_DRAFT_TIMEOUT_MS);
+      await failure;
+      expect(stream.abort).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
   });
 });

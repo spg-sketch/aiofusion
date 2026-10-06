@@ -28,6 +28,7 @@ vi.mock("../lib/contentAi", () => ({
   streamContent,
   buildProjectDataText: () => "",
   CONTENT_AI_TIMEOUT_MS: 1000,
+  CONTENT_DRAFT_TIMEOUT_MS: 190_000,
   escapeHtml: (value: string) => value,
   textToHtmlParagraphs: () => "",
   downloadWordDocument: vi.fn(),
@@ -164,5 +165,26 @@ describe("ContentCreatorPage database category guard", () => {
     expect(screen.getByRole("button", { name: /Media Research/i })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Push to Comms Planner/i })).toBeEnabled();
     expect(getAiRun(`${encodeURIComponent(userEmail)}:${encodeURIComponent(username)}:project-1:content-draft:stale`)?.status).toBe("succeeded");
+  });
+
+  it("shows a readable announced failure, preserves the original editor and permits an explicit retry", async () => {
+    streamContent.mockRejectedValueOnce(new Error("The draft took too long to finish. Your original copy is unchanged."));
+    render(<ContentCreatorPage onNavigate={vi.fn()} />);
+    const theme = screen.getByPlaceholderText("e.g. AI Authority is the New PR Battleground");
+    fireEvent.change(theme, { target: { value: "Original source theme" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: /Create Content/i })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Create Content/i }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Content could not be created");
+    expect(alert).toHaveTextContent("Your original copy is unchanged");
+    expect(alert).toHaveStyle({ background: "#FEF2F2", color: "#7F1D1D" });
+    expect(theme).toHaveValue("Original source theme");
+    expect(state.saved).toHaveLength(0);
+    expect(streamContent).toHaveBeenCalledTimes(1);
+    expect(streamContent).toHaveBeenCalledWith("/api/content/generate", expect.any(Object), expect.any(Function), { timeoutMs: 190_000 });
+    expect(screen.getByRole("button", { name: /Create Content/i })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: /Create Content/i }));
+    expect(await screen.findByDisplayValue("Generated")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

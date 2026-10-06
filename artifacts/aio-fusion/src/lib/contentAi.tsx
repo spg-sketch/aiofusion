@@ -47,6 +47,8 @@ export function safeHttpUrl(v: unknown): string {
 // longer than the server's own stream timeout so the server's friendly message
 // wins when it can, but the user is never left waiting forever.
 export const CONTENT_AI_TIMEOUT_MS = 100_000;
+// The server gives full drafts 180 seconds; allow time for its final SSE event.
+export const CONTENT_DRAFT_TIMEOUT_MS = 190_000;
 
 export function estimatedGenerationProgress(elapsedSeconds: number, durationSeconds: number): number {
   if (!Number.isFinite(elapsedSeconds) || !Number.isFinite(durationSeconds) || durationSeconds <= 0) return 0;
@@ -64,10 +66,12 @@ export async function streamContent(
   path: string,
   body: unknown,
   onProgress?: (chars: number) => void,
+  options?: { timeoutMs?: number },
 ): Promise<Record<string, unknown>> {
+  const timeoutMs = options?.timeoutMs ?? CONTENT_AI_TIMEOUT_MS;
   const controller = new AbortController();
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
-  const expiresAt = Date.now() + CONTENT_AI_TIMEOUT_MS;
+  const expiresAt = Date.now() + timeoutMs;
   const timeoutError = new Error("This is taking longer than expected and timed out. Your original copy is unchanged. Please try again.");
   let rejectTimeout: (reason: Error) => void = () => {};
   const timeout = new Promise<never>((_, reject) => { rejectTimeout = reject; });
@@ -80,7 +84,7 @@ export async function streamContent(
     void reader?.cancel().catch(() => {});
   };
   const checkDeadline = () => { if (Date.now() >= expiresAt) expire(); };
-  const timer = setTimeout(expire, CONTENT_AI_TIMEOUT_MS);
+  const timer = setTimeout(expire, timeoutMs);
   window.addEventListener("focus", checkDeadline);
   document.addEventListener("visibilitychange", checkDeadline);
   try {

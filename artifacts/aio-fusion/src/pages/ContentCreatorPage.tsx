@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { streamContent, buildProjectDataText, CONTENT_AI_TIMEOUT_MS, escapeHtml, textToHtmlParagraphs, downloadWordDocument, GenerationProgress, safeHttpUrl } from "../lib/contentAi";
+import { streamContent, buildProjectDataText, CONTENT_AI_TIMEOUT_MS, CONTENT_DRAFT_TIMEOUT_MS, escapeHtml, textToHtmlParagraphs, downloadWordDocument, GenerationProgress, safeHttpUrl } from "../lib/contentAi";
 import { loadArchive, saveArchive, useContentStore, isLinkedPlannerSyncError, splitArchiveBody, plannerProjectForArchive, type ArchiveItem, loadPlannerProjects, savePlannerProjects, getISOWeek, weekDateLabel, type PlannerProject } from "../lib/contentStore";
 import { getKeyMessages, getSpokespeople, loadIntakeData, getActiveProjectId, getCompetitors, getConfirmedEntity } from "../IntakeForm";
 import { buildExactTargetRequest, getExactTargetPhrases as getCanonicalExactTargetPhrases, type ExactTargetPhrase } from "../lib/exactTargetPhrases";
@@ -676,12 +676,12 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
       subjectId: sourceArchiveId || "new-article",
       input,
       estimateSeconds: getAuditDurationSeconds("content-draft"),
-      timeoutMs: 110_000,
+      timeoutMs: CONTENT_DRAFT_TIMEOUT_MS + 10_000,
       timeoutMessage: "The draft did not finish in time. Your original copy is unchanged. Please try again.",
       execute: (progress) => streamContent("/api/content/generate", input.request, (chars) => {
         setGenerateChars(chars);
         progress(chars);
-      }),
+      }, { timeoutMs: CONTENT_DRAFT_TIMEOUT_MS }),
       onSuccess: (_result, run) => {
         recordAuditDuration("content-draft", Date.now() - run.startedAt, run.estimateSeconds * 1000);
       },
@@ -1157,8 +1157,12 @@ function ContentCreatorPage({ onNavigate, registerUnsavedEditor }: { onNavigate:
       )}
 
       {creatorError && (
-        <div className="mt-4 flex items-start gap-2 rounded-lg border p-3 text-[12px]" style={{ borderColor: "rgba(176,61,51,0.4)", background: "rgba(176,61,51,0.06)", color: "#B03D33" }}>
-          <X size={14} className="mt-0.5 flex-shrink-0" /> <span>{creatorError}</span>
+        <div role="alert" className="mt-4 flex items-start gap-3 rounded-lg border p-4 text-sm leading-relaxed" style={{ borderColor: "#FCA5A5", background: "#FEF2F2", color: "#7F1D1D" }}>
+          <X size={18} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="font-semibold">Content could not be created</p>
+            <p className="mt-1 break-words">{creatorError}</p>
+          </div>
         </div>
       )}
 
