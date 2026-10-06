@@ -188,7 +188,13 @@ export function GenerationProgress({
   return (
     <div
       className={`rounded-lg border ${compact ? "px-3 py-2" : "p-4"}`}
-      style={{ borderColor: `${accent}40`, background: tint }}
+      style={{
+        borderColor: `${accent}40`,
+        // Keep the accent tint, but give it an opaque base so dark progress
+        // text remains readable when this panel sits on the teal workspace.
+        backgroundColor: "#ffffff",
+        backgroundImage: `linear-gradient(${tint}, ${tint})`,
+      }}
       role="group"
     >
       <div className="flex items-center justify-between gap-2">
@@ -226,7 +232,7 @@ export function GenerationProgress({
         )}
       </div>
       {!compact && (
-        <p className="mt-2 text-[12px] font-medium" style={{ color: vars.g600 }}>
+        <p className="mt-2 text-[13px] leading-relaxed font-medium" style={{ color: vars.g600 }}>
           Generating with AI. You can navigate within AIO Fusion, but please keep this browser tab open.
         </p>
       )}

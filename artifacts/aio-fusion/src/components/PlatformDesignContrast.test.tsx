@@ -29,7 +29,7 @@ describe("platform readability", () => {
     expect(within(select).getByRole("option", { name: "Natalie's team" }).style.color).toBe("rgb(10, 22, 40)");
   });
 
-  it("keeps progress guidance and the current stage dark enough to read", () => {
+  it("keeps progress guidance readable on the teal workspace with an opaque light panel", () => {
     render(
       <GenerationProgress
         stages={["Drafting the article"]}
@@ -42,8 +42,20 @@ describe("platform readability", () => {
 
     expect(screen.getByText("Drafting the article…").style.color).toBe("rgb(10, 22, 40)");
     const guidance = screen.getByText(/keep this browser tab open/i);
-    expect(guidance.className).toContain("text-[12px]");
+    expect(guidance.className).toContain("text-[13px]");
+    expect(guidance.className).toContain("leading-relaxed");
     expect(guidance.style.color).toBe("rgb(51, 65, 85)");
+    const panel = screen.getByRole("group");
+    expect(panel.style.backgroundColor).toBe("rgb(255, 255, 255)");
+    expect(panel.style.backgroundImage).toContain("linear-gradient");
+    expect(screen.getByText("Approximately 0%").style.color).toBe("rgb(51, 65, 85)");
+  });
+
+  it("keeps compact copy optimisation progress on the same opaque base", () => {
+    render(<GenerationProgress stages={["Polishing the result"]} chars={120} accent="#C94A3E" textColor="#0a1628" compact />);
+    expect(screen.getByRole("group").style.backgroundColor).toBe("rgb(255, 255, 255)");
+    expect(screen.getByText("Polishing the result…").style.color).toBe("rgb(10, 22, 40)");
+    expect(screen.getByText(/120 characters generated/).style.color).toBe("rgb(51, 65, 85)");
   });
 
   it("keeps switching guarded and reports a failure without changing the active workspace", async () => {
