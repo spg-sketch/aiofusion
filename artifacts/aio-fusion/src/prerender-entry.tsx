@@ -36,6 +36,7 @@ import TrustSecurityPage from "./marketing/TrustSecurityPage";
 import PrivacyPolicyPage from "./marketing/PrivacyPolicyPage";
 import JournalistPrivacyPage from "./marketing/JournalistPrivacyPage";
 import TermsConditionsPage from "./marketing/TermsConditionsPage";
+import LegalDocumentPage from "./marketing/LegalDocumentPage";
 
 import {
   PAGE_META,
@@ -92,6 +93,10 @@ function buildElement(route: string, articleId?: string): React.ReactElement | n
       return createElement(JournalistPrivacyPage, commonProps);
     case "terms-conditions":
       return createElement(TermsConditionsPage, commonProps);
+    case "website-terms":
+    case "cookie-policy":
+    case "legal-review":
+      return createElement(LegalDocumentPage, { ...commonProps, documentKind: route });
     default:
       return null;
   }

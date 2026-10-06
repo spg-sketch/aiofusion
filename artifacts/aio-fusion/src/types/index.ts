@@ -183,7 +183,8 @@ export type EventItem = {
 export type PublicView =
   | "landing" | "about" | "contact" | "insights" | "pricing"
   | "for-inhouse" | "for-agencies" | "for-agents" | "trust-security"
-  | "privacy-policy" | "journalist-privacy" | "terms-conditions";
+  | "privacy-policy" | "journalist-privacy" | "terms-conditions"
+  | "website-terms" | "cookie-policy" | "legal-review";
 
 export type Outlet = {
   id: number;

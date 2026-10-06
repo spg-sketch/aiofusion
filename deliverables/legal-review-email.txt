@@ -1,0 +1,40 @@
+Subject: AIO Fusion website policies and cookie controls for legal review
+
+Hi Patch and Natalie,
+
+We have compared the existing website documents and put together an expanded set for review:
+
+Website Terms of Use:
+https://aiofusion.ai/website-terms
+
+Privacy Policy:
+https://aiofusion.ai/privacy-policy
+
+Cookie Policy:
+https://aiofusion.ai/cookie-policy
+
+Comparison and Legal Review Pack:
+https://aiofusion.ai/legal-review
+
+Existing Platform Terms:
+https://aiofusion.ai/terms-conditions
+
+Journalist Privacy Rights:
+https://aiofusion.ai/journalist-privacy
+
+The website terms are separate from the platform agreement. The privacy draft covers visitors, enquiries, account administration, subscriber activity and AIO Fusion's own journalist contact database, and distinguishes that from information processed for customers.
+
+We have also added a compact cookie-choice panel. Optional Google Analytics stays off until accepted, visitors can choose essential cookies only, and they can change their choice later from the footer.
+
+A particular focus has been avoiding promises of success. The drafts make clear that rankings, AI citations, media coverage, journalist responses, traffic, leads, sales, revenue and return on investment are not guaranteed.
+
+The review pack proposes stronger platform no-results wording and a liability framework for consideration. We have not silently adopted a financial cap or waived rights that cannot legally be excluded.
+
+Please have these documents checked by a qualified legal adviser before treating the drafts as final. The review notes identify matters requiring confirmation, including the liability cap, journalist-data lawful basis and transparency, provider contracts and international transfers, retention periods, and the final deployed cookie inventory.
+
+These documents are a starting point for legal and business approval, not a guarantee of compliance or protection from every liability.
+
+Best,
+[Your name]
+
+SENDING NOTE: Send this only after the update has been published and the links checked. The new pages and controls are not live merely because the development preview works.

@@ -177,6 +177,7 @@ const loadTrustSecurityPage = () => import("./marketing/TrustSecurityPage");
 const loadPrivacyPolicyPage = () => import("./marketing/PrivacyPolicyPage");
 const loadJournalistPrivacyPage = () => import("./marketing/JournalistPrivacyPage");
 const loadTermsConditionsPage = () => import("./marketing/TermsConditionsPage");
+const loadLegalDocumentPage = () => import("./marketing/LegalDocumentPage");
 const loadForAgentsPage = () => import("./marketing/ForAgentsPage");
 const loadDashboardPage = () =>
   import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage }));
@@ -249,6 +250,7 @@ const TrustSecurityPage = lazy(() => import("./marketing/TrustSecurityPage"));
 const PrivacyPolicyPage = lazy(() => import("./marketing/PrivacyPolicyPage"));
 const JournalistPrivacyPage = lazy(() => import("./marketing/JournalistPrivacyPage"));
 const TermsConditionsPage = lazy(() => import("./marketing/TermsConditionsPage"));
+const LegalDocumentPage = lazy(loadLegalDocumentPage);
 const ForAgentsPage = lazy(() => import("./marketing/ForAgentsPage"));
 const DashboardPage = lazy(() =>
   import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage }))
@@ -310,6 +312,9 @@ const VIEW_PRELOADERS: Record<string, RoutePreloader> = {
   "privacy-policy": loadPrivacyPolicyPage,
   "journalist-privacy": loadJournalistPrivacyPage,
   "terms-conditions": loadTermsConditionsPage,
+  "website-terms": loadLegalDocumentPage,
+  "cookie-policy": loadLegalDocumentPage,
+  "legal-review": loadLegalDocumentPage,
   "sub-accounts": loadSubAccountsPage,
   guidance: loadGuidancePage,
   "archived-projects": loadArchivedProjectsPage,
@@ -485,7 +490,7 @@ function viewToUrl(v: string, insightsArticleId?: string | null): string {
 
 function App() {
   const [guidanceRoute, setGuidanceRoute] = useState<GuidanceRoute>(() => guidanceRouteFromLocation());
-  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "insights-admin" | "howto-admin" | "privacy-admin" | "sub-accounts" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security" | "privacy-policy" | "journalist-privacy" | "terms-conditions" | "not-found">(() =>
+  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "insights-admin" | "howto-admin" | "privacy-admin" | "sub-accounts" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security" | "privacy-policy" | "journalist-privacy" | "terms-conditions" | "website-terms" | "cookie-policy" | "legal-review" | "not-found">(() =>
     isAuthenticationLanding() ? "platform-home" : directViewFromLocation(),
   );
   // One owner for every in-flight authority/cache request. Identity changes
@@ -2009,6 +2014,9 @@ function App() {
   }
   if (view === "privacy-policy") {
     return <PrivacyPolicyPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;
+  }
+  if (view === "website-terms" || view === "cookie-policy" || view === "legal-review") {
+    return <LegalDocumentPage documentKind={view} onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;
   }
   if (view === "journalist-privacy") {
     return <JournalistPrivacyPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;

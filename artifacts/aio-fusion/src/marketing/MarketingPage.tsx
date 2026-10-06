@@ -1,3 +1,4 @@
+import { CookiePreferencesButton } from "../components/CookieConsent";
 import MarketingNav from "./MarketingNav";
 import { vars } from "./vars";
 
@@ -62,6 +63,14 @@ export default function MarketingPage({
             &copy; AIO Fusion. All rights reserved.
           </p>
           <nav aria-label="Footer navigation" className="flex items-center gap-5 flex-wrap justify-center">
+            {[
+              ["Website terms", "website-terms"],
+              ["Cookie policy", "cookie-policy"],
+              ["Legal review", "legal-review"],
+            ].map(([label, kind]) => <a key={kind} href={`${base}${kind}`}
+              onClick={(event) => { event.preventDefault(); onNavigate(kind); }}
+              className="text-[12px] font-normal hover:underline text-[#334155]">{label}</a>)}
+            <CookiePreferencesButton className="text-[12px] font-normal text-[#334155]" />
             <a
               href={`${base}trust-security`}
               onClick={(e) => { e.preventDefault(); onNavigate("trust-security"); }}
@@ -92,7 +101,7 @@ export default function MarketingPage({
               className="text-[12px] font-normal hover:underline"
               style={{ color: "#334155" }}
             >
-              Terms &amp; Conditions
+              Platform terms
             </a>
             <a
               href="mailto:info@aiofusion.ai"

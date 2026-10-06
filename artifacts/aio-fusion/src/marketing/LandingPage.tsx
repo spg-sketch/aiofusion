@@ -1,3 +1,5 @@
+import { CookiePreferencesButton } from "../components/CookieConsent";
+import { readCookiePreference } from "../lib/cookieConsent";
 import { useEffect, useState } from "react";
 import {
   Sparkles,
@@ -63,7 +65,10 @@ const FOOTER_PRIMARY_LINKS = [
 const FOOTER_SECONDARY_LINKS = [
   ["Trust & Security", "trust-security"],
   ["Privacy Policy", "privacy-policy"],
-  ["Terms & Conditions", "terms-conditions"],
+  ["Website terms", "website-terms"],
+  ["Platform terms", "terms-conditions"],
+  ["Cookie policy", "cookie-policy"],
+  ["Legal review", "legal-review"],
 ] as const;
 
 function navHref(v: string): string {
@@ -85,6 +90,8 @@ export default function LandingPageC({
   const [menuOpen, setMenuOpen] = useState(false);
   const [demoOpen, setDemoOpen] = useState(false);
   useEffect(() => {
+    // Avoid an automatic demo modal competing with a first-visit cookie choice.
+    if (!readCookiePreference()) return;
     try {
       if (window.localStorage.getItem(DEMO_OPT_OUT_KEY) === "1") return;
     } catch {
@@ -441,6 +448,7 @@ export default function LandingPageC({
                       className="inline-block whitespace-nowrap hover:opacity-60">{label}</a>
                   </li>
                 ))}
+                <li><CookiePreferencesButton /></li>
               </ul>
             </nav>
           </div>

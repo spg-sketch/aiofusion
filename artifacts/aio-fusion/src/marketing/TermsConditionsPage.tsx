@@ -15,12 +15,17 @@ function Section({ title, children }: { title: string; children: any }) {
 
 export default function TermsConditionsPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
   return (
-    <MarketingPage title="Terms &amp; Conditions" {...props}>
+    <MarketingPage title="Platform Terms &amp; Conditions" {...props}>
       <PageHead meta={PAGE_META["terms-conditions"]} />
-      <p className="text-[13px] font-normal mb-8" style={{ color: vars.g600 }}>Last updated: 10 July 2026</p>
+      <p className="text-[13px] font-normal mb-8" style={{ color: vars.g600 }}>Existing platform terms: 10 July 2026. Website/platform scope clarification: 6 October 2026.</p>
+      <aside className="mb-8 rounded-xl border border-slate-200 bg-[#F0F6F6] p-5 text-[14px] leading-relaxed text-[#102B36]">
+        Public website terms are now presented separately for review. Proposed no-results and liability amendments are in the{" "}
+        <a className="underline" href={`${import.meta.env.BASE_URL}legal-review`} onClick={(event) => { event.preventDefault(); props.onNavigate("legal-review"); }}>Legal review pack</a>.
+        {" "}Those proposals have not been automatically adopted into your platform contract.
+      </aside>
 
       <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
-        These terms govern your use of the AIO Fusion website and platform (together, the "Service"), provided by
+        These terms govern your use of the AIO Fusion platform (the "Service"), provided by
         AIO Fusion Ltd. By creating an account or using the Service, you agree to these terms.
       </p>
 

@@ -233,6 +233,24 @@ export const PAGE_META: Record<PublicPageMetaKey, PageMeta> = {
     canonical: `${BASE}/privacy-policy`,
     ogType: "website",
   },
+  "website-terms": {
+    title: "Website Terms of Use - Review Draft | AIO Fusion",
+    description: "Separate public website terms, including AI limitations, no guaranteed outcomes and proposed liability provisions, awaiting legal review.",
+    canonical: `${BASE}/website-terms`,
+    ogType: "website",
+  },
+  "cookie-policy": {
+    title: "Cookie Policy | AIO Fusion",
+    description: "How AIO Fusion uses essential browser storage and optional Google Analytics, and how to manage cookie preferences.",
+    canonical: `${BASE}/cookie-policy`,
+    ogType: "website",
+  },
+  "legal-review": {
+    title: "Legal Review Pack | AIO Fusion",
+    description: "Comparison of existing legal documents and proposed website, privacy, cookie and platform liability provisions for adviser review.",
+    canonical: `${BASE}/legal-review`,
+    ogType: "website",
+  },
   "journalist-privacy": {
     title: "Journalist Privacy Rights | AIO Fusion",
     description:
@@ -250,7 +268,7 @@ export const PAGE_META: Record<PublicPageMetaKey, PageMeta> = {
   "terms-conditions": {
     title: "Terms & Conditions | AIO Fusion",
     description:
-      "Terms governing your use of the AIO Fusion website and platform, provided by AIO Fusion Ltd.",
+      "Terms governing your use of the AIO Fusion platform, provided by AIO Fusion Ltd. Public website terms are separate.",
     canonical: `${BASE}/terms-conditions`,
     ogType: "website",
   },
@@ -665,6 +683,9 @@ export const PUBLIC_PAGE_DEFINITIONS = [
   { view: "contact", slug: "contact", priority: "0.8" },
   { view: "trust-security", slug: "trust-security", priority: "0.5" },
   { view: "privacy-policy", slug: "privacy-policy", priority: "0.4" },
+  { view: "website-terms", slug: "website-terms", priority: "0.4" },
+  { view: "cookie-policy", slug: "cookie-policy", priority: "0.4" },
+  { view: "legal-review", slug: "legal-review", priority: "0.3" },
   { view: "journalist-privacy", slug: "journalist-privacy", priority: "0.4" },
   { view: "terms-conditions", slug: "terms-conditions", priority: "0.4" },
 ] as const satisfies readonly {

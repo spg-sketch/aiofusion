@@ -6,6 +6,10 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ImpersonationBanner } from "./components/ImpersonationBanner";
 import { RouteLoading } from "./components/RouteLoading";
 import "./index.css";
+import { CookieConsent } from "./components/CookieConsent";
+import { initialiseCookieConsent } from "./lib/cookieConsent";
+
+initialiseCookieConsent();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,6 +35,7 @@ createRoot(document.getElementById("root")!).render(
       <Suspense fallback={<RouteLoading fullScreen />}>
         <App />
       </Suspense>
+      <CookieConsent />
     </QueryClientProvider>
   </ErrorBoundary>
 );
