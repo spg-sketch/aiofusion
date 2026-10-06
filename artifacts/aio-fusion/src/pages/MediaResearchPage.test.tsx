@@ -1731,7 +1731,7 @@ describe("MediaResearchPage live discovery", () => {
     expect(status.textContent).toMatch(/does not mean they have no recent coverage/i);
     expect(status.textContent).toMatch(/Previous verified evidence is retained/i);
     expect(status.className).toContain("bg-amber-50");
-    const summary = screen.getByText("Coverage evidence is limited — view details");
+    const summary = screen.getByText("Coverage evidence is limited - view details");
     const details = summary.closest("details");
     expect(details).not.toHaveAttribute("open");
     expect(details?.textContent).toMatch(/no citation-backed/);
