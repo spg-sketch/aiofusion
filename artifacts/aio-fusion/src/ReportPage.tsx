@@ -690,7 +690,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
         <div>
           <div className="flex items-center gap-2 mb-2">
             <PieChart size={24} color="#ffffff" />
-            <h1 className="aio-type-page-title flex items-center" style={{ color: "#ffffff" }}>
+            <h1 className="text-3xl sm:text-4xl tracking-tight flex items-center" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
               Measure &amp; Report
               <InfoTip text="Combines diagnostic scores, earned media authority, planned activity, the Earned Media Tracker and the website GEO audit. Designed to be exported and shared with the client." width={260} />
             </h1>
@@ -698,7 +698,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           <p className="aio-type-supporting" style={{ color: "rgba(255,255,255,0.85)" }}>
             Authority &amp; Activity Report &middot; {activeClient.name} &middot; Generated {reportDate}
           </p>
-          <p className="aio-type-body mt-3 max-w-3xl" style={{ color: "#ffffff" }}>
+          <p className="text-[13px] sm:text-[14px] font-light mt-3 max-w-3xl" style={{ color: "#ffffff" }}>
             This is your shareable scorecard for the whole project. It pulls your audit scores, earned media and planned activity into one place so you can see how your AI authority is growing over time. Clear measurement shows what is working and proves the impact of your AIO strategy to clients and stakeholders.
           </p>
         </div>

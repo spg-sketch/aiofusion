@@ -374,9 +374,9 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
       <div className="mb-6">
         <div className="flex items-center gap-3">
           <CalendarDays size={26} color="#ffffff" />
-          <h1 className="aio-type-page-title mb-2" style={{ color: "#ffffff" }}>Comms Planner</h1>
+          <h1 className="text-3xl sm:text-4xl tracking-tight mb-2" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Comms Planner</h1>
         </div>
-        <p className="aio-type-body max-w-5xl" style={{ color: "rgba(255,255,255,0.85)" }}>Plan your PR and marketing schedule in one place and see a configurable estimate of its visibility and authority potential. The score responds to content type, selected release channels and workflow status. Click any content item to open and edit it in the Content Optimiser.</p>
+        <p className="text-[13px] sm:text-[14px] font-light max-w-5xl" style={{ color: "rgba(255,255,255,0.85)" }}>Plan your PR and marketing schedule in one place and see a configurable estimate of its visibility and authority potential. The score responds to content type, selected release channels and workflow status. Click any content item to open and edit it in the Content Optimiser.</p>
       </div>
 
       {storeState.status === "loading" && (

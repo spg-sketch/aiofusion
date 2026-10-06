@@ -12,13 +12,11 @@ import {
 import { vars } from "../marketing/vars";
 import { loadArchive, saveArchive, useContentStore, getContentStoreState, initContentStore, plannerProjectForArchive, type ArchiveItem, splitArchiveBody, loadPlannerProjects, savePlannerProjects, getISOWeek, weekDateLabel, type PlannerProject } from "../lib/contentStore";
 import CountdownBanner from "../components/CountdownBanner";
-import { loadIntakeData, getKeyMessages, getSpokespeople } from "../IntakeForm";
+import { getKeyMessages, getSpokespeople } from "../IntakeForm";
 import { CONTENT_TYPES } from "./shared";
 import InfoTip from "../InfoTip";
 function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
   const contentVersion = useContentStore();
-  const intake = loadIntakeData();
-  const projectName = (intake?.formData["4.1"] as string) || "your project";
   const keyMessages = getKeyMessages();
   const intakeSpeakers = getSpokespeople();
 
@@ -137,7 +135,7 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
     <div className="p-6 sm:p-10 max-w-6xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl sm:text-3xl mb-1.5 flex items-center gap-2" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
-          <Archive size={22} color="#ffffff" /> Content Library - {projectName}
+          <Archive size={22} color="#ffffff" /> Content Library
         </h1>
         <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>
           Your full, searchable library of every accepted, drafted and reviewed piece for this project, filtered by message, spokesperson, content type and time period. A well kept library lets you reuse proven content and keep messaging consistent, which compounds your authority with AI over time.

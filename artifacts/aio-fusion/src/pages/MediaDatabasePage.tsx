@@ -1573,9 +1573,9 @@ function MediaDatabasePage() {
       <div className="mb-6">
         <div className="flex items-center gap-2.5">
           <Database size={24} color="#ffffff" />
-          <h1 className="text-[28px] font-semibold mb-1" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Media Database</h1>
+          <h1 className="text-3xl sm:text-4xl tracking-tight mb-1" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Media Database</h1>
         </div>
-         <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>Find media contacts and publications, then save the records your team wants to follow.</p>
+         <p className="text-[13px] sm:text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>Find media contacts and publications, then save the records your team wants to follow.</p>
          <nav aria-label="Media Database sections" className="mt-3 flex flex-wrap gap-2">
            <button onClick={openSearchMedia} aria-current={activeNavigation === "search" ? "page" : undefined} className={navigationButtonClass} style={navigationButtonStyle("search")}>Search Media Database</button>
            <button onClick={() => openSavedMedia("contacts")} aria-current={activeNavigation === "saved" ? "page" : undefined} className={navigationButtonClass} style={navigationButtonStyle("saved")}>My Media Database</button>
