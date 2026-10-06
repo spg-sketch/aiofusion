@@ -3,11 +3,11 @@ name: Media spreadsheet export expectations
 description: Working-spreadsheet intent, CSV contract separation and Calc compatibility verification.
 ---
 
-Workbook and CSV field sets deliberately differ. Historical workbook presentation approval applies to preserved workbook uses, not as authority to override the current customer download policy in replit.md.
+Authorised Media Database Excel downloads must contain the same fields, in the same order, as the equivalent CSV download, while retaining readable widths and spreadsheet formatting. This supersedes the earlier compact Excel field selection, not the customer CSV-only access policy.
 
-**Why:** A later customer download-policy change superseded the earlier customer workbook request, without removing authorised Master maintenance or unrelated workbook exports.
+**Why:** On 2026-10-06 the user clarified that they want Excel to match the CSV column fields. CSV itself cannot preserve the wider cell settings they requested.
 
-**How to apply:** Preserve machine-friendly CSV fields independently of workbook presentation. Use synthetic examples for review, not customer contact data. Publication still requires separate approval.
+**How to apply:** Share scoped headers and values between the formats; do not expose restricted fields through Excel or restore customer Excel access implicitly. Preserve unrelated workbook layouts and the dedicated story outreach CSV. Use synthetic examples, not customer data. Publication still requires separate approval.
 
 An OOXML auto-filter element alone can leave filter buttons hidden in LibreOffice Calc, even though its range is present in the worksheet XML. A hidden filter database named range is also needed for this interoperability path.
 

@@ -96,6 +96,21 @@ function inlineCellValues(xml: string): string[] {
 }
 
 describe("buildMediaExcelExport", () => {
+  it("supports CSV-aligned headers with wide columns, wrapped prose and literal complete values", () => {
+    const headers = ["First Name", "Outlet Description", "LinkedIn URL", "Outlet Website", "Notes"];
+    const rows = [["Élodie", "Detailed\npublication description", "https://www.linkedin.com/in/test-person", "https://example.test/news", "=Not a formula"]];
+    const files = unzipAndValidate(buildMediaExcelExport("contacts", rows, headers));
+    const sheet = files.get("xl/worksheets/sheet1.xml")!;
+    expect(inlineCellValues(sheet)).toEqual([...headers, ...rows[0]!]);
+    expect(sheet).toContain('<col min="2" max="2" width="48"');
+    expect(sheet).toContain('<col min="3" max="3" width="34"');
+    expect(sheet).toContain('<autoFilter ref="A1:E2"/>');
+    expect(sheet).toContain('state="frozen"');
+    expect(sheet).not.toMatch(/<f(?:\s|>)/);
+    expect(files.get("xl/worksheets/_rels/sheet1.xml.rels")).toContain("https://example.test/news");
+    expect(files.get("xl/styles.xml")).toContain('wrapText="1"');
+  });
+
   it("creates a styled valid ZIP workbook with exact contact headers and safe literal strings", async () => {
     const workbook = buildMediaExcelExport("contacts", [[
       "Élodie",

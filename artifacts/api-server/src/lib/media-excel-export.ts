@@ -73,16 +73,27 @@ function cellText(value: unknown): string {
   return String(value);
 }
 
-function worksheetXml(type: ExportType, rows: readonly (readonly unknown[])[]): { xml: string; relationships: string; range: string } {
-  const headers = type === "contacts" ? CONTACT_HEADERS : PUBLICATION_HEADERS;
+function worksheetXml(type: ExportType, rows: readonly (readonly unknown[])[], exportHeaders?: readonly string[]): { xml: string; relationships: string; range: string } {
+  const headers = exportHeaders ?? (type === "contacts" ? CONTACT_HEADERS : PUBLICATION_HEADERS);
   const rowCount = rows.length + 1;
   const endColumn = columnName(headers.length - 1);
   const filterRange = `A1:${endColumn}${rowCount}`;
-  const widths = type === "contacts"
+  const widths = exportHeaders ? headers.map((header) =>
+    /description|notes|reference|journalist names/i.test(header) ? 48 :
+    /url|website|email/i.test(header) ? 34 :
+    /role|outlet|publication$|sector|beats|industry/i.test(header) ? 28 : 20)
+    : type === "contacts"
     ? [15, 17, 32, 28, 32, 20, 26, 28, 20, 18]
     : [28, 26, 56, 20, 44, 18];
-  const wrappedColumns = new Set(type === "contacts" ? [2, 3, 7] : [0, 2, 4]);
-  const websiteColumn = type === "contacts" ? 6 : 1;
+  const wrappedColumns = new Set(exportHeaders
+    ? headers.flatMap((header, index) => /description|notes|reference|journalist names|role|beats|sector|industry/i.test(header) ? [index] : [])
+    : type === "contacts" ? [2, 3, 7] : [0, 2, 4]);
+  const websiteColumn = exportHeaders
+    ? headers.findIndex((header) => /^(?:outlet |publication )?website$/i.test(header))
+    : type === "contacts" ? 6 : 1;
+  const linkedinColumn = exportHeaders
+    ? headers.findIndex((header) => /^linkedin(?: url)?$/i.test(header))
+    : type === "contacts" ? 5 : -1;
   const hyperlinks: string[] = [];
   const relationships: string[] = [];
   const tableRows = [headers, ...rows];
@@ -92,11 +103,11 @@ function worksheetXml(type: ExportType, rows: readonly (readonly unknown[])[]): 
       let value = rowIndex === 0 ? headers[columnIndex]! : cellText(row[columnIndex]);
       let style = rowIndex === 0 ? 1 : (rowIndex % 2 === 1 ? 2 : 3) + (wrappedColumns.has(columnIndex) ? 2 : 0);
       const reference = `${columnName(columnIndex)}${rowNumber}`;
-      if (rowIndex > 0 && (columnIndex === websiteColumn || (type === "contacts" && columnIndex === 5))) {
+      if (rowIndex > 0 && (columnIndex === websiteColumn || columnIndex === linkedinColumn)) {
         const link = safeMediaExportLink(value);
         if (link && (columnIndex === websiteColumn || /(^|\.)linkedin\.com$/i.test(link.hostname))) {
           const tooltip = link.target !== value ? ` tooltip="${xmlEscape(value)}"` : "";
-          value = columnIndex === websiteColumn ? link.hostname : "LinkedIn profile";
+          if (!exportHeaders) value = columnIndex === websiteColumn ? link.hostname : "LinkedIn profile";
           style = rowIndex % 2 === 1 ? 6 : 7;
           const id = `rId${relationships.length + 1}`;
           hyperlinks.push(`<hyperlink ref="${reference}" r:id="${id}"${tooltip}/>`);
@@ -334,13 +345,14 @@ function zip(parts: ZipPart[]): Buffer {
 export function buildMediaExcelExport(
   type: "contacts" | "publications",
   rows: readonly (readonly unknown[])[],
+  exportHeaders?: readonly string[],
 ): Buffer {
   if (rows.length > MAX_ROWS) {
     throw new MediaExcelExportLimitError(`Excel exports may contain no more than ${MAX_ROWS.toLocaleString()} data rows.`);
   }
 
   let totalTextBytes = 0;
-  const headers = type === "contacts" ? CONTACT_HEADERS : PUBLICATION_HEADERS;
+  const headers = exportHeaders ?? (type === "contacts" ? CONTACT_HEADERS : PUBLICATION_HEADERS);
   const allRows: readonly (readonly unknown[])[] = [headers, ...rows];
   for (const row of allRows) {
     for (let index = 0; index < headers.length; index += 1) {
@@ -357,5 +369,5 @@ export function buildMediaExcelExport(
     }
   }
 
-  return zip(partsFor(type, worksheetXml(type, rows)));
+  return zip(partsFor(type, worksheetXml(type, rows, exportHeaders)));
 }

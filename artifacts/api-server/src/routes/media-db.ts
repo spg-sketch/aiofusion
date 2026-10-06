@@ -829,17 +829,6 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
         res.status(403).json({ error: "One or more selected contacts are unavailable for export." });
         return;
       }
-      if (format === "xlsx") {
-        const workbook = buildMediaExcelExport("contacts", eligible.map(({ contact, outlet }) => [
-          contact.firstName, contact.lastName, contact.role, outlet?.name ?? "", contact.email,
-          contact.linkedinUrl, outlet?.website ?? "",
-          (contact.sectors ?? []).join("; ") || outlet?.category || "", outlet?.country ?? "",
-          contact.publicationReach || outlet?.reachBand || "",
-        ]));
-        res.status(200).set("Content-Disposition", 'attachment; filename="Media Contacts.xlsx"')
-          .type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(workbook);
-        return;
-      }
       const headers = layout === "story-outreach" ? STORY_OUTREACH_CSV_HEADERS : scope === "full"
         ? MEDIA_EXPORT_CONTACT_HEADERS
         : MEDIA_EXPORT_CONTACT_HEADERS.filter((header) => !MEDIA_EXPORT_RESTRICTED_HEADERS.has(header));
@@ -865,6 +854,12 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
         };
         return headers.map((header) => data[header] ?? "");
       });
+      if (format === "xlsx") {
+        const workbook = buildMediaExcelExport("contacts", output, headers);
+        res.status(200).set("Content-Disposition", 'attachment; filename="Media Contacts.xlsx"')
+          .type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(workbook);
+        return;
+      }
       const csv = mediaExportCsv(headers, output);
       if (customer) await settleMediaExport(accountId, req.body.operationId, JSON.stringify({ scope, type, ids: requestedIds, csv }), eligible.filter(({ contact }) => contact.accountId === null).length);
       if (scope !== "full") res.set("Content-Disposition", layout === "story-outreach"
@@ -933,17 +928,6 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
         journalistsByOutlet.set(contact.outletId!, journalists);
       }
     }
-    if (format === "xlsx") {
-      const workbook = buildMediaExcelExport("publications", publications.map((publication) => [
-        publication.name, publication.website, publication.description,
-        publication.country,
-        (journalistsByOutlet.get(publication.id) ?? []).map((journalist) => journalist.name).filter(Boolean).join("; "),
-        publication.reachBand || "",
-      ]));
-      res.status(200).set("Content-Disposition", 'attachment; filename="Media Publications.xlsx"')
-        .type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(workbook);
-      return;
-    }
     const output = publications.map((publication) => {
       const journalists = journalistsByOutlet.get(publication.id) ?? [];
       return [
@@ -957,6 +941,12 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
     const headers = scope === "full"
       ? MEDIA_EXPORT_PUBLICATION_HEADERS
       : MEDIA_EXPORT_PUBLICATION_HEADERS.filter((header) => header !== "Linked journalist emails");
+    if (format === "xlsx") {
+      const workbook = buildMediaExcelExport("publications", output.map((row) => row.slice(0, headers.length)), headers);
+      res.status(200).set("Content-Disposition", 'attachment; filename="Media Publications.xlsx"')
+        .type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(workbook);
+      return;
+    }
     const csv = mediaExportCsv(headers, output.map((row) => row.slice(0, headers.length)));
     if (customer) await settleMediaExport(accountId, req.body.operationId, JSON.stringify({ scope, type, ids: requestedIds, csv }), publications.filter((publication) => publication.accountId === null).length);
     if (scope !== "full") res.set("Content-Disposition", 'attachment; filename="Media Publications.csv"');

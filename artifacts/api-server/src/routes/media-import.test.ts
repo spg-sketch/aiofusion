@@ -727,7 +727,7 @@ describe("media export route regressions", () => {
     expect(response.text).not.toContain("Confidential hidden outlet details.");
   });
 
-  it("exports exactly the requested contact Excel fields and imported reach, without authority or notes", async () => {
+  it("matches contact Excel fields to CSV in every authorised scope, preserving formatting and access restrictions", async () => {
     const workspace = "admin";
     const [outlet] = await db.insert(mediaOutletsTable).values({
       name: "Excel News", accountId: workspace, website: "https://excel.example.test",
@@ -740,7 +740,7 @@ describe("media export route regressions", () => {
       publicationAuthority: "88", journalistAuthority: "77", notes: "Private notes not exported",
     }).returning();
     await db.insert(mediaBookmarksTable).values({ accountId: workspace, contactId: contact!.id, outletId: null });
-    for (const scope of ["saved", "selected"]) {
+    for (const scope of ["saved", "selected", "full"]) {
       const response = await mediaExportRequest(workspace, {
         scope, type: "contacts", format: "xlsx", ...(scope === "selected" ? { ids: [contact!.id] } : {}),
       }, "admin");
@@ -749,30 +749,54 @@ describe("media export route regressions", () => {
       expect(response.disposition).toContain('filename="Media Contacts.xlsx"');
       const sheet = exportedWorksheet(response.bytes);
       const header = sheet.match(/<row r="1"[^>]*>(.*?)<\/row>/s)![1]!;
-      expect([...header.matchAll(/<t[^>]*>(.*?)<\/t>/g)].map((match) => match[1])).toEqual([
-        "First name", "Last name", "Role", "Outlet name", "Email", "LinkedIn", "Outlet website", "Sector", "Country", "Source reach value",
-      ]);
-      for (const value of ["Zoë", "=Reporter", "Excel News", "zoe@example.test", "LinkedIn profile",
+      for (const value of ["Zoë", "=Reporter", "Excel News", "zoe@example.test", "https://www.linkedin.com/in/excel-example",
         "excel.example.test", "Energy &amp; Nature; Technology", "UK", "00042"]) expect(sheet).toContain(value);
-      for (const absent of ["Private notes not exported", "Not requested for contacts", "Authority", ">88<", ">77<", "<f>"]) expect(sheet).not.toContain(absent);
+      expect(sheet).toContain("Private notes not exported");
+      expect(sheet).toContain("Not requested for contacts");
+      expect(sheet).not.toContain("<f>");
       const csv = await mediaExportRequest(workspace, {
         scope, type: "contacts", format: "csv", ...(scope === "selected" ? { ids: [contact!.id] } : {}),
       }, "admin");
       expect(csv.status).toBe(200);
       expect(csv.contentType).toContain("text/csv");
-      expect(csv.disposition).toContain('filename="Media Contacts.csv"');
+      if (scope !== "full") expect(csv.disposition).toContain('filename="Media Contacts.csv"');
+      const csvHeaders = [...csv.text.split(/\r?\n/)[0]!.matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+      expect([...header.matchAll(/<t[^>]*>(.*?)<\/t>/g)].map((match) => match[1])).toEqual(csvHeaders);
       expect(csv.text).toContain("https://www.linkedin.com/in/excel-example");
       expect(csv.text).toContain("https://excel.example.test");
       expect(csv.text).toContain('"Outlet Description"');
       expect(csv.text).toContain("Not requested for contacts");
       expect(csv.text).toContain("Private notes not exported");
-      expect(csv.text).not.toContain('"Review Notes"');
+      if (scope !== "full") expect(csv.text).not.toContain('"Review Notes"');
     }
     const denied = await mediaExportRequest("another-excel-workspace", { scope: "selected", type: "contacts", ids: [contact!.id], format: "xlsx" });
     expect(denied.status).toBe(400);
     expect((await mediaExportRequest(workspace, { scope: "full", type: "contacts", format: "xlsx" })).status).toBe(400);
     expect((await mediaExportRequest(workspace, { scope: "selected", type: "contacts", ids: Array.from({ length: 26 }, (_, i) => i + 1), format: "xlsx" })).status).toBe(400);
     expect((await mediaExportRequest(workspace, { scope: "saved", type: "contacts", format: "html" })).status).toBe(400);
+  });
+
+  it("matches authorised publication Excel columns and values to the equivalent CSV export", async () => {
+    const [publication] = await db.insert(mediaOutletsTable).values({
+      name: "CSV Aligned Publication", accountId: "admin",
+      website: "https://aligned.example.test", description: "Detailed publication description",
+      category: "Technology", country: "UK", reachBand: "00029",
+    }).returning();
+    await db.insert(mediaBookmarksTable).values({ accountId: "admin", outletId: publication!.id, contactId: null });
+    for (const scope of ["full", "saved", "selected"]) {
+      const options = { scope, type: "publications", ...(scope === "selected" ? { ids: [publication!.id] } : {}) };
+      const csv = await mediaExportRequest("admin", { ...options, format: "csv" }, "admin");
+      const workbook = await mediaExportRequest("admin", { ...options, format: "xlsx" }, "admin");
+      expect(csv.status).toBe(200);
+      expect(workbook.status).toBe(200);
+      const sheet = exportedWorksheet(workbook.bytes);
+      const header = sheet.match(/<row r="1"[^>]*>(.*?)<\/row>/s)![1]!;
+      const csvHeaders = [...csv.text.split(/\r?\n/)[0]!.matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+      expect([...header.matchAll(/<t[^>]*>(.*?)<\/t>/g)].map((match) => match[1])).toEqual(csvHeaders);
+      expect(sheet).toContain("Source reach value: 00029");
+      expect(sheet).toContain("Detailed publication description");
+      expect(sheet).toContain("https://aligned.example.test");
+    }
   });
 
   it("includes only independently saved visible linked journalists in saved and selected publication exports", async () => {
