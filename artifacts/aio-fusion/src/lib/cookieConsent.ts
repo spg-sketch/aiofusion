@@ -6,6 +6,7 @@ const CONSENT_LIFETIME = 180 * 24 * 60 * 60 * 1000;
 type Preference = { version: 1; analytics: boolean; savedAt: number };
 let memoryPreference: Preference | null = null;
 let initialised = false;
+let preferenceOnArrival: boolean | null = null;
 
 function validPreference(raw: string | null): Preference | null {
   try {
@@ -83,6 +84,7 @@ export function saveCookiePreference(analytics: boolean): boolean {
 export function initialiseCookieConsent() {
   if (initialised || typeof window === "undefined") return;
   initialised = true;
+  preferenceOnArrival = readCookiePreference() !== null;
   applyAnalytics(readCookiePreference()?.analytics === true);
   window.addEventListener("storage", (event) => {
     if (event.key !== CONSENT_KEY && event.key !== null) return;
@@ -90,6 +92,12 @@ export function initialiseCookieConsent() {
     applyAnalytics(readCookiePreference()?.analytics === true);
     window.dispatchEvent(new Event(CONSENT_EVENT));
   });
+}
+
+export function hasCookiePreferenceOnArrival(): boolean {
+  // Capture this before React mounts. A choice made while App is still loading
+  // must not turn the delayed first homepage mount into a returning visit.
+  return preferenceOnArrival ?? (readCookiePreference() !== null);
 }
 
 export function openCookiePreferences() {

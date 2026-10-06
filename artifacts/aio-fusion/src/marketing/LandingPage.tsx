@@ -1,5 +1,5 @@
 import { CookiePreferencesButton } from "../components/CookieConsent";
-import { readCookiePreference } from "../lib/cookieConsent";
+import { hasCookiePreferenceOnArrival } from "../lib/cookieConsent";
 import { useEffect, useState } from "react";
 import {
   Sparkles,
@@ -91,7 +91,7 @@ export default function LandingPageC({
   const [demoOpen, setDemoOpen] = useState(false);
   useEffect(() => {
     // Avoid an automatic demo modal competing with a first-visit cookie choice.
-    if (!readCookiePreference()) return;
+    if (!hasCookiePreferenceOnArrival()) return;
     try {
       if (window.localStorage.getItem(DEMO_OPT_OUT_KEY) === "1") return;
     } catch {

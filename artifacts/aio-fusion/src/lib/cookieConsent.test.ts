@@ -46,7 +46,16 @@ describe("analytics consent", () => {
     const consent = await import("./cookieConsent");
     localStorage.setItem(consent.CONSENT_KEY, JSON.stringify({ version: 1, analytics: true, savedAt: Date.now() }));
     consent.initialiseCookieConsent();
+    expect(consent.hasCookiePreferenceOnArrival()).toBe(true);
     expect(document.getElementById("aio-analytics-loader")).not.toBeNull();
+  });
+  it("does not turn a first visit into a returning visit when the choice precedes app mounting", async () => {
+    const consent = await import("./cookieConsent");
+    consent.initialiseCookieConsent();
+    expect(consent.hasCookiePreferenceOnArrival()).toBe(false);
+    consent.saveCookiePreference(false);
+    expect(consent.readCookiePreference()?.analytics).toBe(false);
+    expect(consent.hasCookiePreferenceOnArrival()).toBe(false);
   });
   it("fails closed when storage is blocked and honours the explicit current-tab choice", async () => {
     const consent = await import("./cookieConsent");

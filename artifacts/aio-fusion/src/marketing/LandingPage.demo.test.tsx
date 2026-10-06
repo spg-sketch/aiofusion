@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import LandingPage from "./LandingPage";
 import DemoDialog from "./DemoDialog";
 import { CONSENT_KEY } from "../lib/cookieConsent";
+import * as cookieConsent from "../lib/cookieConsent";
 
 describe("homepage demo enquiry", () => {
   beforeEach(() => {
@@ -14,7 +15,7 @@ describe("homepage demo enquiry", () => {
     sessionStorage.clear();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => [] }));
   });
-  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
   it("opens on returning homepage visits, dismisses with Escape and reopens on request", () => {
     const props = { onLogin: vi.fn(), onNavigate: vi.fn() };
@@ -38,6 +39,11 @@ describe("homepage demo enquiry", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(screen.getAllByRole("button", { name: /book a demo/i })[0]!);
     expect(screen.getByRole("dialog", { name: /see your ai visibility/i })).toBeTruthy();
+  });
+  it("does not mistake a choice made during app loading for a returning visitor", () => {
+    vi.spyOn(cookieConsent, "hasCookiePreferenceOnArrival").mockReturnValue(false);
+    render(<LandingPage onLogin={vi.fn()} onNavigate={vi.fn()} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("opens even if an earlier visit left the old storage flag", () => {
