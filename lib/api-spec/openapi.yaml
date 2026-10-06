@@ -19,6 +19,41 @@ tags:
   - name: How-to
     description: Published How-to library and protected editorial management.
 paths:
+  /store/media-db/export:
+    post:
+      operationId: exportMediaDatabase
+      summary: Download visible media records using the standard or story outreach layout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaDownloadInput"
+      responses:
+        "200":
+          description: CSV download; XLSX is available only for authorised Master maintenance
+          content:
+            text/csv:
+              schema:
+                type: string
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Invalid selection, format or layout
+        "401":
+          description: Authentication required
+        "403":
+          description: Export unavailable to this member
+        "409":
+          description: Export operation conflicts with a previous download
+        "413":
+          description: Collection exceeds the export limit
+        "429":
+          description: Daily allowance exceeded
+        "500":
+          description: Export failed
   /store/media-db/outreach/{id}:
     delete:
       operationId: removeMediaOutreach
@@ -780,6 +815,35 @@ components:
       required: true
       schema: { type: string, minLength: 1, maxLength: 200 }
   schemas:
+    MediaDownloadInput:
+      type: object
+      required: [scope, type]
+      properties:
+        scope:
+          type: string
+          enum: [full, saved, selected]
+        type:
+          type: string
+          enum: [contacts, publications]
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 25
+          uniqueItems: true
+          items:
+            type: integer
+            minimum: 1
+        format:
+          type: string
+          enum: [csv, xlsx]
+          default: csv
+        layout:
+          type: string
+          enum: [story-outreach]
+          description: Optional nine-column layout, available only for selected contact CSV downloads.
+        operationId:
+          type: string
+          description: Optional idempotency key for safe retry accounting.
     MediaOutreachRemovalInput:
       type: object
       required: [projectId, storyKey]

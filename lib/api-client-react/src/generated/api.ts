@@ -48,6 +48,7 @@ import type {
   MediaDiscoveryInstructionsInput,
   MediaDiscoveryListEnvelope,
   MediaDiscoveryRejectInput,
+  MediaDownloadInput,
   MediaOutreachRemovalInput,
   MediaPitchAnglesInput,
   MediaPitchInput,
@@ -92,6 +93,86 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getExportMediaDatabaseUrl = () => {
+
+
+
+
+  return `/api/store/media-db/export`
+}
+
+/**
+ * @summary Download visible media records using the standard or story outreach layout
+ */
+export const exportMediaDatabase = async (mediaDownloadInput: MediaDownloadInput, options?: Parameters<typeof customFetch>[1]): Promise<string | Blob> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<string | Blob>(getExportMediaDatabaseUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(mediaDownloadInput)
+  }
+);}
+
+
+
+
+
+export const getExportMediaDatabaseMutationKey = () => ['exportMediaDatabase'] as const;
+
+export const getExportMediaDatabaseMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportMediaDatabase>>, TError,ExportMediaDatabaseMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof exportMediaDatabase>>, TError,ExportMediaDatabaseMutationVariables, TContext> => {
+
+const mutationKey = getExportMediaDatabaseMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exportMediaDatabase>>, ExportMediaDatabaseMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  exportMediaDatabase(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExportMediaDatabaseMutationResult = NonNullable<Awaited<ReturnType<typeof exportMediaDatabase>>>
+    export type ExportMediaDatabaseMutationBody = BodyType<MediaDownloadInput>
+    export type ExportMediaDatabaseMutationError = ErrorType<void>
+    export type ExportMediaDatabaseMutationVariables = {data: BodyType<MediaDownloadInput>}
+
+    /**
+ * @summary Download visible media records using the standard or story outreach layout
+ */
+export const useExportMediaDatabase = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportMediaDatabase>>, TError,ExportMediaDatabaseMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof exportMediaDatabase>>,
+        TError,
+        ExportMediaDatabaseMutationVariables,
+        TContext
+      > => {
+      return useMutation(getExportMediaDatabaseMutationOptions(options));
+    }
 
 export const getRemoveMediaOutreachUrl = (id: number,) => {
 

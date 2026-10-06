@@ -1351,9 +1351,11 @@ describe("MediaResearchPage live discovery", () => {
     await waitFor(() => expect(requests.some((request) =>
       request.url.endsWith("/store/media-db/export") && request.method === "POST"
         && request.body?.scope === "selected" && request.body?.type === "contacts"
+        && request.body?.format === "csv" && request.body?.layout === "story-outreach"
         && JSON.stringify(request.body?.ids) === "[100]"
     )).toBe(true));
     await waitFor(() => expect(createObjectURL).toHaveBeenCalledOnce());
+    expect((click.mock.contexts[0] as HTMLAnchorElement).download).toBe("Story Outreach Contacts.csv");
     // Keep the URL mock installed until the delayed download cleanup runs.
     await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith("blob:media-test"), { timeout: 2500 });
     click.mockRestore();

@@ -20,3 +20,9 @@ The user reviewed the workbook examples and approved them on 2026-10-03.
 **Why:** In response to the outstanding desktop Excel review, the user said, “i've revied looks good to go”.
 
 **How to apply:** Do not continue presenting that review as outstanding. Revisit compatibility review only if subsequent changes materially alter the workbook output.
+
+Story outreach planning uses a dedicated nine-column CSV: First Name, Last Name, Role, Publication, Email, LinkedIn, Publication Website, Industry and Country. This policy is specific to that story-list download, not all Media Database or Master exports.
+
+**Why:** On 2026-10-06 the user chose this simplified layout after unwanted metadata and cramped spreadsheet display caused confusion. They want the reviewer asked about additional fields afterwards, not more fields included pre-emptively.
+
+**How to apply:** Preserve all stored data and other export contracts. Keep industry values grounded in recorded contact sectors (publication category only as a fallback), never silently recategorise records to improve export appearance. Explain that CSV may open in Excel but cannot preserve spreadsheet column widths.

@@ -5,6 +5,57 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type MediaDownloadInputScope = typeof MediaDownloadInputScope[keyof typeof MediaDownloadInputScope];
+
+
+export const MediaDownloadInputScope = {
+  full: 'full',
+  saved: 'saved',
+  selected: 'selected',
+} as const;
+
+export type MediaDownloadInputType = typeof MediaDownloadInputType[keyof typeof MediaDownloadInputType];
+
+
+export const MediaDownloadInputType = {
+  contacts: 'contacts',
+  publications: 'publications',
+} as const;
+
+export type MediaDownloadInputFormat = typeof MediaDownloadInputFormat[keyof typeof MediaDownloadInputFormat];
+
+
+export const MediaDownloadInputFormat = {
+  csv: 'csv',
+  xlsx: 'xlsx',
+} as const;
+
+/**
+ * Optional nine-column layout, available only for selected contact CSV downloads.
+ */
+export type MediaDownloadInputLayout = typeof MediaDownloadInputLayout[keyof typeof MediaDownloadInputLayout];
+
+
+export const MediaDownloadInputLayout = {
+  'story-outreach': 'story-outreach',
+} as const;
+
+export interface MediaDownloadInput {
+  scope: MediaDownloadInputScope;
+  type: MediaDownloadInputType;
+  /**
+     * @minItems 1
+     * @maxItems 25
+     * @items.minimum 1
+     */
+  ids?: number[];
+  format?: MediaDownloadInputFormat;
+  /** Optional nine-column layout, available only for selected contact CSV downloads. */
+  layout?: MediaDownloadInputLayout;
+  /** Optional idempotency key for safe retry accounting. */
+  operationId?: string;
+}
+
 export interface MediaOutreachRemovalInput {
   /** @minLength 1 */
   projectId: string;

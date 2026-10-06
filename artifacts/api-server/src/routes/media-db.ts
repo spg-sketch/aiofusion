@@ -697,6 +697,10 @@ router.delete("/store/media-db/bookmarks/:type/:id", requirePlatformAuth, async 
 });
 
 const MEDIA_EXPORT_MAX_ROWS = 10_000;
+const STORY_OUTREACH_CSV_HEADERS = [
+  "First Name", "Last Name", "Role", "Publication", "Email", "LinkedIn",
+  "Publication Website", "Industry", "Country",
+];
 const MEDIA_EXPORT_CONTACT_HEADERS = [
   "First Name", "Last Name", "Role", "Email", "Email Status", "Phone", "Mobile",
   "Outlet", "Outlet Website", "Outlet Description", "Category", "Country", "Publication Reach", "Beats", "Sectors",
@@ -724,7 +728,11 @@ function mediaExportCsv(headers: string[], rows: unknown[][]): string {
 
 router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const { scope, type, ids, format = "csv" } = req.body ?? {};
+    const { scope, type, ids, format = "csv", layout } = req.body ?? {};
+    if (layout !== undefined && (layout !== "story-outreach" || scope !== "selected" || type !== "contacts" || format !== "csv")) {
+      res.status(400).json({ error: "The story-outreach layout requires a selected contacts CSV export." });
+      return;
+    }
     const customer = !isMasterWorkspace(req);
     if (customer && format !== "csv") {
       res.status(400).json({ error: "Customer media downloads support CSV only." });
@@ -832,12 +840,15 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
           .type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").send(workbook);
         return;
       }
-      const headers = scope === "full"
+      const headers = layout === "story-outreach" ? STORY_OUTREACH_CSV_HEADERS : scope === "full"
         ? MEDIA_EXPORT_CONTACT_HEADERS
         : MEDIA_EXPORT_CONTACT_HEADERS.filter((header) => !MEDIA_EXPORT_RESTRICTED_HEADERS.has(header));
       const output = eligible.map(({ contact, outlet }) => {
         const data: Record<string, unknown> = {
           "First Name": contact.firstName, "Last Name": contact.lastName, Role: contact.role, Email: contact.email,
+          Publication: outlet?.name ?? "", LinkedIn: contact.linkedinUrl,
+          "Publication Website": safePublicationWebsite(outlet?.website),
+          Industry: (contact.sectors ?? []).join("; ") || outlet?.category || "",
           "Email Status": contact.email ? (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email.trim()) ? "Sendable format" : "Review - not sendable") : "",
           Phone: contact.phone, Mobile: contact.mobile,
           Outlet: outlet?.name ?? "", "Outlet Website": safePublicationWebsite(outlet?.website),
@@ -856,7 +867,8 @@ router.post("/store/media-db/export", requirePlatformAuth, async (req: Request, 
       });
       const csv = mediaExportCsv(headers, output);
       if (customer) await settleMediaExport(accountId, req.body.operationId, JSON.stringify({ scope, type, ids: requestedIds, csv }), eligible.filter(({ contact }) => contact.accountId === null).length);
-      if (scope !== "full") res.set("Content-Disposition", 'attachment; filename="Media Contacts.csv"');
+      if (scope !== "full") res.set("Content-Disposition", layout === "story-outreach"
+        ? 'attachment; filename="Story Outreach Contacts.csv"' : 'attachment; filename="Media Contacts.csv"');
       res.status(200).type("text/csv; charset=utf-8").send(csv);
       return;
     }

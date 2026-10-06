@@ -190,6 +190,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { privacyHash } from "../lib/journalist-privacy";
 import mediaRouter from "./media-db";
 import { mediaExportWindow } from "../lib/media-export-allowance";
+import { parseCsvRecords } from "../lib/media-csv-import";
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
 
@@ -641,6 +642,44 @@ describe("media export route regressions", () => {
     expect(publicationsCsv.status).toBe(200);
     expect(publicationsCsv.text).not.toContain("Revoked Private");
     expect(publicationsCsv.text).not.toContain("Revoked Contact");
+  });
+
+  it("exports the exact nine story outreach columns without altering stored data or standard downloads", async () => {
+    const workspace = "story-outreach-csv";
+    const [outlet] = await db.insert(mediaOutletsTable).values({
+      name: 'Example, "Daily"', website: "https://daily.example.test", category: "Business",
+      country: "UK", description: "Not part of story CSV", reachBand: "100000", accountId: workspace,
+    }).returning();
+    const contacts = await db.insert(mediaContactsTable).values([
+      { firstName: 'Ari, "A"', lastName: "Reporter", role: "Editor\nTechnology", email: "ari@example.test",
+        linkedinUrl: "https://www.linkedin.com/in/ari", sectors: ["Technology", "Energy"],
+        outletId: outlet!.id, accountId: workspace, notes: "Keep this note", sourceRef: "Keep this source" },
+      { firstName: "Ben", lastName: "Reporter", outletId: outlet!.id, accountId: workspace },
+      { firstName: "Private", lastName: "Reporter", accountId: "another-workspace" },
+    ]).returning();
+    const body = { scope: "selected", type: "contacts", format: "csv", ids: contacts.slice(0, 2).map((contact) => contact.id), layout: "story-outreach" };
+    const response = await mediaExportRequest(workspace, body);
+    expect(response.status).toBe(200);
+    expect(response.contentType).toContain("text/csv");
+    expect(response.disposition).toContain('filename="Story Outreach Contacts.csv"');
+    expect(response.bytes.subarray(0, 2).toString()).not.toBe("PK");
+    const records = parseCsvRecords(response.text);
+    expect(records[0]).toEqual(["First Name", "Last Name", "Role", "Publication", "Email", "LinkedIn", "Publication Website", "Industry", "Country"]);
+    expect(records).toHaveLength(3);
+    expect(records.every((record) => record.length === 9)).toBe(true);
+    expect(records[1]).toEqual(['Ari, "A"', "Reporter", "Editor\nTechnology", 'Example, "Daily"', "ari@example.test", "https://www.linkedin.com/in/ari", "https://daily.example.test", "Technology; Energy", "UK"]);
+    expect(records[2][7]).toBe("Business");
+    expect(response.text).not.toContain("Private");
+    expect(response.text).not.toContain("Keep this note");
+    expect((await mediaExportRequest(workspace, { ...body, ids: [contacts[2].id] })).status).toBe(403);
+    const standard = await mediaExportRequest(workspace, { scope: "selected", type: "contacts", ids: [contacts[0].id] });
+    expect(parseCsvRecords(standard.text)[0]).toContain("Outlet Description");
+    expect(standard.text).toContain("Keep this note");
+    const [stored] = await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, contacts[0].id));
+    expect(stored).toMatchObject({ notes: "Keep this note", sourceRef: "Keep this source", sectors: ["Technology", "Energy"] });
+    for (const patch of [{ layout: "unknown" }, { type: "publications" }, { scope: "saved" }, { format: "xlsx" }]) {
+      expect((await mediaExportRequest(workspace, { ...body, ...patch })).status).toBe(400);
+    }
   });
 
   it("exports outlet website and description for saved contacts only when the outlet is visible", async () => {

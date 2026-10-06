@@ -9,6 +9,26 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Download visible media records using the standard or story outreach layout
+ */
+
+export const exportMediaDatabaseBodyIdsMax = 25;
+
+export const exportMediaDatabaseBodyFormatDefault = `csv`;
+
+export const ExportMediaDatabaseBody = zod.object({
+  "scope": zod.enum(['full', 'saved', 'selected']),
+  "type": zod.enum(['contacts', 'publications']),
+  "ids": zod.array(zod.number().int().min(1)).min(1).max(exportMediaDatabaseBodyIdsMax).optional(),
+  "format": zod.enum(['csv', 'xlsx']).default(exportMediaDatabaseBodyFormatDefault),
+  "layout": zod.enum(['story-outreach']).optional().describe('Optional nine-column layout, available only for selected contact CSV downloads.'),
+  "operationId": zod.string().optional().describe('Optional idempotency key for safe retry accounting.')
+})
+
+export const ExportMediaDatabaseResponse = zod.unknown()
+
+
+/**
  * @summary Remove a journalist from a story outreach list while retaining historical evidence
  */
 

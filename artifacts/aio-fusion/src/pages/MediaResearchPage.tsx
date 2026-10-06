@@ -1300,7 +1300,7 @@ function MediaResearchPage() {
     try {
       const response = await fetch(`${apiBase()}/api/store/media-db/export`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope: "selected", type: "contacts", ids: exportIds }),
+        body: JSON.stringify({ scope: "selected", type: "contacts", ids: exportIds, format: "csv", layout: "story-outreach" }),
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({})) as { error?: string };
@@ -1309,7 +1309,7 @@ function MediaResearchPage() {
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");
       link.href = url;
-      link.download = "Accepted Media Contacts.csv";
+      link.download = "Story Outreach Contacts.csv";
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (reason) {
