@@ -3,6 +3,7 @@ import { PageHead } from "./PageHead";
 import { PAGE_META } from "./pageMeta";
 import { legalDocuments, type LegalDocumentKind } from "./legalDocuments";
 import { CookiePreferencesButton } from "../components/CookieConsent";
+import { vars } from "./vars";
 
 export type LegalPageProps = { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean };
 const related = [
@@ -24,7 +25,7 @@ export default function LegalDocumentPage({ documentKind, ...props }: LegalPageP
     <nav aria-label="Legal documents" className="mb-8 flex flex-wrap gap-x-5 gap-y-3 text-[13px] font-medium text-[#102B36]">
       {related.filter(([, kind]) => kind !== documentKind).map(([label, kind]) =>
         <a key={kind} href={`${base}${kind}`} onClick={(event) => { event.preventDefault(); props.onNavigate(kind); }}
-          className="underline decoration-[#C8497A] underline-offset-4">{label}</a>)}
+          className="underline underline-offset-4" style={{ textDecorationColor: vars.accent }}>{label}</a>)}
       <CookiePreferencesButton />
     </nav>
     <div className="space-y-9">

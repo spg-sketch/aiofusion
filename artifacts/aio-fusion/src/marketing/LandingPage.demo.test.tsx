@@ -3,16 +3,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import LandingPage from "./LandingPage";
 import DemoDialog from "./DemoDialog";
+import { CONSENT_KEY } from "../lib/cookieConsent";
 
 describe("homepage demo enquiry", () => {
   beforeEach(() => {
     localStorage.clear();
+    // Returning visitors have already made a choice; first visits are tested
+    // separately so an automatic demo never competes with cookie consent.
+    localStorage.setItem(CONSENT_KEY, JSON.stringify({ version: 1, analytics: false, savedAt: Date.now() }));
     sessionStorage.clear();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => [] }));
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-  it("opens on every homepage visit, dismisses with Escape and reopens on request", () => {
+  it("opens on returning homepage visits, dismisses with Escape and reopens on request", () => {
     const props = { onLogin: vi.fn(), onNavigate: vi.fn() };
     const page = render(<LandingPage {...props} />);
     expect(screen.getByRole("dialog", { name: /see your ai visibility/i })).toBeTruthy();
@@ -26,6 +30,14 @@ describe("homepage demo enquiry", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(screen.getAllByRole("button", { name: /book a demo/i })[0]!);
     expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("does not automatically open the demo before a first-visit cookie choice", () => {
+    localStorage.removeItem(CONSENT_KEY);
+    render(<LandingPage onLogin={vi.fn()} onNavigate={vi.fn()} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: /book a demo/i })[0]!);
+    expect(screen.getByRole("dialog", { name: /see your ai visibility/i })).toBeTruthy();
   });
 
   it("opens even if an earlier visit left the old storage flag", () => {
@@ -177,12 +189,16 @@ describe("homepage demo enquiry", () => {
     const legalLinks = [
       ["Trust & Security", "trust-security"],
       ["Privacy Policy", "privacy-policy"],
-      ["Terms & Conditions", "terms-conditions"],
+      ["Website terms", "website-terms"],
+      ["Platform terms", "terms-conditions"],
+      ["Cookie policy", "cookie-policy"],
+      ["Legal review", "legal-review"],
     ];
     expect(primary.getAllByRole("link").map((link) => link.textContent)).toEqual(primaryLinks.map(([label]) => label));
     expect(legal.getAllByRole("link").map((link) => link.textContent)).toEqual(legalLinks.map(([label]) => label));
     expect(primary.getByRole("list")).toBeTruthy();
     expect(legal.getByRole("list")).toBeTruthy();
+    expect(legal.getByRole("button", { name: "Cookie preferences" })).toBeTruthy();
     for (const [group, links] of [[primary, primaryLinks], [legal, legalLinks]] as const) {
       for (const [label, destination] of links) {
         const link = group.getByRole("link", { name: label });

@@ -68,9 +68,10 @@ describe("public WCAG AA contrast", () => {
   it.each([
     "MarketingPage", "LandingPage", "ContactPage", "AboutPage", "ForAgenciesPage",
     "ForAgentsPage", "ForInhousePage", "JournalistPrivacyPage", "PricingPage",
-    "PrivacyPolicyPage", "TermsConditionsPage", "TrustSecurityPage",
+    "PrivacyPolicyPage", "LegalDocumentPage", "TermsConditionsPage", "TrustSecurityPage",
   ])("uses the accessible shared pink in %s instead of the old text/control color", (page) => {
-    const code = source(`./${page}.tsx`);
+    const code = source(`./${page}.tsx`)
+      + (page === "PrivacyPolicyPage" ? source("./LegalDocumentPage.tsx") : "");
     expect(code).toContain("vars.accent");
     expect(code).not.toMatch(/#C8497A/i);
   });
