@@ -55,3 +55,20 @@ the dump, including authentication material and customer data.
 **How to apply:** Verify ignore coverage for the resolved path before download,
 check tracked files before completion, and retain only private object-storage
 copies plus non-sensitive verification documentation.
+
+## Backup provenance and freshness
+
+Do not treat a production-labelled storage destination or a manifest's
+`verified` flag as proof that a snapshot belongs to the current live database.
+Cross-check source identity, creation time, the latest pointer, and restore
+evidence before declaring production recovery coverage.
+
+**Why:** An operational inspection found snapshots with different source counts
+in the documented production destination, while its latest pointer lagged newer
+objects. Creation-time row-count verification alone did not establish current
+production provenance or a functioning daily schedule.
+
+**How to apply:** Inspect safe manifest metadata without downloading database
+contents. Confirm the published application's actual database target separately.
+Verify scheduled run history and freshness; never repair the latest pointer by
+simply choosing the newest filename.
