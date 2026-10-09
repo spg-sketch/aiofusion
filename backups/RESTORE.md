@@ -105,11 +105,30 @@ a long-lived in-process timer):
 
 1. Open the **Publishing / Deployments** tool → **Create deployment** →
    **Scheduled**.
-2. **Schedule:** daily (e.g. `0 3 * * *` — 03:00 UTC).
+2. **Requested schedule:** daily at **02:00 GMT**, cron `0 2 * * *`,
+   timezone **UTC**. This is fixed GMT, not Europe/London: it must not move with
+   British Summer Time. These are configuration instructions, not evidence that
+   a scheduled job is active.
 3. **Build command:** `pnpm install --frozen-lockfile`
-4. **Run command:** `pnpm --filter @workspace/scripts run backup`
-5. Set `DATABASE_URL`, `DEPLOYMENT_ENV`, `BACKUP_ENABLED`, and, when enabled,
+4. **Run command:** bind the same explicit main database secret used by the live
+   application's bootstrap, and reject an absent or beta target:
+   ```bash
+   test -n "$PRODUCTION_DATABASE_URL" && test "$PRODUCTION_DATABASE_URL" != "$BETA_DATABASE_URL" && DATABASE_URL="$PRODUCTION_DATABASE_URL" pnpm --filter @workspace/scripts run backup
+   ```
+5. Make the existing `PRODUCTION_DATABASE_URL` secret available to the backup
+   job through the secure deployment settings; never paste it into source code
+   or logs. Set `DEPLOYMENT_ENV`, `BACKUP_ENABLED`, and, when enabled,
    `BACKUP_BUCKET_ID` plus `BACKUP_PREFIX` explicitly for that deployment.
+   Production destination:
+   `BACKUP_BUCKET_ID=replit-objstore-802dbaf4-ecde-4956-b539-7205f1d4aed4`,
+   `BACKUP_PREFIX=.private/db-backups`, `DEPLOYMENT_ENV=production`,
+   `BACKUP_ENABLED=true`. Default retention is 14 successful snapshots.
+   Keep the live web app's deployment type unchanged; this is a backup job,
+   not a replacement for the web deployment.
+
+After activation, confirm the next-run timestamp is 02:00 UTC, inspect the first
+scheduled run's success, and verify that a new private backup and matching
+manifest appeared. A successful manual run does not prove the schedule works.
 
 > Scheduling must be created from the **main** project (the Publishing UI), not
 > from a task agent. After this change is merged, set up the scheduled

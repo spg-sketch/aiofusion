@@ -37,6 +37,15 @@ project's Publishing UI — a task agent cannot publish. Each deployment must
 carry its own explicit database and backup-destination configuration. Never let
 staging infer or reuse the production destination.
 
+The user requires daily backups at **02:00 GMT (fixed UTC)**, not a
+Europe/London daylight-saving schedule.
+
+**Why:** The user explicitly requested daily 2am backups and clarified GMT.
+
+**How to apply:** Use cron `0 2 * * *` with timezone UTC. Treat the runbook as
+desired configuration, not proof of activation; verify scheduled run history
+and the resulting private snapshot before claiming daily automation is working.
+
 ## Restore test guard
 `restore:verify` restores `latest` into a scratch `TARGET_DATABASE_URL` and
 asserts row count matches the manifest. It refuses to run if
